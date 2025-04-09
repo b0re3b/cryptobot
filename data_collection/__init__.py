@@ -1,6 +1,4 @@
-# data_collection/__init__.py
-
-# Імпорт основних класів
+from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
 from .binance_client import BinanceClient
 from .market_data_processor import MarketDataProcessor
 from .feature_engineering import FeatureEngineer
@@ -16,18 +14,8 @@ DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT']
 
 # Функція для зручного створення клієнта з конфігурацією за замовчуванням
 def create_binance_client(api_key=None, api_secret=None, use_testnet=False):
-    """
-    Створює і повертає налаштований екземпляр BinanceClient.
 
-    Args:
-        api_key (str, optional): API ключ Binance
-        api_secret (str, optional): Секретний ключ Binance
-        use_testnet (bool): Використовувати тестову мережу Binance
-
-    Returns:
-        BinanceClient: Налаштований клієнт Binance
-    """
-    client = BinanceClient(api_key=api_key, api_secret=api_secret)
+    client = BinanceClient(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
     if use_testnet:
         client.base_url = "https://testnet.binance.vision"
     return client
@@ -35,12 +23,7 @@ def create_binance_client(api_key=None, api_secret=None, use_testnet=False):
 
 # Допоміжна функція для налаштування логування
 def setup_data_collection_logging(log_level='INFO'):
-    """
-    Налаштовує логування для модулів збору даних.
 
-    Args:
-        log_level (str): Рівень логування ('DEBUG', 'INFO', 'WARNING', 'ERROR')
-    """
     import logging
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(format=log_format, level=getattr(logging, log_level))
