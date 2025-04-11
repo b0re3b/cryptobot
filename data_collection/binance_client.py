@@ -4,13 +4,14 @@ import hmac
 import json
 import time
 from datetime import datetime
+from logging import exception
 from urllib.parse import urlencode
 import aiohttp
 import pandas as pd
 import requests
 import websocket
 from utils.config import BINANCE_API_SECRET, BINANCE_API_KEY
-
+import threading
 
 class BinanceClient:
     def __init__(self):
@@ -243,7 +244,26 @@ class BinanceClient:
         )
 
         # Запуск в окремому потоці
-        import threading
+
+        ws_thread = threading.Thread(target=ws.run_forever)
+        ws_thread.daemon = True
+        ws_thread.start()
+
+        return ws
+
+    def order_book_socket(self, symbol, callback):
+        socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@depth20@100ms"
+
+        ws = websocket.WebSocketApp(
+            socket_url,
+            on_message=callback,
+            on_error=lambda ws, error: print(f"WebSocket Error: {error}"),
+            on_close=lambda ws, close_status_code, close_msg: print(
+                f"WebSocket Connection Closed: {close_msg if close_msg else 'No message'}"),
+            on_open=lambda ws: print("WebSocket Connection Opened")
+        )
+
+
         ws_thread = threading.Thread(target=ws.run_forever)
         ws_thread.daemon = True
         ws_thread.start()
@@ -252,7 +272,7 @@ class BinanceClient:
 
     # ===== Методи збереження даних =====
 
-    def save_historical_data(self, symbol, interval, start_date, end_date=None, directory="data/raw/"):
+    def save_historical_data(self, symbol, interval, start_date, end_date=None, directory="kursova/data/raw/"):
         import os
 
         # Конвертація дат у мілісекунди
@@ -270,7 +290,7 @@ class BinanceClient:
         current_start = start_ts
 
         while current_start < end_ts:
-            current_end = min(current_start + (1000 * 60 * 60 * 24), end_ts)  # максимум 1000 свічок
+            current_end = min(current_start + (1000 * 60 * 60 * 24), end_ts)
 
             df = self.get_klines(
                 symbol=symbol,
@@ -283,20 +303,20 @@ class BinanceClient:
             if df.empty:
                 print(
                     f"No data returned for {symbol} from {datetime.fromtimestamp(current_start / 1000)} to {datetime.fromtimestamp(current_end / 1000)}")
-                # Move forward in time even if no data
+
                 current_start = current_end + 1
                 continue
 
             all_candles = pd.concat([all_candles, df])
 
-            # Переміщення часового вікна
+
             if len(df) > 0:
                 current_start = int(df.iloc[-1]['close_time'].timestamp() * 1000) + 1
             else:
                 break
 
             # Дотримання рейт-лімітів
-            time.sleep(1)  # Increased to 1 second to avoid rate limits
+            time.sleep(1)
 
         if all_candles.empty:
             print(f"No data collected for {symbol} for the specified time period")
@@ -317,7 +337,6 @@ class BinanceClient:
             return None
 
 
-# Приклад обробника WebSocket
 def handle_kline_message(ws, message):
     data = json.loads(message)
     candle = data['k']
@@ -370,15 +389,19 @@ def main():
 
     # Підключення до WebSocket для отримання свічок у реальному часі
     print("Підключення до WebSocket для отримання даних у реальному часі...")
-    btc_socket = client.start_kline_socket("BTCUSDT", "1m", handle_kline_message)
+    #Оримання нових ордерів
+    btc_socket = client.start_kline_socket("BTCUSDT", "1d", handle_kline_message)
+    try:
+        client.order_book_socket("BTCUSDT", btc_socket)
+        if btc_socket: print(f"Новий ордер:{btc_socket['price']}")
+        else:
+            print ("Не вдалось отримати дані про нові ордери")
+            return
+    except Exception as e:
+        print(f"Помилка при отриманні ціни: {e}")
+        return
 
-    # Коментуємо збереження історичних даних, оскільки воно викликало помилку
-    # client.save_historical_data(
-    #     symbol="BTCUSDT",
-    #     interval="1d",
-    #     start_date="2023-01-01",
-    #     end_date="2023-12-31"
-    # )
+
 
     # Тримаємо головний потік активним, щоб WebSocket міг отримувати дані
     try:
@@ -394,4 +417,3 @@ def main():
 # Запуск головної функції
 if __name__ == "__main__":
     main()
-    fdgkldhgldkf
