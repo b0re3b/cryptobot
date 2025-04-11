@@ -394,3 +394,4 @@ def main():
 # Запуск головної функції
 if __name__ == "__main__":
     main()
+    fdgkldhgldkf
