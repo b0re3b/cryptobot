@@ -1,3 +1,5 @@
-# Збір твітів про криптовалюти
+import snscrape.modules.twitter as sntwitter
+from transformers import pipeline
+
 class TwitterScraper:
-    pass
+   def __init__(self):

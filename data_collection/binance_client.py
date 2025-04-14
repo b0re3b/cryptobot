@@ -4,9 +4,7 @@ import hmac
 import json
 import time
 import os
-import sys
 from datetime import datetime
-from logging import exception
 from urllib.parse import urlencode
 import aiohttp
 import pandas as pd
