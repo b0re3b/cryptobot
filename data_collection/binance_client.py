@@ -17,13 +17,12 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DATA_RAW_DIR = os.path.join(PROJECT_ROOT, 'data', 'raw')
 DATA_PROCESSED_DIR = os.path.join(PROJECT_ROOT, 'data', 'processed')
 
-
 os.makedirs(DATA_RAW_DIR, exist_ok=True)
 os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
 
 
 class BinanceClient:
-    #Ініціалізація binance client
+    # Ініціалізація binance client
     def __init__(self):
         self.api_key = BINANCE_API_KEY
         self.api_secret = BINANCE_API_SECRET
@@ -34,7 +33,10 @@ class BinanceClient:
             'X-MBX-APIKEY': self.api_key,
             'Content-Type': 'application/json'
         })
-    #Генерація цифрового підпису
+        self.active_websockets = {}
+        self.file_handlers = {}
+
+    # Генерація цифрового підпису
     def _generate_signature(self, params):
         query_string = urlencode(params)
         signature = hmac.new(
@@ -43,7 +45,8 @@ class BinanceClient:
             hashlib.sha256
         ).hexdigest()
         return signature
-    #Отримання даних про ціну у вигляді свічок
+
+    # Отримання даних про ціну у вигляді свічок
     def get_klines(self, symbol, interval, limit=100, start_time=None, end_time=None):
         endpoint = f"{self.base_url_v3}/klines"
         params = {
@@ -83,7 +86,8 @@ class BinanceClient:
         df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
 
         return df
-    #Отримання поточної ціни
+
+    # Отримання поточної ціни
     def get_ticker_price(self, symbol=None):
         endpoint = f"{self.base_url_v3}/ticker/price"
         params = {}
@@ -97,7 +101,8 @@ class BinanceClient:
         except Exception as e:
             print(f"Error getting ticker price: {e}")
             return {}
-    #Отримання книги ордерів(поточних пропозицій на купівлю чи продаж)
+
+    # Отримання книги ордерів(поточних пропозицій на купівлю чи продаж)
     def get_order_book(self, symbol, limit=4500):
         endpoint = f"{self.base_url_v3}/depth"
         params = {
@@ -124,7 +129,8 @@ class BinanceClient:
             'bids': bids_df,
             'asks': asks_df
         }
-    #Отримання останніх угод
+
+    # Отримання останніх угод
     def get_recent_trades(self, symbol, limit=100):
         endpoint = f"{self.base_url_v3}/trades"
         params = {
@@ -242,36 +248,98 @@ class BinanceClient:
 
     # ===== WebSocket methods for real-time data =====
 
-    def start_kline_socket(self, symbol, interval, callback, save_to_file=False, directory=None):
+    def _get_kline_file_handler(self, symbol, interval, directory=None):
+        """Отримати або створити файловий обробник для свічок"""
         if directory is None:
             directory = os.path.join(DATA_RAW_DIR, 'candles')
 
-        socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@kline_{interval}"
+        # Створюємо директорію для збереження свічок
+        symbol_dir = os.path.join(directory, symbol)
+        os.makedirs(symbol_dir, exist_ok=True)
 
-        file_handler = None
-        if save_to_file:
-            symbol_dir = os.path.join(directory, symbol)
-            os.makedirs(symbol_dir, exist_ok=True)
-            print(f"Creating directory for candles: {symbol_dir}")
+        # Формуємо унікальний ключ для цього типу даних
+        file_key = f"kline_{symbol}_{interval}"
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(symbol_dir, f"{symbol}_{interval}_{timestamp}.csv")
+        # Якщо обробник файлу вже існує, повертаємо його
+        if file_key in self.file_handlers:
+            return self.file_handlers[file_key]
 
-            file = open(filename, 'w', newline='')
-            import csv
-            writer = csv.writer(file)
+        # Інакше створюємо новий файл для запису
+        filename = os.path.join(symbol_dir, f"{symbol}_{interval}_continuous.csv")
+        file_exists = os.path.exists(filename)
+
+        file = open(filename, 'a', newline='')  # append mode
+        import csv
+        writer = csv.writer(file)
+
+        # Якщо файл новий, записуємо заголовок
+        if not file_exists:
             writer.writerow([
                 'symbol', 'interval', 'open_time', 'open', 'high', 'low',
                 'close', 'volume', 'close_time', 'is_closed'
             ])
 
-            file_handler = {
-                'file': file,
-                'writer': writer,
-                'filename': filename
-            }
+        file_handler = {
+            'file': file,
+            'writer': writer,
+            'filename': filename
+        }
 
-            print(f"Saving kline data to {filename}")
+        # Зберігаємо обробник для майбутнього використання
+        self.file_handlers[file_key] = file_handler
+        print(f"Created/opened file for kline data: {filename}")
+
+        return file_handler
+
+    def _get_orderbook_file_handler(self, symbol, directory=None):
+        """Отримати або створити файловий обробник для книги ордерів"""
+        if directory is None:
+            directory = os.path.join(DATA_RAW_DIR, 'orderbook')
+
+        # Створюємо директорію для збереження даних книги ордерів
+        symbol_dir = os.path.join(directory, symbol)
+        os.makedirs(symbol_dir, exist_ok=True)
+
+        # Формуємо унікальний ключ для цього типу даних
+        file_key = f"orderbook_{symbol}"
+
+        # Якщо обробник файлу вже існує, повертаємо його
+        if file_key in self.file_handlers:
+            return self.file_handlers[file_key]
+
+        # Інакше створюємо новий файл для запису
+        filename = os.path.join(symbol_dir, f"{symbol}_orderbook_continuous.csv")
+        file_exists = os.path.exists(filename)
+
+        file = open(filename, 'a', newline='')  # append mode
+        import csv
+        writer = csv.writer(file)
+
+        # Якщо файл новий, записуємо заголовок
+        if not file_exists:
+            writer.writerow([
+                'timestamp', 'lastUpdateId', 'type', 'price', 'quantity'
+            ])
+
+        file_handler = {
+            'file': file,
+            'writer': writer,
+            'filename': filename
+        }
+
+        # Зберігаємо обробник для майбутнього використання
+        self.file_handlers[file_key] = file_handler
+        print(f"Created/opened file for orderbook data: {filename}")
+
+        return file_handler
+
+    def start_kline_socket(self, symbol, interval, callback, save_to_file=False, directory=None):
+        """Запуск WebSocket для отримання даних свічок"""
+        socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@kline_{interval}"
+
+        file_handler = None
+        if save_to_file:
+            file_handler = self._get_kline_file_handler(symbol, interval, directory)
 
         def callback_wrapper(ws, message):
             callback(ws, message)
@@ -304,7 +372,7 @@ class BinanceClient:
             on_close=lambda ws, close_status_code, close_msg: print(
                 f"WebSocket Connection Closed: {close_msg if close_msg else 'No message'}"
             ),
-            on_open=lambda ws: print("WebSocket Connection Opened")
+            on_open=lambda ws: print(f"WebSocket Connection Opened for {symbol} {interval} klines")
         )
 
         import threading
@@ -312,39 +380,22 @@ class BinanceClient:
         ws_thread.daemon = True
         ws_thread.start()
 
-        ws.file_handler = file_handler
+        # Зберігаємо веб-сокет в активних з'єднаннях
+        ws_key = f"kline_{symbol}_{interval}"
+        self.active_websockets[ws_key] = {
+            'ws': ws,
+            'file_handler': file_handler
+        }
 
         return ws
 
     def order_book_socket(self, symbol, callback, save_to_file=False, directory=None):
-        if directory is None:
-            directory = os.path.join(DATA_RAW_DIR, 'orderbook')
-
+        """Запуск WebSocket для отримання даних книги ордерів"""
         socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@depth20@100ms"
 
         file_handler = None
         if save_to_file:
-            symbol_dir = os.path.join(directory, symbol)
-            os.makedirs(symbol_dir, exist_ok=True)
-            print(f"Creating directory for orderbook: {symbol_dir}")
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(symbol_dir, f"{symbol}_orderbook_{timestamp}.csv")
-
-            file = open(filename, 'w', newline='')
-            import csv
-            writer = csv.writer(file)
-            writer.writerow([
-                'timestamp', 'lastUpdateId', 'type', 'price', 'quantity'
-            ])
-
-            file_handler = {
-                'file': file,
-                'writer': writer,
-                'filename': filename
-            }
-
-            print(f"Saving order book data to {filename}")
+            file_handler = self._get_orderbook_file_handler(symbol, directory)
 
         def callback_wrapper(ws, message):
             callback(ws, message)
@@ -385,7 +436,7 @@ class BinanceClient:
             on_close=lambda ws, close_status_code, close_msg: print(
                 f"WebSocket Connection Closed: {close_msg if close_msg else 'No message'}"
             ),
-            on_open=lambda ws: print("WebSocket Connection Opened")
+            on_open=lambda ws: print(f"WebSocket Connection Opened for {symbol} orderbook")
         )
 
         import threading
@@ -393,22 +444,58 @@ class BinanceClient:
         ws_thread.daemon = True
         ws_thread.start()
 
-
-        ws.file_handler = file_handler
+        # Зберігаємо веб-сокет в активних з'єднаннях
+        ws_key = f"orderbook_{symbol}"
+        self.active_websockets[ws_key] = {
+            'ws': ws,
+            'file_handler': file_handler
+        }
 
         return ws
 
     # Зупинка роботи веб сокета
-    def close_websocket(self, ws):
-        if ws:
-            if hasattr(ws, 'file_handler') and ws.file_handler:
-                try:
-                    ws.file_handler['file'].close()
-                    print(f"Closed data file: {ws.file_handler['filename']}")
-                except Exception as e:
-                    print(f"Error closing file: {e}")
+    def close_websocket(self, ws_or_key):
+        """Закрити WebSocket з'єднання та відповідний файл"""
+        if isinstance(ws_or_key, str):
+            # Якщо передано ключ
+            if ws_or_key in self.active_websockets:
+                ws_info = self.active_websockets[ws_or_key]
+                ws = ws_info['ws']
+                ws.close()
+                # Не закриваємо файл, щоб можна було використовувати його повторно
+                print(f"Closed WebSocket connection: {ws_or_key}")
+                return True
+            return False
+        else:
+            # Якщо передано об'єкт WebSocket
+            for key, ws_info in self.active_websockets.items():
+                if ws_info['ws'] == ws_or_key:
+                    ws_or_key.close()
+                    # Не закриваємо файл, щоб можна було використовувати його повторно
+                    print(f"Closed WebSocket connection: {key}")
+                    return True
+            return False
 
-            ws.close()
+    def close_all_websockets(self):
+        """Закрити всі WebSocket з'єднання"""
+        for key, ws_info in list(self.active_websockets.items()):
+            ws_info['ws'].close()
+            print(f"Closed WebSocket connection: {key}")
+
+        self.active_websockets.clear()
+
+    def close_all_files(self):
+        """Закрити всі відкриті файли"""
+        for key, handler in list(self.file_handlers.items()):
+            handler['file'].close()
+            print(f"Closed file: {handler['filename']}")
+
+        self.file_handlers.clear()
+
+    def cleanup(self):
+        """Повне очищення всіх ресурсів"""
+        self.close_all_websockets()
+        self.close_all_files()
 
     # ===== Збереження даних =====
 
@@ -475,7 +562,6 @@ class BinanceClient:
             return None
 
     def save_processed_data(self, dataframe, symbol, data_type, timestamp=None, directory=None):
-
         if directory is None:
             directory = DATA_PROCESSED_DIR
 
@@ -516,64 +602,57 @@ def handle_kline_message(ws, message):
 def handle_order_book_message(ws, message):
     data = json.loads(message)
 
-    print(f"Оновлення книги ордерів:")
+    # Отримуємо символ із URL сокета
+    symbol = "Unknown"
+    if hasattr(ws, 'url'):
+        symbol_part = ws.url.split('@')[0].split('/')[-1]
+        symbol = symbol_part.upper()
+
+    print(f"Оновлення книги ордерів {symbol}:")
     print(f"Час оновлення: {datetime.now()}")
     print(f"Останній ID оновлення: {data.get('lastUpdateId', 'Немає')}")
 
     if 'bids' in data and data['bids']:
-        print("Топ 5 ордерів на купівлю:")
-        for i, bid in enumerate(data['bids'][:5]):
+        print("Топ 3 ордерів на купівлю:")
+        for i, bid in enumerate(data['bids'][:3]):
             print(f"  {i + 1}. Ціна: {bid[0]}, Обсяг: {bid[1]}")
 
     if 'asks' in data and data['asks']:
-        print("Топ 5 ордерів на продаж:")
-        for i, ask in enumerate(data['asks'][:5]):
+        print("Топ 3 ордерів на продаж:")
+        for i, ask in enumerate(data['asks'][:3]):
             print(f"  {i + 1}. Ціна: {ask[0]}, Обсяг: {ask[1]}")
 
     print("-----")
-
 
 
 # Main function
 def main():
     client = BinanceClient()
 
+    # Список криптовалют для відстеження
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
     try:
-        btc_price = client.get_ticker_price(symbol="BTCUSDT")
-        if btc_price:
-            print(f"Поточна ціна BTC/USDT: {btc_price['price']}")
-        else:
-            print("Не вдалося отримати ціну BTC/USDT")
-            return
+        # Отримання поточних цін для всіх символів
+        for symbol in symbols:
+            price = client.get_ticker_price(symbol=symbol)
+            if price:
+                print(f"Поточна ціна {symbol}: {price['price']}")
+            else:
+                print(f"Не вдалося отримати ціну {symbol}")
     except Exception as e:
-        print(f"Помилка при отриманні ціни: {e}")
+        print(f"Помилка при отриманні цін: {e}")
         return
-
-    btc_candles = client.get_klines(symbol="BTCUSDT", interval="1h", limit=10)
-    if not btc_candles.empty:
-        print(f"Отримано {len(btc_candles)} годинних свічок для BTC/USDT")
-        print(btc_candles.head())
-    else:
-        print("Не вдалося отримати історичні свічки")
-
-    order_book = client.get_order_book(symbol="BTCUSDT", limit=10)
-    if not order_book['bids'].empty:
-        print("Топ 10 ордерів на купівлю:")
-        print(order_book['bids'].head(10))
-        print("Топ 10 ордерів на продаж:")
-        print(order_book['asks'].head(10))
-    else:
-        print("Не вдалося отримати книгу ордерів")
 
     print("Підключення до WebSocket для отримання даних у реальному часі...")
 
-    candles_dir = os.path.join(DATA_RAW_DIR, 'candles')
-    kline_socket = client.start_kline_socket("BTCUSDT", "1m", handle_kline_message, save_to_file=True,
-                                             directory=candles_dir)
+    # Запуск WebSocket для всіх символів (свічки)
+    for symbol in symbols:
+        # Створення веб-сокетів для свічок (1-хвилинний інтервал)
+        client.start_kline_socket(symbol, "1m", handle_kline_message, save_to_file=True)
 
-    orderbook_dir = os.path.join(DATA_RAW_DIR, 'orderbook')
-    order_book_socket = client.order_book_socket("BTCUSDT", handle_order_book_message, save_to_file=True,
-                                                 directory=orderbook_dir)
+        # Створення веб-сокетів для книги ордерів
+        client.order_book_socket(symbol, handle_order_book_message, save_to_file=True)
 
     try:
         print("Очікування даних ринку в реальному часі. Натисніть Ctrl+C для виходу.")
@@ -582,8 +661,7 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         print("Завершення роботи...")
-        client.close_websocket(kline_socket)
-        client.close_websocket(order_book_socket)
+        client.cleanup()  # Закриття всіх з'єднань та файлів
 
 
 # Запуск основної функції
