@@ -35,6 +35,8 @@ class BinanceClient:
         })
         self.active_websockets = {}
         self.file_handlers = {}
+        # Додаємо флаг для перевірки чи потрібно перепідключитись
+        self.reconnect_required = False
 
     # Генерація цифрового підпису
     def _generate_signature(self, params):
@@ -341,39 +343,67 @@ class BinanceClient:
         if save_to_file:
             file_handler = self._get_kline_file_handler(symbol, interval, directory)
 
-        def callback_wrapper(ws, message):
-            callback(ws, message)
+        def on_message(ws, message):
+            try:
+                callback(ws, message)
 
-            if save_to_file and file_handler:
-                try:
-                    data = json.loads(message)
-                    candle = data['k']
+                if save_to_file and file_handler:
+                    try:
+                        data = json.loads(message)
+                        candle = data['k']
 
-                    file_handler['writer'].writerow([
-                        candle['s'],  # symbol
-                        candle['i'],  # interval
-                        datetime.fromtimestamp(candle['t'] / 1000),  # open_time
-                        candle['o'],  # open
-                        candle['h'],  # high
-                        candle['l'],  # low
-                        candle['c'],  # close
-                        candle['v'],  # volume
-                        datetime.fromtimestamp(candle['T'] / 1000),  # close_time
-                        candle['x']  # is_closed
-                    ])
-                    file_handler['file'].flush()
-                except Exception as e:
-                    print(f"Error saving kline data to file: {e}")
+                        file_handler['writer'].writerow([
+                            candle['s'],  # symbol
+                            candle['i'],  # interval
+                            datetime.fromtimestamp(candle['t'] / 1000),  # open_time
+                            candle['o'],  # open
+                            candle['h'],  # high
+                            candle['l'],  # low
+                            candle['c'],  # close
+                            candle['v'],  # volume
+                            datetime.fromtimestamp(candle['T'] / 1000),  # close_time
+                            candle['x']  # is_closed
+                        ])
+                        # Краще використовувати flush() менш часто, наприклад кожні 10 записів
+                        # Але оскільки ми зберігаємо в один файл, будемо робити flush після кожного запису
+                        file_handler['file'].flush()
+                    except Exception as e:
+                        print(f"Error saving kline data to file: {e}")
+            except Exception as e:
+                print(f"Error in on_message handler for kline: {e}")
+
+        def on_error(ws, error):
+            print(f"WebSocket Error: {error}")
+            ws.custom_reconnect_info['needs_reconnect'] = True
+
+        def on_close(ws, close_status_code, close_msg):
+            print(f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}")
+            ws.custom_reconnect_info['needs_reconnect'] = True
+            # Запускаємо пізніше перепідключення
+            self.reconnect_required = True
+
+        def on_open(ws):
+            print(f"WebSocket Connection Opened for {symbol} {interval} klines")
+            ws.custom_reconnect_info['needs_reconnect'] = False
 
         ws = websocket.WebSocketApp(
             socket_url,
-            on_message=callback_wrapper,
-            on_error=lambda ws, error: print(f"WebSocket Error: {error}"),
-            on_close=lambda ws, close_status_code, close_msg: print(
-                f"WebSocket Connection Closed: {close_msg if close_msg else 'No message'}"
-            ),
-            on_open=lambda ws: print(f"WebSocket Connection Opened for {symbol} {interval} klines")
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+            on_open=on_open
         )
+
+        # Додаємо необхідну інформацію для перепідключення
+        ws.custom_reconnect_info = {
+            'needs_reconnect': False,
+            'symbol': symbol,
+            'interval': interval,
+            'callback': callback,
+            'save_to_file': save_to_file,
+            'directory': directory,
+            'socket_type': 'kline'
+        }
 
         import threading
         ws_thread = threading.Thread(target=ws.run_forever)
@@ -397,47 +427,74 @@ class BinanceClient:
         if save_to_file:
             file_handler = self._get_orderbook_file_handler(symbol, directory)
 
-        def callback_wrapper(ws, message):
-            callback(ws, message)
+        def on_message(ws, message):
+            try:
+                callback(ws, message)
 
-            if save_to_file and file_handler:
-                try:
-                    data = json.loads(message)
-                    timestamp = datetime.now()
+                if save_to_file and file_handler:
+                    try:
+                        data = json.loads(message)
+                        timestamp = datetime.now()
 
-                    if 'bids' in data and data['bids']:
-                        for bid in data['bids']:
-                            file_handler['writer'].writerow([
-                                timestamp,
-                                data.get('lastUpdateId', 'N/A'),
-                                'bid',
-                                bid[0],
-                                bid[1]
-                            ])
+                        if 'bids' in data and data['bids']:
+                            for bid in data['bids']:
+                                file_handler['writer'].writerow([
+                                    timestamp,
+                                    data.get('lastUpdateId', 'N/A'),
+                                    'bid',
+                                    bid[0],
+                                    bid[1]
+                                ])
 
-                    if 'asks' in data and data['asks']:
-                        for ask in data['asks']:
-                            file_handler['writer'].writerow([
-                                timestamp,
-                                data.get('lastUpdateId', 'N/A'),
-                                'ask',
-                                ask[0],
-                                ask[1]
-                            ])
+                        if 'asks' in data and data['asks']:
+                            for ask in data['asks']:
+                                file_handler['writer'].writerow([
+                                    timestamp,
+                                    data.get('lastUpdateId', 'N/A'),
+                                    'ask',
+                                    ask[0],
+                                    ask[1]
+                                ])
 
-                    file_handler['file'].flush()
-                except Exception as e:
-                    print(f"Error saving order book data to file: {e}")
+                        # Краще використовувати flush() менш часто, наприклад кожні 10 записів
+                        # Але оскільки ми зберігаємо в один файл, будемо робити flush після кожного запису
+                        file_handler['file'].flush()
+                    except Exception as e:
+                        print(f"Error saving order book data to file: {e}")
+            except Exception as e:
+                print(f"Error in on_message handler for orderbook: {e}")
+
+        def on_error(ws, error):
+            print(f"WebSocket Error: {error}")
+            ws.custom_reconnect_info['needs_reconnect'] = True
+
+        def on_close(ws, close_status_code, close_msg):
+            print(f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}")
+            ws.custom_reconnect_info['needs_reconnect'] = True
+            # Запускаємо пізніше перепідключення
+            self.reconnect_required = True
+
+        def on_open(ws):
+            print(f"WebSocket Connection Opened for {symbol} orderbook")
+            ws.custom_reconnect_info['needs_reconnect'] = False
 
         ws = websocket.WebSocketApp(
             socket_url,
-            on_message=callback_wrapper,
-            on_error=lambda ws, error: print(f"WebSocket Error: {error}"),
-            on_close=lambda ws, close_status_code, close_msg: print(
-                f"WebSocket Connection Closed: {close_msg if close_msg else 'No message'}"
-            ),
-            on_open=lambda ws: print(f"WebSocket Connection Opened for {symbol} orderbook")
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+            on_open=on_open
         )
+
+        # Додаємо необхідну інформацію для перепідключення
+        ws.custom_reconnect_info = {
+            'needs_reconnect': False,
+            'symbol': symbol,
+            'callback': callback,
+            'save_to_file': save_to_file,
+            'directory': directory,
+            'socket_type': 'orderbook'
+        }
 
         import threading
         ws_thread = threading.Thread(target=ws.run_forever)
@@ -453,6 +510,61 @@ class BinanceClient:
 
         return ws
 
+    # Перевірка та автоматичне перепідключення сокетів
+    def check_websocket_connections(self):
+        """Перевірка з'єднань WebSocket та перепідключення при необхідності"""
+        disconnected_sockets = []
+
+        for key, ws_info in list(self.active_websockets.items()):
+            ws = ws_info['ws']
+            if not ws.sock or not ws.sock.connected or ws.custom_reconnect_info['needs_reconnect']:
+                print(f"WebSocket {key} is disconnected or requires reconnection.")
+                disconnected_sockets.append(key)
+
+        # Перепідключення відключених сокетів
+        for key in disconnected_sockets:
+            self.reconnect_websocket(key)
+
+    def reconnect_websocket(self, ws_key):
+        """Перепідключення WebSocket за ключем"""
+        if ws_key not in self.active_websockets:
+            print(f"Cannot reconnect unknown WebSocket: {ws_key}")
+            return False
+
+        # Закриваємо старий WebSocket
+        old_ws = self.active_websockets[ws_key]['ws']
+        reconnect_info = old_ws.custom_reconnect_info
+
+        try:
+            old_ws.close()
+        except Exception as e:
+            print(f"Error closing old WebSocket {ws_key}: {e}")
+
+        # Пауза перед повторним підключенням
+        time.sleep(2)
+
+        # Перепідключення в залежності від типу сокета
+        if reconnect_info['socket_type'] == 'kline':
+            print(f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['interval']}...")
+            self.start_kline_socket(
+                reconnect_info['symbol'],
+                reconnect_info['interval'],
+                reconnect_info['callback'],
+                reconnect_info['save_to_file'],
+                reconnect_info['directory']
+            )
+        elif reconnect_info['socket_type'] == 'orderbook':
+            print(f"Reconnecting orderbook WebSocket for {reconnect_info['symbol']}...")
+            self.order_book_socket(
+                reconnect_info['symbol'],
+                reconnect_info['callback'],
+                reconnect_info['save_to_file'],
+                reconnect_info['directory']
+            )
+
+        print(f"Successfully reconnected WebSocket: {ws_key}")
+        return True
+
     # Зупинка роботи веб сокета
     def close_websocket(self, ws_or_key):
         """Закрити WebSocket з'єднання та відповідний файл"""
@@ -461,7 +573,10 @@ class BinanceClient:
             if ws_or_key in self.active_websockets:
                 ws_info = self.active_websockets[ws_or_key]
                 ws = ws_info['ws']
-                ws.close()
+                try:
+                    ws.close()
+                except Exception as e:
+                    print(f"Error closing WebSocket {ws_or_key}: {e}")
                 # Не закриваємо файл, щоб можна було використовувати його повторно
                 print(f"Closed WebSocket connection: {ws_or_key}")
                 return True
@@ -470,7 +585,10 @@ class BinanceClient:
             # Якщо передано об'єкт WebSocket
             for key, ws_info in self.active_websockets.items():
                 if ws_info['ws'] == ws_or_key:
-                    ws_or_key.close()
+                    try:
+                        ws_or_key.close()
+                    except Exception as e:
+                        print(f"Error closing WebSocket {key}: {e}")
                     # Не закриваємо файл, щоб можна було використовувати його повторно
                     print(f"Closed WebSocket connection: {key}")
                     return True
@@ -479,16 +597,22 @@ class BinanceClient:
     def close_all_websockets(self):
         """Закрити всі WebSocket з'єднання"""
         for key, ws_info in list(self.active_websockets.items()):
-            ws_info['ws'].close()
-            print(f"Closed WebSocket connection: {key}")
+            try:
+                ws_info['ws'].close()
+                print(f"Closed WebSocket connection: {key}")
+            except Exception as e:
+                print(f"Error closing WebSocket {key}: {e}")
 
         self.active_websockets.clear()
 
     def close_all_files(self):
         """Закрити всі відкриті файли"""
         for key, handler in list(self.file_handlers.items()):
-            handler['file'].close()
-            print(f"Closed file: {handler['filename']}")
+            try:
+                handler['file'].close()
+                print(f"Closed file: {handler['filename']}")
+            except Exception as e:
+                print(f"Error closing file {handler['filename']}: {e}")
 
         self.file_handlers.clear()
 
@@ -496,6 +620,15 @@ class BinanceClient:
         """Повне очищення всіх ресурсів"""
         self.close_all_websockets()
         self.close_all_files()
+
+    # ===== Сервісні функції для перепідключення та моніторингу =====
+
+    def check_and_handle_reconnections(self):
+        """Перевірка та обробка необхідності перепідключення"""
+        if self.reconnect_required:
+            print("Reconnection flag detected, checking WebSocket connections...")
+            self.check_websocket_connections()
+            self.reconnect_required = False
 
     # ===== Збереження даних =====
 

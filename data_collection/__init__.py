@@ -1,7 +1,7 @@
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
 from .binance_client import BinanceClient
 from .market_data_processor import MarketDataProcessor
-from .feature_engineering import FeatureEngineer
+from .feature_engineering import FeatureEngineering
 from .twitter_scraper import TwitterScraper
 from .crypto_news_scraper import CryptoNewsScraper
 
