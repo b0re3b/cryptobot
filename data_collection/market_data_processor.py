@@ -52,87 +52,196 @@ class MarketDataProcessor:
             print(f"Помилка збереження в кеш: {e}")
             return False
 
+    def _load_from_database(self, symbol: str, interval: str,
+                            start_date: Optional[datetime] = None,
+                            end_date: Optional[datetime] = None,
+                            data_type: str = 'candles') -> pd.DataFrame:
+
+        self.logger.info(f"Завантаження {data_type} даних з бази даних для {symbol} {interval}")
+
+        try:
+            if data_type == 'candles':
+                data = db.get_klines(
+                    symbol=symbol,
+                    interval=interval,
+                    start_time=start_date,
+                    end_time=end_date
+                )
+            elif data_type == 'orderbook':
+                data = db.get_orderbook(
+                    symbol=symbol,
+                    start_time=start_date,
+                    end_time=end_date
+                )
+            else:
+                raise ValueError(f"Непідтримуваний тип даних: {data_type}")
+
+            if not isinstance(data, pd.DataFrame):
+                data = pd.DataFrame(data)
+
+            if 'timestamp' in data.columns:
+                data['timestamp'] = pd.to_datetime(data['timestamp'])
+                data.set_index('timestamp', inplace=True)
+
+            return data
+
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні з бази даних: {str(e)}")
+            raise
+
     def load_data(self, data_source: str, symbol: str, interval: str,
                   start_date: Optional[Union[str, datetime]] = None,
-                  end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+                  end_date: Optional[Union[str, datetime]] = None,
+                  file_path: Optional[str] = None,
+                  data_type: str = 'candles') -> pd.DataFrame:
 
-            start_date_dt = pd.to_datetime(start_date) if start_date else None
-            end_date_dt = pd.to_datetime(end_date) if end_date else None
+        start_date_dt = pd.to_datetime(start_date) if start_date else None
+        end_date_dt = pd.to_datetime(end_date) if end_date else None
 
-            cache_key = self.create_cache_key(data_source, symbol, interval, start_date, end_date)
+        cache_key = self.create_cache_key(
+            data_source, symbol, interval, start_date, end_date, data_type
+        )
 
+        if self.cache_dir:
             cache_file = os.path.join(self.cache_dir, f"{cache_key}.parquet")
             if os.path.exists(cache_file):
                 self.logger.info(f"Завантаження даних з кешу: {cache_key}")
                 return pd.read_parquet(cache_file)
 
-            # Якщо даних немає в кеші, завантажуємо їх з джерела
-            self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {interval}")
+        self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {interval}, {data_type}")
 
-            params = {
-                'source': data_source,
-                'startTime': start_date_dt,
-                'endTime': end_date_dt,
-                'symbol': symbol,
-                'interval': interval
-            }
+        try:
+            if data_source == 'database':
+                data = self._load_from_database(
+                    symbol,
+                    interval,
+                    start_date_dt,
+                    end_date_dt,
+                    data_type
+                )
+            elif data_source == 'csv':
+                if not file_path:
+                    raise ValueError("Для джерела 'csv' необхідно вказати шлях до файлу (file_path)")
 
-            try:
-                if data_source == 'database':
-                    data = self._load_from_database(params)
-                elif data_source == 'csv':
-                    data = pd.read_csv(params['source'])
-                else:
-                    raise ValueError(f"Непідтримуване джерело даних: {data_source}")
+                self.logger.info(f"Завантаження даних з CSV файлу: {file_path}")
+                data = pd.read_csv(file_path)
 
-                if data is None or data.empty:
-                    self.logger.warning(f"Отримано порожній набір даних від {data_source}")
-                    return pd.DataFrame()
+                if 'timestamp' in data.columns or 'date' in data.columns or 'time' in data.columns:
+                    time_col = next(col for col in ['timestamp', 'date', 'time'] if col in data.columns)
+                    data[time_col] = pd.to_datetime(data[time_col])
+                    data.set_index(time_col, inplace=True)
 
-                if self.cache_dir:
-                    data.to_parquet(cache_file)
-                    self.cache_index[cache_key] = {
-                        'source': data_source,
-                        'symbol': symbol,
-                        'interval': interval,
-                        'start_date': start_date_dt.isoformat() if start_date_dt else None,
-                        'end_date': end_date_dt.isoformat() if end_date_dt else None,
-                        'rows': len(data),
-                        'created_at': datetime.now().isoformat()
-                    }
-                    with open(os.path.join(self.cache_dir, "cache_index.json"), 'w') as f:
-                        json.dump(self.cache_index, f)
+                if start_date_dt:
+                    data = data[data.index >= start_date_dt]
+                if end_date_dt:
+                    data = data[data.index <= end_date_dt]
 
-                return data
+            else:
+                raise ValueError(f"Непідтримуване джерело даних: {data_source}")
 
-            except Exception as e:
-                self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
-                raise
+            if data is None or data.empty:
+                self.logger.warning(f"Отримано порожній набір даних від {data_source}")
+                return pd.DataFrame()
+
+            if self.cache_dir:
+                self.save_to_cache(cache_key, data, metadata={
+                    'source': data_source,
+                    'symbol': symbol,
+                    'interval': interval,
+                    'data_type': data_type,
+                    'start_date': start_date_dt.isoformat() if start_date_dt else None,
+                    'end_date': end_date_dt.isoformat() if end_date_dt else None,
+                    'file_path': file_path if data_source == 'csv' else None
+                })
+
+            return data
+
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
+            raise
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True) -> pd.DataFrame:
-        """
-        Очищує дані від аномалій та виконує базове форматування.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            DataFrame з даними для очищення
-        remove_outliers : bool
-            Чи видаляти аномальні значення
-        fill_missing : bool
-            Чи заповнювати відсутні значення
+        if data.empty:
+            self.logger.warning("Отримано порожній DataFrame для очищення")
+            return data
 
-        Returns:
-        --------
-        pandas.DataFrame
-            Очищений DataFrame
-        """
-        # Видалити дублікати по часовій мітці
-        # Переконатися, що індекс є DatetimeIndex
-        # Виправити типи даних стовпців
-        # Опціонально видалити аномалії та заповнити відсутні значення
-        pass
+        self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
+        result = data.copy()
+
+        if not isinstance(result.index, pd.DatetimeIndex):
+            try:
+                time_cols = [col for col in result.columns if
+                             any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
+                if time_cols:
+                    time_col = time_cols[0]
+                    self.logger.info(f"Конвертування колонки {time_col} в індекс часу")
+                    result[time_col] = pd.to_datetime(result[time_col])
+                    result.set_index(time_col, inplace=True)
+                else:
+                    self.logger.warning("Не знайдено колонку з часом, індекс залишається незмінним")
+            except Exception as e:
+                self.logger.error(f"Помилка при конвертуванні індексу: {str(e)}")
+
+        if result.index.duplicated().any():
+            dup_count = result.index.duplicated().sum()
+            self.logger.info(f"Знайдено {dup_count} дублікатів індексу, видалення...")
+            result = result[~result.index.duplicated(keep='first')]
+
+        result = result.sort_index()
+
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if col in result.columns:
+                result[col] = pd.to_numeric(result[col], errors='coerce')
+
+        if remove_outliers:
+            self.logger.info("Видалення аномальних значень...")
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+            for col in price_cols:
+                Q1 = result[col].quantile(0.25)
+                Q3 = result[col].quantile(0.75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - 3 * IQR
+                upper_bound = Q3 + 3 * IQR
+
+                outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
+                if outliers.any():
+                    outlier_count = outliers.sum()
+                    self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
+                    result.loc[outliers, col] = np.nan
+
+        if fill_missing and result.isna().any().any():
+            self.logger.info("Заповнення відсутніх значень...")
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+            if price_cols:
+                result[price_cols] = result[price_cols].interpolate(method='time')
+
+            if 'volume' in result.columns and result['volume'].isna().any():
+                result['volume'] = result['volume'].fillna(0)
+
+            numeric_cols = result.select_dtypes(include=[np.number]).columns
+            other_numeric = [col for col in numeric_cols if col not in price_cols + ['volume']]
+            if other_numeric:
+                result[other_numeric] = result[other_numeric].interpolate(method='time')
+
+            result = result.fillna(method='ffill').fillna(method='bfill')
+
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+        if len(price_cols) == 4:
+
+            invalid_hl = result['high'] < result['low']
+            if invalid_hl.any():
+                invalid_count = invalid_hl.sum()
+                self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
+
+                temp = result.loc[invalid_hl, 'high'].copy()
+                result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
+                result.loc[invalid_hl, 'low'] = temp
+
+        self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
+        return result
 
     def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
         """
@@ -465,7 +574,25 @@ class MarketDataProcessor:
         # Повернути фінальний оброблений DataFrame
         pass
 
-    def main():
-        data_source = []
-        symbol = ['BTC','SOL','ETH']
-        interval = ['1m','1h','4h','1d']
+ def main():
+     data_source = {
+         'csv': {
+             'BTC': {
+                 '1d': './data/crypto_data/BTCUSDT_1d.csv',
+                 '1h': './data/crypto_data/BTCUSDT_1h.csv',
+                 '4h': './data/crypto_data/BTCUSDT_4h.csv'
+             },
+             'ETH': {
+                 '1d': './data/crypto_data/ETHUSDT_1d.csv',
+                 '1h': './data/crypto_data/ETHUSDT_1h.csv',
+                 '4h': './data/crypto_data/ETHUSDT_4h.csv'
+             },
+             'SOL': {
+                 '1d': './data/crypto_data/SOLUSDT_1d.csv',
+                 '1h': './data/crypto_data/SOLUSDT_1h.csv',
+                 '4h': './data/crypto_data/SOLUSDT_4h.csv'
+             }
+         }
+     }
+    symbol = ['BTC','SOL','ETH']
+    interval = ['1m','1h','4h','1d']
