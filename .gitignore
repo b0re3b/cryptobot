@@ -1,8 +1,3 @@
 utils/config.py
 utils/__pycache__
-data/
-*/data/
-*/*/data/
-data/raw/orderbook/BTCUSDT/BTCUSDT_orderbook_continuous.csv
-data/raw/orderbook/ETHUSDT/ETHUSDT_orderbook_continuous.csv
-data/raw/orderbook/SOLUSDT/SOLUSDT_orderbook_continuous.csv
+
