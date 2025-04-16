@@ -11,14 +11,10 @@ import pandas as pd
 import requests
 import websocket
 from utils.config import BINANCE_API_SECRET, BINANCE_API_KEY
+from data.db import DatabaseManager
 
-# Збереження зібраних даних у папку data
+# Збереження зібраних даних у базу даних
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-DATA_RAW_DIR = os.path.join(PROJECT_ROOT, 'data', 'raw')
-DATA_PROCESSED_DIR = os.path.join(PROJECT_ROOT, 'data', 'processed')
-
-os.makedirs(DATA_RAW_DIR, exist_ok=True)
-os.makedirs(DATA_PROCESSED_DIR, exist_ok=True)
 
 
 class BinanceClient:
@@ -34,9 +30,30 @@ class BinanceClient:
             'Content-Type': 'application/json'
         })
         self.active_websockets = {}
-        self.file_handlers = {}
+        # Ініціалізуємо підключення до бази даних
+        self.db_manager = DatabaseManager()
         # Додаємо флаг для перевірки чи потрібно перепідключитись
         self.reconnect_required = False
+        # Використовуємо підтримувані символи з DatabaseManager
+        self.supported_symbols = self.db_manager.supported_symbols
+        # Кеш для даних
+        self.cache = {
+            'ticker_price': {},
+            'order_book': {},
+            'klines': {}
+        }
+        # Час актуальності кешу (у секундах)
+        self.cache_ttl = {
+            'ticker_price': 5,  # 5 секунд
+            'order_book': 2,  # 2 секунди
+            'klines': 60  # 1 хвилина
+        }
+        # Час останнього оновлення кешу
+        self.last_cache_update = {
+            'ticker_price': {},
+            'order_book': {},
+            'klines': {}
+        }
 
     # Генерація цифрового підпису
     def _generate_signature(self, params):
@@ -48,8 +65,33 @@ class BinanceClient:
         ).hexdigest()
         return signature
 
+    # Перевірка допустимості символу
+    def _validate_symbol(self, symbol):
+        """Перевіряє, чи є символ допустимим для роботи"""
+        base_symbol = None
+
+        # Витягуємо базовий символ (наприклад, BTC з BTCUSDT)
+        for s in self.supported_symbols:
+            if symbol.startswith(s):
+                base_symbol = s
+                break
+
+        if not base_symbol:
+            self.db_manager.log_event('WARNING', f"Непідтримувана криптовалюта: {symbol}", 'BinanceClient')
+            return False, None
+
+        return True, base_symbol
+
     # Отримання даних про ціну у вигляді свічок
-    def get_klines(self, symbol, interval, limit=100, start_time=None, end_time=None):
+    def get_klines(self, symbol, interval, limit=100, start_time=None, end_time=None, use_cache=True):
+        # Перевіряємо кеш, якщо дозволено
+        cache_key = f"{symbol}_{interval}_{start_time}_{end_time}_{limit}"
+
+        if use_cache and cache_key in self.cache['klines']:
+            cache_time = self.last_cache_update['klines'].get(cache_key, 0)
+            if time.time() - cache_time < self.cache_ttl['klines']:
+                return self.cache['klines'][cache_key]
+
         endpoint = f"{self.base_url_v3}/klines"
         params = {
             'symbol': symbol,
@@ -66,8 +108,8 @@ class BinanceClient:
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
             data = response.json()
-        except Exception as e:
-            print(f"Error getting klines: {e}")
+        except requests.exceptions.RequestException as e:
+            self.db_manager.log_event('ERROR', f"Error getting klines: {e}", 'BinanceClient')
             return pd.DataFrame()
 
         df = pd.DataFrame(data, columns=[
@@ -87,10 +129,21 @@ class BinanceClient:
         df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
         df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
 
+        # Оновлюємо кеш
+        if use_cache:
+            self.cache['klines'][cache_key] = df.copy()
+            self.last_cache_update['klines'][cache_key] = time.time()
+
         return df
 
     # Отримання поточної ціни
-    def get_ticker_price(self, symbol=None):
+    def get_ticker_price(self, symbol=None, use_cache=True):
+        # Перевіряємо кеш, якщо дозволено і якщо запитується конкретний символ
+        if use_cache and symbol and symbol in self.cache['ticker_price']:
+            cache_time = self.last_cache_update['ticker_price'].get(symbol, 0)
+            if time.time() - cache_time < self.cache_ttl['ticker_price']:
+                return self.cache['ticker_price'][symbol]
+
         endpoint = f"{self.base_url_v3}/ticker/price"
         params = {}
         if symbol:
@@ -99,13 +152,35 @@ class BinanceClient:
         try:
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            print(f"Error getting ticker price: {e}")
+            data = response.json()
+
+            # Оновлюємо кеш
+            if use_cache:
+                if symbol:
+                    self.cache['ticker_price'][symbol] = data
+                    self.last_cache_update['ticker_price'][symbol] = time.time()
+                else:
+                    # Якщо запитуються всі ціни, оновлюємо кеш для кожного символу
+                    for item in data:
+                        self.cache['ticker_price'][item['symbol']] = {
+                            'symbol': item['symbol'],
+                            'price': item['price']
+                        }
+                        self.last_cache_update['ticker_price'][item['symbol']] = time.time()
+
+            return data
+        except requests.exceptions.RequestException as e:
+            self.db_manager.log_event('ERROR', f"Error getting ticker price: {e}", 'BinanceClient')
             return {}
 
     # Отримання книги ордерів(поточних пропозицій на купівлю чи продаж)
-    def get_order_book(self, symbol, limit=4500):
+    def get_order_book(self, symbol, limit=4500, use_cache=True):
+        # Перевіряємо кеш, якщо дозволено
+        if use_cache and symbol in self.cache['order_book']:
+            cache_time = self.last_cache_update['order_book'].get(symbol, 0)
+            if time.time() - cache_time < self.cache_ttl['order_book']:
+                return self.cache['order_book'][symbol]
+
         endpoint = f"{self.base_url_v3}/depth"
         params = {
             'symbol': symbol,
@@ -116,8 +191,8 @@ class BinanceClient:
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
             data = response.json()
-        except Exception as e:
-            print(f"Error getting order book: {e}")
+        except requests.exceptions.RequestException as e:
+            self.db_manager.log_event('ERROR', f"Error getting order book: {e}", 'BinanceClient')
             return {'bids': pd.DataFrame(), 'asks': pd.DataFrame(), 'lastUpdateId': 0}
 
         bids_df = pd.DataFrame(data['bids'], columns=['price', 'quantity'])
@@ -126,11 +201,18 @@ class BinanceClient:
         bids_df[['price', 'quantity']] = bids_df[['price', 'quantity']].apply(pd.to_numeric)
         asks_df[['price', 'quantity']] = asks_df[['price', 'quantity']].apply(pd.to_numeric)
 
-        return {
+        result = {
             'lastUpdateId': data['lastUpdateId'],
             'bids': bids_df,
             'asks': asks_df
         }
+
+        # Оновлюємо кеш
+        if use_cache:
+            self.cache['order_book'][symbol] = result
+            self.last_cache_update['order_book'][symbol] = time.time()
+
+        return result
 
     # Отримання останніх угод
     def get_recent_trades(self, symbol, limit=100):
@@ -144,8 +226,8 @@ class BinanceClient:
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
             data = response.json()
-        except Exception as e:
-            print(f"Error getting recent trades: {e}")
+        except requests.exceptions.RequestException as e:
+            self.db_manager.log_event('ERROR', f"Error getting recent trades: {e}", 'BinanceClient')
             return pd.DataFrame()
 
         df = pd.DataFrame(data)
@@ -170,8 +252,8 @@ class BinanceClient:
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
             return response.json()
-        except Exception as e:
-            print(f"Error getting 24hr ticker statistics: {e}")
+        except requests.exceptions.RequestException as e:
+            self.db_manager.log_event('ERROR', f"Error getting 24hr ticker statistics: {e}", 'BinanceClient')
             return {}
 
     # ===== Authenticated REST API requests =====
@@ -191,8 +273,8 @@ class BinanceClient:
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
             return response.json()
-        except Exception as e:
-            print(f"Error getting account info: {e}")
+        except requests.exceptions.RequestException as e:
+            self.db_manager.log_event('ERROR', f"Error getting account info: {e}", 'BinanceClient')
             return {}
 
     # ===== Async methods for high performance =====
@@ -215,7 +297,8 @@ class BinanceClient:
                 async with session.get(endpoint, params=params) as response:
                     if response.status != 200:
                         text = await response.text()
-                        print(f"Error {response.status} for {symbol}: {text}")
+                        self.db_manager.log_event('ERROR', f"Error {response.status} for {symbol}: {text}",
+                                                  'BinanceClient')
                         return symbol, pd.DataFrame()
 
                     data = await response.json()
@@ -239,7 +322,7 @@ class BinanceClient:
 
                     return symbol, df
             except Exception as e:
-                print(f"Error fetching klines for {symbol}: {e}")
+                self.db_manager.log_event('ERROR', f"Error fetching klines for {symbol}: {e}", 'BinanceClient')
                 return symbol, pd.DataFrame()
 
         async with aiohttp.ClientSession() as session:
@@ -250,141 +333,151 @@ class BinanceClient:
 
     # ===== WebSocket methods for real-time data =====
 
-    def _get_kline_file_handler(self, symbol, interval, directory=None):
-        """Отримати або створити файловий обробник для свічок"""
-        if directory is None:
-            directory = os.path.join(DATA_RAW_DIR, 'candles')
+    def _save_kline_to_db(self, kline_data):
+        """Зберігає дані свічки в базу даних"""
+        try:
+            # Отримуємо базову валюту з символа (напр. BTC з BTCUSDT)
+            symbol = kline_data['symbol']
+            is_valid, crypto_symbol = self._validate_symbol(symbol)
 
-        # Створюємо директорію для збереження свічок
-        symbol_dir = os.path.join(directory, symbol)
-        os.makedirs(symbol_dir, exist_ok=True)
+            if not is_valid:
+                return False
 
-        # Формуємо унікальний ключ для цього типу даних
-        file_key = f"kline_{symbol}_{interval}"
+            # Перетворюємо дані у формат, який очікує DatabaseManager
+            kline_db_data = {
+                'interval': kline_data['interval'],
+                'open_time': kline_data['open_time'],
+                'open': float(kline_data['open']),
+                'high': float(kline_data['high']),
+                'low': float(kline_data['low']),
+                'close': float(kline_data['close']),
+                'volume': float(kline_data['volume']),
+                'close_time': kline_data['close_time'],
+                'quote_asset_volume': float(kline_data['quote_asset_volume']),
+                'number_of_trades': int(kline_data['number_of_trades']),
+                'taker_buy_base_volume': float(kline_data['taker_buy_base_volume']),
+                'taker_buy_quote_volume': float(kline_data['taker_buy_quote_volume']),
+                'is_closed': kline_data['is_closed']
+            }
 
-        # Якщо обробник файлу вже існує, повертаємо його
-        if file_key in self.file_handlers:
-            return self.file_handlers[file_key]
+            # Вставка даних у відповідну таблицю
+            result = self.db_manager.insert_kline(crypto_symbol, kline_db_data)
+            return result
+        except Exception as e:
+            self.db_manager.log_event('ERROR', f"Error saving kline to database: {e}", 'BinanceClient')
+            return False
 
-        # Інакше створюємо новий файл для запису
-        filename = os.path.join(symbol_dir, f"{symbol}_{interval}_continuous.csv")
-        file_exists = os.path.exists(filename)
+    def _save_orderbook_to_db(self, orderbook_data):
+        """Зберігає дані книги ордерів в базу даних"""
+        try:
+            # Отримуємо базову валюту з символа (напр. BTC з BTCUSDT)
+            symbol = orderbook_data['symbol']
+            is_valid, crypto_symbol = self._validate_symbol(symbol)
 
-        file = open(filename, 'a', newline='')  # append mode
-        import csv
-        writer = csv.writer(file)
+            if not is_valid:
+                return False
 
-        # Якщо файл новий, записуємо заголовок
-        if not file_exists:
-            writer.writerow([
-                'symbol', 'interval', 'open_time', 'open', 'high', 'low',
-                'close', 'volume', 'close_time', 'is_closed'
-            ])
+            timestamp = orderbook_data['timestamp']
+            last_update_id = orderbook_data['last_update_id']
 
-        file_handler = {
-            'file': file,
-            'writer': writer,
-            'filename': filename
-        }
+            # Обробка ордерів на купівлю (bids)
+            if 'bids' in orderbook_data and orderbook_data['bids']:
+                for bid in orderbook_data['bids']:
+                    orderbook_entry = {
+                        'timestamp': timestamp,
+                        'last_update_id': last_update_id,
+                        'type': 'bid',
+                        'price': float(bid[0]),
+                        'quantity': float(bid[1])
+                    }
+                    self.db_manager.insert_orderbook_entry(crypto_symbol, orderbook_entry)
 
-        # Зберігаємо обробник для майбутнього використання
-        self.file_handlers[file_key] = file_handler
-        print(f"Created/opened file for kline data: {filename}")
+            # Обробка ордерів на продаж (asks)
+            if 'asks' in orderbook_data and orderbook_data['asks']:
+                for ask in orderbook_data['asks']:
+                    orderbook_entry = {
+                        'timestamp': timestamp,
+                        'last_update_id': last_update_id,
+                        'type': 'ask',
+                        'price': float(ask[0]),
+                        'quantity': float(ask[1])
+                    }
+                    self.db_manager.insert_orderbook_entry(crypto_symbol, orderbook_entry)
 
-        return file_handler
+            return True
+        except Exception as e:
+            self.db_manager.log_event('ERROR', f"Error saving orderbook to database: {e}", 'BinanceClient')
+            return False
 
-    def _get_orderbook_file_handler(self, symbol, directory=None):
-        """Отримати або створити файловий обробник для книги ордерів"""
-        if directory is None:
-            directory = os.path.join(DATA_RAW_DIR, 'orderbook')
-
-        # Створюємо директорію для збереження даних книги ордерів
-        symbol_dir = os.path.join(directory, symbol)
-        os.makedirs(symbol_dir, exist_ok=True)
-
-        # Формуємо унікальний ключ для цього типу даних
-        file_key = f"orderbook_{symbol}"
-
-        # Якщо обробник файлу вже існує, повертаємо його
-        if file_key in self.file_handlers:
-            return self.file_handlers[file_key]
-
-        # Інакше створюємо новий файл для запису
-        filename = os.path.join(symbol_dir, f"{symbol}_orderbook_continuous.csv")
-        file_exists = os.path.exists(filename)
-
-        file = open(filename, 'a', newline='')  # append mode
-        import csv
-        writer = csv.writer(file)
-
-        # Якщо файл новий, записуємо заголовок
-        if not file_exists:
-            writer.writerow([
-                'timestamp', 'lastUpdateId', 'type', 'price', 'quantity'
-            ])
-
-        file_handler = {
-            'file': file,
-            'writer': writer,
-            'filename': filename
-        }
-
-        # Зберігаємо обробник для майбутнього використання
-        self.file_handlers[file_key] = file_handler
-        print(f"Created/opened file for orderbook data: {filename}")
-
-        return file_handler
-
-    def start_kline_socket(self, symbol, interval, callback, save_to_file=False, directory=None):
+    def start_kline_socket(self, symbol, interval, callback, save_to_db=True):
         """Запуск WebSocket для отримання даних свічок"""
+        # Перевіряємо, чи є базовий символ допустимим
+        is_valid, _ = self._validate_symbol(symbol)
+        if not is_valid:
+            self.db_manager.log_event('ERROR', f"Cannot start kline socket for unsupported symbol: {symbol}",
+                                      'BinanceClient')
+            return None
+
         socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@kline_{interval}"
 
-        file_handler = None
-        if save_to_file:
-            file_handler = self._get_kline_file_handler(symbol, interval, directory)
+        # Додаємо запис про WebSocket-з'єднання в базу даних
+        if save_to_db:
+            self.db_manager.update_websocket_status(symbol, 'kline', interval, True)
 
         def on_message(ws, message):
             try:
                 callback(ws, message)
 
-                if save_to_file and file_handler:
+                if save_to_db:
                     try:
                         data = json.loads(message)
                         candle = data['k']
 
-                        file_handler['writer'].writerow([
-                            candle['s'],  # symbol
-                            candle['i'],  # interval
-                            datetime.fromtimestamp(candle['t'] / 1000),  # open_time
-                            candle['o'],  # open
-                            candle['h'],  # high
-                            candle['l'],  # low
-                            candle['c'],  # close
-                            candle['v'],  # volume
-                            datetime.fromtimestamp(candle['T'] / 1000),  # close_time
-                            candle['x']  # is_closed
-                        ])
-                        # Краще використовувати flush() менш часто, наприклад кожні 10 записів
-                        # Але оскільки ми зберігаємо в один файл, будемо робити flush після кожного запису
-                        file_handler['file'].flush()
+                        kline_data = {
+                            'symbol': candle['s'],  # symbol
+                            'interval': candle['i'],  # interval
+                            'open_time': datetime.fromtimestamp(candle['t'] / 1000),  # open_time
+                            'open': candle['o'],  # open
+                            'high': candle['h'],  # high
+                            'low': candle['l'],  # low
+                            'close': candle['c'],  # close
+                            'volume': candle['v'],  # volume
+                            'close_time': datetime.fromtimestamp(candle['T'] / 1000),  # close_time
+                            'quote_asset_volume': candle['q'],  # quote asset volume
+                            'number_of_trades': candle['n'],  # number of trades
+                            'taker_buy_base_volume': candle['V'],  # taker buy base volume
+                            'taker_buy_quote_volume': candle['Q'],  # taker buy quote volume
+                            'is_closed': candle['x']  # is closed
+                        }
+
+                        self._save_kline_to_db(kline_data)
                     except Exception as e:
-                        print(f"Error saving kline data to file: {e}")
+                        self.db_manager.log_event('ERROR', f"Error saving kline data to database: {e}", 'BinanceClient')
             except Exception as e:
-                print(f"Error in on_message handler for kline: {e}")
+                self.db_manager.log_event('ERROR', f"Error in on_message handler for kline: {e}", 'BinanceClient')
 
         def on_error(ws, error):
-            print(f"WebSocket Error: {error}")
+            self.db_manager.log_event('ERROR', f"WebSocket Error: {error}", 'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = True
+            if save_to_db:
+                self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
 
         def on_close(ws, close_status_code, close_msg):
-            print(f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}")
+            self.db_manager.log_event('INFO',
+                                      f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}",
+                                      'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = True
+            if save_to_db:
+                self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
             # Запускаємо пізніше перепідключення
             self.reconnect_required = True
 
         def on_open(ws):
-            print(f"WebSocket Connection Opened for {symbol} {interval} klines")
+            self.db_manager.log_event('INFO', f"WebSocket Connection Opened for {symbol} {interval} klines",
+                                      'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = False
+            if save_to_db:
+                self.db_manager.update_websocket_status(symbol, 'kline', interval, True)
 
         ws = websocket.WebSocketApp(
             socket_url,
@@ -393,6 +486,9 @@ class BinanceClient:
             on_close=on_close,
             on_open=on_open
         )
+
+        # Додаємо механізм пінгу для підтримки з'єднання
+        ws.on_ping = lambda ws, message: ws.send(json.dumps({"type": "pong"}))
 
         # Додаємо необхідну інформацію для перепідключення
         ws.custom_reconnect_info = {
@@ -400,83 +496,84 @@ class BinanceClient:
             'symbol': symbol,
             'interval': interval,
             'callback': callback,
-            'save_to_file': save_to_file,
-            'directory': directory,
-            'socket_type': 'kline'
+            'save_to_db': save_to_db,
+            'socket_type': 'kline',
+            'last_ping_time': time.time()
         }
 
         import threading
-        ws_thread = threading.Thread(target=ws.run_forever)
+        ws_thread = threading.Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
         ws_thread.daemon = True
         ws_thread.start()
 
         # Зберігаємо веб-сокет в активних з'єднаннях
         ws_key = f"kline_{symbol}_{interval}"
         self.active_websockets[ws_key] = {
-            'ws': ws,
-            'file_handler': file_handler
+            'ws': ws
         }
 
         return ws
 
-    def order_book_socket(self, symbol, callback, save_to_file=False, directory=None):
+    def order_book_socket(self, symbol, callback, save_to_db=True):
         """Запуск WebSocket для отримання даних книги ордерів"""
+        # Перевіряємо, чи є базовий символ допустимим
+        is_valid, _ = self._validate_symbol(symbol)
+        if not is_valid:
+            self.db_manager.log_event('ERROR', f"Cannot start orderbook socket for unsupported symbol: {symbol}",
+                                      'BinanceClient')
+            return None
+
         socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@depth20@100ms"
 
-        file_handler = None
-        if save_to_file:
-            file_handler = self._get_orderbook_file_handler(symbol, directory)
+        # Додаємо запис про WebSocket-з'єднання в базу даних
+        if save_to_db:
+            self.db_manager.update_websocket_status(symbol, 'orderbook', None, True)
 
         def on_message(ws, message):
             try:
                 callback(ws, message)
 
-                if save_to_file and file_handler:
+                if save_to_db:
                     try:
                         data = json.loads(message)
                         timestamp = datetime.now()
 
-                        if 'bids' in data and data['bids']:
-                            for bid in data['bids']:
-                                file_handler['writer'].writerow([
-                                    timestamp,
-                                    data.get('lastUpdateId', 'N/A'),
-                                    'bid',
-                                    bid[0],
-                                    bid[1]
-                                ])
+                        orderbook_data = {
+                            'symbol': symbol,
+                            'timestamp': timestamp,
+                            'last_update_id': data.get('lastUpdateId', 0),
+                            'bids': data.get('bids', []),
+                            'asks': data.get('asks', [])
+                        }
 
-                        if 'asks' in data and data['asks']:
-                            for ask in data['asks']:
-                                file_handler['writer'].writerow([
-                                    timestamp,
-                                    data.get('lastUpdateId', 'N/A'),
-                                    'ask',
-                                    ask[0],
-                                    ask[1]
-                                ])
-
-                        # Краще використовувати flush() менш часто, наприклад кожні 10 записів
-                        # Але оскільки ми зберігаємо в один файл, будемо робити flush після кожного запису
-                        file_handler['file'].flush()
+                        self._save_orderbook_to_db(orderbook_data)
                     except Exception as e:
-                        print(f"Error saving order book data to file: {e}")
+                        self.db_manager.log_event('ERROR', f"Error saving order book data to database: {e}",
+                                                  'BinanceClient')
             except Exception as e:
-                print(f"Error in on_message handler for orderbook: {e}")
+                self.db_manager.log_event('ERROR', f"Error in on_message handler for orderbook: {e}", 'BinanceClient')
 
         def on_error(ws, error):
-            print(f"WebSocket Error: {error}")
+            self.db_manager.log_event('ERROR', f"WebSocket Error: {error}", 'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = True
+            if save_to_db:
+                self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
 
         def on_close(ws, close_status_code, close_msg):
-            print(f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}")
+            self.db_manager.log_event('INFO',
+                                      f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}",
+                                      'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = True
+            if save_to_db:
+                self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
             # Запускаємо пізніше перепідключення
             self.reconnect_required = True
 
         def on_open(ws):
-            print(f"WebSocket Connection Opened for {symbol} orderbook")
+            self.db_manager.log_event('INFO', f"WebSocket Connection Opened for {symbol} orderbook", 'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = False
+            if save_to_db:
+                self.db_manager.update_websocket_status(symbol, 'orderbook', None, True)
 
         ws = websocket.WebSocketApp(
             socket_url,
@@ -486,26 +583,28 @@ class BinanceClient:
             on_open=on_open
         )
 
+        # Додаємо механізм пінгу для підтримки з'єднання
+        ws.on_ping = lambda ws, message: ws.send(json.dumps({"type": "pong"}))
+
         # Додаємо необхідну інформацію для перепідключення
         ws.custom_reconnect_info = {
             'needs_reconnect': False,
             'symbol': symbol,
             'callback': callback,
-            'save_to_file': save_to_file,
-            'directory': directory,
-            'socket_type': 'orderbook'
+            'save_to_db': save_to_db,
+            'socket_type': 'orderbook',
+            'last_ping_time': time.time()
         }
 
         import threading
-        ws_thread = threading.Thread(target=ws.run_forever)
+        ws_thread = threading.Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
         ws_thread.daemon = True
         ws_thread.start()
 
         # Зберігаємо веб-сокет в активних з'єднаннях
         ws_key = f"orderbook_{symbol}"
         self.active_websockets[ws_key] = {
-            'ws': ws,
-            'file_handler': file_handler
+            'ws': ws
         }
 
         return ws
@@ -518,8 +617,17 @@ class BinanceClient:
         for key, ws_info in list(self.active_websockets.items()):
             ws = ws_info['ws']
             if not ws.sock or not ws.sock.connected or ws.custom_reconnect_info['needs_reconnect']:
-                print(f"WebSocket {key} is disconnected or requires reconnection.")
+                self.db_manager.log_event('WARNING', f"WebSocket {key} is disconnected or requires reconnection.",
+                                          'BinanceClient')
                 disconnected_sockets.append(key)
+            else:
+                # Перевіряємо час останнього пінгу
+                if 'last_ping_time' in ws.custom_reconnect_info:
+                    last_ping = ws.custom_reconnect_info['last_ping_time']
+                    if time.time() - last_ping > 120:  # 2 хвилини без пінгу
+                        self.db_manager.log_event('WARNING', f"WebSocket {key} has not received ping for too long.",
+                                                  'BinanceClient')
+                        disconnected_sockets.append(key)
 
         # Перепідключення відключених сокетів
         for key in disconnected_sockets:
@@ -528,7 +636,7 @@ class BinanceClient:
     def reconnect_websocket(self, ws_key):
         """Перепідключення WebSocket за ключем"""
         if ws_key not in self.active_websockets:
-            print(f"Cannot reconnect unknown WebSocket: {ws_key}")
+            self.db_manager.log_event('ERROR', f"Cannot reconnect unknown WebSocket: {ws_key}", 'BinanceClient')
             return False
 
         # Закриваємо старий WebSocket
@@ -539,6 +647,7 @@ class BinanceClient:
             old_ws.close()
         except Exception as e:
             print(f"Error closing old WebSocket {ws_key}: {e}")
+            self.db_manager.log_event('ERROR', f"Error closing old WebSocket {ws_key}: {e}", 'BinanceClient')
 
         # Пауза перед повторним підключенням
         time.sleep(2)
@@ -546,99 +655,128 @@ class BinanceClient:
         # Перепідключення в залежності від типу сокета
         if reconnect_info['socket_type'] == 'kline':
             print(f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['interval']}...")
+            self.db_manager.log_event('INFO',
+                                      f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['interval']}...",
+                                      'BinanceClient')
             self.start_kline_socket(
                 reconnect_info['symbol'],
                 reconnect_info['interval'],
                 reconnect_info['callback'],
-                reconnect_info['save_to_file'],
-                reconnect_info['directory']
+                reconnect_info['save_to_db']
             )
         elif reconnect_info['socket_type'] == 'orderbook':
             print(f"Reconnecting orderbook WebSocket for {reconnect_info['symbol']}...")
+            self.db_manager.log_event('INFO', f"Reconnecting orderbook WebSocket for {reconnect_info['symbol']}...",
+                                      'BinanceClient')
             self.order_book_socket(
                 reconnect_info['symbol'],
                 reconnect_info['callback'],
-                reconnect_info['save_to_file'],
-                reconnect_info['directory']
+                reconnect_info['save_to_db']
             )
 
         print(f"Successfully reconnected WebSocket: {ws_key}")
+        self.db_manager.log_event('INFO', f"Successfully reconnected WebSocket: {ws_key}", 'BinanceClient')
         return True
 
     # Зупинка роботи веб сокета
     def close_websocket(self, ws_or_key):
-        """Закрити WebSocket з'єднання та відповідний файл"""
         if isinstance(ws_or_key, str):
-            # Якщо передано ключ
             if ws_or_key in self.active_websockets:
                 ws_info = self.active_websockets[ws_or_key]
                 ws = ws_info['ws']
+
+                socket_parts = ws_or_key.split('_')
+                if socket_parts[0] == 'kline':
+                    symbol = socket_parts[1]
+                    interval = socket_parts[2]
+                    self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
+                elif socket_parts[0] == 'orderbook':
+                    symbol = socket_parts[1]
+                    self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
+
                 try:
                     ws.close()
                 except Exception as e:
                     print(f"Error closing WebSocket {ws_or_key}: {e}")
-                # Не закриваємо файл, щоб можна було використовувати його повторно
+                    self.db_manager.log_event('ERROR', f"Error closing WebSocket {ws_or_key}: {e}", 'BinanceClient')
                 print(f"Closed WebSocket connection: {ws_or_key}")
+                self.db_manager.log_event('INFO', f"Closed WebSocket connection: {ws_or_key}", 'BinanceClient')
                 return True
             return False
         else:
-            # Якщо передано об'єкт WebSocket
             for key, ws_info in self.active_websockets.items():
                 if ws_info['ws'] == ws_or_key:
                     try:
                         ws_or_key.close()
                     except Exception as e:
                         print(f"Error closing WebSocket {key}: {e}")
-                    # Не закриваємо файл, щоб можна було використовувати його повторно
+                        self.db_manager.log_event('ERROR', f"Error closing WebSocket {key}: {e}", 'BinanceClient')
                     print(f"Closed WebSocket connection: {key}")
+                    self.db_manager.log_event('INFO', f"Closed WebSocket connection: {key}", 'BinanceClient')
+
+                    # Оновлюємо статус у БД
+                    socket_parts = key.split('_')
+                    if socket_parts[0] == 'kline':
+                        symbol = socket_parts[1]
+                        interval = socket_parts[2]
+                        self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
+                    elif socket_parts[0] == 'orderbook':
+                        symbol = socket_parts[1]
+                        self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
+
                     return True
             return False
 
     def close_all_websockets(self):
-        """Закрити всі WebSocket з'єднання"""
         for key, ws_info in list(self.active_websockets.items()):
             try:
                 ws_info['ws'].close()
                 print(f"Closed WebSocket connection: {key}")
+                self.db_manager.log_event('INFO', f"Closed WebSocket connection: {key}", 'BinanceClient')
+
+                # Оновлюємо статус у БД
+                socket_parts = key.split('_')
+                if socket_parts[0] == 'kline':
+                    symbol = socket_parts[1]
+                    interval = socket_parts[2]
+                    self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
+                elif socket_parts[0] == 'orderbook':
+                    symbol = socket_parts[1]
+                    self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
             except Exception as e:
                 print(f"Error closing WebSocket {key}: {e}")
+                self.db_manager.log_event('ERROR', f"Error closing WebSocket {key}: {e}", 'BinanceClient')
 
         self.active_websockets.clear()
-
-    def close_all_files(self):
-        """Закрити всі відкриті файли"""
-        for key, handler in list(self.file_handlers.items()):
-            try:
-                handler['file'].close()
-                print(f"Closed file: {handler['filename']}")
-            except Exception as e:
-                print(f"Error closing file {handler['filename']}: {e}")
-
-        self.file_handlers.clear()
 
     def cleanup(self):
         """Повне очищення всіх ресурсів"""
         self.close_all_websockets()
-        self.close_all_files()
+        self.db_manager.disconnect()
+        print("Cleaned up all resources")
 
     # ===== Сервісні функції для перепідключення та моніторингу =====
 
     def check_and_handle_reconnections(self):
-        """Перевірка та обробка необхідності перепідключення"""
         if self.reconnect_required:
             print("Reconnection flag detected, checking WebSocket connections...")
+            self.db_manager.log_event('INFO', "Reconnection flag detected, checking WebSocket connections...",
+                                      'BinanceClient')
             self.check_websocket_connections()
             self.reconnect_required = False
 
-    # ===== Збереження даних =====
+    # ===== Збереження історичних даних в базу даних =====
 
-    def save_historical_data(self, symbol, interval, start_date, end_date=None, directory=None):
-        if directory is None:
-            directory = os.path.join(DATA_RAW_DIR, 'candles')
+    def save_historical_data_to_db(self, symbol, interval, start_date, end_date=None):
+        """Зберігає історичні дані свічок в базу даних"""
+        print(f"Починаємо зберігання історичних даних для {symbol} з інтервалом {interval}")
+        self.db_manager.log_event('INFO', f"Починаємо зберігання історичних даних для {symbol} з інтервалом {interval}",
+                                  'BinanceClient')
 
-        symbol_dir = os.path.join(directory, symbol)
-        os.makedirs(symbol_dir, exist_ok=True)
-        print(f"Creating directory for historical data: {symbol_dir}")
+        base_asset = symbol[:-4]
+        quote_asset = symbol[-4:]
+
+        self.db_manager.insert_cryptocurrency(symbol, base_asset, quote_asset)
 
         start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp() * 1000)
         if end_date:
@@ -646,11 +784,11 @@ class BinanceClient:
         else:
             end_ts = int(datetime.now().timestamp() * 1000)
 
-        all_candles = pd.DataFrame()
         current_start = start_ts
+        saved_candles_count = 0
 
         while current_start < end_ts:
-            current_end = min(current_start + (1000 * 60 * 60 * 24), end_ts)
+            current_end = min(current_start + (1000 * 60 * 60 * 24), end_ts)  # Обмеження на 1 день данних за запит
 
             df = self.get_klines(
                 symbol=symbol,
@@ -662,60 +800,55 @@ class BinanceClient:
 
             if df.empty:
                 print(
-                    f"No data returned for {symbol} from {datetime.fromtimestamp(current_start / 1000)} to {datetime.fromtimestamp(current_end / 1000)}")
-
+                    f"Дані відсутні для {symbol} від {datetime.fromtimestamp(current_start / 1000)} до {datetime.fromtimestamp(current_end / 1000)}")
+                self.db_manager.log_event('WARNING',
+                                          f"Дані відсутні для {symbol} від {datetime.fromtimestamp(current_start / 1000)} до {datetime.fromtimestamp(current_end / 1000)}",
+                                          'BinanceClient')
                 current_start = current_end + 1
                 continue
 
-            all_candles = pd.concat([all_candles, df])
+            for _, row in df.iterrows():
+                kline_data = {
+                    'symbol': symbol,
+                    'interval': interval,
+                    'open_time': row['open_time'],
+                    'open': float(row['open']),
+                    'high': float(row['high']),
+                    'low': float(row['low']),
+                    'close': float(row['close']),
+                    'volume': float(row['volume']),
+                    'close_time': row['close_time'],
+                    'quote_asset_volume': float(row['quote_asset_volume']),
+                    'number_of_trades': int(row['number_of_trades']),
+                    'taker_buy_base_volume': float(row['taker_buy_base_asset_volume']),
+                    'taker_buy_quote_volume': float(row['taker_buy_quote_asset_volume']),
+                    'is_closed': True
+                }
+
+                try:
+                    self._save_kline_to_db(kline_data)
+                    saved_candles_count += 1
+                except Exception as e:
+                    print(f"Помилка збереження свічки в базу даних: {e}")
+                    self.db_manager.log_event('ERROR', f"Помилка збереження свічки в базу даних: {e}", 'BinanceClient')
 
             if len(df) > 0:
                 current_start = int(df.iloc[-1]['close_time'].timestamp() * 1000) + 1
             else:
                 break
-
             time.sleep(2)
 
-        if all_candles.empty:
-            print(f"No data collected for {symbol} for the specified time period")
-            return None
-
-        filename_prefix = f"{symbol}_{interval}_{start_date}"
-        if end_date:
-            filename_prefix += f"_to_{end_date}"
-
-        filename = os.path.join(symbol_dir, f"{filename_prefix}.csv")
-
-        try:
-            all_candles.to_csv(filename, index=False)
-            print(f"Saved {len(all_candles)} candles for {symbol} ({interval}) to file {filename}")
-            return filename
-        except Exception as e:
-            print(f"Error saving data to file: {e}")
-            return None
-
-    def save_processed_data(self, dataframe, symbol, data_type, timestamp=None, directory=None):
-        if directory is None:
-            directory = DATA_PROCESSED_DIR
-
-        type_dir = os.path.join(directory, data_type)
-        symbol_dir = os.path.join(type_dir, symbol)
-        os.makedirs(symbol_dir, exist_ok=True)
-        print(f"Creating directory for processed data: {symbol_dir}")
-
-        if timestamp is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        filename = os.path.join(symbol_dir, f"{symbol}_{data_type}_{timestamp}.csv")
-
-        try:
-            dataframe.to_csv(filename, index=False)
-            print(f"Saved {len(dataframe)} records of {data_type} data for {symbol} to {filename}")
-            return filename
-        except Exception as e:
-            print(f"Error saving processed data to file: {e}")
-            return None
-
+        if saved_candles_count > 0:
+            print(f"Збережено {saved_candles_count} свічок для {symbol} ({interval}) в базу даних")
+            self.db_manager.log_event('INFO',
+                                      f"Збережено {saved_candles_count} свічок для {symbol} ({interval}) в базу даних",
+                                      'BinanceClient')
+            return saved_candles_count
+        else:
+            print(f"Не вдалося зберегти жодної свічки для {symbol} за вказаний період")
+            self.db_manager.log_event('WARNING', f"Не вдалося зберегти жодної свічки для {symbol} за вказаний період",
+                                      'BinanceClient')
+            return 0
 
 def handle_kline_message(ws, message):
     data = json.loads(message)
@@ -758,45 +891,56 @@ def handle_order_book_message(ws, message):
     print("-----")
 
 
-# Main function
 def main():
     client = BinanceClient()
-
-    # Список криптовалют для відстеження
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 
     try:
         # Отримання поточних цін для всіх символів
         for symbol in symbols:
-            price = client.get_ticker_price(symbol=symbol)
-            if price:
-                print(f"Поточна ціна {symbol}: {price['price']}")
-            else:
-                print(f"Не вдалося отримати ціну {symbol}")
-    except Exception as e:
-        print(f"Помилка при отриманні цін: {e}")
-        return
+            try:
+                price = client.get_ticker_price(symbol=symbol)
+                if price:
+                    print(f"Поточна ціна {symbol}: {price['price']}")
+                else:
+                    print(f"Не вдалося отримати ціну {symbol}")
+            except Exception as e:
+                print(f"Помилка при отриманні ціни {symbol}: {e}")
 
-    print("Підключення до WebSocket для отримання даних у реальному часі...")
+        print("Підключення до WebSocket для отримання даних у реальному часі...")
 
-    # Запуск WebSocket для всіх символів (свічки)
-    for symbol in symbols:
-        # Створення веб-сокетів для свічок (1-хвилинний інтервал)
-        client.start_kline_socket(symbol, "1m", handle_kline_message, save_to_file=True)
+        active_sockets = []
+        # Запуск WebSocket для всіх символів (свічки)
+        for symbol in symbols:
+            try:
+                # Створення веб-сокетів для свічок (1-хвилинний інтервал)
+                socket1 = client.start_kline_socket(symbol, "1m", handle_kline_message, save_to_db=True)
+                if socket1:
+                    active_sockets.append(socket1)
 
-        # Створення веб-сокетів для книги ордерів
-        client.order_book_socket(symbol, handle_order_book_message, save_to_file=True)
+                # Створення веб-сокетів для книги ордерів
+                socket2 = client.order_book_socket(symbol, handle_order_book_message, save_to_db=True)
+                if socket2:
+                    active_sockets.append(socket2)
+            except Exception as e:
+                print(f"Помилка при створенні WebSocket для {symbol}: {e}")
 
-    try:
+        if not active_sockets:
+            print("Не вдалося створити жодного WebSocket з'єднання!")
+            return
+
         print("Очікування даних ринку в реальному часі. Натисніть Ctrl+C для виходу.")
-        print(f"Дані зберігаються в: {DATA_RAW_DIR}")
+
         while True:
-            time.sleep(1)
+            time.sleep(5)
+            client.check_and_handle_reconnections()
+
     except KeyboardInterrupt:
         print("Завершення роботи...")
-        client.cleanup()  # Закриття всіх з'єднань та файлів
+    except Exception as e:
+        print(f"Критична помилка: {e}")
+    finally:
+        client.cleanup()
 
-
-# Запуск основної функції
 if __name__ == "__main__":
     main()
