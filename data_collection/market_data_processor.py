@@ -1,5 +1,3 @@
-# market_data_processor.py
-
 import os
 import pandas as pd
 import numpy as np
@@ -11,56 +9,105 @@ import hashlib
 import json
 from functools import lru_cache
 import pytz
-import warnings
-
+from utils.config import db_connection
+import data.db as db
 
 class MarketDataProcessor:
-    def __init__(self, cache_dir=None, log_level=logging.INFO):
-        """
-        Ініціалізує процесор ринкових даних з опціональним кешуванням.
 
-        Parameters:
-        -----------
-        cache_dir : str, optional
-            Директорія для зберігання кешованих даних
-        log_level : int, optional
-            Рівень логування
-        """
-        # Ініціалізувати логування
-        # Налаштувати кешування та створити директорію, якщо потрібно
-        # Ініціалізувати внутрішні змінні для відстеження стану
-        pass
+    def __init__(self, cache_dir=None, log_level=logging.INFO):
+        self.cache_dir = cache_dir
+        self.log_level = log_level
+        self.db_connection = db_connection
+
+        logging.basicConfig(level=self.log_level)
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Ініціалізація класу...")
+
+        if self.cache_dir:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            self.logger.info(f"Директорію для кешу створено: {self.cache_dir}")
+
+        self.cache_index = {}
+        self._load_cache_index()
+        self.ready = True
+
+    def _get_cache_path(self, cache_key: str) -> str:
+        return os.path.join(self.cache_dir, f"{cache_key}.parquet")
+
+    def save_to_cache(self, cache_key: str, data: pd.DataFrame, metadata: Dict = None) -> bool:
+        cache_path = self._get_cache_path(cache_key)
+        try:
+            data.to_parquet(cache_path)
+
+            self.cache_index[cache_key] = {
+                "created_at": datetime.now().isoformat(),
+                "rows": len(data),
+                "columns": list(data.columns),
+                **(metadata or {})
+            }
+
+            self._save_cache_index()
+            return True
+        except Exception as e:
+            print(f"Помилка збереження в кеш: {e}")
+            return False
 
     def load_data(self, data_source: str, symbol: str, interval: str,
                   start_date: Optional[Union[str, datetime]] = None,
                   end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
-        """
-        Завантажує дані з вказаного джерела.
 
-        Parameters:
-        -----------
-        data_source : str
-            Джерело даних (наприклад, 'binance', 'csv', 'database')
-        symbol : str
-            Торгова пара (наприклад, 'BTCUSDT')
-        interval : str
-            Часовий інтервал свічок (наприклад, '1m', '1h')
-        start_date : str or datetime, optional
-            Початкова дата даних
-        end_date : str or datetime, optional
-            Кінцева дата даних
+            start_date_dt = pd.to_datetime(start_date) if start_date else None
+            end_date_dt = pd.to_datetime(end_date) if end_date else None
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з завантаженими даними
-        """
-        # Перевірити кеш, якщо він включений
-        # Перетворити формат дат, якщо вони надані як рядки
-        # Вибрати відповідний метод завантаження на основі data_source
-        # Обробити помилки API і мережеві проблеми
-        # Збереження результатів у кеш, якщо потрібно
-        pass
+            cache_key = self.create_cache_key(data_source, symbol, interval, start_date, end_date)
+
+            cache_file = os.path.join(self.cache_dir, f"{cache_key}.parquet")
+            if os.path.exists(cache_file):
+                self.logger.info(f"Завантаження даних з кешу: {cache_key}")
+                return pd.read_parquet(cache_file)
+
+            # Якщо даних немає в кеші, завантажуємо їх з джерела
+            self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {interval}")
+
+            params = {
+                'source': data_source,
+                'startTime': start_date_dt,
+                'endTime': end_date_dt,
+                'symbol': symbol,
+                'interval': interval
+            }
+
+            try:
+                if data_source == 'database':
+                    data = self._load_from_database(params)
+                elif data_source == 'csv':
+                    data = pd.read_csv(params['source'])
+                else:
+                    raise ValueError(f"Непідтримуване джерело даних: {data_source}")
+
+                if data is None or data.empty:
+                    self.logger.warning(f"Отримано порожній набір даних від {data_source}")
+                    return pd.DataFrame()
+
+                if self.cache_dir:
+                    data.to_parquet(cache_file)
+                    self.cache_index[cache_key] = {
+                        'source': data_source,
+                        'symbol': symbol,
+                        'interval': interval,
+                        'start_date': start_date_dt.isoformat() if start_date_dt else None,
+                        'end_date': end_date_dt.isoformat() if end_date_dt else None,
+                        'rows': len(data),
+                        'created_at': datetime.now().isoformat()
+                    }
+                    with open(os.path.join(self.cache_dir, "cache_index.json"), 'w') as f:
+                        json.dump(self.cache_index, f)
+
+                return data
+
+            except Exception as e:
+                self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
+                raise
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True) -> pd.DataFrame:
@@ -353,32 +400,25 @@ class MarketDataProcessor:
     def create_cache_key(self, source: str, symbol: str, interval: str,
                          start_date: Union[str, datetime, None],
                          end_date: Union[str, datetime, None]) -> str:
-        """
-        Створює унікальний ключ для кешування даних.
 
-        Parameters:
-        -----------
-        source : str
-            Джерело даних
-        symbol : str
-            Торгова пара
-        interval : str
-            Часовий інтервал
-        start_date : str, datetime, or None
-            Початкова дата
-        end_date : str, datetime, or None
-            Кінцева дата
+        params={
+            'symbol': symbol,
+            'interval': interval,
+            'start_date': start_date,
+            'end_date': end_date
+        }
+        cache_dict ={
+            'source': source,
+            **params
+        }
+        for key, value in cache_dict.items():
+            if isinstance(value, datetime):
+                cache_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+            elif value is None:
+                cache_dict[key] = None
 
-        Returns:
-        --------
-        str
-            Хеш-ключ для кешування
-        """
-        # Створити словник з параметрами
-        # Серіалізувати в JSON
-        # Створити MD5 або SHA-1 хеш
-        # Повернути хеш як ключ кешу
-        pass
+        json_string = json.dumps(cache_dict, sort_keys=True)
+        return hashlib.md5(json_string.encode()).hexdigest()
 
     def merge_datasets(self, datasets: List[pd.DataFrame],
                        merge_on: str = 'timestamp') -> pd.DataFrame:
@@ -424,3 +464,8 @@ class MarketDataProcessor:
         # Логувати процес та результати
         # Повернути фінальний оброблений DataFrame
         pass
+
+    def main():
+        data_source = []
+        symbol = ['BTC','SOL','ETH']
+        interval = ['1m','1h','4h','1d']

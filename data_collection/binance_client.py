@@ -13,12 +13,10 @@ import websocket
 from utils.config import BINANCE_API_SECRET, BINANCE_API_KEY
 from data.db import DatabaseManager
 
-# Збереження зібраних даних у базу даних
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 
 class BinanceClient:
-    # Ініціалізація binance client
     def __init__(self):
         self.api_key = BINANCE_API_KEY
         self.api_secret = BINANCE_API_SECRET
@@ -30,25 +28,19 @@ class BinanceClient:
             'Content-Type': 'application/json'
         })
         self.active_websockets = {}
-        # Ініціалізуємо підключення до бази даних
         self.db_manager = DatabaseManager()
-        # Додаємо флаг для перевірки чи потрібно перепідключитись
         self.reconnect_required = False
-        # Використовуємо підтримувані символи з DatabaseManager
         self.supported_symbols = self.db_manager.supported_symbols
-        # Кеш для даних
         self.cache = {
             'ticker_price': {},
             'order_book': {},
             'klines': {}
         }
-        # Час актуальності кешу (у секундах)
         self.cache_ttl = {
-            'ticker_price': 5,  # 5 секунд
-            'order_book': 2,  # 2 секунди
-            'klines': 60  # 1 хвилина
+            'ticker_price': 5,
+            'order_book': 2,
+            'klines': 60
         }
-        # Час останнього оновлення кешу
         self.last_cache_update = {
             'ticker_price': {},
             'order_book': {},
@@ -84,7 +76,6 @@ class BinanceClient:
 
     # Отримання даних про ціну у вигляді свічок
     def get_klines(self, symbol, interval, limit=100, start_time=None, end_time=None, use_cache=True):
-        # Перевіряємо кеш, якщо дозволено
         cache_key = f"{symbol}_{interval}_{start_time}_{end_time}_{limit}"
 
         if use_cache and cache_key in self.cache['klines']:
