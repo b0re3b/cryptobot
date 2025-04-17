@@ -7,10 +7,9 @@ from sklearn.feature_selection import RFE
 from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-import talib
 from scipy import stats
 import logging
-
+import ta
 
 class FeatureEngineering:
     def __init__(self, log_level=logging.INFO):

@@ -6,6 +6,6 @@ requests~=2.32.3
 websocket~=0.2.1
 websocket-client~=1.8.0
 numpy~=2.2.4
-scikit-learn~=1.6.1doc
+scikit-learn~=1.6.1
 scipy~=1.15.2
 pytz~=2025.2
