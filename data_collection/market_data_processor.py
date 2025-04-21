@@ -1,6 +1,5 @@
 import os
 import traceback
-
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -17,8 +16,7 @@ from data.db import DatabaseManager
 
 class MarketDataProcessor:
 
-    def __init__(self, cache_dir=None, log_level=logging.INFO):
-        self.cache_dir = cache_dir
+    def __init__(self,  log_level=logging.INFO):
         self.log_level = log_level
         self.db_connection = db_connection
         self.db_manager = DatabaseManager()
@@ -26,19 +24,21 @@ class MarketDataProcessor:
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація класу...")
-
-        if self.cache_dir:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            self.logger.info(f"Директорію для кешу створено: {self.cache_dir}")
-
-        self.cache_index = {}
-        self._load_cache_index()
         self.ready = True
 
     def save_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
         if df.empty:
             self.logger.warning("Спроба зберегти порожні свічки")
             return
+
+        def convert_numpy_types(obj):
+            import numpy as np
+            if isinstance(obj, dict):
+                return {k: convert_numpy_types(v) for k, v in obj.items()}
+            elif isinstance(obj, (np.generic, np.bool_)):
+                return obj.item()
+            else:
+                return obj
 
         for _, row in df.iterrows():
             try:
@@ -55,11 +55,16 @@ class MarketDataProcessor:
                     'number_of_trades': row.get('number_of_trades', 0),
                     'taker_buy_base_volume': row.get('taker_buy_base_volume', 0),
                     'taker_buy_quote_volume': row.get('taker_buy_quote_volume', 0),
-                    'is_closed': row.get('is_closed', True),
+                    'is_closed': bool(row.get('is_closed', True)),
                 }
+
+                # Конвертація до базових типів Python
+                kline_data = convert_numpy_types(kline_data)
+
                 self.db_manager.insert_kline(symbol, kline_data)
+
             except Exception as e:
-                self.logger.error(f"Помилка при збереженні свічки: {e}")
+                self.logger.error(f"Помилка при збереженні свічки для {symbol}: {e}")
 
     def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
         if df.empty:
@@ -109,9 +114,6 @@ class MarketDataProcessor:
             except Exception as e:
                 self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
 
-
-
-
     def _load_from_database(self, symbol: str, interval: str,
                             start_date: Optional[datetime] = None,
                             end_date: Optional[datetime] = None,
@@ -122,14 +124,14 @@ class MarketDataProcessor:
         try:
             data = None
             if data_type == 'candles':
-                data = DatabaseManager.get_klines(
+                data = self.db_manager.get_klines(
                     symbol=symbol,
                     interval=interval,
                     start_time=start_date,
                     end_time=end_date
                 )
             elif data_type == 'orderbook':
-                data = DatabaseManager.get_orderbook(
+                data = self.db_manager.get_orderbook(
                     symbol=symbol,
                     start_time=start_date,
                     end_time=end_date
@@ -137,10 +139,9 @@ class MarketDataProcessor:
             else:
                 raise ValueError(f"Непідтримуваний тип даних: {data_type}")
 
-            # Перевірка на None перед перевіркою типу
             if data is None:
                 self.logger.warning("База даних повернула None")
-                return pd.DataFrame()  # Повертаємо пустий DataFrame
+                return pd.DataFrame()
 
             if not isinstance(data, pd.DataFrame):
                 data = pd.DataFrame(data)
@@ -164,16 +165,6 @@ class MarketDataProcessor:
         start_date_dt = pd.to_datetime(start_date) if start_date else None
         end_date_dt = pd.to_datetime(end_date) if end_date else None
 
-        cache_key = self.create_cache_key(
-            data_source, symbol, interval, start_date, end_date, data_type
-        )
-
-        if self.cache_dir:
-            cache_file = os.path.join(self.cache_dir, f"{cache_key}.csv")
-            if os.path.exists(cache_file):
-                self.logger.info(f"Завантаження даних з кешу: {cache_key}")
-                return pd.read_csv(cache_file, index_col=0, parse_dates=True)  # Виправлено на read_csv
-
         self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {interval}, {data_type}")
 
         try:
@@ -194,7 +185,7 @@ class MarketDataProcessor:
 
                 if 'timestamp' in data.columns or 'date' in data.columns or 'time' in data.columns:
                     time_col = next((col for col in ['timestamp', 'date', 'time'] if col in data.columns), None)
-                    if time_col:  # Перевірка наявності часової колонки
+                    if time_col:
                         data[time_col] = pd.to_datetime(data[time_col])
                         data.set_index(time_col, inplace=True)
                     else:
@@ -211,17 +202,6 @@ class MarketDataProcessor:
             if data is None or data.empty:
                 self.logger.warning(f"Отримано порожній набір даних від {data_source}")
                 return pd.DataFrame()
-
-            if self.cache_dir:
-                self.save_to_cache(cache_key, data, metadata={
-                    'source': data_source,
-                    'symbol': symbol,
-                    'interval': interval,
-                    'data_type': data_type,
-                    'start_date': start_date_dt.isoformat() if start_date_dt else None,
-                    'end_date': end_date_dt.isoformat() if end_date_dt else None,
-                    'file_path': file_path if data_source == 'csv' else None
-                })
 
             return data
 
@@ -1130,9 +1110,18 @@ class MarketDataProcessor:
             bin_width = (price_max - price_min) / bins
 
             bin_labels = list(range(bins))
-            data['price_bin'] = pd.cut(data[price_col], bins=bin_edges, labels=bin_labels, include_lowest=True)
+            data = data.copy()  # гарантія, що не змінюємо оригінал
 
-            volume_profile = data.groupby('price_bin').agg({
+            # Виправлено SettingWithCopyWarning
+            data.loc[:, 'price_bin'] = pd.cut(
+                data[price_col],
+                bins=bin_edges,
+                labels=bin_labels,
+                include_lowest=True
+            )
+
+            # Виправлено FutureWarning — додано observed=False
+            volume_profile = data.groupby('price_bin', observed=False).agg({
                 volume_col: 'sum',
                 price_col: ['count', 'min', 'max']
             })
@@ -1150,7 +1139,7 @@ class MarketDataProcessor:
             })
 
             total_volume = volume_profile['volume'].sum()
-            if total_volume > 0:  # Уникаємо ділення на нуль
+            if total_volume > 0:
                 volume_profile['volume_percent'] = (volume_profile['volume'] / total_volume * 100).round(2)
             else:
                 volume_profile['volume_percent'] = 0
@@ -1161,7 +1150,6 @@ class MarketDataProcessor:
             volume_profile['bin_upper'] = [bin_edges[i + 1] for i in volume_profile.index]
 
             volume_profile = volume_profile.reset_index()
-
             volume_profile = volume_profile.sort_values('price_bin', ascending=False)
 
             if 'price_bin' in volume_profile.columns:
@@ -1556,77 +1544,52 @@ class MarketDataProcessor:
             f"Результат: {len(result)} рядків, {len(result.columns)} колонок.")
 
         return result
-
-    def _load_cache_index(self):
-
-        if not self.cache_dir:
-            return
-
-        cache_index_path = os.path.join(self.cache_dir, "cache_index.json")
-        if os.path.exists(cache_index_path):
-            try:
-                with open(cache_index_path, 'r') as f:
-                    self.cache_index = json.load(f)
-                self.logger.info(f"Завантажено індекс кешу: {len(self.cache_index)} записів")
-            except Exception as e:
-                self.logger.error(f"Помилка при завантаженні індексу кешу: {str(e)}")
-                self.cache_index = {}
-        else:
-            self.logger.info("Індекс кешу не знайдено. Створено порожній індекс.")
-            self.cache_index = {}
-
-    def _save_cache_index(self):
-
-        if not self.cache_dir:
-            return
-
-        cache_index_path = os.path.join(self.cache_dir, "cache_index.json")
-        try:
-            with open(cache_index_path, 'w') as f:
-                json.dump(self.cache_index, f, indent=2)
-            self.logger.info(f"Збережено індекс кешу: {len(self.cache_index)} записів")
-        except Exception as e:
-            self.logger.error(f"Помилка при збереженні індексу кешу: {str(e)}")
-
 def main():
+    # Конфігурація
+    EU_TIMEZONE = 'Europe/Kiev'
+    SYMBOLS = ['BTC', 'ETH', 'SOL']
+    INTERVALS = ['1d', '1h', '4h']
 
-    data_source = {
+    data_source_paths = {
         'csv': {
             'BTC': {
-                '1d': './data/crypto_data/BTCUSDT_1d.csv',
-                '1h': './data/crypto_data/BTCUSDT_1h.csv',
-                '4h': './data/crypto_data/BTCUSDT_4h.csv'
+                '1d': '/Users/bogdanresetko/Desktop/kursova/data/crypto_data/BTCUSDT_1d.csv',
+                '1h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/BTCUSDT_1h.csv',
+                '4h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/BTCUSDT_4h.csv'
             },
             'ETH': {
-                '1d': './data/crypto_data/ETHUSDT_1d.csv',
-                '1h': './data/crypto_data/ETHUSDT_1h.csv',
-                '4h': './data/crypto_data/ETHUSDT_4h.csv'
+                '1d': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/ETHUSDT_1d.csv',
+                '1h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/ETHUSDT_1h.csv',
+                '4h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/ETHUSDT_4h.csv'
             },
             'SOL': {
-                '1d': './data/crypto_data/SOLUSDT_1d.csv',
-                '1h': './data/crypto_data/SOLUSDT_1h.csv',
-                '4h': './data/crypto_data/SOLUSDT_4h.csv'
+                '1d': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/SOLUSDT_1d.csv',
+                '1h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/SOLUSDT_1h.csv',
+                '4h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/SOLUSDT_4h.csv'
             }
         }
     }
 
-    symbols = ['BTC', 'ETH', 'SOL']
-    intervals = ['1d', '1h', '4h']
-
-    EU_TIMEZONE = 'Europe/Kiev'
-
     processor = MarketDataProcessor()
 
+    for symbol in SYMBOLS:
+        for interval in INTERVALS:
+            print(f"\n🔄 Обробка {symbol} {interval}...")
 
+            data = processor.load_data(
+                data_source='database',
+                symbol=symbol,
+                interval=interval,
+                data_type='candles'
+            )
 
-    for symbol in symbols:
-        for interval in intervals:
-            file_path = data_source['csv'][symbol].get(interval)
-            if not file_path:
-                continue
+            if data.empty:
+                file_path = data_source_paths['csv'].get(symbol, {}).get(interval)
+                if not file_path:
+                    print(f"⚠️ Немає CSV-файлу для {symbol} {interval}")
+                    continue
 
-            print(f"\n Завантаження {symbol} {interval} з {file_path}")
-            try:
+                print(f"📁 Завантаження з CSV: {file_path}")
                 data = processor.load_data(
                     data_source='csv',
                     symbol=symbol,
@@ -1635,27 +1598,34 @@ def main():
                     data_type='candles'
                 )
 
-                print(f"✔️ Дані завантажено: {len(data)} рядків")
+                if data.empty:
+                    print(f"⚠️ Дані не знайдено для {symbol} {interval}")
+                    continue
 
-                data = processor.preprocess_pipeline(data)
+                processor.save_klines_to_db(data, symbol, interval)
+                print("📥 Збережено свічки в базу даних")
 
-                if interval != '1d':
-                    data = processor.resample_data(data, target_interval='1d')
+            print(f"✔️ Завантажено {len(data)} рядків")
 
-                data = processor.add_time_features(data, tz=EU_TIMEZONE)
+            # Обробка
+            processed_data = processor.preprocess_pipeline(data)
 
-                save_path = f"./processed/{symbol}_{interval}_processed.csv"
+            if interval != '1d':
+                processed_data = processor.resample_data(processed_data, target_interval='1d')
 
-                if db_connection:
-                    processor.save_processed_data(data, save_path, db_connection)
-                else:
-                    processor.save_processed_data(data, save_path)
+            processed_data = processor.add_time_features(processed_data, tz=EU_TIMEZONE)
 
-                print(f" Дані збережено: {save_path}")
+            # Збереження оброблених даних
+            processor.save_processed_klines_to_db(processed_data, symbol, '1d')
+            print("✅ Оброблені дані збережено в БД")
 
-            except Exception as e:
-                print(f" Помилка обробки {symbol} {interval}: {e}")
-
+            # Побудова та збереження профілю об'єму
+            volume_profile = processor.aggregate_volume_profile(
+                processed_data, bins=12, time_period='1W'
+            )
+            if not volume_profile.empty:
+                processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
+                print("📊 Профіль об'єму збережено")
 
 if __name__ == "__main__":
     main()
