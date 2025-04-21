@@ -1,4 +1,6 @@
 import os
+import traceback
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -645,35 +647,66 @@ class MarketDataProcessor:
     def _detect_missing_periods(self, data: pd.DataFrame, expected_diff: pd.Timedelta) -> List[
         Tuple[datetime, datetime]]:
 
-        if not isinstance(data.index, pd.DatetimeIndex):
+        if not isinstance(data.index, pd.DatetimeIndex) or data.empty:
+            return []
+
+        if expected_diff is None:
+            self.logger.warning("expected_diff є None, неможливо визначити пропущені періоди")
             return []
 
         sorted_index = data.index.sort_values()
 
         time_diff = sorted_index.to_series().diff()
+        # Використовуємо більш безпечне порівняння
         large_gaps = time_diff[time_diff > expected_diff * 1.5]
 
         missing_periods = []
         for timestamp, gap in large_gaps.items():
             prev_timestamp = timestamp - gap
 
-            missing_steps = int(gap / expected_diff) - 1
-            if missing_steps > 0:
-                self.logger.info(
-                    f"Виявлено проміжок: {prev_timestamp} - {timestamp} ({missing_steps} пропущених записів)")
-                missing_periods.append((prev_timestamp, timestamp))
+            # Запобігаємо потенційному переповненню при обчисленні missing_steps
+            try:
+                missing_steps = max(0, int(gap / expected_diff) - 1)
+                if missing_steps > 0:
+                    self.logger.info(
+                        f"Виявлено проміжок: {prev_timestamp} - {timestamp} ({missing_steps} пропущених записів)")
+                    missing_periods.append((prev_timestamp, timestamp))
+            except (OverflowError, ZeroDivisionError) as e:
+                self.logger.error(f"Помилка при обчисленні missing_steps: {str(e)}")
 
         return missing_periods
 
     def _fetch_missing_data_from_binance(self, data: pd.DataFrame,
                                          missing_periods: List[Tuple[datetime, datetime]],
                                          symbol: str, interval: str) -> pd.DataFrame:
+
+        if data is None or data.empty:
+            self.logger.warning("Отримано порожній DataFrame для заповнення даними")
+            return pd.DataFrame()
+
+        # Перевірка валідності параметрів
+        if not symbol or not interval:
+            self.logger.error("Невалідний symbol або interval")
+            return data
+
         try:
             from binance.client import Client
+            # Отримуємо ключі API з конфігураційного файлу або змінних середовища
+            api_key = self.config.get('BINANCE_API_KEY', os.environ.get('BINANCE_API_KEY'))
+            api_secret = self.config.get('BINANCE_API_SECRET', os.environ.get('BINANCE_API_SECRET'))
 
-            client = Client("BINANCE_API_KEY", "BINANCE_API_SECRET")
+            if not api_key or not api_secret:
+                self.logger.error("Не знайдено ключі API Binance в конфігурації або змінних середовища")
+                return data
+
+            client = Client(api_key, api_secret)
 
             filled_data = data.copy()
+
+            valid_intervals = ['1m',  '1h',  '4h', '1d',]
+            if interval not in valid_intervals:
+                self.logger.error(f"Невалідний інтервал: {interval}. Дозволені значення: {valid_intervals}")
+                return data
 
             for start_time, end_time in missing_periods:
                 try:
@@ -707,6 +740,10 @@ class MarketDataProcessor:
                     binance_df.set_index('timestamp', inplace=True)
 
                     common_cols = [col for col in binance_df.columns if col in filled_data.columns]
+                    if not common_cols:
+                        self.logger.warning("Немає спільних колонок між DataFrame та даними Binance")
+                        continue
+
                     binance_df = binance_df[common_cols]
 
                     filled_data = pd.concat([filled_data, binance_df])
@@ -722,12 +759,13 @@ class MarketDataProcessor:
 
         except ImportError:
             self.logger.error(
-                "Не вдалося імпортувати модуль binance. Встановіть його за допомогою 'pip install python-binance'")
+                "Не вдалося імпортувати модуль binance.")
             return data
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
-                       columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[pd.DataFrame, object]:
-        if data.empty:
+                       columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[pd.DataFrame, Dict]:
+
+        if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
             return data, None
 
@@ -752,8 +790,6 @@ class MarketDataProcessor:
 
         self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
 
-        original_index = result.index
-
         X = result[normalize_cols].values
 
         scaler = None
@@ -771,23 +807,27 @@ class MarketDataProcessor:
             return result, None
 
         try:
+            # Обробка NaN значень
             if np.isnan(X).any():
                 self.logger.warning("Знайдено NaN значення в даних. Заміна на середні значення колонок")
                 for i, col in enumerate(normalize_cols):
-                    col_mean = np.nanmean(X[:, i])
-                    X[:, i] = np.nan_to_num(X[:, i], nan=col_mean)
+                    # Перевірка чи вся колонка складається з NaN
+                    if np.all(np.isnan(X[:, i])):
+                        self.logger.warning(f"Колонка {col} містить лише NaN значення. Заміна на 0.")
+                        X[:, i] = 0
+                    else:
+                        col_mean = np.nanmean(X[:, i])
+                        X[:, i] = np.nan_to_num(X[:, i], nan=col_mean)
 
             X_scaled = scaler.fit_transform(X)
 
+            # Перевірка на нескінченні значення після трансформації
+            if not np.isfinite(X_scaled).all():
+                self.logger.warning("Знайдено нескінченні значення після нормалізації. Заміна на 0.")
+                X_scaled = np.nan_to_num(X_scaled, nan=0, posinf=0, neginf=0)
+
             for i, col in enumerate(normalize_cols):
                 result[col] = X_scaled[:, i]
-
-            inf_mask = np.isinf(X_scaled)
-            if inf_mask.any():
-                inf_count = np.sum(inf_mask)
-                self.logger.warning(f"Знайдено {inf_count} нескінченних значень після нормалізації. Заміна на 0.")
-                for i, col in enumerate(normalize_cols):
-                    result[col] = result[col].replace([np.inf, -np.inf], 0)
 
             self.logger.info(f"Успішно нормалізовано колонки: {normalize_cols}")
 
@@ -814,7 +854,13 @@ class MarketDataProcessor:
             self.logger.error(f"Невірний reference_index: {reference_index}. Має бути від 0 до {len(data_list) - 1}")
             reference_index = 0
 
+        # Перевірка та конвертація індексів до DatetimeIndex
         for i, df in enumerate(data_list):
+            if df is None or df.empty:
+                self.logger.warning(f"DataFrame {i} є порожнім або None")
+                data_list[i] = pd.DataFrame()  # Замінюємо на порожній DataFrame
+                continue
+
             if not isinstance(df.index, pd.DatetimeIndex):
                 self.logger.warning(f"DataFrame {i} не має часового індексу. Спроба конвертувати.")
                 try:
@@ -831,23 +877,42 @@ class MarketDataProcessor:
                     self.logger.error(f"Помилка при конвертації індексу для DataFrame {i}: {str(e)}")
                     return []
 
+        # Перевірка еталонного DataFrame
         reference_df = data_list[reference_index]
-        reference_freq = pd.infer_freq(reference_df.index)
+        if reference_df is None or reference_df.empty:
+            self.logger.error("Еталонний DataFrame є порожнім")
+            return data_list
 
-        if not reference_freq:
-            self.logger.warning("Не вдалося визначити частоту reference DataFrame. Спроба визначити вручну.")
-            if len(reference_df.index) > 1:
-                time_diff = reference_df.index.to_series().diff().dropna()
-                reference_freq = time_diff.median()
-                self.logger.info(f"Визначено медіанний інтервал: {reference_freq}")
-            else:
-                self.logger.error("Недостатньо точок для визначення частоти reference DataFrame")
-                return data_list
+        # Визначення частоти часового ряду
+        try:
+            reference_freq = pd.infer_freq(reference_df.index)
+
+            if not reference_freq:
+                self.logger.warning("Не вдалося визначити частоту reference DataFrame. Спроба визначити вручну.")
+                if len(reference_df.index) > 1:
+                    time_diff = reference_df.index.to_series().diff().dropna()
+                    if not time_diff.empty:
+                        reference_freq = time_diff.median()
+                        self.logger.info(f"Визначено медіанний інтервал: {reference_freq}")
+                    else:
+                        self.logger.error("Не вдалося визначити інтервал з різниці часових міток")
+                        return data_list
+                else:
+                    self.logger.error("Недостатньо точок для визначення частоти reference DataFrame")
+                    return data_list
+        except Exception as e:
+            self.logger.error(f"Помилка при визначенні частоти reference DataFrame: {str(e)}")
+            return data_list
 
         aligned_data_list = [reference_df]
 
         for i, df in enumerate(data_list):
             if i == reference_index:
+                continue
+
+            if df is None or df.empty:
+                self.logger.warning(f"Пропускаємо порожній DataFrame {i}")
+                aligned_data_list.append(df)
                 continue
 
             self.logger.info(f"Вирівнювання DataFrame {i} з reference DataFrame")
@@ -856,13 +921,14 @@ class MarketDataProcessor:
                 aligned_data_list.append(df)
                 continue
 
-            start_time = max(df.index.min(), reference_df.index.min())
-            end_time = min(df.index.max(), reference_df.index.max())
-
             try:
+                start_time = max(df.index.min(), reference_df.index.min())
+                end_time = min(df.index.max(), reference_df.index.max())
+
                 reference_subset = reference_df.loc[(reference_df.index >= start_time) &
                                                     (reference_df.index <= end_time)]
 
+                # Безпечний спосіб reindex
                 aligned_df = df.reindex(reference_subset.index, method=None)
 
                 numeric_cols = aligned_df.select_dtypes(include=[np.number]).columns
@@ -878,13 +944,15 @@ class MarketDataProcessor:
 
             except Exception as e:
                 self.logger.error(f"Помилка при вирівнюванні DataFrame {i}: {str(e)}")
+                self.logger.error(f"Деталі помилки: {traceback.format_exc()}")
                 aligned_data_list.append(df)  # Додаємо оригінал при помилці
 
         return aligned_data_list
 
-    def validate_data_integrity(self, data: pd.DataFrame) -> Dict[str, List]:
+    def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
+                                volume_anomaly_threshold: float = 5) -> Dict[str, List]:
 
-        if data.empty:
+        if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для перевірки цілісності")
             return {"empty_data": []}
 
@@ -900,30 +968,38 @@ class MarketDataProcessor:
             issues["not_datetime_index"] = True
             self.logger.warning("Індекс не є DatetimeIndex")
         else:
-            time_diff = data.index.to_series().diff()
-            if len(time_diff) > 1:
-                median_diff = time_diff.median()
+            # Перевірка часових проміжків
+            if len(data.index) > 1:
+                time_diff = data.index.to_series().diff().dropna()
+                if not time_diff.empty:
+                    median_diff = time_diff.median()
 
-                large_gaps = time_diff[time_diff > 2 * median_diff]
-                if not large_gaps.empty:
-                    gap_locations = large_gaps.index.tolist()
-                    issues["time_gaps"] = gap_locations
-                    self.logger.warning(f"Знайдено {len(gap_locations)} аномальних проміжків у часових мітках")
+                    # Перевірка на великі проміжки
+                    if median_diff.total_seconds() > 0:  # Уникаємо ділення на нуль
+                        large_gaps = time_diff[time_diff > 2 * median_diff]
+                        if not large_gaps.empty:
+                            gap_locations = large_gaps.index.tolist()
+                            issues["time_gaps"] = gap_locations
+                            self.logger.warning(f"Знайдено {len(gap_locations)} аномальних проміжків у часових мітках")
 
-                duplicates = data.index.duplicated()
-                if duplicates.any():
-                    dup_indices = data.index[duplicates].tolist()
-                    issues["duplicate_timestamps"] = dup_indices
-                    self.logger.warning(f"Знайдено {len(dup_indices)} дублікатів часових міток")
+                    # Перевірка на дублікати часових міток
+                    duplicates = data.index.duplicated()
+                    if duplicates.any():
+                        dup_indices = data.index[duplicates].tolist()
+                        issues["duplicate_timestamps"] = dup_indices
+                        self.logger.warning(f"Знайдено {len(dup_indices)} дублікатів часових міток")
 
+        # Перевірка цінових аномалій
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in data.columns]
         if len(price_cols) == 4:
+            # Перевірка high < low
             invalid_hl = data['high'] < data['low']
             if invalid_hl.any():
                 invalid_hl_indices = data.index[invalid_hl].tolist()
                 issues["high_lower_than_low"] = invalid_hl_indices
                 self.logger.warning(f"Знайдено {len(invalid_hl_indices)} записів де high < low")
 
+            # Перевірка від'ємних цін
             for col in price_cols:
                 negative_prices = data[col] < 0
                 if negative_prices.any():
@@ -931,39 +1007,53 @@ class MarketDataProcessor:
                     issues[f"negative_{col}"] = neg_price_indices
                     self.logger.warning(f"Знайдено {len(neg_price_indices)} записів з від'ємними значеннями у {col}")
 
+            # Перевірка різких стрибків цін
             for col in price_cols:
                 pct_change = data[col].pct_change().abs()
-                price_jumps = pct_change > 0.2
+                price_jumps = pct_change > price_jump_threshold
                 if price_jumps.any():
                     jump_indices = data.index[price_jumps].tolist()
                     issues[f"price_jumps_{col}"] = jump_indices
                     self.logger.warning(f"Знайдено {len(jump_indices)} різких змін у колонці {col}")
 
+        # Перевірка об'єму
         if 'volume' in data.columns:
+            # Перевірка від'ємного об'єму
             negative_volume = data['volume'] < 0
             if negative_volume.any():
                 neg_vol_indices = data.index[negative_volume].tolist()
                 issues["negative_volume"] = neg_vol_indices
                 self.logger.warning(f"Знайдено {len(neg_vol_indices)} записів з від'ємним об'ємом")
 
-            volume_zscore = np.abs((data['volume'] - data['volume'].mean()) / data['volume'].std())
-            volume_anomalies = volume_zscore > 5
-            if volume_anomalies.any():
-                vol_anomaly_indices = data.index[volume_anomalies].tolist()
-                issues["volume_anomalies"] = vol_anomaly_indices
-                self.logger.warning(f"Знайдено {len(vol_anomaly_indices)} записів з аномальним об'ємом")
+            # Перевірка аномального об'єму
+            try:
+                volume_std = data['volume'].std()
+                if volume_std > 0:  # Уникаємо ділення на нуль
+                    volume_zscore = np.abs((data['volume'] - data['volume'].mean()) / volume_std)
+                    volume_anomalies = volume_zscore > volume_anomaly_threshold
+                    if volume_anomalies.any():
+                        vol_anomaly_indices = data.index[volume_anomalies].tolist()
+                        issues["volume_anomalies"] = vol_anomaly_indices
+                        self.logger.warning(f"Знайдено {len(vol_anomaly_indices)} записів з аномальним об'ємом")
+            except Exception as e:
+                self.logger.error(f"Помилка при аналізі аномалій об'єму: {str(e)}")
 
+        # Перевірка на NaN значення
         na_counts = data.isna().sum()
         cols_with_na = na_counts[na_counts > 0].index.tolist()
         if cols_with_na:
             issues["columns_with_na"] = {col: data.index[data[col].isna()].tolist() for col in cols_with_na}
             self.logger.warning(f"Знайдено відсутні значення у колонках: {cols_with_na}")
 
-        inf_counts = np.isinf(data.select_dtypes(include=[np.number])).sum()
-        cols_with_inf = inf_counts[inf_counts > 0].index.tolist()
-        if cols_with_inf:
-            issues["columns_with_inf"] = {col: data.index[np.isinf(data[col])].tolist() for col in cols_with_inf}
-            self.logger.warning(f"Знайдено нескінченні значення у колонках: {cols_with_inf}")
+        # Перевірка на нескінченні значення
+        try:
+            inf_counts = np.isinf(data.select_dtypes(include=[np.number])).sum()
+            cols_with_inf = inf_counts[inf_counts > 0].index.tolist()
+            if cols_with_inf:
+                issues["columns_with_inf"] = {col: data.index[np.isinf(data[col])].tolist() for col in cols_with_inf}
+                self.logger.warning(f"Знайдено нескінченні значення у колонках: {cols_with_inf}")
+        except Exception as e:
+            self.logger.error(f"Помилка при перевірці нескінченних значень: {str(e)}")
 
         return issues
 
@@ -971,7 +1061,7 @@ class MarketDataProcessor:
                                  price_col: str = 'close', volume_col: str = 'volume',
                                  time_period: Optional[str] = None) -> pd.DataFrame:
 
-        if data.empty:
+        if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
             return pd.DataFrame()
 
@@ -985,12 +1075,13 @@ class MarketDataProcessor:
 
         self.logger.info(f"Створення профілю об'єму з {bins} ціновими рівнями")
 
+        # Перевірка можливості створення часового профілю
         if time_period:
             if not isinstance(data.index, pd.DatetimeIndex):
                 self.logger.warning("Індекс не є DatetimeIndex. Часовий профіль не може бути створений.")
-                time_period = None
+                # Створюємо простий профіль об'єму замість часового
+                return self._create_volume_profile(data, bins, price_col, volume_col)
 
-        if time_period:
             self.logger.info(f"Створення часового профілю об'єму з періодом {time_period}")
             period_groups = data.groupby(pd.Grouper(freq=time_period))
 
@@ -1001,18 +1092,21 @@ class MarketDataProcessor:
                     continue
 
                 period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
-                period_profile['period'] = period
-                result_dfs.append(period_profile)
+                if not period_profile.empty:
+                    period_profile['period'] = period
+                    result_dfs.append(period_profile)
 
             if result_dfs:
                 return pd.concat(result_dfs)
             else:
+                self.logger.warning("Не вдалося створити часовий профіль об'єму")
                 return pd.DataFrame()
         else:
             return self._create_volume_profile(data, bins, price_col, volume_col)
 
     def _create_volume_profile(self, data: pd.DataFrame, bins: int,
                                price_col: str, volume_col: str) -> pd.DataFrame:
+
         price_min = data[price_col].min()
         price_max = data[price_col].max()
 
@@ -1020,41 +1114,62 @@ class MarketDataProcessor:
             self.logger.warning("Мінімальна та максимальна ціни однакові. Неможливо створити профіль об'єму.")
             return pd.DataFrame()
 
-        bin_edges = np.linspace(price_min, price_max, bins + 1)
-        bin_width = (price_max - price_min) / bins
+        effective_bins = min(bins, int((price_max - price_min) * 100) + 1)
+        if effective_bins < bins:
+            self.logger.warning(f"Зменшено кількість бінів з {bins} до {effective_bins} через малий діапазон цін")
+            bins = effective_bins
 
-        data['price_bin'] = pd.cut(data[price_col], bins=bin_edges, labels=False, include_lowest=True)
+        if bins <= 1:
+            self.logger.warning("Недостатньо бінів для створення профілю об'єму")
+            return pd.DataFrame()
 
-        volume_profile = data.groupby('price_bin').agg({
-            volume_col: 'sum',
-            price_col: ['count', 'min', 'max']
-        })
+        try:
+            bin_edges = np.linspace(price_min, price_max, bins + 1)
+            bin_width = (price_max - price_min) / bins
 
-        volume_profile.columns = [f'{col[0]}_{col[1]}' if col[1] else col[0] for col in volume_profile.columns]
+            bin_labels = list(range(bins))
+            data['price_bin'] = pd.cut(data[price_col], bins=bin_edges, labels=bin_labels, include_lowest=True)
 
-        volume_profile = volume_profile.rename(columns={
-            f'{volume_col}_sum': 'volume',
-            f'{price_col}_count': 'count',
-            f'{price_col}_min': 'price_min',
-            f'{price_col}_max': 'price_max'
-        })
+            volume_profile = data.groupby('price_bin').agg({
+                volume_col: 'sum',
+                price_col: ['count', 'min', 'max']
+            })
 
-        total_volume = volume_profile['volume'].sum()
-        volume_profile['volume_percent'] = (volume_profile['volume'] / total_volume * 100).round(2)
+            if volume_profile.empty:
+                self.logger.warning("Отримано порожній профіль об'єму після групування")
+                return pd.DataFrame()
 
-        volume_profile['price_mid'] = (volume_profile['price_min'] + volume_profile['price_max']) / 2
+            volume_profile.columns = [f'{col[0]}_{col[1]}' if col[1] else col[0] for col in volume_profile.columns]
+            volume_profile = volume_profile.rename(columns={
+                f'{volume_col}_sum': 'volume',
+                f'{price_col}_count': 'count',
+                f'{price_col}_min': 'price_min',
+                f'{price_col}_max': 'price_max'
+            })
 
-        volume_profile['bin_lower'] = [bin_edges[i] for i in volume_profile.index]
-        volume_profile['bin_upper'] = [bin_edges[i + 1] for i in volume_profile.index]
+            total_volume = volume_profile['volume'].sum()
+            if total_volume > 0:  # Уникаємо ділення на нуль
+                volume_profile['volume_percent'] = (volume_profile['volume'] / total_volume * 100).round(2)
+            else:
+                volume_profile['volume_percent'] = 0
 
-        volume_profile = volume_profile.reset_index()
+            volume_profile['price_mid'] = (volume_profile['price_min'] + volume_profile['price_max']) / 2
 
-        volume_profile = volume_profile.sort_values('price_bin', ascending=False)
+            volume_profile['bin_lower'] = [bin_edges[i] for i in volume_profile.index]
+            volume_profile['bin_upper'] = [bin_edges[i + 1] for i in volume_profile.index]
 
-        if 'price_bin' in volume_profile.columns:
-            volume_profile = volume_profile.drop('price_bin', axis=1)
+            volume_profile = volume_profile.reset_index()
 
-        return volume_profile
+            volume_profile = volume_profile.sort_values('price_bin', ascending=False)
+
+            if 'price_bin' in volume_profile.columns:
+                volume_profile = volume_profile.drop('price_bin', axis=1)
+
+            return volume_profile
+
+        except Exception as e:
+            self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
+            return pd.DataFrame()
 
     def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
                           add_sessions: bool = False, tz: str = 'UTC') -> pd.DataFrame:
