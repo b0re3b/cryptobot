@@ -12,6 +12,7 @@ import pytz
 from utils.config import db_connection
 import data.db as db
 
+
 class MarketDataProcessor:
 
     def __init__(self, cache_dir=None, log_level=logging.INFO):
@@ -31,13 +32,66 @@ class MarketDataProcessor:
         self._load_cache_index()
         self.ready = True
 
+    def _load_cache_index(self):
+        """Завантаження індексу кешу з файлу, якщо він існує"""
+        if not self.cache_dir:
+            return
+
+        index_path = os.path.join(self.cache_dir, "cache_index.json")
+        if os.path.exists(index_path):
+            try:
+                with open(index_path, 'r') as f:
+                    self.cache_index = json.load(f)
+                self.logger.info(f"Індекс кешу завантажено: {len(self.cache_index)} записів")
+            except Exception as e:
+                self.logger.error(f"Помилка завантаження індексу кешу: {e}")
+                self.cache_index = {}
+
+    def _save_cache_index(self):
+        """Збереження індексу кешу в файл"""
+        if not self.cache_dir:
+            return
+
+        index_path = os.path.join(self.cache_dir, "cache_index.json")
+        try:
+            with open(index_path, 'w') as f:
+                json.dump(self.cache_index, f, indent=2)
+            self.logger.info("Індекс кешу збережено")
+        except Exception as e:
+            self.logger.error(f"Помилка збереження індексу кешу: {e}")
+
+    def create_cache_key(self, data_source: str, symbol: str, interval: str,
+                         start_date: Optional[Union[str, datetime]] = None,
+                         end_date: Optional[Union[str, datetime]] = None,
+                         data_type: str = 'candles') -> str:
+        """Створює унікальний ключ для кешування даних"""
+        key_parts = [data_source, symbol, interval, data_type]
+
+        if start_date:
+            if isinstance(start_date, datetime):
+                key_parts.append(start_date.isoformat())
+            else:
+                key_parts.append(str(start_date))
+
+        if end_date:
+            if isinstance(end_date, datetime):
+                key_parts.append(end_date.isoformat())
+            else:
+                key_parts.append(str(end_date))
+
+        key_str = "_".join(key_parts)
+        return hashlib.md5(key_str.encode()).hexdigest()
+
     def _get_cache_path(self, cache_key: str) -> str:
-        return os.path.join(self.cache_dir, f"{cache_key}.parquet")
+        return os.path.join(self.cache_dir, f"{cache_key}.csv")
 
     def save_to_cache(self, cache_key: str, data: pd.DataFrame, metadata: Dict = None) -> bool:
+        if not self.cache_dir:
+            return False
+
         cache_path = self._get_cache_path(cache_key)
         try:
-            data.to_parquet(cache_path)
+            data.to_csv(cache_path)
 
             self.cache_index[cache_key] = {
                 "created_at": datetime.now().isoformat(),
@@ -47,9 +101,10 @@ class MarketDataProcessor:
             }
 
             self._save_cache_index()
+            self.logger.info(f"Дані збережено в кеш: {cache_key}, {len(data)} рядків")
             return True
         except Exception as e:
-            print(f"Помилка збереження в кеш: {e}")
+            self.logger.error(f"Помилка збереження в кеш: {e}")
             return False
 
     def _load_from_database(self, symbol: str, interval: str,
@@ -60,6 +115,7 @@ class MarketDataProcessor:
         self.logger.info(f"Завантаження {data_type} даних з бази даних для {symbol} {interval}")
 
         try:
+            data = None
             if data_type == 'candles':
                 data = db.get_klines(
                     symbol=symbol,
@@ -75,6 +131,11 @@ class MarketDataProcessor:
                 )
             else:
                 raise ValueError(f"Непідтримуваний тип даних: {data_type}")
+
+            # Перевірка на None перед перевіркою типу
+            if data is None:
+                self.logger.warning("База даних повернула None")
+                return pd.DataFrame()  # Повертаємо пустий DataFrame
 
             if not isinstance(data, pd.DataFrame):
                 data = pd.DataFrame(data)
@@ -103,10 +164,10 @@ class MarketDataProcessor:
         )
 
         if self.cache_dir:
-            cache_file = os.path.join(self.cache_dir, f"{cache_key}.parquet")
+            cache_file = os.path.join(self.cache_dir, f"{cache_key}.csv")
             if os.path.exists(cache_file):
                 self.logger.info(f"Завантаження даних з кешу: {cache_key}")
-                return pd.read_parquet(cache_file)
+                return pd.read_csv(cache_file, index_col=0, parse_dates=True)  # Виправлено на read_csv
 
         self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {interval}, {data_type}")
 
@@ -127,13 +188,16 @@ class MarketDataProcessor:
                 data = pd.read_csv(file_path)
 
                 if 'timestamp' in data.columns or 'date' in data.columns or 'time' in data.columns:
-                    time_col = next(col for col in ['timestamp', 'date', 'time'] if col in data.columns)
-                    data[time_col] = pd.to_datetime(data[time_col])
-                    data.set_index(time_col, inplace=True)
+                    time_col = next((col for col in ['timestamp', 'date', 'time'] if col in data.columns), None)
+                    if time_col:  # Перевірка наявності часової колонки
+                        data[time_col] = pd.to_datetime(data[time_col])
+                        data.set_index(time_col, inplace=True)
+                    else:
+                        self.logger.warning("Не знайдено часову колонку в CSV файлі")
 
-                if start_date_dt:
+                if start_date_dt and isinstance(data.index, pd.DatetimeIndex):
                     data = data[data.index >= start_date_dt]
-                if end_date_dt:
+                if end_date_dt and isinstance(data.index, pd.DatetimeIndex):
                     data = data[data.index <= end_date_dt]
 
             else:
@@ -200,6 +264,10 @@ class MarketDataProcessor:
             self.logger.info("Видалення аномальних значень...")
             price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
             for col in price_cols:
+                # Перевірка на порожній DataFrame або серію
+                if result[col].empty or result[col].isna().all():
+                    continue
+
                 Q1 = result[col].quantile(0.25)
                 Q3 = result[col].quantile(0.75)
                 IQR = Q3 - Q1
@@ -215,7 +283,7 @@ class MarketDataProcessor:
         if fill_missing and result.isna().any().any():
             self.logger.info("Заповнення відсутніх значень...")
             price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-            if price_cols:
+            if price_cols and isinstance(result.index, pd.DatetimeIndex):
                 result[price_cols] = result[price_cols].interpolate(method='time')
 
             if 'volume' in result.columns and result['volume'].isna().any():
@@ -224,13 +292,15 @@ class MarketDataProcessor:
             numeric_cols = result.select_dtypes(include=[np.number]).columns
             other_numeric = [col for col in numeric_cols if col not in price_cols + ['volume']]
             if other_numeric:
-                result[other_numeric] = result[other_numeric].interpolate(method='time')
+                if isinstance(result.index, pd.DatetimeIndex):
+                    result[other_numeric] = result[other_numeric].interpolate(method='time')
+                else:
+                    result[other_numeric] = result[other_numeric].interpolate(method='linear')
 
             result = result.fillna(method='ffill').fillna(method='bfill')
 
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
         if len(price_cols) == 4:
-
             invalid_hl = result['high'] < result['low']
             if invalid_hl.any():
                 invalid_count = invalid_hl.sum()
@@ -343,14 +413,15 @@ class MarketDataProcessor:
         }
 
         import re
-        match = re.match(r'(\d+)([smhdw])', interval)
+        match = re.match(r'(\d+)([smhdwM])', interval)
         if not match:
             raise ValueError(f"Неправильний формат інтервалу: {interval}")
 
         number, unit = match.groups()
 
         if unit == 'M':
-            return pd.Timedelta(days=int(number) * 30)
+            # Використовуємо приблизне середнє значення для місяця (30.44 днів)
+            return pd.Timedelta(days=int(number) * 30.44)
 
         return pd.Timedelta(**{interval_map[unit]: int(number)})
 
@@ -373,10 +444,13 @@ class MarketDataProcessor:
 
         if method == 'zscore':
             for col in numeric_cols:
-                if data[col].std() == 0:
+                # Перевірка на стандартне відхилення == 0
+                std = data[col].std()
+                if std == 0 or pd.isna(std):
+                    self.logger.warning(f"Колонка {col} має нульове стандартне відхилення або NaN")
                     continue
 
-                z_scores = np.abs((data[col] - data[col].mean()) / data[col].std())
+                z_scores = np.abs((data[col] - data[col].mean()) / std)
                 outliers = z_scores > threshold
                 outliers_df[f'{col}_outlier'] = outliers
 
@@ -386,11 +460,17 @@ class MarketDataProcessor:
 
         elif method == 'iqr':
             for col in numeric_cols:
+                # Перевірка на достатню кількість даних для обчислення квартилів
+                if len(data[col].dropna()) < 4:
+                    self.logger.warning(f"Недостатньо даних у колонці {col} для IQR методу")
+                    continue
+
                 Q1 = data[col].quantile(0.25)
                 Q3 = data[col].quantile(0.75)
                 IQR = Q3 - Q1
 
-                if IQR == 0:
+                if IQR == 0 or pd.isna(IQR):
+                    self.logger.warning(f"Колонка {col} має нульовий IQR або NaN")
                     continue
 
                 lower_bound = Q1 - threshold * IQR
@@ -407,9 +487,19 @@ class MarketDataProcessor:
             try:
                 from sklearn.ensemble import IsolationForest
 
+                # Перевірка наявності достатньої кількості даних
+                if len(data) < 10:
+                    self.logger.warning("Недостатньо даних для Isolation Forest")
+                    return pd.DataFrame(), []
+
                 X = data[numeric_cols].fillna(data[numeric_cols].mean())
 
-                model = IsolationForest(contamination=1 / threshold, random_state=42)
+                # Перевірка на наявність NaN після заповнення
+                if X.isna().any().any():
+                    self.logger.warning("Залишились NaN після заповнення. Вони будуть замінені на 0")
+                    X = X.fillna(0)
+
+                model = IsolationForest(contamination=min(0.1, 1 / threshold), random_state=42)
                 predictions = model.fit_predict(X)
 
                 outliers = predictions == -1
@@ -477,29 +567,52 @@ class MarketDataProcessor:
 
             price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
             if price_cols and isinstance(result.index, pd.DatetimeIndex):
+                # Підраховуємо відсутні значення до заповнення
+                before_fill_prices = result[price_cols].count().sum()
                 result[price_cols] = result[price_cols].interpolate(method='time')
-                filled_values += result[price_cols].count().sum() - (
-                            len(result) * len(price_cols) - missing_values[price_cols].sum())
+                # Підраховуємо заповнені значення
+                filled_values += result[price_cols].count().sum() - before_fill_prices
 
             other_numeric = [col for col in numeric_cols if col not in price_cols]
             if other_numeric:
                 before_fill = result[other_numeric].count().sum()
-                result[other_numeric] = result[other_numeric].interpolate(method='linear')
+
+                if isinstance(result.index, pd.DatetimeIndex):
+                    result[other_numeric] = result[other_numeric].interpolate(method='time')
+                else:
+                    result[other_numeric] = result[other_numeric].interpolate(method='linear')
+
                 filled_values += result[other_numeric].count().sum() - before_fill
 
+            # Використовуємо ffill і bfill для залишкових NaN
+            before_fill_total = result.count().sum()
             result = result.fillna(method='ffill').fillna(method='bfill')
+            filled_values += result.count().sum() - before_fill_total
 
         elif method == 'ffill':
             self.logger.info("Застосування методу заповнення попереднім значенням (forward fill)")
             before_fill = result.count().sum()
             result = result.fillna(method='ffill')
+            after_forward = result.count().sum()
+
+            # Використовуємо backward fill для перших рядків, які не могли бути заповнені
+            result = result.fillna(method='bfill')
             filled_values = result.count().sum() - before_fill
 
         elif method == 'mean':
             self.logger.info("Застосування методу заповнення середнім значенням")
             for col in numeric_cols:
                 if missing_values[col] > 0:
+                    # Перевірка на порожність або всі NaN
+                    if result[col].dropna().empty:
+                        self.logger.warning(f"Колонка {col} не містить значень для обчислення середнього")
+                        continue
+
                     col_mean = result[col].mean()
+                    if pd.isna(col_mean):
+                        self.logger.warning(f"Середнє значення колонки {col} є NaN")
+                        continue
+
                     missing_before = result[col].isna().sum()
                     result[col] = result[col].fillna(col_mean)
                     filled_values += missing_before - result[col].isna().sum()
@@ -508,7 +621,16 @@ class MarketDataProcessor:
             self.logger.info("Застосування методу заповнення медіанним значенням")
             for col in numeric_cols:
                 if missing_values[col] > 0:
+                    # Перевірка на порожність або всі NaN
+                    if result[col].dropna().empty:
+                        self.logger.warning(f"Колонка {col} не містить значень для обчислення медіани")
+                        continue
+
                     col_median = result[col].median()
+                    if pd.isna(col_median):
+                        self.logger.warning(f"Медіанне значення колонки {col} є NaN")
+                        continue
+
                     missing_before = result[col].isna().sum()
                     result[col] = result[col].fillna(col_median)
                     filled_values += missing_before - result[col].isna().sum()
@@ -549,7 +671,7 @@ class MarketDataProcessor:
         try:
             from binance.client import Client
 
-            client = Client("", "")
+            client = Client("BINANCE_API_KEY", "BINANCE_API_SECRET")
 
             filled_data = data.copy()
 
@@ -825,7 +947,7 @@ class MarketDataProcessor:
                 self.logger.warning(f"Знайдено {len(neg_vol_indices)} записів з від'ємним об'ємом")
 
             volume_zscore = np.abs((data['volume'] - data['volume'].mean()) / data['volume'].std())
-            volume_anomalies = volume_zscore > 5  # Z-score > 5 вважаємо аномальним
+            volume_anomalies = volume_zscore > 5
             if volume_anomalies.any():
                 vol_anomaly_indices = data.index[volume_anomalies].tolist()
                 issues["volume_anomalies"] = vol_anomaly_indices
@@ -837,7 +959,6 @@ class MarketDataProcessor:
             issues["columns_with_na"] = {col: data.index[data[col].isna()].tolist() for col in cols_with_na}
             self.logger.warning(f"Знайдено відсутні значення у колонках: {cols_with_na}")
 
-        # Перевірка на нескінченні значення
         inf_counts = np.isinf(data.select_dtypes(include=[np.number])).sum()
         cols_with_inf = inf_counts[inf_counts > 0].index.tolist()
         if cols_with_inf:
@@ -1087,7 +1208,6 @@ class MarketDataProcessor:
 
         self.logger.info(f"Знайдено {duplicates_count} дублікатів часових міток")
 
-        # Зберігаємо перші входження для кожної часової мітки
         result = data[~duplicates]
 
         self.logger.info(f"Видалено {duplicates_count} дублікатів. Залишилось {len(result)} записів.")
@@ -1153,10 +1273,8 @@ class MarketDataProcessor:
             self.logger.warning("Спроба зберегти порожній DataFrame")
             return ""
 
-        # Визначення формату на основі розширення
-        file_extension = filename.split('.')[-1].lower() if '.' in filename else 'parquet'
+        file_extension = filename.split('.')[-1].lower() if '.' in filename else 'csv'
 
-        # Створення директорії, якщо вона не існує
         directory = os.path.dirname(filename)
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
@@ -1203,7 +1321,6 @@ class MarketDataProcessor:
                 data = pd.read_csv(filename)
                 self.logger.info(f"Дані завантажено з CSV файлу: {filename}")
 
-                # Спроба визначити та перетворити часовий індекс
                 time_cols = [col for col in data.columns if
                              any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
                 if time_cols:
@@ -1232,7 +1349,6 @@ class MarketDataProcessor:
                 self.logger.error(f"Невідомий формат файлу: {file_extension}")
                 return pd.DataFrame()
 
-            # Перевірка DatetimeIndex
             if not isinstance(data.index, pd.DatetimeIndex) and len(data) > 0:
                 self.logger.warning("Завантажені дані не мають DatetimeIndex. Спроба конвертувати.")
                 try:
@@ -1264,17 +1380,14 @@ class MarketDataProcessor:
 
         self.logger.info(f"Початок об'єднання {len(datasets)} наборів даних")
 
-        # Перевірка чи всі datasets мають вказаний merge_on
         all_have_merge_on = all(merge_on in df.columns or df.index.name == merge_on for df in datasets)
 
         if not all_have_merge_on:
-            # Якщо merge_on - це "timestamp", але у деяких datasets індекс безіменний
             if merge_on == 'timestamp':
                 self.logger.info("Перевірка, чи всі DataFrame мають DatetimeIndex")
                 all_have_datetime_index = all(isinstance(df.index, pd.DatetimeIndex) for df in datasets)
 
                 if all_have_datetime_index:
-                    # Перейменування індексів
                     for i in range(len(datasets)):
                         if datasets[i].index.name is None:
                             datasets[i].index.name = 'timestamp'
@@ -1285,12 +1398,10 @@ class MarketDataProcessor:
                 self.logger.error(f"Не всі набори даних містять '{merge_on}' для об'єднання")
                 return pd.DataFrame()
 
-        # Приведення до єдиного формату (індекс або колонка)
         datasets_copy = []
         for i, df in enumerate(datasets):
             df_copy = df.copy()
 
-            # Якщо merge_on - колонка, а не індекс
             if merge_on in df_copy.columns:
                 df_copy.set_index(merge_on, inplace=True)
                 self.logger.info(f"DataFrame {i} перетворено: колонка '{merge_on}' стала індексом")
@@ -1300,23 +1411,19 @@ class MarketDataProcessor:
 
             datasets_copy.append(df_copy)
 
-        # Об'єднання наборів даних
         result = datasets_copy[0]
         total_columns = len(result.columns)
 
         for i, df in enumerate(datasets_copy[1:], 2):
-            # Перейменування колонок у випадку конфлікту імен
             rename_dict = {}
             for col in df.columns:
                 if col in result.columns:
-                    # Додаємо суфікс з номером DataFrame тільки для дублікатів колонок
                     rename_dict[col] = f"{col}_{i}"
 
             if rename_dict:
                 self.logger.info(f"Перейменування колонок у DataFrame {i}: {rename_dict}")
                 df = df.rename(columns=rename_dict)
 
-            # Об'єднання
             result = result.join(df, how='outer')
             total_columns += len(df.columns)
 
@@ -1332,7 +1439,6 @@ class MarketDataProcessor:
             return data
 
         if steps is None:
-            # Стандартний конвеєр обробки
             steps = [
                 {'name': 'remove_duplicate_timestamps', 'params': {}},
                 {'name': 'clean_data', 'params': {'remove_outliers': True, 'fill_missing': True}},
@@ -1356,26 +1462,19 @@ class MarketDataProcessor:
 
                 method = getattr(self, step_name)
 
-                # Виклик методу з параметрами та вхідними даними
                 if step_name == 'normalize_data':
-                    # normalize_data повертає кортеж (DataFrame, scaler_meta)
                     result, _ = method(result, **step_params)
                 elif step_name == 'detect_outliers':
-                    # detect_outliers повертає кортеж (DataFrame з outlier flags, список індексів outliers)
                     outliers_df, _ = method(result, **step_params)
-                    # Тут ми не змінюємо result, але можемо зробити щось із outliers_df
                     self.logger.info(f"Виявлено аномалії, але дані не змінено")
                 else:
-                    # Інші методи повертають оброблений DataFrame
                     result = method(result, **step_params)
 
-                # Логування результатів кроку
                 self.logger.info(
                     f"Крок {step_idx}: '{step_name}' завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
 
             except Exception as e:
                 self.logger.error(f"Помилка на кроці {step_idx}: '{step_name}': {str(e)}")
-                # Продовжуємо з наступним кроком
 
         self.logger.info(
             f"Конвеєр обробки даних завершено. Початково: {len(data)} рядків, {len(data.columns)} колонок. "

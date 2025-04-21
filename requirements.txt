@@ -9,3 +9,5 @@ numpy~=2.2.4
 scikit-learn~=1.6.1
 scipy~=1.15.2
 pytz~=2025.2
+snscrape~=0.7.0.20230622
+transformers~=4.51.3

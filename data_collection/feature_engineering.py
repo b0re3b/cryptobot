@@ -471,3 +471,4 @@ class FeatureEngineering:
         # Створити цільову змінну
         # Повернути набір ознак і цільову змінну
         pass
+def main():
