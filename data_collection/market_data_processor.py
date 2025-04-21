@@ -35,58 +35,82 @@ class MarketDataProcessor:
         self._load_cache_index()
         self.ready = True
 
-    def _load_cache_index(self):
-        """Завантаження індексу кешу з файлу, якщо він існує"""
-        if not self.cache_dir:
+    def save_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
+        if df.empty:
+            self.logger.warning("Спроба зберегти порожні свічки")
             return
 
-        index_path = os.path.join(self.cache_dir, "cache_index.json")
-        if os.path.exists(index_path):
+        for _, row in df.iterrows():
             try:
-                with open(index_path, 'r') as f:
-                    self.cache_index = json.load(f)
-                self.logger.info(f"Індекс кешу завантажено: {len(self.cache_index)} записів")
+                kline_data = {
+                    'interval': interval,
+                    'open_time': row.name,
+                    'open': row['open'],
+                    'high': row['high'],
+                    'low': row['low'],
+                    'close': row['close'],
+                    'volume': row.get('volume', 0),
+                    'close_time': row.get('close_time', row.name),
+                    'quote_asset_volume': row.get('quote_asset_volume', 0),
+                    'number_of_trades': row.get('number_of_trades', 0),
+                    'taker_buy_base_volume': row.get('taker_buy_base_volume', 0),
+                    'taker_buy_quote_volume': row.get('taker_buy_quote_volume', 0),
+                    'is_closed': row.get('is_closed', True),
+                }
+                self.db_manager.insert_kline(symbol, kline_data)
             except Exception as e:
-                self.logger.error(f"Помилка завантаження індексу кешу: {e}")
-                self.cache_index = {}
+                self.logger.error(f"Помилка при збереженні свічки: {e}")
 
-    def _save_cache_index(self):
-        """Збереження індексу кешу в файл"""
-        if not self.cache_dir:
+    def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
+        if df.empty:
+            self.logger.warning("Спроба зберегти порожні оброблені свічки")
             return
 
-        index_path = os.path.join(self.cache_dir, "cache_index.json")
-        try:
-            with open(index_path, 'w') as f:
-                json.dump(self.cache_index, f, indent=2)
-            self.logger.info("Індекс кешу збережено")
-        except Exception as e:
-            self.logger.error(f"Помилка збереження індексу кешу: {e}")
+        for _, row in df.iterrows():
+            try:
+                processed_data = {
+                    'interval': interval,
+                    'open_time': row.name,
+                    'open': row['open'],
+                    'high': row['high'],
+                    'low': row['low'],
+                    'close': row['close'],
+                    'volume': row['volume'],
+                    'price_zscore': row.get('price_zscore'),
+                    'volume_zscore': row.get('volume_zscore'),
+                    'volatility': row.get('volatility'),
+                    'trend': row.get('trend'),
+                    'hour': row.get('hour'),
+                    'day_of_week': row.get('weekday'),
+                    'is_weekend': bool(row.get('is_weekend')),  # очікується bool
+                    'session': row.get('session', 'unknown'),
+                    'is_anomaly': row.get('is_anomaly', False),
+                    'has_missing': row.get('has_missing', False)
+                }
+                self.db_manager.insert_kline_processed(symbol, processed_data)
+            except Exception as e:
+                self.logger.error(f"Помилка при збереженні обробленої свічки: {e}")
 
-    def _get_cache_path(self, cache_key: str) -> str:
-        return os.path.join(self.cache_dir, f"{cache_key}.csv")
+    def save_volume_profile_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
+        if df.empty:
+            self.logger.warning("Спроба зберегти порожній профіль об'єму")
+            return
 
-    def save_to_cache(self, cache_key: str, data: pd.DataFrame, metadata: Dict = None) -> bool:
-        if not self.cache_dir:
-            return False
+        for _, row in df.iterrows():
+            try:
+                profile_data = {
+                    'interval': interval,
+                    'time_bucket': row.get('period') or row.name,
+                    'price_bin_start': row.get('bin_lower'),
+                    'price_bin_end': row.get('bin_upper'),
+                    'volume': row['volume']
+                }
+                self.db_manager.insert_volume_profile(symbol, profile_data)
+            except Exception as e:
+                self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
 
-        cache_path = self._get_cache_path(cache_key)
-        try:
-            data.to_csv(cache_path)
 
-            self.cache_index[cache_key] = {
-                "created_at": datetime.now().isoformat(),
-                "rows": len(data),
-                "columns": list(data.columns),
-                **(metadata or {})
-            }
 
-            self._save_cache_index()
-            self.logger.info(f"Дані збережено в кеш: {cache_key}, {len(data)} рядків")
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка збереження в кеш: {e}")
-            return False
 
     def _load_from_database(self, symbol: str, interval: str,
                             start_date: Optional[datetime] = None,
@@ -401,7 +425,6 @@ class MarketDataProcessor:
         number, unit = match.groups()
 
         if unit == 'M':
-            # Використовуємо приблизне середнє значення для місяця (30.44 днів)
             return pd.Timedelta(days=int(number) * 30.44)
 
         return pd.Timedelta(**{interval_map[unit]: int(number)})
@@ -1248,28 +1271,6 @@ class MarketDataProcessor:
         self.logger.info(f"Успішно додано {len(result.columns) - len(data.columns)} часових ознак")
         return result
 
-    def create_cache_key(self, source: str, symbol: str, interval: str,
-                         start_date: Union[str, datetime, None],
-                         end_date: Union[str, datetime, None]) -> str:
-
-        params = {
-            'symbol': symbol,
-            'interval': interval,
-            'start_date': start_date,
-            'end_date': end_date
-        }
-        cache_dict = {
-            'source': source,
-            **params
-        }
-        for key, value in cache_dict.items():
-            if isinstance(value, datetime):
-                cache_dict[key] = value.strftime('%Y-%m-%d %H:%M:%S')
-            elif value is None:
-                cache_dict[key] = None
-
-        json_string = json.dumps(cache_dict, sort_keys=True)
-        return hashlib.md5(json_string.encode()).hexdigest()
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame) -> pd.DataFrame:
 
@@ -1614,7 +1615,7 @@ def main():
 
     EU_TIMEZONE = 'Europe/Kiev'
 
-    processor = MarketDataProcessor(cache_dir="./cache")
+    processor = MarketDataProcessor()
 
 
 
