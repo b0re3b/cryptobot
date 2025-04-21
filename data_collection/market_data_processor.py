@@ -12,7 +12,7 @@ import json
 from functools import lru_cache
 import pytz
 from utils.config import db_connection
-import data.db as db
+from data.db import DatabaseManager
 
 
 class MarketDataProcessor:
@@ -21,7 +21,8 @@ class MarketDataProcessor:
         self.cache_dir = cache_dir
         self.log_level = log_level
         self.db_connection = db_connection
-
+        self.db_manager = DatabaseManager()
+        self.supported_symbols = self.db_manager.supported_symbols
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація класу...")
@@ -62,28 +63,6 @@ class MarketDataProcessor:
         except Exception as e:
             self.logger.error(f"Помилка збереження індексу кешу: {e}")
 
-    def create_cache_key(self, data_source: str, symbol: str, interval: str,
-                         start_date: Optional[Union[str, datetime]] = None,
-                         end_date: Optional[Union[str, datetime]] = None,
-                         data_type: str = 'candles') -> str:
-        """Створює унікальний ключ для кешування даних"""
-        key_parts = [data_source, symbol, interval, data_type]
-
-        if start_date:
-            if isinstance(start_date, datetime):
-                key_parts.append(start_date.isoformat())
-            else:
-                key_parts.append(str(start_date))
-
-        if end_date:
-            if isinstance(end_date, datetime):
-                key_parts.append(end_date.isoformat())
-            else:
-                key_parts.append(str(end_date))
-
-        key_str = "_".join(key_parts)
-        return hashlib.md5(key_str.encode()).hexdigest()
-
     def _get_cache_path(self, cache_key: str) -> str:
         return os.path.join(self.cache_dir, f"{cache_key}.csv")
 
@@ -119,14 +98,14 @@ class MarketDataProcessor:
         try:
             data = None
             if data_type == 'candles':
-                data = db.get_klines(
+                data = DatabaseManager.get_klines(
                     symbol=symbol,
                     interval=interval,
                     start_time=start_date,
                     end_time=end_date
                 )
             elif data_type == 'orderbook':
-                data = db.get_orderbook(
+                data = DatabaseManager.get_orderbook(
                     symbol=symbol,
                     start_time=start_date,
                     end_time=end_date
@@ -1172,7 +1151,7 @@ class MarketDataProcessor:
             return pd.DataFrame()
 
     def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
-                          add_sessions: bool = False, tz: str = 'UTC') -> pd.DataFrame:
+                          add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для додавання часових ознак")
@@ -1273,13 +1252,13 @@ class MarketDataProcessor:
                          start_date: Union[str, datetime, None],
                          end_date: Union[str, datetime, None]) -> str:
 
-        params={
+        params = {
             'symbol': symbol,
             'interval': interval,
             'start_date': start_date,
             'end_date': end_date
         }
-        cache_dict ={
+        cache_dict = {
             'source': source,
             **params
         }
@@ -1382,13 +1361,30 @@ class MarketDataProcessor:
         self.logger.info(f"Відфільтровано {initial_count - final_count} записів. Залишилось {final_count} записів.")
         return result
 
-    def save_processed_data(self, data: pd.DataFrame, filename: str) -> str:
+    def save_processed_data(self, data: pd.DataFrame, filename: str, db_connection=None) -> str:
 
         if data.empty:
             self.logger.warning("Спроба зберегти порожній DataFrame")
             return ""
 
-        file_extension = filename.split('.')[-1].lower() if '.' in filename else 'csv'
+        # Збереження в базу даних, якщо надано з'єднання
+        if db_connection:
+            try:
+                table_name = os.path.basename(filename).split('.')[0]
+                data.to_sql(table_name, db_connection, if_exists='replace', index=True)
+                self.logger.info(f"Дані збережено в базу даних, таблиця: {table_name}")
+                return table_name
+            except Exception as e:
+                self.logger.error(f"Помилка при збереженні в базу даних: {str(e)}")
+                return ""
+
+        # Забезпечення формату CSV
+        if '.' in filename and filename.split('.')[-1].lower() != 'csv':
+            filename = f"{filename.split('.')[0]}.csv"
+            self.logger.warning(f"Змінено формат файлу на CSV: {filename}")
+
+        if not filename.endswith('.csv'):
+            filename = f"{filename}.csv"
 
         directory = os.path.dirname(filename)
         if directory and not os.path.exists(directory):
@@ -1396,28 +1392,8 @@ class MarketDataProcessor:
             self.logger.info(f"Створено директорію: {directory}")
 
         try:
-            if file_extension == 'csv':
-                data.to_csv(filename)
-                self.logger.info(f"Дані збережено у CSV форматі: {filename}")
-            elif file_extension == 'parquet':
-                data.to_parquet(filename)
-                self.logger.info(f"Дані збережено у Parquet форматі: {filename}")
-            elif file_extension in ['h5', 'hdf', 'hdf5']:
-                data.to_hdf(filename, key='data', mode='w')
-                self.logger.info(f"Дані збережено у HDF5 форматі: {filename}")
-            elif file_extension == 'json':
-                data.to_json(filename)
-                self.logger.info(f"Дані збережено у JSON форматі: {filename}")
-            elif file_extension == 'pickle' or file_extension == 'pkl':
-                data.to_pickle(filename)
-                self.logger.info(f"Дані збережено у Pickle форматі: {filename}")
-            else:
-                default_filename = f"{filename}.parquet"
-                data.to_parquet(default_filename)
-                self.logger.warning(
-                    f"Невідомий формат файлу: {file_extension}. Збережено як Parquet: {default_filename}")
-                return os.path.abspath(default_filename)
-
+            data.to_csv(filename)
+            self.logger.info(f"Дані збережено у CSV форматі: {filename}")
             return os.path.abspath(filename)
         except Exception as e:
             self.logger.error(f"Помилка при збереженні даних: {str(e)}")
@@ -1443,25 +1419,8 @@ class MarketDataProcessor:
                     data[time_col] = pd.to_datetime(data[time_col])
                     data.set_index(time_col, inplace=True)
                     self.logger.info(f"Встановлено індекс за колонкою {time_col}")
-
-            elif file_extension == 'parquet':
-                data = pd.read_parquet(filename)
-                self.logger.info(f"Дані завантажено з Parquet файлу: {filename}")
-
-            elif file_extension in ['h5', 'hdf', 'hdf5']:
-                data = pd.read_hdf(filename, key='data')
-                self.logger.info(f"Дані завантажено з HDF5 файлу: {filename}")
-
-            elif file_extension == 'json':
-                data = pd.read_json(filename)
-                self.logger.info(f"Дані завантажено з JSON файлу: {filename}")
-
-            elif file_extension == 'pickle' or file_extension == 'pkl':
-                data = pd.read_pickle(filename)
-                self.logger.info(f"Дані завантажено з Pickle файлу: {filename}")
-
             else:
-                self.logger.error(f"Невідомий формат файлу: {file_extension}")
+                self.logger.error(f"Підтримується лише формат CSV, отримано: {file_extension}")
                 return pd.DataFrame()
 
             if not isinstance(data.index, pd.DatetimeIndex) and len(data) > 0:
@@ -1628,9 +1587,7 @@ class MarketDataProcessor:
         except Exception as e:
             self.logger.error(f"Помилка при збереженні індексу кешу: {str(e)}")
 
-
 def main():
-    from market_data_processor import MarketDataProcessor
 
     data_source = {
         'csv': {
@@ -1655,7 +1612,11 @@ def main():
     symbols = ['BTC', 'ETH', 'SOL']
     intervals = ['1d', '1h', '4h']
 
+    EU_TIMEZONE = 'Europe/Kiev'
+
     processor = MarketDataProcessor(cache_dir="./cache")
+
+
 
     for symbol in symbols:
         for interval in intervals:
@@ -1680,10 +1641,15 @@ def main():
                 if interval != '1d':
                     data = processor.resample_data(data, target_interval='1d')
 
-                data = processor.add_time_features(data)
+                data = processor.add_time_features(data, tz=EU_TIMEZONE)
 
-                save_path = f"./processed/{symbol}_{interval}_processed.parquet"
-                processor.save_processed_data(data, save_path)
+                save_path = f"./processed/{symbol}_{interval}_processed.csv"
+
+                if db_connection:
+                    processor.save_processed_data(data, save_path, db_connection)
+                else:
+                    processor.save_processed_data(data, save_path)
+
                 print(f" Дані збережено: {save_path}")
 
             except Exception as e:
