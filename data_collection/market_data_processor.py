@@ -32,7 +32,6 @@ class MarketDataProcessor:
             return
 
         def convert_numpy_types(obj):
-            import numpy as np
             if isinstance(obj, dict):
                 return {k: convert_numpy_types(v) for k, v in obj.items()}
             elif isinstance(obj, (np.generic, np.bool_)):
@@ -58,7 +57,6 @@ class MarketDataProcessor:
                     'is_closed': bool(row.get('is_closed', True)),
                 }
 
-                # Конвертація до базових типів Python
                 kline_data = convert_numpy_types(kline_data)
 
                 self.db_manager.insert_kline(symbol, kline_data)
@@ -282,7 +280,7 @@ class MarketDataProcessor:
                 else:
                     result[other_numeric] = result[other_numeric].interpolate(method='linear')
 
-            result = result.fillna(method='ffill').fillna(method='bfill')
+            result = result.ffill().bfill()
 
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
         if len(price_cols) == 4:
@@ -518,7 +516,6 @@ class MarketDataProcessor:
             return data
 
         result = data.copy()
-
         missing_values = result.isna().sum()
         total_missing = missing_values.sum()
 
@@ -526,98 +523,74 @@ class MarketDataProcessor:
             self.logger.info("Відсутні значення не знайдено")
             return result
 
-        self.logger.info(f"Знайдено {total_missing} відсутніх значень:")
-        for col in result.columns:
-            if missing_values[col] > 0:
-                self.logger.info(f"  - {col}: {missing_values[col]} ({missing_values[col] / len(result) * 100:.2f}%)")
+        self.logger.info(
+            f"Знайдено {total_missing} відсутніх значень у {len(missing_values[missing_values > 0])} колонках")
 
+        # 🔄 Підтягування з Binance
         if isinstance(result.index, pd.DatetimeIndex) and fetch_missing:
             time_diff = result.index.to_series().diff()
-            expected_diff = None
+            expected_diff = time_diff.dropna().median() if len(time_diff) > 5 else None
 
-            if len(time_diff) > 5:
-                expected_diff = time_diff.dropna().median()
-
-            if expected_diff is not None and symbol and interval and method == 'binance':
+            if expected_diff and symbol and interval:
                 missing_periods = self._detect_missing_periods(result, expected_diff)
                 if missing_periods:
-                    result = self._fetch_missing_data_from_binance(result, missing_periods, symbol, interval)
+                    self.logger.info(f"Знайдено {len(missing_periods)} прогалин. Підтягуємо з Binance...")
+                    filled = self._fetch_missing_data_from_binance(result, missing_periods, symbol, interval)
+                    result = pd.concat([result, filled])
+                    result = result[~result.index.duplicated(keep='last')].sort_index()
 
         filled_values = 0
         numeric_cols = result.select_dtypes(include=[np.number]).columns
 
         if method == 'interpolate':
-            self.logger.info("Застосування методу інтерполяції")
-
+            self.logger.info("Застосування методу лінійної інтерполяції")
             price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-            if price_cols and isinstance(result.index, pd.DatetimeIndex):
-                # Підраховуємо відсутні значення до заповнення
-                before_fill_prices = result[price_cols].count().sum()
+            other_cols = [col for col in numeric_cols if col not in price_cols]
+            before_fill = result.count().sum()
+
+            if price_cols:
                 result[price_cols] = result[price_cols].interpolate(method='time')
-                # Підраховуємо заповнені значення
-                filled_values += result[price_cols].count().sum() - before_fill_prices
 
-            other_numeric = [col for col in numeric_cols if col not in price_cols]
-            if other_numeric:
-                before_fill = result[other_numeric].count().sum()
+            if other_cols:
+                result[other_cols] = result[other_cols].interpolate().ffill().bfill()
 
-                if isinstance(result.index, pd.DatetimeIndex):
-                    result[other_numeric] = result[other_numeric].interpolate(method='time')
-                else:
-                    result[other_numeric] = result[other_numeric].interpolate(method='linear')
-
-                filled_values += result[other_numeric].count().sum() - before_fill
-
-            # Використовуємо ffill і bfill для залишкових NaN
-            before_fill_total = result.count().sum()
-            result = result.fillna(method='ffill').fillna(method='bfill')
-            filled_values += result.count().sum() - before_fill_total
+            result = result.ffill().bfill()
+            filled_values = result.count().sum() - before_fill
 
         elif method == 'ffill':
-            self.logger.info("Застосування методу заповнення попереднім значенням (forward fill)")
+            self.logger.info("Застосування методу forward/backward fill")
             before_fill = result.count().sum()
-            result = result.fillna(method='ffill')
-            after_forward = result.count().sum()
-
-            # Використовуємо backward fill для перших рядків, які не могли бути заповнені
-            result = result.fillna(method='bfill')
+            result = result.ffill().bfill()
             filled_values = result.count().sum() - before_fill
 
         elif method == 'mean':
             self.logger.info("Застосування методу заповнення середнім значенням")
             for col in numeric_cols:
                 if missing_values[col] > 0:
-                    # Перевірка на порожність або всі NaN
                     if result[col].dropna().empty:
                         self.logger.warning(f"Колонка {col} не містить значень для обчислення середнього")
                         continue
-
                     col_mean = result[col].mean()
-                    if pd.isna(col_mean):
-                        self.logger.warning(f"Середнє значення колонки {col} є NaN")
-                        continue
-
-                    missing_before = result[col].isna().sum()
-                    result[col] = result[col].fillna(col_mean)
-                    filled_values += missing_before - result[col].isna().sum()
+                    if pd.notna(col_mean):
+                        before = result[col].isna().sum()
+                        result[col] = result[col].fillna(col_mean)
+                        filled_values += before - result[col].isna().sum()
 
         elif method == 'median':
             self.logger.info("Застосування методу заповнення медіанним значенням")
             for col in numeric_cols:
                 if missing_values[col] > 0:
-                    # Перевірка на порожність або всі NaN
                     if result[col].dropna().empty:
                         self.logger.warning(f"Колонка {col} не містить значень для обчислення медіани")
                         continue
-
                     col_median = result[col].median()
-                    if pd.isna(col_median):
-                        self.logger.warning(f"Медіанне значення колонки {col} є NaN")
-                        continue
+                    if pd.notna(col_median):
+                        before = result[col].isna().sum()
+                        result[col] = result[col].fillna(col_median)
+                        filled_values += before - result[col].isna().sum()
 
-                    missing_before = result[col].isna().sum()
-                    result[col] = result[col].fillna(col_median)
-                    filled_values += missing_before - result[col].isna().sum()
+        else:
+            self.logger.warning(f"Метод заповнення '{method}' не підтримується")
 
         remaining_missing = result.isna().sum().sum()
         if remaining_missing > 0:
@@ -661,39 +634,36 @@ class MarketDataProcessor:
     def _fetch_missing_data_from_binance(self, data: pd.DataFrame,
                                          missing_periods: List[Tuple[datetime, datetime]],
                                          symbol: str, interval: str) -> pd.DataFrame:
-
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для заповнення даними")
             return pd.DataFrame()
 
-        # Перевірка валідності параметрів
         if not symbol or not interval:
             self.logger.error("Невалідний symbol або interval")
             return data
 
         try:
             from binance.client import Client
-            # Отримуємо ключі API з конфігураційного файлу або змінних середовища
-            api_key = self.config.get('BINANCE_API_KEY', os.environ.get('BINANCE_API_KEY'))
-            api_secret = self.config.get('BINANCE_API_SECRET', os.environ.get('BINANCE_API_SECRET'))
+            api_key = self.config.get('BINANCE_API_KEY') or os.environ.get('BINANCE_API_KEY')
+            api_secret = self.config.get('BINANCE_API_SECRET') or os.environ.get('BINANCE_API_SECRET')
 
             if not api_key or not api_secret:
-                self.logger.error("Не знайдено ключі API Binance в конфігурації або змінних середовища")
+                self.logger.error("Не знайдено ключі API Binance")
                 return data
 
             client = Client(api_key, api_secret)
-
             filled_data = data.copy()
 
-            valid_intervals = ['1m',  '1h',  '4h', '1d',]
+            valid_intervals = ['1m', '1h', '4h', '1d']
             if interval not in valid_intervals:
-                self.logger.error(f"Невалідний інтервал: {interval}. Дозволені значення: {valid_intervals}")
+                self.logger.error(f"Невалідний інтервал: {interval}")
                 return data
+
+            new_data_frames = []
 
             for start_time, end_time in missing_periods:
                 try:
-                    self.logger.info(f"Отримання даних з Binance для {symbol} від {start_time} до {end_time}")
-
+                    self.logger.info(f"📥 Отримання даних з Binance: {symbol}, {interval}, {start_time} - {end_time}")
                     start_ms = int(start_time.timestamp() * 1000)
                     end_ms = int(end_time.timestamp() * 1000)
 
@@ -705,43 +675,55 @@ class MarketDataProcessor:
                     )
 
                     if not klines:
-                        self.logger.warning(f"Дані не отримано з Binance для проміжку {start_time} - {end_time}")
+                        self.logger.warning(f"⚠️ Порожній результат з Binance: {start_time} - {end_time}")
                         continue
 
                     columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume',
-                               'close_time', 'quote_asset_volume', 'trades',
-                               'taker_buy_base', 'taker_buy_quote', 'ignored']
+                               'close_time', 'quote_asset_volume', 'number_of_trades',
+                               'taker_buy_base_volume', 'taker_buy_quote_volume', 'ignore']
+                    binance_df = pd.DataFrame(klines, columns=columns[:len(klines[0])])
 
-                    binance_df = pd.DataFrame(klines, columns=columns)
                     binance_df['timestamp'] = pd.to_datetime(binance_df['timestamp'], unit='ms')
-
-                    for col in ['open', 'high', 'low', 'close', 'volume']:
-                        if col in binance_df.columns:
-                            binance_df[col] = pd.to_numeric(binance_df[col])
-
                     binance_df.set_index('timestamp', inplace=True)
 
-                    common_cols = [col for col in binance_df.columns if col in filled_data.columns]
-                    if not common_cols:
-                        self.logger.warning("Немає спільних колонок між DataFrame та даними Binance")
+                    # Конвертація числових значень
+                    for col in ['open', 'high', 'low', 'close', 'volume']:
+                        if col in binance_df.columns:
+                            binance_df[col] = pd.to_numeric(binance_df[col], errors='coerce')
+
+                    binance_df['is_closed'] = True
+
+                    # Вибираємо лише ті колонки, які є в обох DataFrame
+                    common_cols = data.columns.intersection(binance_df.columns)
+                    if common_cols.empty:
+                        self.logger.warning("⚠️ Немає спільних колонок для об'єднання")
                         continue
 
-                    binance_df = binance_df[common_cols]
+                    new_data = binance_df[common_cols]
+                    new_data_frames.append(new_data)
 
-                    filled_data = pd.concat([filled_data, binance_df])
-                    filled_data = filled_data[~filled_data.index.duplicated(keep='first')]
-                    filled_data = filled_data.sort_index()
-
-                    self.logger.info(f"Додано {len(binance_df)} записів з Binance")
+                    self.logger.info(f"✅ Отримано {len(new_data)} нових записів")
 
                 except Exception as e:
-                    self.logger.error(f"Помилка при отриманні даних з Binance: {str(e)}")
+                    self.logger.error(f"❌ Помилка при запиті Binance: {e}")
+
+            if not new_data_frames:
+                return data
+
+            combined_new = pd.concat(new_data_frames)
+            total_before = len(filled_data)
+            filled_data = pd.concat([filled_data, combined_new])
+            filled_data = filled_data[~filled_data.index.duplicated(keep='last')]
+            filled_data = filled_data.sort_index()
+            total_after = len(filled_data)
+
+            added_count = total_after - total_before
+            self.logger.info(f"🧩 Загалом додано {added_count} нових рядків після об'єднання")
 
             return filled_data
 
         except ImportError:
-            self.logger.error(
-                "Не вдалося імпортувати модуль binance.")
+            self.logger.error("❌ Модуль binance не встановлено.")
             return data
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
@@ -1495,7 +1477,10 @@ class MarketDataProcessor:
 
         return result
 
-    def preprocess_pipeline(self, data: pd.DataFrame, steps: Optional[List[Dict]] = None) -> pd.DataFrame:
+    def preprocess_pipeline(self, data: pd.DataFrame,
+                            steps: Optional[List[Dict]] = None,
+                            symbol: Optional[str] = None,
+                            interval: Optional[str] = None) -> pd.DataFrame:
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для обробки в конвеєрі")
@@ -1505,11 +1490,13 @@ class MarketDataProcessor:
             steps = [
                 {'name': 'remove_duplicate_timestamps', 'params': {}},
                 {'name': 'clean_data', 'params': {'remove_outliers': True, 'fill_missing': True}},
-                {'name': 'handle_missing_values', 'params': {'method': 'interpolate'}}
+                {'name': 'handle_missing_values', 'params': {
+                    'method': 'interpolate',
+                    'fetch_missing': True
+                }}
             ]
 
         self.logger.info(f"Початок виконання конвеєра обробки даних з {len(steps)} кроками")
-
         result = data.copy()
 
         for step_idx, step in enumerate(steps, 1):
@@ -1522,8 +1509,12 @@ class MarketDataProcessor:
 
             try:
                 self.logger.info(f"Крок {step_idx}: Виконання '{step_name}' з параметрами {step_params}")
-
                 method = getattr(self, step_name)
+
+                # Додаємо symbol та interval якщо метод підтримує їх
+                if step_name == 'handle_missing_values':
+                    step_params['symbol'] = symbol
+                    step_params['interval'] = interval
 
                 if step_name == 'normalize_data':
                     result, _ = method(result, **step_params)
@@ -1544,6 +1535,8 @@ class MarketDataProcessor:
             f"Результат: {len(result)} рядків, {len(result.columns)} колонок.")
 
         return result
+
+
 def main():
     # Конфігурація
     EU_TIMEZONE = 'Europe/Kiev'
@@ -1608,7 +1601,11 @@ def main():
             print(f"✔️ Завантажено {len(data)} рядків")
 
             # Обробка
-            processed_data = processor.preprocess_pipeline(data)
+            processed_data = processor.preprocess_pipeline(
+                data,
+                symbol=symbol,
+                interval=interval
+            )
 
             if interval != '1d':
                 processed_data = processor.resample_data(processed_data, target_interval='1d')

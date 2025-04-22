@@ -635,7 +635,6 @@ class DatabaseManager:
             result = self.cursor.fetchone()
 
             if result:
-                # Оновлюємо існуючий запис
                 update_query = '''
                 UPDATE websocket_status 
                 SET is_active = %s, last_updated = CURRENT_TIMESTAMP 
@@ -643,7 +642,6 @@ class DatabaseManager:
                 '''
                 self.cursor.execute(update_query, (is_active, result['id']))
             else:
-                # Додаємо новий запис
                 insert_query = '''
                 INSERT INTO websocket_status (symbol, socket_type, interval, is_active)
                 VALUES (%s, %s, %s, %s)
