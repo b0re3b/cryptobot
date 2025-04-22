@@ -210,7 +210,8 @@ class MarketDataProcessor:
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True, normalize: bool = False,
                    norm_method: str = 'z-score', resample: bool = False,
-                   target_interval: str = None) -> pd.DataFrame:
+                   target_interval: str = None, add_time_features: bool = False,
+                   cyclical: bool = True, add_sessions: bool = False) -> pd.DataFrame:
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для очищення")
@@ -247,6 +248,15 @@ class MarketDataProcessor:
             result = result[~result.index.duplicated(keep='first')]
 
         result = result.sort_index()
+
+        # Додаємо часові ознаки, якщо потрібно
+        if add_time_features:
+            self.logger.info("Додавання часових ознак...")
+            result = self.add_time_features(
+                data=result,
+                cyclical=cyclical,
+                add_sessions=add_sessions
+            )
 
         numeric_cols = ['open', 'high', 'low', 'close', 'volume']
         for col in numeric_cols:
@@ -348,68 +358,166 @@ class MarketDataProcessor:
         self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result
 
-    def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
+    def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
+                   fill_missing: bool = True, normalize: bool = False,
+                   norm_method: str = 'z-score', resample: bool = False,
+                   target_interval: str = None, add_time_features: bool = False,
+                   cyclical: bool = True, add_sessions: bool = False,
+                   add_time_after_resample: bool = False) -> pd.DataFrame:
 
         if data.empty:
-            self.logger.warning("Отримано порожній DataFrame для ресемплінгу")
+            self.logger.warning("Отримано порожній DataFrame для очищення")
             return data
 
-        if not isinstance(data.index, pd.DatetimeIndex):
-            raise ValueError("Дані повинні мати DatetimeIndex для ресемплінгу")
+        self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
 
-        required_cols = ['open', 'high', 'low', 'close']
-        missing_cols = [col for col in required_cols if col not in data.columns]
-        if missing_cols:
-            self.logger.warning(f"Відсутні необхідні колонки: {missing_cols}")
-            return data
+        # Виконуємо перевірку цілісності даних перед очищенням
+        integrity_issues = self.validate_data_integrity(data)
+        if integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in integrity_issues.values())
+            self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю даних")
 
-        pandas_interval = self._convert_interval_to_pandas_format(target_interval)
-        self.logger.info(f"Ресемплінг даних до інтервалу: {target_interval} (pandas формат: {pandas_interval})")
+        result = data.copy()
 
-        if len(data) > 1:
-            current_interval = pd.Timedelta(data.index[1] - data.index[0])
-            estimated_target_interval = self._parse_interval(target_interval)
-
-            if estimated_target_interval < current_interval:
-                self.logger.warning(f"Цільовий інтервал ({target_interval}) менший за поточний інтервал даних. "
-                                    f"Даунсемплінг неможливий без додаткових даних.")
-                return data
-
-        agg_dict = {
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last'
-        }
-
-        if 'volume' in data.columns:
-            agg_dict['volume'] = 'sum'
-
-        numeric_cols = data.select_dtypes(include=[np.number]).columns
-        for col in numeric_cols:
-            if col not in agg_dict:
-                if any(x in col.lower() for x in ['count', 'number', 'trades']):
-                    agg_dict[col] = 'sum'
+        if not isinstance(result.index, pd.DatetimeIndex):
+            try:
+                time_cols = [col for col in result.columns if
+                             any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
+                if time_cols:
+                    time_col = time_cols[0]
+                    self.logger.info(f"Конвертування колонки {time_col} в індекс часу")
+                    result[time_col] = pd.to_datetime(result[time_col])
+                    result.set_index(time_col, inplace=True)
                 else:
-                    agg_dict[col] = 'mean'
+                    self.logger.warning("Не знайдено колонку з часом, індекс залишається незмінним")
+            except Exception as e:
+                self.logger.error(f"Помилка при конвертуванні індексу: {str(e)}")
 
-        try:
-            resampled = data.resample(pandas_interval).agg(agg_dict)
+        if result.index.duplicated().any():
+            dup_count = result.index.duplicated().sum()
+            self.logger.info(f"Знайдено {dup_count} дублікатів індексу, видалення...")
+            result = result[~result.index.duplicated(keep='first')]
 
-            if resampled.isna().any().any():
-                self.logger.info("Заповнення відсутніх значень після ресемплінгу...")
-                price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in resampled.columns]
-                resampled[price_cols] = resampled[price_cols].fillna(method='ffill')
+        result = result.sort_index()
 
-                if 'volume' in resampled.columns:
-                    resampled['volume'] = resampled['volume'].fillna(0)
+        # Додаємо часові ознаки перед очищенням, якщо потрібно і не вказано додавати після ресемплінгу
+        if add_time_features and not add_time_after_resample:
+            self.logger.info("Додавання часових ознак...")
+            result = self.add_time_features(
+                data=result,
+                cyclical=cyclical,
+                add_sessions=add_sessions
+            )
 
-            self.logger.info(f"Ресемплінг успішно завершено: {resampled.shape[0]} рядків")
-            return resampled
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if col in result.columns:
+                result[col] = pd.to_numeric(result[col], errors='coerce')
 
-        except Exception as e:
-            self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
-            raise
+        if remove_outliers:
+            self.logger.info("Видалення аномальних значень...")
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+            for col in price_cols:
+                # Перевірка на порожній DataFrame або серію
+                if result[col].empty or result[col].isna().all():
+                    continue
+
+                Q1 = result[col].quantile(0.25)
+                Q3 = result[col].quantile(0.75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - 3 * IQR
+                upper_bound = Q3 + 3 * IQR
+
+                outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
+                if outliers.any():
+                    outlier_count = outliers.sum()
+                    self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
+                    result.loc[outliers, col] = np.nan
+
+        if fill_missing and result.isna().any().any():
+            self.logger.info("Заповнення відсутніх значень...")
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+            if price_cols and isinstance(result.index, pd.DatetimeIndex):
+                result[price_cols] = result[price_cols].interpolate(method='time')
+
+            if 'volume' in result.columns and result['volume'].isna().any():
+                result['volume'] = result['volume'].fillna(0)
+
+            numeric_cols = result.select_dtypes(include=[np.number]).columns
+            other_numeric = [col for col in numeric_cols if col not in price_cols + ['volume']]
+            if other_numeric:
+                if isinstance(result.index, pd.DatetimeIndex):
+                    result[other_numeric] = result[other_numeric].interpolate(method='time')
+                else:
+                    result[other_numeric] = result[other_numeric].interpolate(method='linear')
+
+            result = result.ffill().bfill()
+
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+        if len(price_cols) == 4:
+            invalid_hl = result['high'] < result['low']
+            if invalid_hl.any():
+                invalid_count = invalid_hl.sum()
+                self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
+
+                temp = result.loc[invalid_hl, 'high'].copy()
+                result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
+                result.loc[invalid_hl, 'low'] = temp
+
+        # Виконуємо ресемплінг даних, якщо потрібно
+        if resample and target_interval:
+            try:
+                self.logger.info(f"Виконання ресемплінгу даних до інтервалу {target_interval}...")
+                result = self.resample_data(result, target_interval)
+
+                # Додаємо часові ознаки після ресемплінгу, якщо вказано
+                if add_time_features and add_time_after_resample:
+                    self.logger.info("Додавання часових ознак після ресемплінгу...")
+                    result = self.add_time_features(
+                        data=result,
+                        cyclical=cyclical,
+                        add_sessions=add_sessions
+                    )
+            except Exception as e:
+                self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
+
+        # Додаємо нормалізацію даних, якщо потрібно
+        if normalize:
+            self.logger.info(f"Виконання нормалізації даних методом {norm_method}...")
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+
+            # Нормалізуємо цінові колонки
+            if price_cols:
+                result, price_scaler = self.normalize_data(
+                    data=result,
+                    method=norm_method,
+                    columns=price_cols
+                )
+
+                if price_scaler is None:
+                    self.logger.warning("Не вдалося нормалізувати цінові колонки")
+
+            # Окремо нормалізуємо об'єм, якщо він присутній
+            if 'volume' in result.columns:
+                result, volume_scaler = self.normalize_data(
+                    data=result,
+                    method='min-max',  # Для об'єму краще використовувати min-max нормалізацію
+                    columns=['volume']
+                )
+
+                if volume_scaler is None:
+                    self.logger.warning("Не вдалося нормалізувати колонку об'єму")
+
+        # Перевіряємо цілісність даних після очищення
+        clean_integrity_issues = self.validate_data_integrity(result)
+        if clean_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in clean_integrity_issues.values())
+            self.logger.info(f"Після очищення залишилось {issue_count} проблем з цілісністю даних")
+
+        self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
+        return result
 
     def _convert_interval_to_pandas_format(self, interval: str) -> str:
 
@@ -876,7 +984,8 @@ class MarketDataProcessor:
             self.logger.warning(f"Помилка обробки даних ордербука: {e}")
             return pd.DataFrame()
 
-    def process_orderbook_data(self, data: pd.DataFrame) -> pd.DataFrame:
+    def process_orderbook_data(self, data: pd.DataFrame, add_time_features: bool = False,
+                               cyclical: bool = True, add_sessions: bool = False) -> pd.DataFrame:
         """Обробляє дані ордербука (нормалізація, розрахунок метрик)."""
         if data.empty:
             return data
@@ -929,6 +1038,18 @@ class MarketDataProcessor:
             # Додамо волатильність
             if len(processed) >= 10:  # Достатньо даних для розрахунку волатильності
                 processed['volatility'] = processed['mid_price'].rolling(10).std() / processed['mid_price']
+
+        # Додаємо часові ознаки, якщо потрібно
+        if add_time_features:
+            if isinstance(processed.index, pd.DatetimeIndex):
+                self.logger.info("Додавання часових ознак до даних ордербука...")
+                processed = self.add_time_features(
+                    data=processed,
+                    cyclical=cyclical,
+                    add_sessions=add_sessions
+                )
+            else:
+                self.logger.warning("Неможливо додати часові ознаки: індекс не є DatetimeIndex")
 
         # Нормалізація числових даних
         # Виключаємо часові або ідентифікаційні колонки з нормалізації
@@ -1085,10 +1206,20 @@ class MarketDataProcessor:
 
     def preprocess_orderbook_pipeline(self, symbol: str,
                                       start_time: Optional[datetime] = None,
-                                      end_time: Optional[datetime] = None) -> pd.DataFrame:
+                                      end_time: Optional[datetime] = None,
+                                      add_time_features: bool = False,
+                                      cyclical: bool = True,
+                                      add_sessions: bool = True) -> pd.DataFrame:
         """Повний конвеєр обробки даних ордербука."""
         # Завантаження даних
         raw_data = self.load_orderbook_data(symbol, start_time, end_time)
+
+        # Перевіряємо цілісність сирих даних
+        raw_integrity_issues = self.validate_data_integrity(raw_data)
+        if raw_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in raw_integrity_issues.values())
+            self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю сирих даних ордербука")
 
         # Виявлення пропущених періодів
         if not raw_data.empty and isinstance(raw_data.index, pd.DatetimeIndex):
@@ -1116,6 +1247,13 @@ class MarketDataProcessor:
         # Обробка даних
         processed_data = self.process_orderbook_data(raw_data)
 
+        # Перевірка цілісності даних після первинної обробки
+        processed_integrity_issues = self.validate_data_integrity(processed_data)
+        if processed_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in processed_integrity_issues.values())
+            self.logger.info(f"Після процесу обробки залишилось {issue_count} проблем з цілісністю даних")
+
         # Нормалізація даних перед виявленням аномалій
         normalized_data, scaler_meta = self.normalize_data(
             processed_data,
@@ -1128,6 +1266,30 @@ class MarketDataProcessor:
             processed_data = normalized_data
             self.logger.info(f"Дані нормалізовано методом {scaler_meta['method']}")
 
+            # Перевірка цілісності даних після нормалізації
+            norm_integrity_issues = self.validate_data_integrity(processed_data)
+            if norm_integrity_issues:
+                issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                                  for issues in norm_integrity_issues.values())
+                self.logger.info(f"Після нормалізації залишилось {issue_count} проблем з цілісністю даних")
+
+                # Перевіряємо на наявність нескінченних або NaN значень після нормалізації
+                if "columns_with_inf" in norm_integrity_issues or "columns_with_na" in norm_integrity_issues:
+                    self.logger.warning("Нормалізація створила проблеми з нескінченними або відсутніми значеннями")
+
+        # Додавання часових ознак перед виявленням аномалій
+        if add_time_features:
+            if isinstance(processed_data.index, pd.DatetimeIndex):
+                self.logger.info("Додавання часових ознак до даних ордербука перед виявленням аномалій...")
+                processed_data = self.add_time_features(
+                    data=processed_data,
+                    cyclical=cyclical,
+                    add_sessions=add_sessions
+                )
+                self.logger.info(f"Додано часові ознаки. Нова кількість колонок: {processed_data.shape[1]}")
+            else:
+                self.logger.warning("Неможливо додати часові ознаки: індекс не є DatetimeIndex")
+
         # Виявлення аномалій
         anomalies = self.detect_orderbook_anomalies(processed_data)
         processed_data = pd.concat([processed_data, anomalies], axis=1)
@@ -1136,10 +1298,48 @@ class MarketDataProcessor:
         if len(processed_data) > 1000:  # Ресемплінг тільки для великих наборів
             processed_data = self.resample_orderbook_data(processed_data, '5min')
 
+            # Перевірка цілісності даних після ресемплінгу
+            resample_integrity_issues = self.validate_data_integrity(processed_data)
+            if resample_integrity_issues:
+                issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                                  for issues in resample_integrity_issues.values())
+                self.logger.info(f"Після ресемплінгу залишилось {issue_count} проблем з цілісністю даних")
+
         # Додаємо фільтрацію аномалій, якщо потрібно
         if 'is_anomaly' in processed_data.columns:
             # Зберігаємо відфільтровані дані в атрибуті класу для можливого використання
             self.filtered_data = processed_data[~processed_data['is_anomaly']]
+
+            # Перевірка цілісності відфільтрованих даних
+            if not self.filtered_data.empty:
+                filtered_integrity_issues = self.validate_data_integrity(self.filtered_data)
+                if filtered_integrity_issues:
+                    issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                                      for issues in filtered_integrity_issues.values())
+                    self.logger.info(
+                        f"У відфільтрованих даних (без аномалій) залишилось {issue_count} проблем з цілісністю")
+                else:
+                    self.logger.info("У відфільтрованих даних (без аномалій) проблем з цілісністю не виявлено")
+
+        # Фінальна перевірка цілісності даних перед поверненням результату
+        final_integrity_issues = self.validate_data_integrity(processed_data)
+        if final_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in final_integrity_issues.values())
+            self.logger.warning(f"У фінальному наборі даних залишилось {issue_count} проблем з цілісністю")
+
+            # Деталізація проблем, які залишились
+            issue_types = list(final_integrity_issues.keys())
+            self.logger.info(f"Типи проблем у фінальному наборі даних: {issue_types}")
+        else:
+            self.logger.info("Фінальний набір даних не має проблем з цілісністю")
+
+        # Розрахунок статистики ордербука
+        statistics = self.get_orderbook_statistics(processed_data)
+        self.logger.info(f"Розраховано статистику ордербука: {len(statistics)} показників")
+
+        # Зберігаємо статистику для подальшого використання
+        self.orderbook_statistics = statistics
 
         self.logger.info(f"Завершено препроцесинг даних ордербука для {symbol}, рядків: {len(processed_data)}")
         return processed_data
