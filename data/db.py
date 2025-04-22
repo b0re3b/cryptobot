@@ -521,7 +521,7 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_klines(self, symbol, interval, start_time=None, end_time=None, limit=100):
+    def get_klines(self, symbol, interval, start_time=None, end_time=None, limit=None):
         """Отримує свічки для валюти"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")

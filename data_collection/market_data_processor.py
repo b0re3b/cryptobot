@@ -358,166 +358,68 @@ class MarketDataProcessor:
         self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result
 
-    def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
-                   fill_missing: bool = True, normalize: bool = False,
-                   norm_method: str = 'z-score', resample: bool = False,
-                   target_interval: str = None, add_time_features: bool = False,
-                   cyclical: bool = True, add_sessions: bool = False,
-                   add_time_after_resample: bool = False) -> pd.DataFrame:
+    def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
 
         if data.empty:
-            self.logger.warning("Отримано порожній DataFrame для очищення")
+            self.logger.warning("Отримано порожній DataFrame для ресемплінгу")
             return data
 
-        self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
+        if not isinstance(data.index, pd.DatetimeIndex):
+            raise ValueError("Дані повинні мати DatetimeIndex для ресемплінгу")
 
-        # Виконуємо перевірку цілісності даних перед очищенням
-        integrity_issues = self.validate_data_integrity(data)
-        if integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in integrity_issues.values())
-            self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю даних")
+        required_cols = ['open', 'high', 'low', 'close']
+        missing_cols = [col for col in required_cols if col not in data.columns]
+        if missing_cols:
+            self.logger.warning(f"Відсутні необхідні колонки: {missing_cols}")
+            return data
 
-        result = data.copy()
+        pandas_interval = self._convert_interval_to_pandas_format(target_interval)
+        self.logger.info(f"Ресемплінг даних до інтервалу: {target_interval} (pandas формат: {pandas_interval})")
 
-        if not isinstance(result.index, pd.DatetimeIndex):
-            try:
-                time_cols = [col for col in result.columns if
-                             any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
-                if time_cols:
-                    time_col = time_cols[0]
-                    self.logger.info(f"Конвертування колонки {time_col} в індекс часу")
-                    result[time_col] = pd.to_datetime(result[time_col])
-                    result.set_index(time_col, inplace=True)
-                else:
-                    self.logger.warning("Не знайдено колонку з часом, індекс залишається незмінним")
-            except Exception as e:
-                self.logger.error(f"Помилка при конвертуванні індексу: {str(e)}")
+        if len(data) > 1:
+            current_interval = pd.Timedelta(data.index[1] - data.index[0])
+            estimated_target_interval = self._parse_interval(target_interval)
 
-        if result.index.duplicated().any():
-            dup_count = result.index.duplicated().sum()
-            self.logger.info(f"Знайдено {dup_count} дублікатів індексу, видалення...")
-            result = result[~result.index.duplicated(keep='first')]
+            if estimated_target_interval < current_interval:
+                self.logger.warning(f"Цільовий інтервал ({target_interval}) менший за поточний інтервал даних. "
+                                    f"Даунсемплінг неможливий без додаткових даних.")
+                return data
 
-        result = result.sort_index()
+        agg_dict = {
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last'
+        }
 
-        # Додаємо часові ознаки перед очищенням, якщо потрібно і не вказано додавати після ресемплінгу
-        if add_time_features and not add_time_after_resample:
-            self.logger.info("Додавання часових ознак...")
-            result = self.add_time_features(
-                data=result,
-                cyclical=cyclical,
-                add_sessions=add_sessions
-            )
+        if 'volume' in data.columns:
+            agg_dict['volume'] = 'sum'
 
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
         for col in numeric_cols:
-            if col in result.columns:
-                result[col] = pd.to_numeric(result[col], errors='coerce')
-
-        if remove_outliers:
-            self.logger.info("Видалення аномальних значень...")
-            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-            for col in price_cols:
-                # Перевірка на порожній DataFrame або серію
-                if result[col].empty or result[col].isna().all():
-                    continue
-
-                Q1 = result[col].quantile(0.25)
-                Q3 = result[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 3 * IQR
-                upper_bound = Q3 + 3 * IQR
-
-                outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
-                if outliers.any():
-                    outlier_count = outliers.sum()
-                    self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
-                    result.loc[outliers, col] = np.nan
-
-        if fill_missing and result.isna().any().any():
-            self.logger.info("Заповнення відсутніх значень...")
-            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-            if price_cols and isinstance(result.index, pd.DatetimeIndex):
-                result[price_cols] = result[price_cols].interpolate(method='time')
-
-            if 'volume' in result.columns and result['volume'].isna().any():
-                result['volume'] = result['volume'].fillna(0)
-
-            numeric_cols = result.select_dtypes(include=[np.number]).columns
-            other_numeric = [col for col in numeric_cols if col not in price_cols + ['volume']]
-            if other_numeric:
-                if isinstance(result.index, pd.DatetimeIndex):
-                    result[other_numeric] = result[other_numeric].interpolate(method='time')
+            if col not in agg_dict:
+                if any(x in col.lower() for x in ['count', 'number', 'trades']):
+                    agg_dict[col] = 'sum'
                 else:
-                    result[other_numeric] = result[other_numeric].interpolate(method='linear')
+                    agg_dict[col] = 'mean'
 
-            result = result.ffill().bfill()
+        try:
+            resampled = data.resample(pandas_interval).agg(agg_dict)
 
-        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-        if len(price_cols) == 4:
-            invalid_hl = result['high'] < result['low']
-            if invalid_hl.any():
-                invalid_count = invalid_hl.sum()
-                self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
+            if resampled.isna().any().any():
+                self.logger.info("Заповнення відсутніх значень після ресемплінгу...")
+                price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in resampled.columns]
+                resampled[price_cols] = resampled[price_cols].fillna(method='ffill')
 
-                temp = result.loc[invalid_hl, 'high'].copy()
-                result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
-                result.loc[invalid_hl, 'low'] = temp
+                if 'volume' in resampled.columns:
+                    resampled['volume'] = resampled['volume'].fillna(0)
 
-        # Виконуємо ресемплінг даних, якщо потрібно
-        if resample and target_interval:
-            try:
-                self.logger.info(f"Виконання ресемплінгу даних до інтервалу {target_interval}...")
-                result = self.resample_data(result, target_interval)
+            self.logger.info(f"Ресемплінг успішно завершено: {resampled.shape[0]} рядків")
+            return resampled
 
-                # Додаємо часові ознаки після ресемплінгу, якщо вказано
-                if add_time_features and add_time_after_resample:
-                    self.logger.info("Додавання часових ознак після ресемплінгу...")
-                    result = self.add_time_features(
-                        data=result,
-                        cyclical=cyclical,
-                        add_sessions=add_sessions
-                    )
-            except Exception as e:
-                self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
-
-        # Додаємо нормалізацію даних, якщо потрібно
-        if normalize:
-            self.logger.info(f"Виконання нормалізації даних методом {norm_method}...")
-            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-
-            # Нормалізуємо цінові колонки
-            if price_cols:
-                result, price_scaler = self.normalize_data(
-                    data=result,
-                    method=norm_method,
-                    columns=price_cols
-                )
-
-                if price_scaler is None:
-                    self.logger.warning("Не вдалося нормалізувати цінові колонки")
-
-            # Окремо нормалізуємо об'єм, якщо він присутній
-            if 'volume' in result.columns:
-                result, volume_scaler = self.normalize_data(
-                    data=result,
-                    method='min-max',  # Для об'єму краще використовувати min-max нормалізацію
-                    columns=['volume']
-                )
-
-                if volume_scaler is None:
-                    self.logger.warning("Не вдалося нормалізувати колонку об'єму")
-
-        # Перевіряємо цілісність даних після очищення
-        clean_integrity_issues = self.validate_data_integrity(result)
-        if clean_integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in clean_integrity_issues.values())
-            self.logger.info(f"Після очищення залишилось {issue_count} проблем з цілісністю даних")
-
-        self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
-        return result
+        except Exception as e:
+            self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
+            raise
 
     def _convert_interval_to_pandas_format(self, interval: str) -> str:
 
