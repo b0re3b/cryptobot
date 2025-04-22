@@ -217,6 +217,14 @@ class MarketDataProcessor:
             return data
 
         self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
+
+        # Виконуємо перевірку цілісності даних перед очищенням
+        integrity_issues = self.validate_data_integrity(data)
+        if integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in integrity_issues.values())
+            self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю даних")
+
         result = data.copy()
 
         if not isinstance(result.index, pd.DatetimeIndex):
@@ -329,6 +337,13 @@ class MarketDataProcessor:
 
                 if volume_scaler is None:
                     self.logger.warning("Не вдалося нормалізувати колонку об'єму")
+
+        # Перевіряємо цілісність даних після очищення
+        clean_integrity_issues = self.validate_data_integrity(result)
+        if clean_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in clean_integrity_issues.values())
+            self.logger.info(f"Після очищення залишилось {issue_count} проблем з цілісністю даних")
 
         self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result
@@ -552,6 +567,17 @@ class MarketDataProcessor:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data
 
+        # Перевіряємо цілісність даних перед обробкою відсутніх значень
+        integrity_issues = self.validate_data_integrity(data)
+        if integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in integrity_issues.values())
+            self.logger.warning(f"Перед обробкою відсутніх значень знайдено {issue_count} проблем з цілісністю даних")
+            # Перевіряємо, чи є проблеми з відсутніми значеннями серед виявлених проблем
+            if "columns_with_na" in integrity_issues:
+                na_cols = list(integrity_issues["columns_with_na"].keys())
+                self.logger.info(f"Виявлені колонки з відсутніми значеннями: {na_cols}")
+
         result = data.copy()
         missing_values = result.isna().sum()
         total_missing = missing_values.sum()
@@ -634,6 +660,21 @@ class MarketDataProcessor:
             self.logger.warning(f"Залишилося {remaining_missing} незаповнених значень після обробки")
 
         self.logger.info(f"Заповнено {filled_values} відсутніх значень методом '{method}'")
+
+        # Перевіряємо цілісність даних після обробки відсутніх значень
+        clean_integrity_issues = self.validate_data_integrity(result)
+        if clean_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in clean_integrity_issues.values())
+            self.logger.info(f"Після обробки відсутніх значень залишилось {issue_count} проблем з цілісністю даних")
+
+            # Перевіряємо, чи залишились проблеми з відсутніми значеннями
+            if "columns_with_na" in clean_integrity_issues:
+                na_cols = list(clean_integrity_issues["columns_with_na"].keys())
+                self.logger.warning(f"Після обробки все ще є колонки з відсутніми значеннями: {na_cols}")
+        else:
+            self.logger.info("Після обробки відсутніх значень проблем з цілісністю даних не виявлено")
+
         return result
 
     def _detect_missing_periods(self, data: pd.DataFrame, expected_diff: pd.Timedelta) -> List[
@@ -840,6 +881,21 @@ class MarketDataProcessor:
         if data.empty:
             return data
 
+        # Перевіряємо цілісність даних перед обробкою
+        integrity_issues = self.validate_data_integrity(data)
+        if integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in integrity_issues.values())
+            self.logger.warning(f"Перед обробкою ордербука знайдено {issue_count} проблем з цілісністю даних")
+
+            # Перевіряємо наявність ключових колонок для ордербука
+            if "missing_columns" in integrity_issues:
+                missing_cols = integrity_issues["missing_columns"]
+                orderbook_key_cols = [col for col in ['bid_price', 'ask_price', 'bid_qty', 'ask_qty'] if
+                                      col in missing_cols]
+                if orderbook_key_cols:
+                    self.logger.error(f"Відсутні критичні колонки для ордербука: {orderbook_key_cols}")
+
         processed = data.copy()
 
         # Розрахунок спреду - використовуємо прогресивну перевірку наявності колонок
@@ -873,6 +929,39 @@ class MarketDataProcessor:
             # Додамо волатильність
             if len(processed) >= 10:  # Достатньо даних для розрахунку волатильності
                 processed['volatility'] = processed['mid_price'].rolling(10).std() / processed['mid_price']
+
+        # Нормалізація числових даних
+        # Виключаємо часові або ідентифікаційні колонки з нормалізації
+        exclude_cols = ['timestamp', 'datetime', 'date', 'time', 'id', 'symbol', 'pair']
+        # Визначаємо колонки для нормалізації - всі числові крім виключених
+        numeric_cols = processed.select_dtypes(include=[np.number]).columns.tolist()
+        normalize_cols = [col for col in numeric_cols if col not in exclude_cols]
+
+        # Застосовуємо робастну нормалізацію, яка менш чутлива до викидів
+        processed, scaler_meta = self.normalize_data(
+            data=processed,
+            method='robust',
+            columns=normalize_cols,
+            exclude_columns=None
+        )
+
+        # Перевіряємо цілісність даних після обробки
+        post_integrity_issues = self.validate_data_integrity(processed)
+        if post_integrity_issues:
+            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
+                              for issues in post_integrity_issues.values())
+            self.logger.info(f"Після обробки ордербука залишилось {issue_count} проблем з цілісністю даних")
+
+            # Перевіряємо, чи виникли нові проблеми після обробки
+            new_issues = set(post_integrity_issues.keys()) - set(integrity_issues.keys() if integrity_issues else [])
+            if new_issues:
+                self.logger.warning(f"Після обробки ордербука виникли нові типи проблем: {new_issues}")
+
+            # Особлива увага до аномалій у розрахованих значеннях
+            if "price_jumps_mid_price" in post_integrity_issues or "price_jumps_spread" in post_integrity_issues:
+                self.logger.warning("Виявлено аномалії у розрахованих цінових метриках")
+        else:
+            self.logger.info("Після обробки ордербука проблем з цілісністю даних не виявлено")
 
         return processed
 
@@ -1026,6 +1115,18 @@ class MarketDataProcessor:
 
         # Обробка даних
         processed_data = self.process_orderbook_data(raw_data)
+
+        # Нормалізація даних перед виявленням аномалій
+        normalized_data, scaler_meta = self.normalize_data(
+            processed_data,
+            method='z-score',
+            exclude_columns=['timestamp', 'symbol']  # Виключаємо нечислові колонки
+        )
+
+        # Якщо нормалізація пройшла успішно, використовуємо нормалізовані дані
+        if scaler_meta is not None:
+            processed_data = normalized_data
+            self.logger.info(f"Дані нормалізовано методом {scaler_meta['method']}")
 
         # Виявлення аномалій
         anomalies = self.detect_orderbook_anomalies(processed_data)
