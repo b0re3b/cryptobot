@@ -208,7 +208,9 @@ class MarketDataProcessor:
             raise
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
-                   fill_missing: bool = True) -> pd.DataFrame:
+                   fill_missing: bool = True, normalize: bool = False,
+                   norm_method: str = 'z-score', resample: bool = False,
+                   target_interval: str = None) -> pd.DataFrame:
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для очищення")
@@ -292,6 +294,41 @@ class MarketDataProcessor:
                 temp = result.loc[invalid_hl, 'high'].copy()
                 result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
                 result.loc[invalid_hl, 'low'] = temp
+
+        # Виконуємо ресемплінг даних, якщо потрібно
+        if resample and target_interval:
+            try:
+                self.logger.info(f"Виконання ресемплінгу даних до інтервалу {target_interval}...")
+                result = self.resample_data(result, target_interval)
+            except Exception as e:
+                self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
+
+        # Додаємо нормалізацію даних, якщо потрібно
+        if normalize:
+            self.logger.info(f"Виконання нормалізації даних методом {norm_method}...")
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+
+            # Нормалізуємо цінові колонки
+            if price_cols:
+                result, price_scaler = self.normalize_data(
+                    data=result,
+                    method=norm_method,
+                    columns=price_cols
+                )
+
+                if price_scaler is None:
+                    self.logger.warning("Не вдалося нормалізувати цінові колонки")
+
+            # Окремо нормалізуємо об'єм, якщо він присутній
+            if 'volume' in result.columns:
+                result, volume_scaler = self.normalize_data(
+                    data=result,
+                    method='min-max',  # Для об'єму краще використовувати min-max нормалізацію
+                    columns=['volume']
+                )
+
+                if volume_scaler is None:
+                    self.logger.warning("Не вдалося нормалізувати колонку об'єму")
 
         self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result
@@ -664,18 +701,7 @@ class MarketDataProcessor:
                             start_time: Optional[datetime] = None,
                             end_time: Optional[datetime] = None,
                             limit: Optional[int] = None) -> pd.DataFrame:
-        """
-        Завантажує історичні дані ордербука з бази даних.
 
-        Args:
-            symbol: Символ торгової пари
-            start_time: Початковий час вибірки
-            end_time: Кінцевий час вибірки
-            limit: Обмеження кількості записів (останні N записів)
-
-        Returns:
-            DataFrame з даними ордербука
-        """
         try:
             data = self.db_manager.get_orderbook(
                 symbol=symbol,
@@ -704,8 +730,7 @@ class MarketDataProcessor:
                                      missing_periods: List[Tuple[datetime, datetime]]) -> pd.DataFrame:
         """Отримує відсутні дані ордербука з Binance API."""
         try:
-            # Імпорт бібліотеки та отримання API ключів винесені в початок класу або в __init__
-            # Тут ми припускаємо, що self.binance_client вже встановлений
+
             if not hasattr(self, 'binance_client'):
                 from binance.client import Client
                 from utils.config import get_binance_keys  # Імпортуємо з конфіг файлу
@@ -772,10 +797,7 @@ class MarketDataProcessor:
             return pd.DataFrame()
 
     def _process_raw_orderbook(self, raw_data: List, symbol: str) -> pd.DataFrame:
-        """
-        Обробляє сирі дані ордербука з API.
-        Оптимізована версія з використанням векторизованих операцій Pandas.
-        """
+
         if not raw_data:
             return pd.DataFrame()
 
