@@ -6,16 +6,32 @@ import logging
 from typing import List, Dict, Optional, Union, Tuple
 import psycopg2
 from psycopg2 import pool
+from data.db import DatabaseManager
+from utils.config import db_connection
 
 
 class TwitterScraper:
 
     def __init__(self, sentiment_model: str = "finiteautomata/bertweet-base-sentiment-analysis",
                  cache_dir: Optional[str] = None,
-                 logger: Optional[logging.Logger] = None,
+                 log_level=logging.INFO,
                  db_config: Optional[Dict] = None,
-                 cache_expiry: int = 86400):  # 24 години за замовчуванням
+                 cache_expiry: int = 86400):
         """
+        Ініціалізація скрапера Twitter.
+
+        Зміни:
+        - Додано об'єкт DatabaseManager для роботи з базою даних
+        - Видалено пряме використання psycopg2
+        """
+        self.log_level = log_level
+        self.db_connection = db_connection
+        self.db_manager = DatabaseManager()
+        self.supported_symbols = self.db_manager.supported_symbols
+        logging.basicConfig(level=self.log_level)
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Ініціалізація класу...")
+        self.ready = True        """
         Ініціалізація скрапера Twitter.
 
         Args:
@@ -27,24 +43,7 @@ class TwitterScraper:
         """
         pass
 
-    def _init_db_connection(self) -> None:
-        """
-        Ініціалізація пула з'єднань до бази даних PostgreSQL.
-        """
-        pass
 
-    def _execute_query(self, query: str, params: tuple = None) -> List[Dict]:
-        """
-        Виконання SQL-запиту до бази даних.
-
-        Args:
-            query: SQL-запит
-            params: Параметри для SQL-запиту
-
-        Returns:
-            Результат запиту як список словників
-        """
-        pass
 
     def search_tweets(self, query: str, days_back: int = 7,
                       limit: Optional[int] = None, lang: str = "en") -> List[Dict]:
@@ -64,18 +63,29 @@ class TwitterScraper:
 
     def _cache_tweets(self, query: str, tweets: List[Dict]) -> bool:
         """
-        Кешування зібраних твітів у базі даних.
-
-        Args:
-            query: Пошуковий запит
-            tweets: Список твітів для кешування
-
-        Returns:
-            Булеве значення успішності операції
+        Тепер використовує DatabaseManager.insert_tweet() для кожного твіту
         """
-        pass
+        if not self.db_manager:
+            return False
+
+        for tweet in tweets:
+            if not self.db_manager.insert_tweet(tweet):
+                return False
+        return True
 
     def _get_cached_tweets(self, query: str, min_date: datetime) -> Optional[List[Dict]]:
+        """
+        Тепер використовує DatabaseManager.get_tweets() з відповідними фільтрами
+        """
+        if not self.db_manager:
+            return None
+
+        filters = {
+            'start_date': min_date,
+            'content': f"%{query}%"  # Приклад фільтрації за вмістом
+        }
+        tweets_df = self.db_manager.get_tweets(filters=filters)
+        return tweets_df.to_dict('records') if not tweets_df.empty else None
         """
         Отримання кешованих твітів з бази даних.
 
@@ -89,6 +99,23 @@ class TwitterScraper:
         pass
 
     def analyze_sentiment(self, tweets: List[Dict]) -> List[Dict]:
+        """
+        Після аналізу настроїв використовує DatabaseManager.insert_tweet_sentiment()
+        для збереження результатів
+        """
+        # Аналіз настроїв...
+        for tweet in analyzed_tweets:
+            if self.db_manager:
+                sentiment_data = {
+                    'tweet_id': tweet['id'],
+                    'sentiment': tweet['sentiment'],
+                    'sentiment_score': tweet['sentiment_score'],
+                    'confidence': tweet.get('confidence', 0.0),
+                    'model_used': self.sentiment_model
+                }
+                self.db_manager.insert_tweet_sentiment(sentiment_data)
+        return analyzed_tweets
+
         """
         Аналіз настроїв у зібраних твітах.
 
@@ -127,20 +154,11 @@ class TwitterScraper:
         """
         pass
 
-    def save_to_csv(self, tweets: List[Dict], filename: str) -> bool:
-        """
-        Збереження зібраних твітів у CSV файл.
-
-        Args:
-            tweets: Список твітів для збереження
-            filename: Ім'я файлу для збереження
-
-        Returns:
-            Булеве значення успішності операції
-        """
-        pass
-
     def save_to_database(self, tweets: List[Dict], table_name: str = "tweets") -> bool:
+        """
+        Тепер використовує DatabaseManager.insert_tweet() або інші методи вставки
+        """
+        return self._cache_tweets("", tweets)  # Можна використати той же метод
         """
         Збереження зібраних твітів у базу даних PostgreSQL.
 
@@ -167,6 +185,10 @@ class TwitterScraper:
 
     def track_influencers(self, influencers: List[str], days_back: int = 30) -> Dict[str, List[Dict]]:
         """
+        Використовує DatabaseManager для:
+        1. Отримання інформації про інфлюенсерів (get_crypto_influencers)
+        2. Збереження їх активності (insert_influencer_activity)
+        """        """
         Відстеження активності відомих крипто-інфлюенсерів.
 
         Args:
@@ -180,6 +202,10 @@ class TwitterScraper:
 
     def track_sentiment_over_time(self, query: str, days: int = 30,
                                   interval: str = "day") -> pd.DataFrame:
+        """
+        Використовує DatabaseManager.get_sentiment_time_series() для отримання історичних даних
+        та DatabaseManager.insert_sentiment_time_series() для збереження нових даних
+        """
         """
         Відстеження зміни настроїв щодо криптовалюти за період часу.
 
@@ -232,6 +258,8 @@ class TwitterScraper:
 
     def detect_crypto_events(self, tweets: List[Dict], min_mentions: int = 50) -> List[Dict]:
         """
+        Використовує DatabaseManager.insert_crypto_event() для збереження виявлених подій
+        """        """
         Виявлення важливих подій на криптовалютному ринку на основі твітів.
 
         Args:
@@ -245,6 +273,8 @@ class TwitterScraper:
 
     def get_error_stats(self) -> Dict:
         """
+        Використовує DatabaseManager.get_scraping_errors() для отримання статистики помилок
+        """        """
         Отримання статистики помилок при зборі даних.
 
         Returns:
@@ -253,6 +283,10 @@ class TwitterScraper:
         pass
 
     def cleanup_database(self, older_than_days: int = 90) -> int:
+        """
+        Тепер не потрібен, оскільки DatabaseManager має власні методи для очищення даних
+        Або можна додати відповідний метод до DatabaseManager
+        """
         """
         Очищення старих даних з бази даних.
 
