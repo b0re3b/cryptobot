@@ -39,17 +39,42 @@ class MarketDataProcessor:
             else:
                 return obj
 
+        # Додано перевірку на мінімальну дату
+        MIN_VALID_DATE = datetime(2000, 1, 1)
+
         for _, row in df.iterrows():
             try:
+                open_time = row.name
+                if isinstance(open_time, (int, float)):
+                    # Додано перевірку на валідність timestamp перед конвертацією
+                    if open_time > 0:
+                        open_time = pd.to_datetime(open_time, unit='ms')
+                    else:
+                        continue  # Пропускаємо невалідні timestamp
+
+                # Пропускаємо дати до 2000 року
+                if open_time < MIN_VALID_DATE:
+                    continue
+
+                close_time = row.get('close_time', open_time)
+                if isinstance(close_time, (int, float)):
+                    if close_time > 0:
+                        close_time = pd.to_datetime(close_time, unit='ms')
+                    else:
+                        close_time = open_time
+
+                if close_time < MIN_VALID_DATE:
+                    close_time = open_time
+
                 kline_data = {
                     'interval': interval,
-                    'open_time': row.name,
+                    'open_time': open_time,
                     'open': row['open'],
                     'high': row['high'],
                     'low': row['low'],
                     'close': row['close'],
                     'volume': row.get('volume', 0),
-                    'close_time': row.get('close_time', row.name),
+                    'close_time': close_time,
                     'quote_asset_volume': row.get('quote_asset_volume', 0),
                     'number_of_trades': row.get('number_of_trades', 0),
                     'taker_buy_base_volume': row.get('taker_buy_base_volume', 0),
@@ -58,22 +83,33 @@ class MarketDataProcessor:
                 }
 
                 kline_data = convert_numpy_types(kline_data)
-
                 self.db_manager.insert_kline(symbol, kline_data)
 
             except Exception as e:
-                self.logger.error(f"Помилка при збереженні свічки для {symbol}: {e}")
+                self.logger.error(f"❌ Помилка при збереженні свічки для {symbol}: {e}")
 
     def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
         if df.empty:
             self.logger.warning("Спроба зберегти порожні оброблені свічки")
             return
 
+        MIN_VALID_DATE = datetime(2000, 1, 1)
+
         for _, row in df.iterrows():
             try:
+                open_time = row.name
+                if isinstance(open_time, (int, float)):
+                    if open_time > 0:
+                        open_time = pd.to_datetime(open_time, unit='ms')
+                    else:
+                        continue
+
+                if open_time < MIN_VALID_DATE:
+                    continue
+
                 processed_data = {
                     'interval': interval,
-                    'open_time': row.name,
+                    'open_time': open_time,
                     'open': row['open'],
                     'high': row['high'],
                     'low': row['low'],
@@ -85,14 +121,16 @@ class MarketDataProcessor:
                     'trend': row.get('trend'),
                     'hour': row.get('hour'),
                     'day_of_week': row.get('weekday'),
-                    'is_weekend': bool(row.get('is_weekend')),  # очікується bool
+                    'is_weekend': bool(row.get('is_weekend')),
                     'session': row.get('session', 'unknown'),
                     'is_anomaly': row.get('is_anomaly', False),
                     'has_missing': row.get('has_missing', False)
                 }
+
                 self.db_manager.insert_kline_processed(symbol, processed_data)
+
             except Exception as e:
-                self.logger.error(f"Помилка при збереженні обробленої свічки: {e}")
+                self.logger.error(f"❌ Помилка при збереженні обробленої свічки для {symbol}: {e}")
 
     def save_volume_profile_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
         if df.empty:
@@ -262,6 +300,7 @@ class MarketDataProcessor:
         for col in numeric_cols:
             if col in result.columns:
                 result[col] = pd.to_numeric(result[col], errors='coerce')
+                result[col] = result[col].astype(float)
 
         if remove_outliers:
             self.logger.info("Видалення аномальних значень...")
@@ -2262,74 +2301,69 @@ class MarketDataProcessor:
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['BTC', 'ETH', 'SOL']
-    INTERVALS = ['5m', '1h']  # базові таймфрейми (30m буде з 5m, 1d — з 1h)
-
+    INTERVALS = ['5m', '1h']
     processor = MarketDataProcessor()
 
     for symbol in SYMBOLS:
         for interval in INTERVALS:
-            print(f"\n Обробка свічок {interval} для {symbol}...")
+            print(f"\n Обробка {symbol} ({interval})...")
 
-            if interval == '5m':
-                # Завантаження з Binance
-                data = processor._fetch_missing_data_from_binance(symbol, interval)
-                if data.empty:
-                    print(f" Не вдалося отримати {interval} для {symbol}")
-                    continue
-            else:
-                # Завантаження з БД або CSV
-                data = processor.load_data(
-                    data_source='database',
-                    symbol=symbol,
-                    interval=interval,
-                    data_type='candles'
-                )
-                if data.empty:
-                    print(f" Немає даних для {symbol} {interval}")
-                    continue
+            # 1. Завантаження даних з БД
+            raw_data = processor.load_data(
+                data_source='database',
+                symbol=symbol,
+                interval=interval,
+                data_type='candles'
+            )
 
-            # Збереження сирих даних
-            processor.save_klines_to_db(data, symbol, interval)
-            print(f" Сирі {interval} свічки збережено")
+            if raw_data.empty:
+                print(f" Дані не знайдено для {symbol} {interval}")
+                continue
 
-            # Обробка
-            processed = processor.preprocess_pipeline(data, symbol=symbol, interval=interval)
+            # 2. Обробка відсутніх значень + підтягування з Binance (якщо треба)
+            filled_data = processor.handle_missing_values(
+                raw_data,
+                symbol=symbol,
+                interval=interval,
+                fetch_missing=True
+            )
+
+            # 3. Збереження сирих даних
+            processor.save_klines_to_db(filled_data, symbol, interval)
+            print(f" Сирі свічки ({interval}) збережено")
+
+            # 4. Попередня обробка (пайплайн)
+            processed = processor.preprocess_pipeline(filled_data, symbol=symbol, interval=interval)
+
             if processed.empty:
-                print(f" Порожній результат обробки {interval} для {symbol}")
+                print(f" Обробка не дала результатів для {symbol} {interval}")
                 continue
 
             processed = processor.add_time_features(processed, tz=EU_TIMEZONE)
             processor.save_processed_klines_to_db(processed, symbol, interval)
-            print(f" Оброблені {interval} свічки збережено")
+            print(f" Оброблені свічки ({interval}) збережено")
 
-            # Ресемплінг до 30m з 5m
+            # 5. Ресемплінг
             if interval == '5m':
                 resampled_30m = processor.resample_data(processed, target_interval='30m')
                 resampled_30m = processor.add_time_features(resampled_30m, tz=EU_TIMEZONE)
                 processor.save_processed_klines_to_db(resampled_30m, symbol, '30m')
-                print(" 30-хвилинні свічки збережено")
+                print(f" 30-хвилинні свічки збережено")
 
-            # Ресемплінг до 1d з 1h
             if interval == '1h':
                 resampled_1d = processor.resample_data(processed, target_interval='1d')
                 resampled_1d = processor.add_time_features(resampled_1d, tz=EU_TIMEZONE)
                 processor.save_processed_klines_to_db(resampled_1d, symbol, '1d')
-                print(" Денні свічки збережено")
+                print(f" Денні свічки збережено")
 
-                # Профіль об'єму (для денних)
+                # 6. Профіль об'єму
                 volume_profile = processor.aggregate_volume_profile(resampled_1d, bins=12, time_period='1W')
                 if not volume_profile.empty:
                     processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
-                    print(" Профіль об'єму збережено")
+                    print(f" Профіль об'єму збережено")
 
-        # Ордербук
-        print(f"\n Обробка ордербука для {symbol}...")
-        orderbook_data = processor.load_orderbook_data(symbol)
-
-        if orderbook_data.empty:
-            print(f" Ордербук для {symbol} не знайдено. Пропускаємо.")
-            continue
-
+        # 7. Ордербук
+        print(f"\n Ордербук для {symbol}...")
         processed_orderbook = processor.preprocess_orderbook_pipeline(
             symbol=symbol,
             add_time_features=True,
@@ -2338,9 +2372,10 @@ def main():
 
         if not processed_orderbook.empty:
             processor.save_processed_orderbook_to_db(symbol, processed_orderbook)
-            print(" Оброблені дані ордербука збережено")
+            print(f" Оброблені дані ордербука збережено")
         else:
-            print(" Не вдалося обробити ордербук")
+            print(f" Не вдалося обробити ордербук для {symbol}")
+
 
 if __name__ == "__main__":
     main()

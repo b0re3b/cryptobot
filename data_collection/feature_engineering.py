@@ -28,55 +28,120 @@ class FeatureEngineering:
     def create_lagged_features(self, data: pd.DataFrame,
                                columns: Optional[List[str]] = None,
                                lag_periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
-        """
-        Створює ознаки з часовим зсувом (лагом).
+        self.logger.info("Створення лагових ознак...")
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        columns : list of str, optional
-            Список стовпців для створення лагів (якщо None, використовуються всі числові)
-        lag_periods : list of int
-            Список періодів зсуву
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        result_df = data.copy()
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданими лаговими ознаками
-        """
-        # Вибрати числові стовпці, якщо columns не вказано
-        # Створити лагові ознаки для кожного стовпця і періоду
-        # Перевірити, що індекс часовий для правильного зсуву
-        pass
+        # Перевіряємо, що індекс часовий для правильного зсуву
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс даних не є часовим (DatetimeIndex). Лагові ознаки можуть бути неточними.")
+
+        # Вибираємо числові стовпці, якщо columns не вказано
+        if columns is None:
+            columns = result_df.select_dtypes(include=[np.number]).columns.tolist()
+            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
+        else:
+            # Перевіряємо наявність вказаних стовпців у даних
+            missing_cols = [col for col in columns if col not in result_df.columns]
+            if missing_cols:
+                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
+                columns = [col for col in columns if col in result_df.columns]
+
+        # Створюємо лагові ознаки для кожного стовпця і періоду
+        for col in columns:
+            for lag in lag_periods:
+                lag_col_name = f"{col}_lag_{lag}"
+                result_df[lag_col_name] = result_df[col].shift(lag)
+                self.logger.debug(f"Створено лаг {lag} для стовпця {col}")
+
+        # Інформуємо про кількість доданих ознак
+        num_added_features = len(columns) * len(lag_periods)
+        self.logger.info(f"Додано {num_added_features} лагових ознак")
+
+        return result_df
 
     def create_rolling_features(self, data: pd.DataFrame,
                                 columns: Optional[List[str]] = None,
                                 window_sizes: List[int] = [5, 10, 20, 50],
                                 functions: List[str] = ['mean', 'std', 'min', 'max']) -> pd.DataFrame:
-        """
-        Створює ознаки на основі ковзного вікна.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        columns : list of str, optional
-            Список стовпців для створення ознак (якщо None, використовуються всі числові)
-        window_sizes : list of int
-            Розміри вікон для обчислення
-        functions : list of str
-            Функції для обчислення ('mean', 'std', 'min', 'max', 'median', etc.)
+        self.logger.info("Створення ознак на основі ковзного вікна...")
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданими ознаками ковзного вікна
-        """
-        # Вибрати числові стовпці, якщо columns не вказано
-        # Для кожного стовпця, розміру вікна і функції створити нову ознаку
-        # Обробити проблему NaN значень на початку часового ряду
-        pass
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        result_df = data.copy()
+
+        # Перевіряємо, що індекс часовий для правильного розрахунку
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            self.logger.warning(
+                "Індекс даних не є часовим (DatetimeIndex). Ознаки ковзного вікна можуть бути неточними.")
+
+        # Вибираємо числові стовпці, якщо columns не вказано
+        if columns is None:
+            columns = result_df.select_dtypes(include=[np.number]).columns.tolist()
+            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
+        else:
+            # Перевіряємо наявність вказаних стовпців у даних
+            missing_cols = [col for col in columns if col not in result_df.columns]
+            if missing_cols:
+                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
+                columns = [col for col in columns if col in result_df.columns]
+
+        # Словник функцій pandas для ковзного вікна
+        func_map = {
+            'mean': 'mean',
+            'std': 'std',
+            'min': 'min',
+            'max': 'max',
+            'median': 'median',
+            'sum': 'sum',
+            'var': 'var',
+            'kurt': 'kurt',
+            'skew': 'skew',
+            'quantile_25': lambda x: x.quantile(0.25),
+            'quantile_75': lambda x: x.quantile(0.75)
+        }
+
+        # Перевіряємо, чи всі функції підтримуються
+        unsupported_funcs = [f for f in functions if f not in func_map]
+        if unsupported_funcs:
+            self.logger.warning(f"Функції {unsupported_funcs} не підтримуються і будуть пропущені")
+            functions = [f for f in functions if f in func_map]
+
+        # Лічильник доданих ознак
+        added_features_count = 0
+
+        # Для кожного стовпця, розміру вікна і функції створюємо нову ознаку
+        for col in columns:
+            for window in window_sizes:
+                # Створюємо об'єкт ковзного вікна
+                rolling_window = result_df[col].rolling(window=window, min_periods=1)
+
+                for func_name in functions:
+                    # Отримуємо функцію з мапінгу
+                    func = func_map[func_name]
+
+                    # Створюємо нову ознаку
+                    feature_name = f"{col}_rolling_{window}_{func_name}"
+
+                    # Застосовуємо функцію до ковзного вікна
+                    if callable(func):
+                        result_df[feature_name] = rolling_window.apply(func)
+                    else:
+                        result_df[feature_name] = getattr(rolling_window, func)()
+
+                    added_features_count += 1
+                    self.logger.debug(f"Створено ознаку {feature_name}")
+
+        # Обробляємо NaN значення на початку часового ряду
+        # Заповнюємо перші значення медіаною стовпця (можна змінити на інший метод)
+        for col in result_df.columns:
+            if col not in data.columns:  # перевіряємо, що це нова ознака
+                result_df[col] = result_df[col].fillna(result_df[col].median())
+
+        self.logger.info(f"Додано {added_features_count} ознак ковзного вікна")
+
+        return result_df
 
     def create_ewm_features(self, data: pd.DataFrame,
                             columns: Optional[List[str]] = None,

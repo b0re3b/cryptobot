@@ -556,26 +556,26 @@ class DatabaseManager:
             print(f"Помилка отримання свічок для {symbol}: {e}")
             return pd.DataFrame()
 
-    def get_orderbook(self, symbol, timestamp=None, limit=100):
-        """Отримує книгу ордерів для валюти"""
+    def get_orderbook(self, symbol, start_time=None, end_time=None, limit=None):
+        """Отримує книгу ордерів для валюти за діапазоном часу"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")
             return pd.DataFrame()
 
         table_name = f"{symbol.lower()}_orderbook"
 
-        query = f'''
-        SELECT * FROM {table_name}
-        '''
+        query = f'SELECT * FROM {table_name} WHERE TRUE'
         params = []
 
-        if timestamp:
-            query += ' WHERE timestamp = %s'
-            params.append(timestamp)
-        else:
-            query += f' WHERE timestamp = (SELECT MAX(timestamp) FROM {table_name})'
+        if start_time:
+            query += ' AND timestamp >= %s'
+            params.append(start_time)
 
-        query += ' ORDER BY type, price LIMIT %s'
+        if end_time:
+            query += ' AND timestamp <= %s'
+            params.append(end_time)
+
+        query += ' ORDER BY timestamp DESC, type, price LIMIT %s'
         params.append(limit)
 
         try:
@@ -586,7 +586,7 @@ class DatabaseManager:
             df = pd.DataFrame(rows)
             return df
         except psycopg2.Error as e:
-            print(f"Помилка отримання книги ордерів для {symbol}: {e}")
+            print(f"❌ Помилка отримання книги ордерів для {symbol}: {e}")
             return pd.DataFrame()
 
     def log_event(self, log_level, message, component):
