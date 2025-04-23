@@ -370,52 +370,316 @@ class TwitterScraper:
             return False
 
     def get_user_influence(self, username: str) -> Dict:
-        """
-        Аналіз впливовості користувача в крипто-спільноті.
 
-        Args:
-            username: Ім'я користувача Twitter
+        if not username:
+            self.logger.error("Не вказано ім'я користувача")
+            return {"error": "Username not provided"}
 
-        Returns:
-            Словник з метриками впливовості
-        """
-        pass
+        try:
+            self.logger.info(f"Аналіз впливовості користувача @{username}")
+
+            # Отримання останніх твітів користувача
+            user_query = f"from:{username}"
+            user_tweets = self.search_tweets(user_query, days_back=90, limit=100)
+
+            if not user_tweets:
+                self.logger.warning(f"Твіти користувача @{username} не знайдено")
+                return {
+                    "username": username,
+                    "found": False,
+                    "error": "No tweets found for this user"
+                }
+
+            # Базова інформація про користувача
+            user_info = {
+                "username": username,
+                "found": True,
+                "display_name": user_tweets[0].get("displayname", ""),
+                "followers_count": user_tweets[0].get("followers", 0),
+                "tweets_analyzed": len(user_tweets)
+            }
+
+            # Аналіз взаємодії з твітами
+            total_likes = sum(tweet.get("likes", 0) for tweet in user_tweets)
+            total_retweets = sum(tweet.get("retweets", 0) for tweet in user_tweets)
+            avg_likes = total_likes / max(len(user_tweets), 1)
+            avg_retweets = total_retweets / max(len(user_tweets), 1)
+
+            # Аналіз настроїв твітів користувача
+            analyzed_tweets = self.analyze_sentiment(user_tweets)
+            sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
+
+            for tweet in analyzed_tweets:
+                sentiment = tweet.get("sentiment", "neutral")
+                sentiment_counts[sentiment] += 1
+
+            dominant_sentiment = max(sentiment_counts, key=sentiment_counts.get)
+
+            # Аналіз цитування та згадування користувача іншими
+            mentions_query = f"@{username}"
+            mention_tweets = self.search_tweets(mentions_query, days_back=30, limit=200)
+
+            # Визначення впливових акаунтів, які взаємодіють з користувачем
+            influential_interactions = [
+                {"username": tweet.get("username"), "followers": tweet.get("followers", 0)}
+                for tweet in mention_tweets
+                if tweet.get("followers", 0) > 10000  # Поріг впливовості
+            ]
+
+            # Аналіз хештегів, які використовує користувач
+            hashtags = []
+            for tweet in user_tweets:
+                content = tweet.get("content", "")
+                found_hashtags = re.findall(r'#\w+', content)
+                hashtags.extend([tag.lower() for tag in found_hashtags])
+
+            top_hashtags = Counter(hashtags).most_common(5)
+
+            # Аналіз тем, про які говорить користувач
+            crypto_keywords = [
+                "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
+                "defi", "nft", "token", "coin", "mining", "wallet", "sol"
+            ]
+
+            topics = []
+            for tweet in user_tweets:
+                content = tweet.get("content", "").lower()
+                for keyword in crypto_keywords:
+                    if keyword in content:
+                        topics.append(keyword)
+
+            top_topics = Counter(topics).most_common(5)
+
+            # Розрахунок індексу впливовості
+            engagement_rate = (avg_likes + avg_retweets * 3) / max(user_info["followers_count"], 1) * 100
+            mention_influence = len(mention_tweets) / 30  # Середня кількість згадувань на день
+            topic_diversity = len(set(topics)) / len(crypto_keywords)
+
+            influence_score = min(100, (
+                    (engagement_rate * 0.4) +
+                    (mention_influence * 5) +
+                    (user_info["followers_count"] / 10000 * 20) +
+                    (topic_diversity * 10)
+            ))
+
+            # Формування результату
+            result = {
+                **user_info,
+                "influence_score": round(influence_score, 2),
+                "engagement": {
+                    "avg_likes": round(avg_likes, 2),
+                    "avg_retweets": round(avg_retweets, 2),
+                    "engagement_rate": round(engagement_rate, 4)
+                },
+                "sentiment_profile": {
+                    "counts": sentiment_counts,
+                    "dominant": dominant_sentiment
+                },
+                "community_interaction": {
+                    "mentions_count": len(mention_tweets),
+                    "influential_interactions": len(influential_interactions)
+                },
+                "topics": {
+                    "top_hashtags": [{"tag": tag, "count": count} for tag, count in top_hashtags],
+                    "top_crypto_topics": [{"topic": topic, "count": count} for topic, count in top_topics]
+                }
+            }
+
+            self.logger.info(f"Аналіз впливовості користувача @{username} завершено")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при аналізі впливовості користувача @{username}: {str(e)}")
+            return {
+                "username": username,
+                "found": False,
+                "error": str(e)
+            }
 
     def track_influencers(self, influencers: List[str], days_back: int = 30) -> Dict[str, List[Dict]]:
-        """
-        Використовує DatabaseManager для:
-        1. Отримання інформації про інфлюенсерів (get_crypto_influencers)
-        2. Збереження їх активності (insert_influencer_activity)
-        """        """
-        Відстеження активності відомих крипто-інфлюенсерів.
 
-        Args:
-            influencers: Список імен користувачів для відстеження
-            days_back: Кількість днів для аналізу
+        if not influencers:
+            self.logger.error("Не вказано імена інфлюенсерів")
+            return {}
 
-        Returns:
-            Словник з ім'ям користувача та його твітами/метриками
-        """
-        pass
+        try:
+            self.logger.info(f"Відстеження активності {len(influencers)} крипто-інфлюенсерів за {days_back} днів")
+
+            # Якщо influencers порожній, спробуємо отримати інфлюенсерів з бази даних
+            if not influencers and self.db_manager:
+                influencers_data = self.db_manager.get_crypto_influencers()
+                if not influencers_data.empty:
+                    influencers = influencers_data['username'].tolist()
+                    self.logger.info(f"Отримано {len(influencers)} інфлюенсерів з бази даних")
+
+            if not influencers:
+                self.logger.warning("Список інфлюенсерів порожній")
+                return {}
+
+            results = {}
+            for username in influencers:
+                self.logger.info(f"Аналіз активності інфлюенсера @{username}")
+
+                # Отримання твітів інфлюенсера
+                user_query = f"from:{username}"
+                user_tweets = self.search_tweets(user_query, days_back=days_back, limit=100)
+
+                if not user_tweets:
+                    self.logger.warning(f"Твіти користувача @{username} не знайдено")
+                    results[username] = []
+                    continue
+
+                # Аналіз настроїв твітів
+                analyzed_tweets = self.analyze_sentiment(user_tweets)
+
+                # Збереження активності інфлюенсера в базу даних
+                if self.db_manager:
+                    # Базова інформація про інфлюенсера
+                    influencer_info = {
+                        "username": username,
+                        "displayname": user_tweets[0].get("displayname", ""),
+                        "followers": user_tweets[0].get("followers", 0),
+                        "last_updated": datetime.now()
+                    }
+
+                    # Оновлення інформації про інфлюенсера
+                    self.db_manager.insert_crypto_influencer(influencer_info)
+
+                    # Збереження активності інфлюенсера
+                    for tweet in analyzed_tweets:
+                        activity_data = {
+                            "influencer_username": username,
+                            "tweet_id": tweet.get("id"),
+                            "content": tweet.get("content"),
+                            "date": tweet.get("date"),
+                            "likes": tweet.get("likes", 0),
+                            "retweets": tweet.get("retweets", 0),
+                            "sentiment": tweet.get("sentiment", "neutral"),
+                            "sentiment_score": tweet.get("sentiment_score", 0.0)
+                        }
+                        self.db_manager.insert_influencer_activity(activity_data)
+
+                # Додавання даних у результат
+                results[username] = analyzed_tweets
+
+            self.logger.info(f"Відстеження активності інфлюенсерів завершено")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Помилка при відстеженні активності інфлюенсерів: {str(e)}")
+            return {}
 
     def track_sentiment_over_time(self, query: str, days: int = 30,
                                   interval: str = "day") -> pd.DataFrame:
-        """
-        Використовує DatabaseManager.get_sentiment_time_series() для отримання історичних даних
-        та DatabaseManager.insert_sentiment_time_series() для збереження нових даних
-        """
-        """
-        Відстеження зміни настроїв щодо криптовалюти за період часу.
 
-        Args:
-            query: Пошуковий запит (криптовалюта)
-            days: Кількість днів для аналізу
-            interval: Інтервал групування (day, hour, week)
+        if not query:
+            self.logger.error("Не вказано пошуковий запит")
+            return pd.DataFrame()
 
-        Returns:
-            DataFrame з даними про зміну настроїв у часі
-        """
-        pass
+        try:
+            self.logger.info(f"Аналіз зміни настроїв для запиту '{query}' за {days} днів з інтервалом '{interval}'")
+
+            # Валідація інтервалу
+            valid_intervals = ["hour", "day", "week"]
+            if interval not in valid_intervals:
+                self.logger.warning(f"Невідомий інтервал: {interval}. Використовується 'day'")
+                interval = "day"
+
+            # Перевірка наявності історичних даних у базі даних
+            historical_data = None
+            if self.db_manager:
+                filters = {
+                    'query': query,
+                    'interval': interval,
+                    'start_date': datetime.now() - timedelta(days=days)
+                }
+                historical_data = self.db_manager.get_sentiment_time_series(filters)
+
+            # Якщо є достатньо історичних даних, повертаємо їх
+            if historical_data is not None and not historical_data.empty:
+                rows_count = len(historical_data)
+                expected_rows = days if interval == "day" else (days * 24 if interval == "hour" else days // 7 + 1)
+
+                if rows_count >= expected_rows * 0.8:  # Якщо є хоча б 80% очікуваних даних
+                    self.logger.info(f"Використання {rows_count} записів історичних даних")
+                    return historical_data
+
+            # Якщо недостатньо історичних даних, збираємо нові дані
+            # Пошук твітів за вказаний період
+            tweets = self.search_tweets(query, days_back=days, limit=1000)
+
+            if not tweets:
+                self.logger.warning(f"Твіти для запиту '{query}' не знайдено")
+                return pd.DataFrame()
+
+            # Аналіз настроїв твітів
+            analyzed_tweets = self.analyze_sentiment(tweets)
+
+            # Перетворення у DataFrame для зручності аналізу
+            df = pd.DataFrame(analyzed_tweets)
+
+            # Конвертація дати у datetime формат, якщо потрібно
+            if "date" in df.columns:
+                if isinstance(df["date"].iloc[0], str):
+                    df["date"] = pd.to_datetime(df["date"])
+            else:
+                self.logger.warning("Колонка 'date' відсутня у даних твітів")
+                return pd.DataFrame()
+
+            # Форматування часового інтервалу для групування
+            if interval == "hour":
+                df["interval"] = df["date"].dt.strftime("%Y-%m-%d %H:00:00")
+            elif interval == "day":
+                df["interval"] = df["date"].dt.strftime("%Y-%m-%d")
+            elif interval == "week":
+                df["interval"] = df["date"].dt.to_period("W").dt.start_time
+
+            # Групування та агрегація даних
+            grouped = df.groupby("interval").agg({
+                "sentiment_score": ["mean", "std", "count"],
+                "sentiment": lambda x: x.value_counts().to_dict()
+            })
+
+            # Рестуктуризація для зручності використання
+            result = pd.DataFrame()
+            result["date"] = grouped.index
+            result["mean_sentiment"] = grouped[("sentiment_score", "mean")]
+            result["std_sentiment"] = grouped[("sentiment_score", "std")]
+            result["tweet_count"] = grouped[("sentiment_score", "count")]
+
+            # Додавання розподілу настроїв
+            sentiment_distributions = grouped[("sentiment", "<lambda>")].tolist()
+            result["positive_count"] = [dist.get("positive", 0) for dist in sentiment_distributions]
+            result["neutral_count"] = [dist.get("neutral", 0) for dist in sentiment_distributions]
+            result["negative_count"] = [dist.get("negative", 0) for dist in sentiment_distributions]
+
+            # Розрахунок відсоткового співвідношення
+            result["positive_percent"] = result["positive_count"] / result["tweet_count"] * 100
+            result["neutral_percent"] = result["neutral_count"] / result["tweet_count"] * 100
+            result["negative_percent"] = result["negative_count"] / result["tweet_count"] * 100
+
+            # Збереження часових рядів у базу даних
+            if self.db_manager:
+                for _, row in result.iterrows():
+                    time_series_data = {
+                        "query": query,
+                        "date": row["date"],
+                        "interval": interval,
+                        "mean_sentiment": row["mean_sentiment"],
+                        "std_sentiment": row["std_sentiment"],
+                        "tweet_count": row["tweet_count"],
+                        "positive_count": row["positive_count"],
+                        "neutral_count": row["neutral_count"],
+                        "negative_count": row["negative_count"],
+                    }
+                    self.db_manager.insert_sentiment_time_series(time_series_data)
+
+            self.logger.info(f"Аналіз зміни настроїв завершено, отримано {len(result)} часових точок")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при аналізі зміни настроїв: {str(e)}")
+            return pd.DataFrame()
 
     def detect_sentiment_change(self, coin: str, threshold: float = 0.2) -> Dict:
         """
@@ -428,31 +692,350 @@ class TwitterScraper:
         Returns:
             Інформація про зміну настроїв
         """
-        pass
+        if not coin:
+            self.logger.error("Не вказано назву криптовалюти")
+            return {"error": "Coin name not provided"}
 
-    def correlate_with_price(self, tweets: List[Dict],
-                             price_data: pd.DataFrame) -> Dict:
-        """
-        Кореляція настроїв твітів з ціновими даними криптовалюти.
+        try:
+            self.logger.info(f"Аналіз змін настроїв для {coin} з порогом {threshold}")
 
-        Args:
-            tweets: Список твітів з аналізом настроїв
-            price_data: DataFrame з ціновими даними
+            # Отримання даних про настрої за останні 7 днів (тиждень)
+            sentiment_data = self.track_sentiment_over_time(
+                query=f"#{coin} OR ${coin}",
+                days=7,
+                interval="day"
+            )
 
-        Returns:
-            Дані про кореляцію та статистичну значущість
-        """
-        pass
+            if sentiment_data.empty:
+                self.logger.warning(f"Недостатньо даних для аналізу настроїв щодо {coin}")
+                return {
+                    "coin": coin,
+                    "detected_change": False,
+                    "reason": "Insufficient data"
+                }
+
+            # Підготовка даних для аналізу
+            sentiment_data = sentiment_data.sort_values("date")
+            daily_means = sentiment_data["mean_sentiment"].tolist()
+            dates = sentiment_data["date"].tolist()
+
+            # Пошук різких змін у настроях
+            changes = []
+            for i in range(1, len(daily_means)):
+                change = daily_means[i] - daily_means[i - 1]
+                changes.append({
+                    "date": dates[i],
+                    "previous_date": dates[i - 1],
+                    "current_sentiment": daily_means[i],
+                    "previous_sentiment": daily_means[i - 1],
+                    "change": change,
+                    "percent_change": change / (abs(daily_means[i - 1]) + 0.0001) * 100,
+                    "is_significant": abs(change) >= threshold
+                })
+
+            # Фільтрація значимих змін
+            significant_changes = [change for change in changes if change["is_significant"]]
+
+            # Визначення найбільш значної зміни
+            if significant_changes:
+                most_significant = max(significant_changes, key=lambda x: abs(x["change"]))
+                direction = "positive" if most_significant["change"] > 0 else "negative"
+
+                # Пошук ймовірних причин зміни настрою
+                start_date = most_significant["previous_date"]
+                end_date = most_significant["date"]
+
+                # Отримання твітів за цей період
+                tweets_query = f"#{coin} OR ${coin}"
+                tweets = self.search_tweets(
+                    query=tweets_query,
+                    days_back=7,
+                    limit=200
+                )
+
+                # Фільтрація твітів за датами
+                relevant_tweets = [
+                    tweet for tweet in tweets
+                    if start_date <= tweet["date"] <= end_date
+                ]
+
+                # Аналіз найпопулярніших твітів
+                popular_tweets = sorted(
+                    relevant_tweets,
+                    key=lambda x: x.get("retweets", 0) + x.get("likes", 0),
+                    reverse=True
+                )[:5]
+
+                result = {
+                    "coin": coin,
+                    "detected_change": True,
+                    "change_direction": direction,
+                    "change_magnitude": abs(most_significant["change"]),
+                    "previous_sentiment": most_significant["previous_sentiment"],
+                    "current_sentiment": most_significant["current_sentiment"],
+                    "change_date": most_significant["date"],
+                    "previous_date": most_significant["previous_date"],
+                    "percent_change": most_significant["percent_change"],
+                    "potential_causes": [
+                        {
+                            "tweet_id": tweet.get("id"),
+                            "content": tweet.get("content"),
+                            "username": tweet.get("username"),
+                            "engagement": tweet.get("retweets", 0) + tweet.get("likes", 0)
+                        }
+                        for tweet in popular_tweets
+                    ]
+                }
+
+                # Збереження інформації про зміну настроїв у базу даних
+                if self.db_manager:
+                    event_data = {
+                        "coin": coin,
+                        "event_type": f"sentiment_change_{direction}",
+                        "event_date": most_significant["date"],
+                        "description": f"Significant {direction} sentiment change detected",
+                        "magnitude": abs(most_significant["change"]),
+                        "previous_value": most_significant["previous_sentiment"],
+                        "current_value": most_significant["current_sentiment"],
+                        "detection_date": datetime.now()
+                    }
+                    self.db_manager.insert_crypto_event(event_data)
+
+                self.logger.info(
+                    f"Виявлено значну зміну настроїв для {coin}: {direction} ({most_significant['percent_change']:.2f}%)")
+                return result
+            else:
+                self.logger.info(f"Не виявлено значних змін настроїв для {coin}")
+                return {
+                    "coin": coin,
+                    "detected_change": False,
+                    "reason": "No significant changes detected",
+                    "max_change": max(abs(change["change"]) for change in changes) if changes else 0,
+                    "threshold": threshold
+                }
+
+        except Exception as e:
+            self.logger.error(f"Помилка при виявленні змін настроїв для {coin}: {str(e)}")
+            return {
+                "coin": coin,
+                "detected_change": False,
+                "error": str(e)
+            }
+
+    def correlate_with_price(self, tweets: List[Dict], price_data: pd.DataFrame) -> Dict:
+
+        if not tweets or price_data.empty:
+            self.logger.warning("Порожні дані для кореляційного аналізу")
+            return {"error": "Empty data for correlation analysis"}
+
+        try:
+            self.logger.info(f"Кореляційний аналіз {len(tweets)} твітів з ціновими даними")
+
+            # Перевірка наявності аналізу настроїв у твітах
+            if "sentiment_score" not in tweets[0]:
+                self.logger.info("Твіти потребують аналізу настроїв")
+                tweets = self.analyze_sentiment(tweets)
+
+            # Перетворення твітів у DataFrame
+            tweets_df = pd.DataFrame(tweets)
+
+            # Перевірка необхідних колонок у DataFrame з цінами
+            required_columns = ["date", "close"]
+            if not all(col in price_data.columns for col in required_columns):
+                self.logger.error("Відсутні необхідні колонки в даних про ціни")
+                return {"error": "Missing required columns in price data"}
+
+            # Конвертація дат у datetime формат
+            tweets_df["date"] = pd.to_datetime(tweets_df["date"])
+            price_data["date"] = pd.to_datetime(price_data["date"])
+
+            # Агрегація настроїв за днями
+            tweets_df["date_day"] = tweets_df["date"].dt.date
+            daily_sentiment = tweets_df.groupby("date_day").agg({
+                "sentiment_score": "mean",
+                "id": "count"
+            }).rename(columns={"id": "tweet_count"}).reset_index()
+
+            # Підготовка даних про ціни з відповідною датою
+            price_data["date_day"] = price_data["date"].dt.date
+            price_daily = price_data.groupby("date_day").agg({
+                "close": "last",
+                "volume": "sum" if "volume" in price_data.columns else None
+            }).reset_index()
+
+            # Об'єднання даних для кореляційного аналізу
+            merged_data = pd.merge(daily_sentiment, price_daily, on="date_day", how="inner")
+
+            if len(merged_data) < 3:
+                self.logger.warning("Недостатньо точок даних для кореляційного аналізу")
+                return {"error": "Insufficient data points for correlation analysis"}
+
+            # Розрахунок кореляцій
+            correlation_same_day = merged_data["sentiment_score"].corr(merged_data["close"])
+
+            # Кореляція з наступним днем (настрої як предиктор)
+            merged_data["next_day_close"] = merged_data["close"].shift(-1)
+            correlation_next_day = merged_data["sentiment_score"].corr(merged_data["next_day_close"])
+
+            # Кореляція з попереднім днем (ціна як предиктор)
+            merged_data["prev_day_sentiment"] = merged_data["sentiment_score"].shift(1)
+            correlation_prev_day = merged_data["close"].corr(merged_data["prev_day_sentiment"])
+
+            # Розрахунок статистичної значущості для основної кореляції
+            from scipy import stats
+            r = correlation_same_day
+            n = len(merged_data)
+            t_stat = r * np.sqrt(n - 2) / np.sqrt(1 - r ** 2)
+            p_value = 2 * (1 - stats.t.cdf(abs(t_stat), n - 2))
+
+            # Застосування лагів для пошуку оптимального часового зсуву
+            max_lag = min(5, len(merged_data) // 3)  # Максимальний лаг для аналізу
+            lag_results = []
+
+            for lag in range(-max_lag, max_lag + 1):
+                if lag == 0:
+                    continue  # Вже розраховано вище
+
+                # Створення зсунутих даних
+                if lag > 0:
+                    lagged_sentiment = merged_data["sentiment_score"].shift(lag)
+                    lagged_corr = merged_data["close"].corr(lagged_sentiment)
+                    direction = "sentiment_follows_price"
+                else:
+                    lagged_price = merged_data["close"].shift(-lag)
+                    lagged_corr = merged_data["sentiment_score"].corr(lagged_price)
+                    direction = "price_follows_sentiment"
+
+                lag_results.append({
+                    "lag": lag,
+                    "correlation": lagged_corr,
+                    "direction": direction
+                })
+
+            # Знаходження найсильнішої кореляції
+            strongest_lag = max(lag_results, key=lambda x: abs(x["correlation"]), default=None)
+
+            # Підготовка результатів
+            result = {
+                "same_day_correlation": correlation_same_day,
+                "next_day_correlation": correlation_next_day,
+                "previous_day_correlation": correlation_prev_day,
+                "data_points": len(merged_data),
+                "statistical_significance": {
+                    "t_statistic": t_stat,
+                    "p_value": p_value,
+                    "is_significant": p_value < 0.05
+                },
+                "strongest_correlation": strongest_lag,
+                "lag_analysis": lag_results,
+                "interpretation": {
+                    "same_day": self._interpret_correlation(correlation_same_day),
+                    "predictive_power": self._interpret_correlation(correlation_next_day),
+                    "reactive_nature": self._interpret_correlation(correlation_prev_day)
+                }
+            }
+
+            self.logger.info(f"Кореляційний аналіз завершено. Основна кореляція: {correlation_same_day:.4f}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при кореляційному аналізі: {str(e)}")
+            return {"error": str(e)}
+
+    def _interpret_correlation(self, corr_value: float) -> str:
+        abs_corr = abs(corr_value)
+
+        if abs_corr < 0.1:
+            strength = "відсутній"
+        elif abs_corr < 0.3:
+            strength = "слабкий"
+        elif abs_corr < 0.5:
+            strength = "помірний"
+        elif abs_corr < 0.7:
+            strength = "сильний"
+        else:
+            strength = "дуже сильний"
+
+        direction = "позитивний" if corr_value > 0 else "негативний"
+        return f"{strength} {direction} зв'язок"
 
     def handle_api_rate_limits(self, retry_count: int = 3, cooldown_period: int = 300) -> None:
-        """
-        Обробка обмежень швидкості API Twitter.
 
-        Args:
-            retry_count: Кількість спроб повторного запиту
-            cooldown_period: Період очікування між спробами в секундах
-        """
-        pass
+        self.logger.info(
+            f"Налаштування параметрів обробки обмежень API: повторні спроби={retry_count}, період очікування={cooldown_period}с")
+
+        # Зберігаємо параметри для використання в інших методах
+        self.api_retry_count = retry_count
+        self.api_cooldown_period = cooldown_period
+
+        # Додаємо лічильник помилок і часову мітку останньої помилки
+        self.api_error_count = 0
+        self.last_api_error_time = None
+
+        # Створюємо декоратор для повторних спроб при помилках API
+        def retry_on_api_limit(func):
+            def wrapper(*args, **kwargs):
+                attempts = 0
+                while attempts < self.api_retry_count:
+                    try:
+                        # Перевірка затримки після останньої помилки
+                        if self.last_api_error_time:
+                            time_since_error = (datetime.now() - self.last_api_error_time).total_seconds()
+                            if time_since_error < self.api_cooldown_period:
+                                wait_time = self.api_cooldown_period - time_since_error
+                                self.logger.info(f"Очікування {wait_time:.1f}с перед наступною спробою")
+                                time.sleep(wait_time)
+
+                        # Виклик оригінального методу
+                        result = func(*args, **kwargs)
+
+                        # Скидання лічильника помилок при успішній спробі
+                        if attempts > 0:
+                            self.api_error_count = 0
+                            self.last_api_error_time = None
+                            self.logger.info("Запит успішний після повторних спроб")
+
+                        return result
+
+                    except Exception as e:
+                        error_message = str(e).lower()
+                        if "rate limit" in error_message or "too many requests" in error_message:
+                            attempts += 1
+                            self.api_error_count += 1
+                            self.last_api_error_time = datetime.now()
+
+                            # Збільшуємо час очікування з кожною спробою
+                            wait_time = self.api_cooldown_period * (2 ** attempts)
+
+                            self.logger.warning(f"Досягнуто обмеження API (спроба {attempts}/{self.api_retry_count}). "
+                                                f"Очікування {wait_time}с перед наступною спробою")
+
+                            # Реєстрація помилки в базі даних
+                            if self.db_manager:
+                                error_data = {
+                                    "error_type": "rate_limit",
+                                    "error_message": str(e),
+                                    "function_name": func.__name__,
+                                    "timestamp": datetime.now()
+                                }
+                                self.db_manager.insert_error_log(error_data)
+
+                            time.sleep(wait_time)
+                        else:
+                            # Якщо помилка не пов'язана з обмеженням швидкості, передаємо її далі
+                            self.logger.error(f"Помилка не пов'язана з обмеженням API: {str(e)}")
+                            raise
+
+                # Якщо всі спроби вичерпано
+                self.logger.error(f"Вичерпано всі {self.api_retry_count} спроб через обмеження API")
+                raise Exception(f"API rate limit exceeded after {self.api_retry_count} attempts")
+
+            return wrapper
+
+        # Застосовуємо декоратор до методів, які взаємодіють з API
+        self.search_tweets = retry_on_api_limit(self.search_tweets)
+
+        self.logger.info("Обробка обмежень API налаштована успішно")
 
     def detect_crypto_events(self, tweets: List[Dict], min_mentions: int = 50) -> List[Dict]:
         """
