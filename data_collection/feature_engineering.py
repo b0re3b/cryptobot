@@ -1430,163 +1430,1053 @@ class FeatureEngineering:
                                price_column: str = 'close',
                                horizon: int = 1,
                                target_type: str = 'return') -> pd.DataFrame:
-        """
-        Створює цільову змінну для прогнозування.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        price_column : str
-            Стовпець з ціною для створення цілі
-        horizon : int
-            Горизонт прогнозування (кількість періодів вперед)
-        target_type : str
-            Тип цільової змінної ('return', 'direction', 'volatility')
+        self.logger.info(f"Створення цільової змінної типу '{target_type}' з горизонтом {horizon}")
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданою цільовою змінною
-        """
-        # Створити цільову змінну в залежності від target_type
-        # 'return': процентна зміна ціни
-        # 'direction': 1 якщо ціна зросла, 0 якщо знизилась
-        # 'volatility': майбутня волатильність
-        pass
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        result_df = data.copy()
+
+        # Перевіряємо, що price_column існує в даних
+        if price_column not in result_df.columns:
+            self.logger.error(f"Стовпець {price_column} не знайдено в даних")
+            raise ValueError(f"Стовпець {price_column} не знайдено в даних")
+
+        # Перевіряємо, що індекс часовий для правильного зсуву
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс даних не є часовим (DatetimeIndex). Цільова змінна може бути неточною.")
+
+        # Перевіряємо наявність пропущених значень у стовпці ціни
+        if result_df[price_column].isna().any():
+            self.logger.warning(f"Стовпець {price_column} містить NaN значення, вони будуть заповнені")
+            result_df[price_column] = result_df[price_column].fillna(method='ffill').fillna(method='bfill')
+
+        # Створюємо цільову змінну в залежності від типу
+        if target_type == 'return':
+            # Процентна зміна ціни через horizon періодів
+            target_name = f'target_return_{horizon}p'
+            result_df[target_name] = result_df[price_column].pct_change(periods=-horizon).shift(horizon)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як процентну зміну ціни")
+
+        elif target_type == 'log_return':
+            # Логарифмічна зміна ціни
+            target_name = f'target_log_return_{horizon}p'
+            result_df[target_name] = np.log(result_df[price_column].shift(-horizon) / result_df[price_column])
+            self.logger.info(f"Створено цільову змінну '{target_name}' як логарифмічну зміну ціни")
+
+        elif target_type == 'direction':
+            # Напрямок зміни ціни (1 - ріст, 0 - падіння)
+            target_name = f'target_direction_{horizon}p'
+            future_price = result_df[price_column].shift(-horizon)
+            result_df[target_name] = np.where(future_price > result_df[price_column], 1, 0)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як напрямок зміни ціни")
+
+        elif target_type == 'volatility':
+            # Майбутня волатильність як стандартне відхилення прибутковості за період
+            target_name = f'target_volatility_{horizon}p'
+            # Розраховуємо логарифмічну прибутковість
+            log_returns = np.log(result_df[price_column] / result_df[price_column].shift(1))
+            # Розраховуємо волатильність за наступні horizon періодів
+            result_df[target_name] = log_returns.rolling(window=horizon).std().shift(-horizon)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як майбутню волатильність")
+
+        elif target_type == 'price':
+            # Майбутня ціна
+            target_name = f'target_price_{horizon}p'
+            result_df[target_name] = result_df[price_column].shift(-horizon)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як майбутню ціну")
+
+        elif target_type == 'range':
+            # Діапазон зміни ціни (high-low) за наступні horizon періодів
+            target_name = f'target_range_{horizon}p'
+            # Для точного розрахунку діапазону потрібні high і low колонки
+            if 'high' in result_df.columns and 'low' in result_df.columns:
+                # Знаходимо максимальне high і мінімальне low за наступні horizon періодів
+                high_values = result_df['high'].rolling(window=horizon, min_periods=1).max().shift(-horizon)
+                low_values = result_df['low'].rolling(window=horizon, min_periods=1).min().shift(-horizon)
+                result_df[target_name] = (high_values - low_values) / result_df[price_column]
+                self.logger.info(f"Створено цільову змінну '{target_name}' як відносний діапазон ціни")
+            else:
+                self.logger.warning(
+                    "Колонки 'high' або 'low' відсутні, використовуємо близьку ціну для розрахунку діапазону")
+                # Використовуємо амплітуду зміни ціни close
+                price_max = result_df[price_column].rolling(window=horizon, min_periods=1).max().shift(-horizon)
+                price_min = result_df[price_column].rolling(window=horizon, min_periods=1).min().shift(-horizon)
+                result_df[target_name] = (price_max - price_min) / result_df[price_column]
+                self.logger.info(f"Створено цільову змінну '{target_name}' як відносний діапазон ціни")
+        else:
+            self.logger.error(f"Невідомий тип цільової змінної: {target_type}")
+            raise ValueError(
+                f"Невідомий тип цільової змінної: {target_type}. Допустимі значення: 'return', 'log_return', 'direction', 'volatility', 'price', 'range'")
+
+        # Заповнюємо NaN значення в цільовій змінній
+        if result_df[target_name].isna().any():
+            self.logger.warning(
+                f"Цільова змінна {target_name} містить {result_df[target_name].isna().sum()} NaN значень")
+            # Для цільових змінних краще видалити рядки з NaN, ніж заповнювати їх
+            if target_type in ['return', 'log_return', 'price', 'range', 'volatility']:
+                # Для числових цільових змінних можна спробувати заповнити медіаною
+                # Але це не рекомендується для навчання моделей
+                median_val = result_df[target_name].median()
+                result_df[target_name] = result_df[target_name].fillna(median_val)
+                self.logger.warning(f"NaN значення в цільовій змінній заповнені медіаною: {median_val}")
+            elif target_type == 'direction':
+                # Для бінарної класифікації можна заповнити найбільш поширеним класом
+                mode_val = result_df[target_name].mode()[0]
+                result_df[target_name] = result_df[target_name].fillna(mode_val)
+                self.logger.warning(f"NaN значення в цільовій змінній заповнені модою: {mode_val}")
+
+        return result_df
 
     def select_features(self, X: pd.DataFrame, y: pd.Series,
                         n_features: Optional[int] = None,
                         method: str = 'f_regression') -> Tuple[pd.DataFrame, List[str]]:
-        """
-        Вибирає найбільш важливі ознаки для моделювання.
 
-        Parameters:
-        -----------
-        X : pandas.DataFrame
-            DataFrame з ознаками
-        y : pandas.Series
-            Цільова змінна
-        n_features : int, optional
-            Кількість ознак для вибору (якщо None, використовується половина)
-        method : str
-            Метод вибору ознак ('f_regression', 'mutual_info', 'rfe')
+        self.logger.info(f"Вибір ознак методом '{method}'")
 
-        Returns:
-        --------
-        tuple
-            (DataFrame з відібраними ознаками, список назв вибраних ознак)
-        """
-        # Визначити кількість ознак для вибору, якщо не вказано
-        # Застосувати вибраний метод відбору ознак
-        # Повернути відібрані ознаки і їх назви
-        pass
+        # Перевіряємо, що X і y мають однакову кількість рядків
+        if len(X) != len(y):
+            self.logger.error(f"Розмірності X ({len(X)}) і y ({len(y)}) не співпадають")
+            raise ValueError(f"Розмірності X ({len(X)}) і y ({len(y)}) не співпадають")
+
+        # Обробляємо пропущені значення в ознаках та цільовій змінній
+        if X.isna().any().any() or y.isna().any():
+            self.logger.warning("Виявлено пропущені значення. Видаляємо рядки з NaN")
+            # Знаходимо індекси рядків без NaN значень
+            valid_indices = X.notna().all(axis=1) & y.notna()
+            X = X.loc[valid_indices]
+            y = y.loc[valid_indices]
+            self.logger.info(f"Залишилось {len(X)} рядків після видалення NaN")
+
+        # Перевіряємо, що залишились дані для аналізу
+        if len(X) == 0 or len(y) == 0:
+            self.logger.error("Після обробки NaN не залишилось даних для аналізу")
+            raise ValueError("Після обробки пропущених значень не залишилось даних для аналізу")
+
+        # Визначаємо кількість ознак для вибору, якщо не вказано
+        if n_features is None:
+            n_features = min(X.shape[1] // 2, X.shape[1])
+            self.logger.info(f"Автоматично визначено кількість ознак: {n_features}")
+
+        # Обмежуємо кількість ознак доступним числом
+        n_features = min(n_features, X.shape[1])
+        self.logger.info(f"Буде відібрано {n_features} ознак з {X.shape[1]}")
+
+        # Вибір методу селекції ознак
+        selected_features = []
+
+        if method == 'f_regression':
+            self.logger.info("Використовуємо F-тест для відбору ознак")
+            selector = SelectKBest(score_func=f_regression, k=n_features)
+            selector.fit(X, y)
+            # Отримуємо маску вибраних ознак
+            selected_mask = selector.get_support()
+            # Отримуємо назви вибраних ознак
+            selected_features = X.columns[selected_mask].tolist()
+
+            # Логуємо найкращі ознаки з їх оцінками
+            scores = selector.scores_
+            feature_scores = list(zip(X.columns, scores))
+            feature_scores.sort(key=lambda x: x[1], reverse=True)
+            self.logger.info(f"Топ-5 ознак за F-тестом: {feature_scores[:5]}")
+
+        elif method == 'mutual_info':
+            self.logger.info("Використовуємо взаємну інформацію для відбору ознак")
+            selector = SelectKBest(score_func=mutual_info_regression, k=n_features)
+            selector.fit(X, y)
+            # Отримуємо маску вибраних ознак
+            selected_mask = selector.get_support()
+            # Отримуємо назви вибраних ознак
+            selected_features = X.columns[selected_mask].tolist()
+
+            # Логуємо найкращі ознаки з їх оцінками
+            scores = selector.scores_
+            feature_scores = list(zip(X.columns, scores))
+            feature_scores.sort(key=lambda x: x[1], reverse=True)
+            self.logger.info(f"Топ-5 ознак за взаємною інформацією: {feature_scores[:5]}")
+
+        elif method == 'rfe':
+            self.logger.info("Використовуємо рекурсивне виключення ознак (RFE)")
+            # Для RFE потрібна базова модель, використовуємо лінійну регресію
+            model = LinearRegression()
+            selector = RFE(estimator=model, n_features_to_select=n_features, step=1)
+
+            try:
+                selector.fit(X, y)
+                # Отримуємо маску вибраних ознак
+                selected_mask = selector.support_
+                # Отримуємо назви вибраних ознак
+                selected_features = X.columns[selected_mask].tolist()
+
+                # Логуємо ранги ознак (менший ранг означає більшу важливість)
+                ranks = selector.ranking_
+                feature_ranks = list(zip(X.columns, ranks))
+                feature_ranks.sort(key=lambda x: x[1])
+                self.logger.info(f"Топ-5 ознак за RFE: {[f[0] for f in feature_ranks[:5]]}")
+            except Exception as e:
+                self.logger.error(f"Помилка при використанні RFE: {str(e)}. Переходимо до F-тесту.")
+                # У випадку помилки використовуємо F-тест
+                selector = SelectKBest(score_func=f_regression, k=n_features)
+                selector.fit(X, y)
+                selected_mask = selector.get_support()
+                selected_features = X.columns[selected_mask].tolist()
+
+        else:
+            self.logger.error(f"Невідомий метод вибору ознак: {method}")
+            raise ValueError(
+                f"Невідомий метод вибору ознак: {method}. Допустимі значення: 'f_regression', 'mutual_info', 'rfe'")
+
+        # Створюємо DataFrame з відібраними ознаками
+        X_selected = X[selected_features]
+
+        self.logger.info(f"Відібрано {len(selected_features)} ознак: {selected_features[:5]}...")
+
+        return X_selected, selected_features
 
     def reduce_dimensions(self, data: pd.DataFrame,
                           n_components: Optional[int] = None,
                           method: str = 'pca') -> Tuple[pd.DataFrame, object]:
-        """
-        Зменшує розмірність набору ознак.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame з ознаками
-        n_components : int, optional
-            Кількість компонентів (якщо None, вибирається автоматично)
-        method : str
-            Метод зменшення розмірності ('pca', 't-sne', 'umap')
+        self.logger.info(f"Зменшення розмірності методом '{method}'")
 
-        Returns:
-        --------
-        tuple
-            (DataFrame зі зменшеною розмірністю, об'єкт трансформатора)
-        """
-        # Вибрати і застосувати метод зменшення розмірності
-        # Створити новий DataFrame з новими компонентами
-        # Повернути трансформовані дані і трансформатор
-        pass
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        X = data.copy()
+
+        # Перевіряємо наявність пропущених значень
+        if X.isna().any().any():
+            self.logger.warning("Виявлено пропущені значення. Заповнюємо їх медіаною.")
+            X = X.fillna(X.median())
+
+        # Визначаємо кількість компонентів, якщо не вказано
+        if n_components is None:
+            # За замовчуванням використовуємо sqrt від кількості ознак, але не більше 10
+            n_components = min(int(np.sqrt(X.shape[1])), 10)
+            self.logger.info(f"Автоматично визначено кількість компонентів: {n_components}")
+
+        # Обмежуємо кількість компонентів доступним числом ознак
+        n_components = min(n_components, X.shape[1], X.shape[0])
+
+        # Вибір методу зменшення розмірності
+        transformer = None
+        X_transformed = None
+        component_names = []
+
+        if method == 'pca':
+            self.logger.info(f"Застосовуємо PCA з {n_components} компонентами")
+
+            # Створюємо і застосовуємо PCA
+            transformer = PCA(n_components=n_components)
+            X_transformed = transformer.fit_transform(X)
+
+            # Логування пояснення дисперсії
+            explained_variance_ratio = transformer.explained_variance_ratio_
+            cumulative_explained_variance = np.cumsum(explained_variance_ratio)
+            self.logger.info(f"PCA пояснює {cumulative_explained_variance[-1] * 100:.2f}% загальної дисперсії")
+            self.logger.info(f"Перші 3 компоненти пояснюють: {explained_variance_ratio[:3] * 100}")
+
+            # Створюємо назви компонентів
+            component_names = [f'pca_component_{i + 1}' for i in range(n_components)]
+
+            # Додаткова інформація: внесок ознак в компоненти
+            feature_importance = transformer.components_
+            for i in range(min(3, n_components)):
+                # Отримуємо абсолютні значення важливості ознак для компоненти
+                abs_importance = np.abs(feature_importance[i])
+                # Сортуємо індекси за важливістю
+                sorted_indices = np.argsort(abs_importance)[::-1]
+                # Виводимо топ-5 ознак для компоненти
+                top_features = [(X.columns[idx], feature_importance[i, idx]) for idx in sorted_indices[:5]]
+                self.logger.info(f"Компонента {i + 1} найбільше залежить від: {top_features}")
+
+        elif method == 'kmeans':
+            self.logger.info(f"Застосовуємо KMeans з {n_components} кластерами")
+
+            # Створюємо і застосовуємо KMeans
+            transformer = KMeans(n_clusters=n_components, random_state=42)
+            cluster_labels = transformer.fit_predict(X)
+
+            # Створюємо двовимірний масив з мітками кластерів
+            X_transformed = np.zeros((X.shape[0], n_components))
+            for i in range(X.shape[0]):
+                X_transformed[i, cluster_labels[i]] = 1
+
+            # Створюємо назви компонентів (кластерів)
+            component_names = [f'cluster_{i + 1}' for i in range(n_components)]
+
+            # Додаткова інформація: розмір кластерів
+            cluster_sizes = np.bincount(cluster_labels)
+            cluster_info = list(zip(range(1, n_components + 1), cluster_sizes))
+            self.logger.info(f"Розмір кластерів: {cluster_info}")
+
+            # Додаткова інформація: центроїди кластерів
+            centroids = transformer.cluster_centers_
+            for i in range(min(3, n_components)):
+                # Знаходимо ознаки, які найбільше відрізняються від глобального середнього
+                mean_values = X.mean().values
+                centroid_diff = centroids[i] - mean_values
+                abs_diff = np.abs(centroid_diff)
+                sorted_indices = np.argsort(abs_diff)[::-1]
+                # Виводимо топ-5 відмінних ознак для кластера
+                top_features = [(X.columns[idx], centroid_diff[idx]) for idx in sorted_indices[:5]]
+                self.logger.info(f"Кластер {i + 1} характеризується: {top_features}")
+
+        else:
+            self.logger.error(f"Невідомий метод зменшення розмірності: {method}")
+            raise ValueError(f"Невідомий метод зменшення розмірності: {method}. Допустимі значення: 'pca', 'kmeans'")
+
+        # Створюємо DataFrame з трансформованими даними
+        result_df = pd.DataFrame(X_transformed, index=X.index, columns=component_names)
+
+        self.logger.info(f"Розмірність зменшено з {X.shape[1]} до {result_df.shape[1]} ознак")
+
+        return result_df, transformer
 
     def create_polynomial_features(self, data: pd.DataFrame,
                                    columns: Optional[List[str]] = None,
                                    degree: int = 2,
                                    interaction_only: bool = False) -> pd.DataFrame:
-        """
-        Створює поліноміальні ознаки та взаємодії.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        columns : list of str, optional
-            Список стовпців для створення ознак (якщо None, використовуються всі числові)
-        degree : int
-            Ступінь поліному
-        interaction_only : bool
-            Чи створювати тільки взаємодії без степенів
+        self.logger.info("Створення поліноміальних ознак...")
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданими поліноміальними ознаками
-        """
-        # Вибрати числові стовпці, якщо columns не вказано
-        # Створити і застосувати PolynomialFeatures
-        # Повернути DataFrame з новими ознаками
-        pass
+        # Вибираємо числові стовпці, якщо columns не вказано
+        if columns is None:
+            columns = data.select_dtypes(include=[np.number]).columns.tolist()
+            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
+        else:
+            # Перевіряємо наявність вказаних стовпців у даних
+            missing_cols = [col for col in columns if col not in data.columns]
+            if missing_cols:
+                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
+                columns = [col for col in columns if col in data.columns]
+
+        # Перевіряємо, чи залишились стовпці після фільтрації
+        if not columns:
+            self.logger.error("Немає доступних стовпців для створення поліноміальних ознак")
+            return data
+
+        # Створюємо копію DataFrame з вибраними стовпцями
+        result_df = data.copy()
+        X = result_df[columns]
+
+        # Перевіряємо на наявність NaN і замінюємо їх
+        if X.isna().any().any():
+            self.logger.warning(f"Виявлено NaN значення у вхідних даних. Заповнюємо їх медіаною.")
+            X = X.fillna(X.median())
+
+        # Створюємо об'єкт для поліноміальних ознак
+        poly = PolynomialFeatures(degree=degree,
+                                  interaction_only=interaction_only,
+                                  include_bias=False)
+
+        # Застосовуємо трансформацію
+        try:
+            poly_features = poly.fit_transform(X)
+
+            # Отримуємо назви нових ознак
+            feature_names = poly.get_feature_names_out(X.columns)
+
+            # Створюємо DataFrame з новими ознаками
+            poly_df = pd.DataFrame(poly_features,
+                                   columns=feature_names,
+                                   index=X.index)
+
+            # Видаляємо оригінальні ознаки, оскільки вони будуть дублюватись у вихідному DataFrame
+            # (перші n стовпців у poly_features відповідають оригінальним ознакам)
+            if degree > 1:
+                poly_df = poly_df.iloc[:, len(columns):]
+
+            # Додаємо префікс до назв ознак для уникнення конфліктів
+            poly_df = poly_df.add_prefix('poly_')
+
+            # Об'єднуємо з вихідним DataFrame
+            result_df = pd.concat([result_df, poly_df], axis=1)
+
+            # Перевіряємо на нескінченні значення або великі числа
+            for col in poly_df.columns:
+                if result_df[col].isna().any() or np.isinf(result_df[col]).any():
+                    self.logger.warning(
+                        f"Виявлено NaN або нескінченні значення у стовпці {col}. Заповнюємо їх медіаною.")
+                    result_df[col] = result_df[col].replace([np.inf, -np.inf], np.nan)
+                    if result_df[col].isna().all():
+                        # Якщо всі значення NaN, заповнюємо нулями
+                        result_df[col] = 0
+                    else:
+                        # Інакше використовуємо медіану для заповнення
+                        result_df[col] = result_df[col].fillna(result_df[col].median())
+
+                # Опціонально можна обмежити великі значення (вінсоризація)
+                q_low, q_high = result_df[col].quantile([0.01, 0.99])
+                result_df[col] = result_df[col].clip(q_low, q_high)
+
+            self.logger.info(f"Додано {len(poly_df.columns)} поліноміальних ознак степені {degree}")
+
+        except Exception as e:
+            self.logger.error(f"Помилка при створенні поліноміальних ознак: {str(e)}")
+            return data
+
+        return result_df
 
     def create_cluster_features(self, data: pd.DataFrame,
                                 n_clusters: int = 5,
                                 method: str = 'kmeans') -> pd.DataFrame:
-        """
-        Створює ознаки на основі кластеризації.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        n_clusters : int
-            Кількість кластерів
-        method : str
-            Метод кластеризації ('kmeans', 'dbscan', 'hierarchical')
+        self.logger.info(f"Створення ознак на основі кластеризації методом '{method}'...")
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданими кластерними ознаками
-        """
-        # Вибрати метод кластеризації і застосувати його
-        # Додати мітки кластерів як нові ознаки
-        # Додати відстань до центроїдів кластерів як ознаки
-        pass
+        # Створюємо копію DataFrame
+        result_df = data.copy()
+
+        # Вибираємо числові стовпці для кластеризації
+        numeric_cols = result_df.select_dtypes(include=[np.number]).columns.tolist()
+
+        if not numeric_cols:
+            self.logger.error("Немає числових стовпців для кластеризації")
+            return result_df
+
+        # Підготовка даних для кластеризації
+        X = result_df[numeric_cols].copy()
+
+        # Замінюємо NaN значення
+        if X.isna().any().any():
+            self.logger.warning("Виявлено NaN значення у вхідних даних. Заповнюємо їх медіаною.")
+            X = X.fillna(X.median())
+
+        # Стандартизуємо дані
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Вибір методу кластеризації
+        if method.lower() == 'kmeans':
+            # KMeans кластеризація
+            try:
+                # Визначаємо оптимальну кількість кластерів, якщо n_clusters > 10
+                if n_clusters > 10:
+                    from sklearn.metrics import silhouette_score
+                    scores = []
+                    range_clusters = range(2, min(11, len(X) // 10))  # Обмежуємо максимальну кількість кластерів
+
+                    for i in range_clusters:
+                        kmeans = KMeans(n_clusters=i, random_state=42, n_init=10)
+                        cluster_labels = kmeans.fit_predict(X_scaled)
+
+                        # Перевіряємо, що кількість унікальних міток відповідає очікуваній
+                        if len(np.unique(cluster_labels)) < i:
+                            self.logger.warning(f"Для {i} кластерів отримано менше унікальних міток.")
+                            continue
+
+                        silhouette_avg = silhouette_score(X_scaled, cluster_labels)
+                        scores.append(silhouette_avg)
+                        self.logger.debug(f"Для n_clusters = {i}, silhouette score: {silhouette_avg}")
+
+                    if scores:
+                        best_n_clusters = range_clusters[np.argmax(scores)]
+                        self.logger.info(f"Оптимальна кількість кластерів за silhouette score: {best_n_clusters}")
+                        n_clusters = best_n_clusters
+
+                # Застосовуємо KMeans з визначеною кількістю кластерів
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+                cluster_labels = kmeans.fit_predict(X_scaled)
+                centers = kmeans.cluster_centers_
+
+                # Додаємо мітки кластерів як нову ознаку
+                result_df['cluster_label'] = cluster_labels
+
+                # Обчислюємо відстань до кожного центроїда
+                for i in range(n_clusters):
+                    # Для кожного кластера обчислюємо відстань від кожної точки до центроїда
+                    if hasattr(kmeans, 'feature_names_in_'):
+                        # Для новіших версій scikit-learn
+                        distances = np.linalg.norm(X_scaled - centers[i], axis=1)
+                    else:
+                        # Для старіших версій, обчислюємо вручну
+                        distances = np.sqrt(np.sum((X_scaled - centers[i]) ** 2, axis=1))
+
+                    result_df[f'distance_to_cluster_{i}'] = distances
+
+                self.logger.info(f"Створено {n_clusters + 1} ознак на основі кластеризації KMeans")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при кластеризації KMeans: {str(e)}")
+                return result_df
+
+        elif method.lower() == 'dbscan':
+            # DBSCAN кластеризація
+            try:
+                from sklearn.cluster import DBSCAN
+                from sklearn.neighbors import KNeighborsClassifier
+
+                # Визначаємо eps (максимальна відстань між сусідніми точками)
+                # Можна використати евристику на основі відстаней до k-го найближчого сусіда
+                from sklearn.neighbors import NearestNeighbors
+                nbrs = NearestNeighbors(n_neighbors=min(len(X), 5)).fit(X_scaled)
+                distances, _ = nbrs.kneighbors(X_scaled)
+
+                # Сортуємо відстані для визначення точки перегину
+                knee_distances = np.sort(distances[:, -1])
+
+                # Евристика для eps: точка перегину на графіку відсортованих відстаней або середня відстань
+                eps = np.mean(knee_distances)
+                min_samples = max(5, len(X) // 100)  # Евристика для min_samples
+
+                self.logger.debug(f"DBSCAN параметри: eps={eps}, min_samples={min_samples}")
+
+                # Застосовуємо DBSCAN
+                dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+                cluster_labels = dbscan.fit_predict(X_scaled)
+
+                # Додаємо мітки кластерів як нову ознаку
+                result_df['dbscan_cluster'] = cluster_labels
+
+                # Рахуємо кількість унікальних кластерів (без врахування викидів з міткою -1)
+                n_clusters_found = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
+
+                self.logger.info(f"DBSCAN знайдено {n_clusters_found} кластерів")
+                self.logger.info(f"Кількість точок-викидів: {sum(cluster_labels == -1)}")
+
+                # Для викидів (точок з міткою -1) знайдемо найближчий кластер
+                if -1 in cluster_labels:
+                    # Навчаємо класифікатор KNN на точках, які належать до кластерів
+                    mask = cluster_labels != -1
+                    if sum(mask) > 0:  # Перевіряємо, що є точки не викиди
+                        knn = KNeighborsClassifier(n_neighbors=3)
+                        knn.fit(X_scaled[mask], cluster_labels[mask])
+
+                        # Для викидів знаходимо найближчий кластер і відстань до нього
+                        outliers_mask = cluster_labels == -1
+                        closest_clusters = knn.predict(X_scaled[outliers_mask])
+
+                        # Замінюємо -1 на мітку найближчого кластера
+                        cluster_labels_fixed = cluster_labels.copy()
+                        cluster_labels_fixed[outliers_mask] = closest_clusters
+                        result_df['dbscan_nearest_cluster'] = cluster_labels_fixed
+
+                        # Додаємо ознаку, що вказує чи є точка викидом
+                        result_df['dbscan_is_outlier'] = outliers_mask.astype(int)
+
+                # Якщо знайдено кластери, додаємо відстані до центроїдів
+                if n_clusters_found > 0:
+                    # Обчислюємо центроїди кластерів (крім викидів)
+                    centroids = {}
+                    for i in range(n_clusters_found):
+                        cluster_idx = np.where(cluster_labels == i)[0]
+                        if len(cluster_idx) > 0:
+                            centroids[i] = np.mean(X_scaled[cluster_idx], axis=0)
+
+                    # Обчислюємо відстані до центроїдів
+                    for i, centroid in centroids.items():
+                        # Для кожного кластера обчислюємо відстань від кожної точки до центроїда
+                        distances = np.sqrt(np.sum((X_scaled - centroid) ** 2, axis=1))
+                        result_df[f'distance_to_dbscan_cluster_{i}'] = distances
+
+                self.logger.info(f"Створено ознаки на основі кластеризації DBSCAN")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при кластеризації DBSCAN: {str(e)}")
+                return result_df
+
+        elif method.lower() == 'hierarchical':
+            # Агломеративна кластеризація
+            try:
+                from sklearn.cluster import AgglomerativeClustering
+
+                # Застосовуємо агломеративну кластеризацію
+                agg = AgglomerativeClustering(n_clusters=n_clusters)
+                cluster_labels = agg.fit_predict(X_scaled)
+
+                # Додаємо мітки кластерів як нову ознаку
+                result_df['hierarchical_cluster'] = cluster_labels
+
+                # Обчислюємо центроїди кластерів
+                centroids = {}
+                for i in range(n_clusters):
+                    cluster_idx = np.where(cluster_labels == i)[0]
+                    centroids[i] = np.mean(X_scaled[cluster_idx], axis=0)
+
+                # Обчислюємо відстані до центроїдів
+                for i, centroid in centroids.items():
+                    # Для кожного кластера обчислюємо відстань від кожної точки до центроїда
+                    distances = np.sqrt(np.sum((X_scaled - centroid) ** 2, axis=1))
+                    result_df[f'distance_to_hier_cluster_{i}'] = distances
+
+                self.logger.info(f"Створено {n_clusters + 1} ознак на основі ієрархічної кластеризації")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при ієрархічній кластеризації: {str(e)}")
+                return result_df
+
+        else:
+            self.logger.error(
+                f"Невідомий метод кластеризації: {method}. Підтримуються: 'kmeans', 'dbscan', 'hierarchical'")
+            return result_df
+
+        return result_df
 
     def prepare_features_pipeline(self, data: pd.DataFrame,
                                   target_column: str = 'close',
                                   horizon: int = 1,
                                   feature_groups: Optional[List[str]] = None) -> Tuple[pd.DataFrame, pd.Series]:
-        """
-        Створює повний набір ознак за допомогою конвеєра обробки.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame з OHLCV даними
-        target_column : str
-            Назва стовпця для створення цільової змінної
-        horizon : int
-            Горизонт прогнозування
-        feature_groups : list of str, optional
-            Список груп ознак для включення
+        self.logger.info("Запуск конвеєра підготовки ознак...")
 
-        Returns:
-        --------
-        tuple
-            (DataFrame з ознаками, Series з цільовою змінною)
-        """
-        # Визначити стандартні групи ознак, якщо не вказано
-        # Створити ознаки з кожної групи
-        # Створити цільову змінну
-        # Повернути набір ознак і цільову змінну
-        pass
+        # Перевіряємо, що цільовий стовпець існує в даних
+        if target_column not in data.columns:
+            self.logger.error(f"Цільовий стовпець {target_column} не знайдено в даних")
+            raise ValueError(f"Цільовий стовпець {target_column} не знайдено в даних")
 
-def main():
+        # Перевіряємо, що дані мають часовий індекс
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.warning("Дані не мають часового індексу (DatetimeIndex). Це може вплинути на якість ознак.")
+
+        # Створюємо копію даних
+        result_df = data.copy()
+
+        # Визначаємо стандартні групи ознак, якщо не вказано
+        standard_groups = [
+            'lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility',
+            'ratio', 'crossover', 'datetime'
+        ]
+
+        if feature_groups is None:
+            feature_groups = standard_groups
+            self.logger.info(f"Використовуються всі стандартні групи ознак: {feature_groups}")
+        else:
+            # Перевіряємо валідність зазначених груп
+            invalid_groups = [group for group in feature_groups if group not in standard_groups]
+            if invalid_groups:
+                self.logger.warning(f"Невідомі групи ознак {invalid_groups} будуть пропущені")
+                feature_groups = [group for group in feature_groups if group in standard_groups]
+
+        # Лічильник доданих ознак
+        total_features_added = 0
+        initial_feature_count = len(result_df.columns)
+
+        # Створюємо ознаки для кожної групи
+        for group in feature_groups:
+            try:
+                self.logger.info(f"Обробка групи ознак: {group}")
+
+                if group == 'lagged':
+                    # Лагові ознаки
+                    price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result_df.columns]
+                    result_df = self.create_lagged_features(result_df, columns=price_cols,
+                                                            lag_periods=[1, 3, 5, 7, 14, 30])
+
+                elif group == 'rolling':
+                    # Ознаки на основі ковзного вікна
+                    price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result_df.columns]
+                    result_df = self.create_rolling_features(result_df, columns=price_cols,
+                                                             window_sizes=[5, 10, 20, 50])
+
+                elif group == 'ewm':
+                    # Ознаки на основі експоненціально зваженого вікна
+                    price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result_df.columns]
+                    result_df = self.create_ewm_features(result_df, columns=price_cols, spans=[5, 10, 20, 50])
+
+                elif group == 'returns':
+                    # Ознаки прибутковості
+                    result_df = self.create_return_features(result_df, price_column=target_column,
+                                                            periods=[1, 3, 5, 7, 14, 30])
+
+                elif group == 'technical':
+                    # Технічні індикатори
+                    result_df = self.create_technical_features(result_df)
+
+                elif group == 'volatility':
+                    # Ознаки волатильності
+                    result_df = self.create_volatility_features(result_df, price_column=target_column,
+                                                                window_sizes=[5, 10, 20, 50])
+
+                elif group == 'ratio':
+                    # Ознаки-співвідношення
+                    price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result_df.columns]
+                    if 'volume' in result_df.columns:
+                        price_cols.append('volume')
+                    result_df = self.create_ratio_features(result_df, numerators=price_cols, denominators=price_cols)
+
+                elif group == 'crossover':
+                    # Перевіряємо наявність реалізації методу
+                    if hasattr(self, 'create_crossover_features'):
+                        # Потрібні технічні індикатори, переважно SMA та EMA
+                        # Перевіряємо, чи були вже створені
+                        sma_cols = [col for col in result_df.columns if col.startswith('sma_')]
+                        ema_cols = [col for col in result_df.columns if col.startswith('ema_')]
+
+                        if not sma_cols or not ema_cols:
+                            # Якщо технічні індикатори ще не створені, створюємо їх
+                            if 'technical' not in feature_groups:
+                                result_df = self.create_technical_features(result_df, indicators=['sma', 'ema'])
+
+                        # Після створення перевіряємо знову наявність індикаторів
+                        sma_cols = [col for col in result_df.columns if col.startswith('sma_')]
+                        ema_cols = [col for col in result_df.columns if col.startswith('ema_')]
+
+                        if sma_cols and ema_cols:
+                            result_df = self.create_crossover_features(result_df, fast_columns=ema_cols,
+                                                                       slow_columns=sma_cols)
+                        else:
+                            self.logger.warning("Не знайдено SMA або EMA індикаторів для створення ознак перетинів")
+                    else:
+                        self.logger.warning("Метод create_crossover_features не реалізований, пропускаємо")
+
+                elif group == 'datetime':
+                    # Ознаки дати і часу
+                    if hasattr(self, 'create_datetime_features'):
+                        result_df = self.create_datetime_features(result_df, cyclical=True)
+                    else:
+                        self.logger.warning("Метод create_datetime_features не реалізований, пропускаємо")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні групи ознак {group}: {str(e)}")
+
+        # Рахуємо кількість доданих ознак
+        features_added = len(result_df.columns) - initial_feature_count
+        self.logger.info(f"Загалом додано {features_added} ознак")
+
+        # Створюємо цільову змінну
+        self.logger.info(f"Створення цільової змінної з горизонтом {horizon}...")
+        target = result_df[target_column].shift(-horizon)
+
+        # Видаляємо рядки з NaN у цільовій змінній (зазвичай останні рядки)
+        valid_idx = ~target.isna()
+        if not valid_idx.all():
+            self.logger.info(f"Видалено {sum(~valid_idx)} рядків з NaN у цільовій змінній")
+            result_df = result_df.loc[valid_idx]
+            target = target.loc[valid_idx]
+
+        # Перевіряємо наявність NaN у ознаках і заповнюємо їх
+        nan_cols = result_df.columns[result_df.isna().any()].tolist()
+        if nan_cols:
+            self.logger.warning(f"Виявлено {len(nan_cols)} стовпців з NaN значеннями. Заповнюємо їх.")
+
+            for col in nan_cols:
+                # Використовуємо різні стратегії заповнення залежно від типу ознаки
+                if result_df[col].dtype == 'object':
+                    # Для категоріальних ознак використовуємо найчастіше значення
+                    result_df[col] = result_df[col].fillna(
+                        result_df[col].mode()[0] if not result_df[col].mode().empty else "unknown")
+                else:
+                    # Для числових ознак використовуємо медіану
+                    result_df[col] = result_df[col].fillna(result_df[col].median())
+
+        # Опціонально можна додати відбір ознак, якщо їх надто багато
+        if len(result_df.columns) > 100:  # Порогове значення кількості ознак
+            self.logger.info(
+                f"Кількість ознак ({len(result_df.columns)}) перевищує поріг. Розгляньте використання select_features для зменшення розмірності.")
+
+        return result_df, target
+
+
+def main(telegram_mode=False, bot=None, update=None, context=None):
+    """
+    Головна функція для feature engineering фінансових часових рядів.
+
+    Args:
+        telegram_mode (bool): Режим роботи (True - в телеграм боті, False - консольний режим)
+        bot: Об'єкт телеграм-бота (використовується тільки в telegram_mode)
+        update: Об'єкт оновлення Telegram (використовується тільки в telegram_mode)
+        context: Контекст телеграм-бота (використовується тільки в telegram_mode)
+    """
+    import logging
+    import pandas as pd
+    import argparse
+    import os
+    from datetime import datetime
+    import sys
+
+    # Налаштування логування
+    if telegram_mode:
+        # Налаштування логування для телеграм-режиму
+        log_level = logging.INFO
+        logger = logging.getLogger("TelegramFeatures")
+        logger.setLevel(log_level)
+    else:
+        # Настройка аргументів командного рядка для консольного режиму
+        parser = argparse.ArgumentParser(description='Feature Engineering для фінансових часових рядів')
+        parser.add_argument('--symbol', type=str, default="BTC-USD", help='Символ для аналізу (наприклад, BTC-USD)')
+        parser.add_argument('--start_date', type=str, default="2020-01-01", help='Початкова дата (YYYY-MM-DD)')
+        parser.add_argument('--end_date', type=str, default=None, help='Кінцева дата (YYYY-MM-DD)')
+        parser.add_argument('--horizon', type=int, default=1, help='Горизонт прогнозування')
+        parser.add_argument('--output', type=str, default="features", help='Директорія для збереження результатів')
+        parser.add_argument('--log_level', type=str, default="INFO",
+                            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                            help='Рівень логування')
+        parser.add_argument('--feature_groups', type=str, nargs='+',
+                            default=None,
+                            help='Групи ознак для генерації (розділені пробілами)')
+
+        args = parser.parse_args()
+
+        # Налаштування логування для консольного режиму
+        numeric_level = getattr(logging, args.log_level.upper(), None)
+        if not isinstance(numeric_level, int):
+            raise ValueError(f'Неправильний рівень логування: {args.log_level}')
+        log_level = numeric_level
+
+        # Налаштування логера для консольного режиму
+        logger = logging.getLogger("ConsoleFeatures")
+        logger.setLevel(log_level)
+
+        # Додаємо обробник для виведення в консоль, якщо його ще немає
+        if not logger.handlers:
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+
+    try:
+        # Ініціалізація класу FeatureEngineering
+        fe = FeatureEngineering(log_level=log_level)
+
+        if telegram_mode:
+            # Отримання параметрів з повідомлення телеграм
+            # Це приклад - реальна реалізація буде залежати від структури ваших команд телеграм-бота
+            chat_id = update.effective_chat.id
+            message_parts = update.message.text.split()
+
+            # Приклад парсингу команди з телеграм
+            # Формат: /features symbol start_date [end_date] [horizon]
+            if len(message_parts) < 3:
+                bot.send_message(chat_id=chat_id,
+                                 text="Недостатньо параметрів. Формат: /features symbol start_date [end_date] [horizon]")
+                return
+
+            symbol = message_parts[1]
+            start_date = message_parts[2]
+            end_date = message_parts[3] if len(message_parts) > 3 else None
+            horizon = int(message_parts[4]) if len(message_parts) > 4 else 1
+            output = "telegram_features"
+            feature_groups = None
+        else:
+            # Використовуємо параметри з командного рядка
+            symbol = args.symbol
+            start_date = args.start_date
+            end_date = args.end_date
+            horizon = args.horizon
+            output = args.output
+            feature_groups = args.feature_groups
+
+        # Перевірка доступності символу
+        if symbol not in fe.supported_symbols:
+            error_msg = f"Символ {symbol} не підтримується. Доступні символи: {fe.supported_symbols}"
+            if telegram_mode:
+                bot.send_message(chat_id=chat_id, text=error_msg)
+            else:
+                logger.error(error_msg)
+            return
+
+        # Завантаження даних
+        load_msg = f"Завантаження даних для {symbol} з {start_date} до {end_date if end_date else 'сьогодні'}"
+        logger.info(load_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=load_msg)
+
+        # Використовуємо db_manager для завантаження даних
+        data = fe.db_manager.get_historical_data(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        if data.empty:
+            empty_msg = "Отримано порожній набір даних. Перевірте параметри запиту."
+            if telegram_mode:
+                bot.send_message(chat_id=chat_id, text=empty_msg)
+            else:
+                logger.error(empty_msg)
+            return
+
+        records_msg = f"Завантажено {len(data)} записів"
+        logger.info(records_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=records_msg)
+
+        # Створення директорії для виводу, якщо не існує
+        if not os.path.exists(output):
+            os.makedirs(output)
+
+        # Збереження початкових (сирих) даних
+        raw_data_path = os.path.join(output, f"{symbol}_raw_data.csv")
+        data.to_csv(raw_data_path, index=True)
+        raw_msg = f"Сирі дані збережено до {raw_data_path}"
+        logger.info(raw_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=raw_msg)
+
+        # Генерація ознак
+        fe_msg = "Початок генерації ознак..."
+        logger.info(fe_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=fe_msg)
+
+        # Виконуємо повний конвеєр підготовки ознак
+        features_df, target = fe.prepare_features_pipeline(
+            data=data,
+            target_column='close',
+            horizon=horizon,
+            feature_groups=feature_groups
+        )
+
+        # Додаємо цільову змінну до датафрейму
+        features_df[f'target_{horizon}'] = target
+
+        # Збереження датафрейму з ознаками
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        features_path = os.path.join(output, f"{symbol}_features_h{horizon}_{timestamp}.csv")
+        features_df.to_csv(features_path, index=True)
+        features_msg = f"Датафрейм з {len(features_df.columns) - 1} ознаками збережено до {features_path}"
+        logger.info(features_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=features_msg)
+
+        # Створення звіту з описовою статистикою
+        stats_report = create_statistics_report(features_df)
+        stats_path = os.path.join(output, f"{symbol}_stats_report_{timestamp}.csv")
+        stats_report.to_csv(stats_path)
+        stats_msg = f"Звіт зі статистикою збережено до {stats_path}"
+        logger.info(stats_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=stats_msg)
+
+        # Створення списку ознак з описами
+        features_info = create_features_info(features_df)
+        info_path = os.path.join(output, f"{symbol}_features_info_{timestamp}.csv")
+        features_info.to_csv(info_path, index=False)
+        info_msg = f"Інформацію про ознаки збережено до {info_path}"
+        logger.info(info_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=info_msg)
+
+        # Якщо консольний режим, виводимо деякі результати у консоль для тестування
+        if not telegram_mode:
+            print("\n--- Перші 5 рядків датафрейму з ознаками ---")
+            print(features_df.head())
+            print("\n--- Описова статистика (перші 5 рядків) ---")
+            print(stats_report.head())
+            print("\n--- Інформація про ознаки (перші 5 рядків) ---")
+            print(features_info.head())
+
+        success_msg = "Обробка завершена успішно!"
+        logger.info(success_msg)
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=success_msg)
+
+    except Exception as e:
+        error_msg = f"Виникла помилка: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        trace_msg = traceback.format_exc()
+        logger.error(trace_msg)
+
+        if telegram_mode:
+            bot.send_message(chat_id=chat_id, text=error_msg)
+            # Відправляємо трейсбек помилки, якщо це потрібно
+            # bot.send_message(chat_id=chat_id, text=f"```\n{trace_msg}\n```")
+
+
+def create_statistics_report(data: pd.DataFrame) -> pd.DataFrame:
+
+    # Основна описова статистика
+    stats = data.describe().T
+
+    # Додаємо додаткові метрики
+    stats['missing'] = data.isnull().sum()
+    stats['missing_pct'] = data.isnull().mean() * 100
+    stats['unique'] = data.nunique()
+
+    # Для числових стовпців додаємо асиметрію та ексцес
+    numeric_cols = data.select_dtypes(include=['number']).columns
+    stats.loc[numeric_cols, 'skew'] = data[numeric_cols].skew()
+    stats.loc[numeric_cols, 'kurtosis'] = data[numeric_cols].kurtosis()
+
+    return stats
+
+
+def create_features_info(data: pd.DataFrame) -> pd.DataFrame:
+
+    features = []
+
+    for col in data.columns:
+        feature_type = "unknown"
+        description = ""
+
+        # Визначаємо тип ознаки на основі префіксу назви
+        if col.startswith('lag_') or col.endswith('_lag'):
+            feature_type = "lagged"
+            description = "Лагова ознака"
+        elif col.startswith('rolling_') or '_rolling_' in col:
+            feature_type = "rolling"
+            description = "Ознака ковзного вікна"
+        elif col.startswith('ewm_') or '_ewm_' in col:
+            feature_type = "exponential_weighted"
+            description = "Експоненційно зважена ознака"
+        elif col.startswith('return_') or col.startswith('log_return_'):
+            feature_type = "return"
+            description = "Ознака прибутковості"
+        elif any(col.startswith(x) for x in ['sma_', 'ema_', 'rsi_', 'macd', 'bb_']):
+            feature_type = "technical"
+            description = "Технічний індикатор"
+        elif col.startswith('volatility_') or 'volatility' in col:
+            feature_type = "volatility"
+            description = "Ознака волатильності"
+        elif col.startswith('ratio_'):
+            feature_type = "ratio"
+            description = "Співвідношення"
+        elif col.startswith('target_'):
+            feature_type = "target"
+            description = "Цільова змінна"
+        elif col in ['open', 'high', 'low', 'close', 'volume']:
+            feature_type = "price_volume"
+            description = "Базовий показник ціни/об'єму"
+
+        # Додаємо більш детальний опис для відомих технічних індикаторів
+        if col.startswith('sma_'):
+            window = col.split('_')[1]
+            description = f"Проста ковзна середня з вікном {window}"
+        elif col.startswith('ema_'):
+            window = col.split('_')[1]
+            description = f"Експоненційна ковзна середня з вікном {window}"
+        elif col.startswith('rsi_'):
+            window = col.split('_')[1]
+            description = f"Індекс відносної сили з вікном {window}"
+        elif col.startswith('bb_high_'):
+            window = col.split('_')[2]
+            description = f"Верхня смуга Боллінджера з вікном {window}"
+        elif col.startswith('bb_mid_'):
+            window = col.split('_')[2]
+            description = f"Середня смуга Боллінджера з вікном {window}"
+        elif col.startswith('bb_low_'):
+            window = col.split('_')[2]
+            description = f"Нижня смуга Боллінджера з вікном {window}"
+
+        # Додаємо інформацію до списку
+        features.append({
+            'feature_name': col,
+            'feature_type': feature_type,
+            'description': description,
+            'dtype': str(data[col].dtype)
+        })
+
+    return pd.DataFrame(features)
+
+
+def process_and_get_features(self, symbol: str, interval: str = "1d", data_type: str = "klines") -> pd.DataFrame:
+
+    if data_type == "klines":
+        df = self.db_manager.get_klines_processed(symbol, interval)
+    elif data_type == "orderbook":
+        df = self.db_manager.get_orderbook_processed(symbol, interval)
+    else:
+        raise ValueError("Невідомий тип даних: очікується 'klines' або 'orderbook'")
+
+    # Генерація ознак
+    df = self.create_technical_features(df)
+    df = self.create_return_features(df)
+    df = self.create_volatility_features(df)
+    df = self.create_volume_features(df)
+    df = self.create_candle_pattern_features(df)
+    df = self.create_custom_indicators(df)
+
+    return df
+
+
+if __name__ == "__main__":
+    main(telegram_mode=False)  # За замовчуванням запускаємо в консольному режимі
