@@ -1,4 +1,4 @@
-from .time_series import ARIMAModel, SARIMAModel
+git from .time_series import ARIMAModel, SARIMAModel
 from .deep_learning import LSTMModel, GRUModel
 from .technical_indicators import TechnicalIndicators
 from .ensemble import EnsemblePredictor

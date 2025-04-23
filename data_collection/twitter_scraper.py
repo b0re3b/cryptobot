@@ -17,33 +17,36 @@ class TwitterScraper:
                  log_level=logging.INFO,
                  db_config: Optional[Dict] = None,
                  cache_expiry: int = 86400):
-        """
-        Ініціалізація скрапера Twitter.
 
-        Зміни:
-        - Додано об'єкт DatabaseManager для роботи з базою даних
-        - Видалено пряме використання psycopg2
-        """
+        self.sentiment_model_name = sentiment_model
+        self.cache_dir = cache_dir
         self.log_level = log_level
-        self.db_connection = db_connection
-        self.db_manager = DatabaseManager()
-        self.supported_symbols = self.db_manager.supported_symbols
+        self.cache_expiry = cache_expiry
+
+        # Налаштування логування
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Ініціалізація класу...")
-        self.ready = True        """
-        Ініціалізація скрапера Twitter.
+        self.logger.info("Ініціалізація TwitterScraper...")
 
-        Args:
-            sentiment_model: Назва моделі з Hugging Face для аналізу настроїв
-            cache_dir: Директорія для кешування завантажених моделей
-            logger: Об'єкт логера (опціонально)
-            db_config: Конфігурація підключення до PostgreSQL
-            cache_expiry: Термін дії кешу в секундах
-        """
-        pass
+        # Підключення до бази даних
+        self.db_config = db_config if db_config else db_connection
+        self.db_manager = DatabaseManager()
+        self.supported_symbols = self.db_manager.supported_symbols
 
+        # Ініціалізація моделі sentiment analysis
+        try:
+            self.logger.info(f"Завантаження моделі аналізу настроїв: {sentiment_model}")
+            self.sentiment_analyzer = pipeline("sentiment-analysis",
+                                               model=sentiment_model,
+                                               cache_dir=cache_dir)
+            self.logger.info("Модель успішно завантажена")
+        except Exception as e:
+            self.logger.error(f"Помилка завантаження моделі: {str(e)}")
+            self.sentiment_analyzer = None
 
+        # Встановлення прапорця готовності
+        self.ready = bool(self.db_manager and self.sentiment_analyzer)
+        self.logger.info(f"TwitterScraper готовий до роботи: {self.ready}")
 
     def search_tweets(self, query: str, days_back: int = 7,
                       limit: Optional[int] = None, lang: str = "en") -> List[Dict]:
@@ -59,33 +62,64 @@ class TwitterScraper:
         Returns:
             Список зібраних твітів у форматі словника
         """
-        pass
+        if not self.ready:
+            self.logger.error("TwitterScraper не ініціалізовано належним чином")
+            return []
 
-    def _cache_tweets(self, query: str, tweets: List[Dict]) -> bool:
-        """
-        Тепер використовує DatabaseManager.insert_tweet() для кожного твіту
-        """
-        if not self.db_manager:
-            return False
+        # Перевірка наявності твітів у кеші
+        min_date = datetime.now() - timedelta(days=days_back)
+        cached_tweets = self._get_cached_tweets(query, min_date)
+        if cached_tweets:
+            self.logger.info(f"Знайдено {len(cached_tweets)} твітів у кеші для запиту '{query}'")
+            return cached_tweets
 
-        for tweet in tweets:
-            if not self.db_manager.insert_tweet(tweet):
-                return False
-        return True
+        # Формування пошукового запиту
+        search_query = f"{query} lang:{lang}" if lang else query
+        since_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        search_query += f" since:{since_date}"
+
+        self.logger.info(f"Виконання пошукового запиту: '{search_query}'")
+
+        # Збір твітів
+        collected_tweets = []
+        try:
+            tweet_count = 0
+            for tweet in sntwitter.TwitterSearchScraper(search_query).get_items():
+                # Конвертація твіту в словник
+                tweet_dict = {
+                    "id": tweet.id,
+                    "date": tweet.date,
+                    "content": tweet.rawContent,
+                    "username": tweet.user.username,
+                    "displayname": tweet.user.displayname,
+                    "followers": tweet.user.followersCount,
+                    "retweets": tweet.retweetCount,
+                    "likes": tweet.likeCount,
+                    "query": query,
+                    "lang": tweet.lang,
+                    "collected_at": datetime.now()
+                }
+
+                collected_tweets.append(tweet_dict)
+                tweet_count += 1
+
+                # Перевірка ліміту
+                if limit and tweet_count >= limit:
+                    break
+
+            self.logger.info(f"Зібрано {len(collected_tweets)} твітів для запиту '{query}'")
+
+            # Кешування результатів
+            if collected_tweets:
+                self._cache_tweets(query, collected_tweets)
+
+            return collected_tweets
+
+        except Exception as e:
+            self.logger.error(f"Помилка при пошуку твітів: {str(e)}")
+            return []
 
     def _get_cached_tweets(self, query: str, min_date: datetime) -> Optional[List[Dict]]:
-        """
-        Тепер використовує DatabaseManager.get_tweets() з відповідними фільтрами
-        """
-        if not self.db_manager:
-            return None
-
-        filters = {
-            'start_date': min_date,
-            'content': f"%{query}%"  # Приклад фільтрації за вмістом
-        }
-        tweets_df = self.db_manager.get_tweets(filters=filters)
-        return tweets_df.to_dict('records') if not tweets_df.empty else None
         """
         Отримання кешованих твітів з бази даних.
 
@@ -96,26 +130,41 @@ class TwitterScraper:
         Returns:
             Список кешованих твітів або None, якщо кеш застарів
         """
-        pass
+        if not self.db_manager:
+            self.logger.warning("DatabaseManager не ініціалізовано, отримання кешу неможливе")
+            return None
+
+        try:
+            self.logger.info(f"Пошук кешованих твітів для запиту '{query}' з {min_date}")
+
+            # Перевірка терміну дії кешу
+            max_cache_age = datetime.now() - timedelta(seconds=self.cache_expiry)
+            if min_date < max_cache_age:
+                self.logger.info("Запитувані дані виходять за межі терміну дії кешу")
+                return None
+
+            # Налаштування фільтрів для пошуку в базі даних
+            filters = {
+                'start_date': min_date,
+                'content': f"%{query}%",  # Використовуємо LIKE для пошуку в тексті
+                'query': query  # Точна відповідність запиту
+            }
+
+            # Отримання твітів з бази даних
+            tweets_df = self.db_manager.get_tweets(filters=filters)
+
+            if tweets_df.empty:
+                self.logger.info("Кешованих твітів не знайдено")
+                return None
+
+            self.logger.info(f"Знайдено {len(tweets_df)} кешованих твітів")
+            return tweets_df.to_dict('records')
+
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні кешованих твітів: {str(e)}")
+            return None
 
     def analyze_sentiment(self, tweets: List[Dict]) -> List[Dict]:
-        """
-        Після аналізу настроїв використовує DatabaseManager.insert_tweet_sentiment()
-        для збереження результатів
-        """
-        # Аналіз настроїв...
-        for tweet in analyzed_tweets:
-            if self.db_manager:
-                sentiment_data = {
-                    'tweet_id': tweet['id'],
-                    'sentiment': tweet['sentiment'],
-                    'sentiment_score': tweet['sentiment_score'],
-                    'confidence': tweet.get('confidence', 0.0),
-                    'model_used': self.sentiment_model
-                }
-                self.db_manager.insert_tweet_sentiment(sentiment_data)
-        return analyzed_tweets
-
         """
         Аналіз настроїв у зібраних твітах.
 
@@ -125,51 +174,200 @@ class TwitterScraper:
         Returns:
             Список твітів із доданим полем sentiment та sentiment_score
         """
-        pass
+        if not tweets:
+            self.logger.warning("Порожній список твітів для аналізу настроїв")
+            return []
+
+        if not self.sentiment_analyzer:
+            self.logger.error("Аналізатор настроїв не ініціалізовано")
+            return tweets
+
+        analyzed_tweets = []
+        try:
+            self.logger.info(f"Аналіз настроїв для {len(tweets)} твітів")
+
+            # Групування твітів для пакетного аналізу (оптимізація)
+            batch_size = 32  # Оптимальний розмір для більшості моделей
+            for i in range(0, len(tweets), batch_size):
+                batch = tweets[i:i + batch_size]
+                texts = [tweet['content'] for tweet in batch]
+
+                # Виконання аналізу настроїв
+                sentiment_results = self.sentiment_analyzer(texts, truncation=True)
+
+                # Обробка результатів для кожного твіту в пакеті
+                for j, result in enumerate(sentiment_results):
+                    tweet = batch[j].copy()
+
+                    # Додавання результатів аналізу настроїв
+                    label = result['label'].lower()
+                    score = result['score']
+
+                    # Стандартизація міток настроїв
+                    if label in ['positive', 'pos']:
+                        sentiment = 'positive'
+                    elif label in ['negative', 'neg']:
+                        sentiment = 'negative'
+                    else:
+                        sentiment = 'neutral'
+
+                    # Нормалізація оцінки для негативних настроїв
+                    sentiment_score = score if sentiment == 'positive' else -score if sentiment == 'negative' else 0.0
+
+                    # Додавання результатів до твіту
+                    tweet['sentiment'] = sentiment
+                    tweet['sentiment_score'] = sentiment_score
+                    tweet['sentiment_confidence'] = score
+                    tweet['sentiment_analysis_date'] = datetime.now()
+
+                    analyzed_tweets.append(tweet)
+
+                    # Збереження результатів у базі даних
+                    if self.db_manager:
+                        sentiment_data = {
+                            'tweet_id': tweet['id'],
+                            'sentiment': sentiment,
+                            'sentiment_score': sentiment_score,
+                            'confidence': score,
+                            'model_used': self.sentiment_model_name,
+                            'analysis_date': tweet['sentiment_analysis_date']
+                        }
+                        self.db_manager.insert_tweet_sentiment(sentiment_data)
+
+            self.logger.info(f"Аналіз настроїв завершено для {len(analyzed_tweets)} твітів")
+            return analyzed_tweets
+
+        except Exception as e:
+            self.logger.error(f"Помилка при аналізі настроїв: {str(e)}")
+            # Повертаємо оригінальні твіти, якщо аналіз не вдався
+            return tweets
 
     def filter_by_keywords(self, tweets: List[Dict], keywords: List[str],
                            case_sensitive: bool = False) -> List[Dict]:
-        """
-        Фільтрація твітів за ключовими словами.
 
-        Args:
-            tweets: Список твітів для фільтрації
-            keywords: Список ключових слів для пошуку
-            case_sensitive: Чи враховувати регістр при пошуку
+        if not tweets or not keywords:
+            self.logger.warning("Порожній список твітів або ключових слів")
+            return tweets
 
-        Returns:
-            Відфільтрований список твітів
-        """
-        pass
+        filtered_tweets = []
+        try:
+            self.logger.info(f"Фільтрація {len(tweets)} твітів за {len(keywords)} ключовими словами")
+
+            # Підготовка ключових слів
+            if not case_sensitive:
+                keywords = [keyword.lower() for keyword in keywords]
+
+            # Фільтрація твітів
+            for tweet in tweets:
+                content = tweet.get('content', '')
+                if not case_sensitive:
+                    content = content.lower()
+
+                # Перевірка наявності будь-якого ключового слова в контенті
+                if any(keyword in content for keyword in keywords):
+                    # Додаємо інформацію про знайдені ключові слова
+                    matched_keywords = [keyword for keyword in keywords if keyword in content]
+                    tweet_copy = tweet.copy()
+                    tweet_copy['matched_keywords'] = matched_keywords
+                    filtered_tweets.append(tweet_copy)
+
+            self.logger.info(f"Відфільтровано {len(filtered_tweets)} твітів")
+            return filtered_tweets
+
+        except Exception as e:
+            self.logger.error(f"Помилка при фільтрації твітів: {str(e)}")
+            return tweets
 
     def get_trending_crypto_topics(self, top_n: int = 10) -> List[Dict]:
-        """
-        Отримання трендових тем, пов'язаних з криптовалютами.
 
-        Args:
-            top_n: Кількість тем для виведення
+        if not self.db_manager:
+            self.logger.error("DatabaseManager не ініціалізовано")
+            return []
 
-        Returns:
-            Список трендових хештегів та їх популярність
-        """
-        pass
+        try:
+            self.logger.info(f"Пошук топ-{top_n} трендових криптовалютних тем")
+
+            # Список криптовалютних хештегів для пошуку
+            crypto_base_tags = [
+                "#bitcoin", "#btc", "#ethereum", "#eth", "#crypto",
+                "#blockchain", "#defi", "#nft", "#altcoin", "#trading"
+            ]
+
+            # Отримання даних за останні 24 години
+            since_date = datetime.now() - timedelta(days=1)
+
+            # Пошук твітів із криптовалютними хештегами
+            all_hashtags = []
+            for crypto_tag in crypto_base_tags:
+                filters = {
+                    'start_date': since_date,
+                    'content': f"%{crypto_tag}%"
+                }
+                tweets_df = self.db_manager.get_tweets(filters=filters)
+
+                if not tweets_df.empty:
+                    # Вилучення всіх хештегів з твітів
+                    for content in tweets_df['content']:
+                        # Знаходження всіх хештегів у твіті
+                        hashtags = [
+                            tag.lower() for tag in re.findall(r'#\w+', content)
+                            if tag.lower() not in crypto_base_tags  # Виключення базових тегів
+                        ]
+                        all_hashtags.extend(hashtags)
+
+            # Підрахунок частоти використання хештегів
+            hashtag_counts = Counter(all_hashtags)
+
+            # Вибір топ-N найпопулярніших хештегів
+            trending_topics = [
+                {
+                    "hashtag": hashtag,
+                    "count": count,
+                    "percentage": count / len(all_hashtags) * 100 if all_hashtags else 0
+                }
+                for hashtag, count in hashtag_counts.most_common(top_n)
+            ]
+
+            self.logger.info(f"Знайдено {len(trending_topics)} трендових тем")
+            return trending_topics
+
+        except Exception as e:
+            self.logger.error(f"Помилка при пошуку трендових тем: {str(e)}")
+            return []
 
     def save_to_database(self, tweets: List[Dict], table_name: str = "tweets") -> bool:
-        """
-        Тепер використовує DatabaseManager.insert_tweet() або інші методи вставки
-        """
-        return self._cache_tweets("", tweets)  # Можна використати той же метод
-        """
-        Збереження зібраних твітів у базу даних PostgreSQL.
 
-        Args:
-            tweets: Список твітів для збереження
-            table_name: Назва таблиці для збереження
+        if not self.db_manager:
+            self.logger.error("DatabaseManager не ініціалізовано")
+            return False
 
-        Returns:
-            Булеве значення успішності операції
-        """
-        pass
+        try:
+            self.logger.info(f"Збереження {len(tweets)} твітів у таблицю {table_name}")
+
+            # Перевірка наявності вказаної таблиці
+            if table_name != "tweets" and not self.db_manager.table_exists(table_name):
+                self.logger.warning(f"Таблиця {table_name} не існує. Створення нової таблиці...")
+                # Тут можна додати логіку створення таблиці, якщо потрібно
+
+            # Використовуємо метод кешування або окремий метод в залежності від таблиці
+            if table_name == "tweets":
+                return self._cache_tweets("", tweets)
+            else:
+                # Якщо використовується інша таблиця, можна реалізувати спеціальну логіку
+                successful = True
+                for tweet in tweets:
+                    result = self.db_manager.insert_custom_data(table_name, tweet)
+                    if not result:
+                        self.logger.warning(
+                            f"Не вдалося зберегти твіт {tweet.get('id', 'unknown')} у таблицю {table_name}")
+                        successful = False
+
+                self.logger.info(f"Збереження у {table_name} завершено {'успішно' if successful else 'з помилками'}")
+                return successful
+
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні твітів у базу даних: {str(e)}")
+            return False
 
     def get_user_influence(self, username: str) -> Dict:
         """
