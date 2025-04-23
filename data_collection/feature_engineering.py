@@ -147,54 +147,146 @@ class FeatureEngineering:
                             columns: Optional[List[str]] = None,
                             spans: List[int] = [5, 10, 20, 50],
                             functions: List[str] = ['mean', 'std']) -> pd.DataFrame:
-        """
-        Створює ознаки на основі експоненціально зваженого вікна.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        columns : list of str, optional
-            Список стовпців для створення ознак (якщо None, використовуються всі числові)
-        spans : list of int
-            Значення span для EWM
-        functions : list of str
-            Функції для обчислення ('mean', 'std', тощо)
+        self.logger.info("Створення ознак на основі експоненціально зваженого вікна...")
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданими EWM ознаками
-        """
-        # Вибрати числові стовпці, якщо columns не вказано
-        # Для кожного стовпця, span і функції створити нову ознаку
-        # Перевірити наявність NaN значень і обробити їх
-        pass
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        result_df = data.copy()
+
+        # Вибираємо числові стовпці, якщо columns не вказано
+        if columns is None:
+            columns = result_df.select_dtypes(include=[np.number]).columns.tolist()
+            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
+        else:
+            # Перевіряємо наявність вказаних стовпців у даних
+            missing_cols = [col for col in columns if col not in result_df.columns]
+            if missing_cols:
+                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
+                columns = [col for col in columns if col in result_df.columns]
+
+        # Словник підтримуваних функцій для EWM
+        func_map = {
+            'mean': 'mean',
+            'std': 'std',
+            'var': 'var',
+        }
+
+        # Перевіряємо, чи всі функції підтримуються
+        unsupported_funcs = [f for f in functions if f not in func_map]
+        if unsupported_funcs:
+            self.logger.warning(f"Функції {unsupported_funcs} не підтримуються для EWM і будуть пропущені")
+            functions = [f for f in functions if f in func_map]
+
+        # Лічильник доданих ознак
+        added_features_count = 0
+
+        # Для кожного стовпця, span і функції створюємо нову ознаку
+        for col in columns:
+            for span in spans:
+                # Перевіряємо наявність пропущених значень в стовпці
+                if result_df[col].isna().any():
+                    self.logger.warning(f"Стовпець {col} містить NaN значення, вони будуть заповнені")
+                    result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
+
+                # Створюємо об'єкт експоненціально зваженого вікна
+                ewm_window = result_df[col].ewm(span=span, min_periods=1)
+
+                for func_name in functions:
+                    # Отримуємо функцію з мапінгу
+                    func = func_map[func_name]
+
+                    # Створюємо нову ознаку
+                    feature_name = f"{col}_ewm_{span}_{func_name}"
+
+                    # Застосовуємо функцію до EWM
+                    result_df[feature_name] = getattr(ewm_window, func)()
+
+                    added_features_count += 1
+                    self.logger.debug(f"Створено ознаку {feature_name}")
+
+        # Перевіряємо наявність NaN значень у нових ознаках
+        for col in result_df.columns:
+            if col not in data.columns:  # перевіряємо, що це нова ознака
+                if result_df[col].isna().any():
+                    self.logger.debug(f"Заповнення NaN значень у стовпці {col}")
+                    result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
+
+                    # Якщо все ще є NaN (можливо на початку), заповнюємо медіаною
+                    if result_df[col].isna().any():
+                        result_df[col] = result_df[col].fillna(result_df[col].median())
+
+        self.logger.info(f"Додано {added_features_count} ознак експоненціально зваженого вікна")
+
+        return result_df
 
     def create_return_features(self, data: pd.DataFrame,
                                price_column: str = 'close',
                                periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
-        """
-        Створює ознаки прибутковості за різні періоди.
 
-        Parameters:
-        -----------
-        data : pandas.DataFrame
-            Вхідний DataFrame
-        price_column : str
-            Стовпець з ціною для розрахунку прибутковості
-        periods : list of int
-            Список періодів для розрахунку прибутковості
+        self.logger.info("Створення ознак прибутковості...")
 
-        Returns:
-        --------
-        pandas.DataFrame
-            DataFrame з доданими ознаками прибутковості
-        """
-        # Перевірити, що price_column існує в даних
-        # Розрахувати процентну зміну для кожного періоду
-        # Опціонально додати логарифмічну прибутковість
-        pass
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        result_df = data.copy()
+
+        # Перевіряємо, що price_column існує в даних
+        if price_column not in result_df.columns:
+            self.logger.error(f"Стовпець {price_column} не знайдено в даних")
+            raise ValueError(f"Стовпець {price_column} не знайдено в даних")
+
+        # Перевіряємо наявність пропущених значень у стовпці ціни
+        if result_df[price_column].isna().any():
+            self.logger.warning(f"Стовпець {price_column} містить NaN значення, вони будуть заповнені")
+            result_df[price_column] = result_df[price_column].fillna(method='ffill').fillna(method='bfill')
+
+        # Лічильник доданих ознак
+        added_features_count = 0
+
+        # Розрахунок процентної зміни для кожного періоду
+        for period in periods:
+            # Процентна зміна
+            pct_change_name = f"return_{period}p"
+            result_df[pct_change_name] = result_df[price_column].pct_change(periods=period)
+            added_features_count += 1
+
+            # Логарифмічна прибутковість
+            log_return_name = f"log_return_{period}p"
+            result_df[log_return_name] = np.log(result_df[price_column] / result_df[price_column].shift(period))
+            added_features_count += 1
+
+            # Абсолютна зміна
+            abs_change_name = f"abs_change_{period}p"
+            result_df[abs_change_name] = result_df[price_column].diff(periods=period)
+            added_features_count += 1
+
+            # Нормалізована зміна (Z-score над N періодами)
+            z_score_period = min(period * 5, len(result_df))  # беремо більший період для розрахунку статистики
+            if z_score_period > period * 2:  # перевіряємо, що маємо достатньо даних для нормалізації
+                z_score_name = f"z_score_return_{period}p"
+                rolling_mean = result_df[pct_change_name].rolling(window=z_score_period).mean()
+                rolling_std = result_df[pct_change_name].rolling(window=z_score_period).std()
+                result_df[z_score_name] = (result_df[pct_change_name] - rolling_mean) / rolling_std
+                added_features_count += 1
+
+        # Додаємо ознаку напрямку зміни ціни (бінарна класифікація)
+        for period in periods:
+            direction_name = f"direction_{period}p"
+            result_df[direction_name] = np.where(result_df[f"return_{period}p"] > 0, 1, 0)
+            added_features_count += 1
+
+        # Заповнюємо NaN значення (особливо на початку часового ряду)
+        for col in result_df.columns:
+            if col not in data.columns:  # перевіряємо, що це нова ознака
+                if result_df[col].isna().any():
+                    # Для ознак напрямку використовуємо 0 (нейтральне значення)
+                    if col.startswith("direction_"):
+                        result_df[col] = result_df[col].fillna(0)
+                    else:
+                        # Для інших ознак використовуємо 0 або медіану
+                        result_df[col] = result_df[col].fillna(0)
+
+        self.logger.info(f"Додано {added_features_count} ознак прибутковості")
+
+        return result_df
 
     def create_technical_features(self, data: pd.DataFrame,
                                   indicators: Optional[List[str]] = None) -> pd.DataFrame:
