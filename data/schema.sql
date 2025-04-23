@@ -484,3 +484,268 @@ CREATE TABLE IF NOT EXISTS scraping_errors (
 
 -- Індекс для аналізу частоти помилок за типом
 CREATE INDEX IF NOT EXISTS idx_scraping_errors_type ON scraping_errors(error_type);
+-- Таблиця для зберігання джерел новин
+CREATE TABLE IF NOT EXISTS news_sources (
+    source_id SERIAL PRIMARY KEY,
+    source_name VARCHAR(100) NOT NULL UNIQUE,
+    base_url VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Таблиця для категорій новин
+CREATE TABLE IF NOT EXISTS news_categories (
+    category_id SERIAL PRIMARY KEY,
+    source_id INTEGER REFERENCES news_sources(source_id),
+    category_name VARCHAR(100) NOT NULL,
+    category_url_path VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(source_id, category_name)
+);
+
+-- Таблиця для зберігання новинних статей
+CREATE TABLE IF NOT EXISTS news_articles (
+    article_id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    summary TEXT,
+    content TEXT,
+    link VARCHAR(512) NOT NULL,
+    source_id INTEGER REFERENCES news_sources(source_id),
+    category_id INTEGER REFERENCES news_categories(category_id),
+    published_at TIMESTAMP WITH TIME ZONE,
+    scraped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(link)
+);
+
+-- Індекси для новинних статей
+CREATE INDEX IF NOT EXISTS idx_articles_published_at ON news_articles(published_at);
+CREATE INDEX IF NOT EXISTS idx_articles_source_id ON news_articles(source_id);
+
+-- Таблиця для аналізу настроїв новин
+CREATE TABLE IF NOT EXISTS news_sentiment_analysis (
+    sentiment_id SERIAL PRIMARY KEY,
+    article_id INTEGER REFERENCES news_articles(article_id),
+    sentiment_score NUMERIC(5,2),  -- Від -1.0 до 1.0
+    sentiment_magnitude NUMERIC(5,2),
+    sentiment_label VARCHAR(20),  -- 'positive', 'negative', 'neutral'
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(article_id)
+);
+
+-- Таблиця для згаданих криптовалют у новинах (зв'язок багато-до-багатьох)
+CREATE TABLE IF NOT EXISTS article_mentioned_coins (
+    mention_id SERIAL PRIMARY KEY,
+    article_id INTEGER REFERENCES news_articles(article_id),
+    crypto_symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
+    mention_count INTEGER DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(article_id, crypto_symbol)
+);
+
+-- Індекс для швидкого пошуку згадок криптовалют
+CREATE INDEX IF NOT EXISTS idx_article_mentioned_coins ON article_mentioned_coins(crypto_symbol);
+
+-- Таблиця для популярних тем у новинах
+CREATE TABLE IF NOT EXISTS trending_news_topics (
+    topic_id SERIAL PRIMARY KEY,
+    topic_name VARCHAR(255) NOT NULL,
+    start_date TIMESTAMP WITH TIME ZONE,
+    end_date TIMESTAMP WITH TIME ZONE,
+    importance_score NUMERIC(5,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Таблиця для зв'язку статей з темами (багато-до-багатьох)
+CREATE TABLE IF NOT EXISTS article_topics (
+    article_topic_id SERIAL PRIMARY KEY,
+    article_id INTEGER REFERENCES news_articles(article_id),
+    topic_id INTEGER REFERENCES trending_news_topics(topic_id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(article_id, topic_id)
+);
+
+-- Таблиця для кореляцій між новинами та ринковими даними
+CREATE TABLE IF NOT EXISTS news_market_correlations (
+    correlation_id SERIAL PRIMARY KEY,
+    topic_id INTEGER REFERENCES trending_news_topics(topic_id),
+    crypto_symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
+    time_period VARCHAR(50),  -- '1h', '4h', '1d'
+    correlation_coefficient NUMERIC(5,4),  -- Від -1 до 1
+    p_value NUMERIC(10,9),
+    start_date TIMESTAMP WITH TIME ZONE,
+    end_date TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Таблиця для відстеження важливих подій, виявлених із новин
+CREATE TABLE IF NOT EXISTS news_detected_events (
+    event_id SERIAL PRIMARY KEY,
+    event_title TEXT NOT NULL,
+    event_description TEXT,
+    crypto_symbols TEXT[],  -- Масив пов'язаних криптовалют
+    source_articles INTEGER[],  -- Масив ID статей-джерел події
+    confidence_score NUMERIC(3,1),  -- 0-10 шкала
+    detected_at TIMESTAMP WITH TIME ZONE,
+    expected_impact TEXT,  -- 'positive', 'negative', 'neutral'
+    event_category TEXT,  -- 'regulatory', 'technical', 'adoption', тощо
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Індекс для пошуку подій за криптовалютами
+CREATE INDEX IF NOT EXISTS idx_news_detected_events_symbols ON news_detected_events USING GIN(crypto_symbols);
+
+-- Таблиця для часових рядів настроїв у новинах
+CREATE TABLE IF NOT EXISTS news_sentiment_time_series (
+    id SERIAL PRIMARY KEY,
+    crypto_symbol TEXT NOT NULL,
+    time_bucket TIMESTAMP WITH TIME ZONE NOT NULL,
+    interval TEXT NOT NULL,  -- 'hour', 'day', 'week'
+    positive_count INTEGER NOT NULL,
+    negative_count INTEGER NOT NULL,
+    neutral_count INTEGER NOT NULL,
+    average_sentiment NUMERIC NOT NULL,
+    news_volume INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE (crypto_symbol, time_bucket, interval)
+);
+
+-- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
+CREATE INDEX IF NOT EXISTS idx_news_sentiment_time_series ON news_sentiment_time_series(crypto_symbol, time_bucket);
+
+-- Таблиця для логування роботи CryptoNewsScraper
+CREATE TABLE IF NOT EXISTS news_scraping_log (
+    id SERIAL PRIMARY KEY,
+    source_id INTEGER REFERENCES news_sources(source_id),
+    category_id INTEGER REFERENCES news_categories(category_id),
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    articles_found INTEGER NOT NULL,
+    articles_processed INTEGER NOT NULL,
+    status TEXT NOT NULL,  -- 'success', 'partial', 'failed'
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Функція для оновлення часових позначок
+CREATE OR REPLACE FUNCTION update_news_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Тригери для оновлення позначок часу
+CREATE TRIGGER update_news_sources_timestamp
+BEFORE UPDATE ON news_sources
+FOR EACH ROW EXECUTE FUNCTION update_news_timestamp();
+
+CREATE TRIGGER update_news_categories_timestamp
+BEFORE UPDATE ON news_categories
+FOR EACH ROW EXECUTE FUNCTION update_news_timestamp();
+
+CREATE TRIGGER update_trending_news_topics_timestamp
+BEFORE UPDATE ON trending_news_topics
+FOR EACH ROW EXECUTE FUNCTION update_news_timestamp();
+
+-- Представлення для новин з настроями та згаданими криптовалютами
+CREATE OR REPLACE VIEW news_analysis_view AS
+SELECT
+    na.article_id,
+    na.title,
+    na.summary,
+    na.link,
+    ns.source_name,
+    nc.category_name,
+    na.published_at,
+    nsa.sentiment_score,
+    nsa.sentiment_label,
+    array_agg(DISTINCT amc.crypto_symbol) as mentioned_coins
+FROM news_articles na
+JOIN news_sources ns ON na.source_id = ns.source_id
+JOIN news_categories nc ON na.category_id = nc.category_id
+LEFT JOIN news_sentiment_analysis nsa ON na.article_id = nsa.article_id
+LEFT JOIN article_mentioned_coins amc ON na.article_id = amc.article_id
+GROUP BY
+    na.article_id,
+    na.title,
+    na.summary,
+    na.link,
+    ns.source_name,
+    nc.category_name,
+    na.published_at,
+    nsa.sentiment_score,
+    nsa.sentiment_label;
+
+-- Представлення для інтегрованого аналізу настроїв новин і твітів
+CREATE OR REPLACE VIEW integrated_sentiment_view AS
+SELECT
+    crypto_symbol,
+    time_bucket,
+    interval,
+    'news' as source_type,
+    positive_count,
+    negative_count,
+    neutral_count,
+    average_sentiment,
+    news_volume as content_volume
+FROM news_sentiment_time_series
+UNION ALL
+SELECT
+    crypto_symbol,
+    time_bucket,
+    interval,
+    'twitter' as source_type,
+    positive_count,
+    negative_count,
+    neutral_count,
+    average_sentiment,
+    tweet_volume as content_volume
+FROM sentiment_time_series;
+
+-- Початкове заповнення таблиці news_sources
+INSERT INTO news_sources (source_name, base_url) VALUES
+('coindesk', 'https://www.coindesk.com'),
+('cointelegraph', 'https://cointelegraph.com'),
+('decrypt', 'https://decrypt.co'),
+('cryptoslate', 'https://cryptoslate.com'),
+('theblock', 'https://www.theblock.co'),
+('cryptopanic', 'https://cryptopanic.com'),
+('coinmarketcal', 'https://coinmarketcal.com'),
+('feedly', 'https://feedly.com'),
+('newsnow', 'https://www.newsnow.co.uk'),
+('reddit', 'https://www.reddit.com')
+ON CONFLICT (source_name) DO NOTHING;
+
+-- Початкове заповнення таблиці news_categories
+INSERT INTO news_categories (source_id, category_name, category_url_path) VALUES
+-- CoinDesk категорії
+((SELECT source_id FROM news_sources WHERE source_name = 'coindesk'), 'markets', 'markets'),
+((SELECT source_id FROM news_sources WHERE source_name = 'coindesk'), 'business', 'business'),
+((SELECT source_id FROM news_sources WHERE source_name = 'coindesk'), 'policy', 'policy'),
+((SELECT source_id FROM news_sources WHERE source_name = 'coindesk'), 'tech', 'tech'),
+-- Cointelegraph категорії
+((SELECT source_id FROM news_sources WHERE source_name = 'cointelegraph'), 'news', 'news'),
+((SELECT source_id FROM news_sources WHERE source_name = 'cointelegraph'), 'markets', 'markets'),
+((SELECT source_id FROM news_sources WHERE source_name = 'cointelegraph'), 'features', 'features'),
+((SELECT source_id FROM news_sources WHERE source_name = 'cointelegraph'), 'analysis', 'analysis'),
+-- Decrypt категорії
+((SELECT source_id FROM news_sources WHERE source_name = 'decrypt'), 'news', 'news'),
+((SELECT source_id FROM news_sources WHERE source_name = 'decrypt'), 'analysis', 'analysis'),
+((SELECT source_id FROM news_sources WHERE source_name = 'decrypt'), 'features', 'features'),
+((SELECT source_id FROM news_sources WHERE source_name = 'decrypt'), 'learn', 'learn'),
+-- CryptoSlate категорії
+((SELECT source_id FROM news_sources WHERE source_name = 'cryptoslate'), 'news', 'news'),
+((SELECT source_id FROM news_sources WHERE source_name = 'cryptoslate'), 'bitcoin', 'bitcoin'),
+((SELECT source_id FROM news_sources WHERE source_name = 'cryptoslate'), 'ethereum', 'ethereum'),
+((SELECT source_id FROM news_sources WHERE source_name = 'cryptoslate'), 'defi', 'defi'),
+-- The Block категорії
+((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'latest', 'latest'),
+((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'policy', 'policy'),
+((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'business', 'business'),
+((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'markets', 'markets')
+ON CONFLICT (source_id, category_name) DO NOTHING;
