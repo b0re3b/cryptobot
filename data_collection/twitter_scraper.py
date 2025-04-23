@@ -1,9 +1,12 @@
+import re
+
+import numpy as np
 import snscrape.modules.twitter as sntwitter
 from transformers import pipeline
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import logging
-from typing import List, Dict, Optional, Union, Tuple
+from typing import List, Dict, Optional, Union, Tuple, Counter
 import psycopg2
 from psycopg2 import pool
 from data.db import DatabaseManager
@@ -1038,43 +1041,394 @@ class TwitterScraper:
         self.logger.info("Обробка обмежень API налаштована успішно")
 
     def detect_crypto_events(self, tweets: List[Dict], min_mentions: int = 50) -> List[Dict]:
-        """
-        Використовує DatabaseManager.insert_crypto_event() для збереження виявлених подій
-        """        """
-        Виявлення важливих подій на криптовалютному ринку на основі твітів.
 
-        Args:
-            tweets: Список твітів для аналізу
-            min_mentions: Мінімальна кількість згадувань для визначення події
+        if not tweets:
+            self.logger.warning("Порожній список твітів для виявлення подій")
+            return []
 
-        Returns:
-            Список виявлених подій з метриками важливості
-        """
-        pass
+        try:
+            self.logger.info(f"Аналіз {len(tweets)} твітів для виявлення криптоподій")
+
+            # Аналіз настроїв, якщо не проведено раніше
+            if "sentiment" not in tweets[0]:
+                tweets = self.analyze_sentiment(tweets)
+
+            # Перетворення у DataFrame для зручності аналізу
+            tweets_df = pd.DataFrame(tweets)
+            tweets_df["date"] = pd.to_datetime(tweets_df["date"])
+            tweets_df["date_day"] = tweets_df["date"].dt.date
+
+            # Виявлення згадувань криптовалют
+            crypto_mentions = {}
+            crypto_patterns = {
+                "BTC": r'#?(?:bitcoin|btc|бітко[її]н)\b',
+                "ETH": r'#?(?:ethereum|eth|ether|етеріум|ефір)\b',
+                "BNB": r'#?(?:binance\s*coin|bnb)\b',
+                "SOL": r'#?(?:solana|sol)\b',
+                "XRP": r'#?(?:ripple|xrp)\b',
+                "ADA": r'#?(?:cardano|ada)\b',
+                "DOGE": r'#?(?:dogecoin|doge)\b',
+                "DOT": r'#?(?:polkadot|dot)\b',
+                "SHIB": r'#?(?:shiba\s*inu|shib)\b',
+                "AVAX": r'#?(?:avalanche|avax)\b'
+            }
+
+            # Підрахунок згадувань для кожної криптовалюти
+            for symbol, pattern in crypto_patterns.items():
+                tweets_df[f"mentions_{symbol}"] = tweets_df["content"].str.lower().str.contains(
+                    pattern, regex=True, case=False).astype(int)
+                crypto_mentions[symbol] = tweets_df[f"mentions_{symbol}"].sum()
+
+            # Групування за днями для виявлення сплесків активності
+            daily_activity = tweets_df.groupby("date_day").agg({
+                "id": "count",
+                **{f"mentions_{symbol}": "sum" for symbol in crypto_patterns.keys()},
+                "sentiment_score": "mean"
+            }).reset_index()
+
+            # Розрахунок базової лінії та виявлення аномальної активності
+            baseline_activity = daily_activity["id"].median()
+            anomaly_threshold = baseline_activity * 1.5
+
+            # Виявлення днів з аномальною активністю
+            anomaly_days = daily_activity[daily_activity["id"] > anomaly_threshold]
+
+            # Перевірка наявності аномальних днів
+            if anomaly_days.empty:
+                self.logger.info("Не виявлено днів з аномальною активністю")
+
+                # Повернення найбільш обговорюваних криптовалют
+                top_cryptos = sorted(crypto_mentions.items(), key=lambda x: x[1], reverse=True)
+                return [{
+                    "event_type": "most_discussed_cryptos",
+                    "date": datetime.now(),
+                    "cryptos": [{"symbol": symbol, "mentions": count} for symbol, count in top_cryptos[:5]],
+                    "total_tweets_analyzed": len(tweets)
+                }]
+
+            # Аналіз кожного аномального дня для визначення подій
+            detected_events = []
+            for _, day_data in anomaly_days.iterrows():
+                date = day_data["date_day"]
+                day_tweets = tweets_df[tweets_df["date_day"] == date]
+
+                # Аналіз особливостей твітів цього дня
+                coins_with_spikes = []
+                for symbol in crypto_patterns.keys():
+                    mentions = day_data[f"mentions_{symbol}"]
+                    if mentions >= min_mentions:
+                        # Отримання найпопулярніших твітів про цю монету
+                        coin_tweets = day_tweets[day_tweets[f"mentions_{symbol}"] == 1]
+                        if len(coin_tweets) == 0:
+                            continue
+
+                        # Сортування за популярністю (ретвіти + лайки)
+                        coin_tweets["popularity"] = coin_tweets["retweets"] + coin_tweets["likes"]
+                        top_tweets = coin_tweets.sort_values("popularity", ascending=False).head(3)
+
+                        # Середній настрій щодо монети
+                        avg_sentiment = coin_tweets["sentiment_score"].mean()
+                        sentiment_direction = "позитивний" if avg_sentiment > 0.1 else "негативний" if avg_sentiment < -0.1 else "нейтральний"
+
+                        coins_with_spikes.append({
+                            "symbol": symbol,
+                            "mentions": int(mentions),
+                            "sentiment": sentiment_direction,
+                            "sentiment_score": float(avg_sentiment),
+                            "example_tweets": top_tweets[["content", "retweets", "likes"]].to_dict('records')
+                        })
+
+                if coins_with_spikes:
+                    # Визначення найбільш обговорюваної монети
+                    main_coin = max(coins_with_spikes, key=lambda x: x["mentions"])
+
+                    # Формування події
+                    event = {
+                        "event_type": "activity_spike",
+                        "date": date,
+                        "total_tweets": int(day_data["id"]),
+                        "baseline_tweets": int(baseline_activity),
+                        "primary_coin": main_coin["symbol"],
+                        "involved_coins": [coin["symbol"] for coin in coins_with_spikes],
+                        "details": coins_with_spikes,
+                        "overall_sentiment": float(day_data["sentiment_score"])
+                    }
+
+                    detected_events.append(event)
+
+                    # Збереження події в базу даних
+                    if self.db_manager:
+                        for coin_data in coins_with_spikes:
+                            event_data = {
+                                "coin": coin_data["symbol"],
+                                "event_type": "mention_spike",
+                                "event_date": date,
+                                "description": f"Spike in mentions for {coin_data['symbol']} with {sentiment_direction} sentiment",
+                                "magnitude": coin_data["mentions"],
+                                "previous_value": 0,  # Можна розрахувати на основі попереднього дня
+                                "current_value": coin_data["mentions"],
+                                "detection_date": datetime.now()
+                            }
+                            self.db_manager.insert_crypto_event(event_data)
+
+            # Якщо не знайдено подій з активністю вище порогу
+            if not detected_events:
+                # Знаходження найцікавіших моментів (навіть якщо не досягнуто порогу активності)
+                max_activity_day = daily_activity.loc[daily_activity["id"].idxmax()]
+
+                # Знаходження монети з найвищою волатильністю настроїв
+                sentiment_volatility = {}
+                for symbol in crypto_patterns.keys():
+                    symbol_tweets = tweets_df[tweets_df[f"mentions_{symbol}"] == 1]
+                    if len(symbol_tweets) >= min_mentions // 2:
+                        sentiment_volatility[symbol] = symbol_tweets["sentiment_score"].std()
+
+                if sentiment_volatility:
+                    volatile_coin = max(sentiment_volatility.items(), key=lambda x: x[1])
+
+                    detected_events.append({
+                        "event_type": "noteworthy_activity",
+                        "date": max_activity_day["date_day"],
+                        "total_tweets": int(max_activity_day["id"]),
+                        "most_volatile_coin": volatile_coin[0],
+                        "sentiment_volatility": float(volatile_coin[1]),
+                        "note": "No significant activity spikes detected, but showing the day with highest activity"
+                    })
+
+            self.logger.info(f"Виявлено {len(detected_events)} подій на криптовалютному ринку")
+            return detected_events
+
+        except Exception as e:
+            self.logger.error(f"Помилка при виявленні криптоподій: {str(e)}")
+            return []
 
     def get_error_stats(self) -> Dict:
-        """
-        Використовує DatabaseManager.get_scraping_errors() для отримання статистики помилок
-        """        """
-        Отримання статистики помилок при зборі даних.
+        if not self.db_manager:
+            self.logger.error("DatabaseManager не ініціалізовано, отримання статистики помилок неможливе")
+            return {"error": "Database manager not initialized"}
 
-        Returns:
-            Словник зі статистикою помилок
-        """
-        pass
+        try:
+            self.logger.info("Отримання статистики помилок збору даних")
 
-    def cleanup_database(self, older_than_days: int = 90) -> int:
-        """
-        Тепер не потрібен, оскільки DatabaseManager має власні методи для очищення даних
-        Або можна додати відповідний метод до DatabaseManager
-        """
-        """
-        Очищення старих даних з бази даних.
+            # Отримання даних про помилки з бази даних
+            error_data = self.db_manager.get_scraping_errors()
 
-        Args:
-            older_than_days: Видалити дані старші вказаної кількості днів
+            if error_data.empty:
+                self.logger.info("Помилок не знайдено")
+                return {
+                    "total_errors": 0,
+                    "error_types": {},
+                    "time_distribution": {},
+                    "most_recent": None
+                }
 
-        Returns:
-            Кількість видалених записів
-        """
-        pass
+            # Агрегація даних для статистики
+            total_errors = len(error_data)
+            error_types = error_data["error_type"].value_counts().to_dict()
+
+            # Аналіз розподілу помилок за часом
+            error_data["timestamp"] = pd.to_datetime(error_data["timestamp"])
+            error_data["date"] = error_data["timestamp"].dt.date
+            time_distribution = error_data["date"].value_counts().sort_index().to_dict()
+
+            # Конвертація datetime.date в str для серіалізації JSON
+            time_distribution = {str(date): count for date, count in time_distribution.items()}
+
+            # Інформація про останню помилку
+            most_recent = error_data.sort_values("timestamp", ascending=False).iloc[0].to_dict()
+            if "timestamp" in most_recent:
+                most_recent["timestamp"] = most_recent["timestamp"].isoformat()
+
+            # Аналіз типових патернів помилок
+            error_patterns = {}
+            if "error_message" in error_data.columns:
+                # Спрощені повідомлення про помилки для групування схожих випадків
+                error_data["simplified_message"] = error_data["error_message"].str.extract(r'^([^:]+)')[0]
+                message_counts = error_data["simplified_message"].value_counts().head(5).to_dict()
+                error_patterns = message_counts
+
+            # Аналіз функцій, що викликають найбільше помилок
+            function_errors = {}
+            if "function_name" in error_data.columns:
+                function_counts = error_data["function_name"].value_counts().to_dict()
+                function_errors = function_counts
+
+            # Тренд помилок за останній тиждень
+            week_ago = datetime.now() - timedelta(days=7)
+            weekly_errors = error_data[error_data["timestamp"] >= week_ago]
+            weekly_count = len(weekly_errors)
+
+            # Порівняння з попереднім тижнем
+            two_weeks_ago = datetime.now() - timedelta(days=14)
+            prev_week_errors = error_data[(error_data["timestamp"] >= two_weeks_ago) &
+                                          (error_data["timestamp"] < week_ago)]
+            prev_week_count = len(prev_week_errors)
+
+            weekly_change = weekly_count - prev_week_count
+            weekly_change_percent = (weekly_change / max(1, prev_week_count)) * 100
+
+            result = {
+                "total_errors": total_errors,
+                "error_types": error_types,
+                "time_distribution": time_distribution,
+                "most_recent": most_recent,
+                "error_patterns": error_patterns,
+                "function_errors": function_errors,
+                "weekly_stats": {
+                    "current_week": weekly_count,
+                    "previous_week": prev_week_count,
+                    "change": weekly_change,
+                    "change_percent": round(weekly_change_percent, 2)
+                },
+                "analysis_date": datetime.now().isoformat()
+            }
+
+            self.logger.info(f"Отримано статистику з {total_errors} помилок")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні статистики помилок: {str(e)}")
+            return {"error": str(e)}
+
+    def get_error_stats(self) -> Dict:
+
+        if not self.db_manager:
+            self.logger.error("DatabaseManager не ініціалізовано, отримання статистики помилок неможливе")
+            return {"error": "Database manager not initialized"}
+
+        try:
+            self.logger.info("Отримання статистики помилок збору даних")
+
+            # Отримання даних про помилки з бази даних
+            error_data = self.db_manager.get_scraping_errors()
+
+            if error_data.empty:
+                self.logger.info("Помилок не знайдено")
+                return {
+                    "total_errors": 0,
+                    "error_types": {},
+                    "time_distribution": {},
+                    "most_recent": None
+                }
+
+            # Агрегація даних для статистики
+            total_errors = len(error_data)
+            error_types = error_data["error_type"].value_counts().to_dict()
+
+            # Аналіз розподілу помилок за часом
+            error_data["timestamp"] = pd.to_datetime(error_data["timestamp"])
+            error_data["date"] = error_data["timestamp"].dt.date
+            time_distribution = error_data["date"].value_counts().sort_index().to_dict()
+
+            # Конвертація datetime.date в str для серіалізації JSON
+            time_distribution = {str(date): count for date, count in time_distribution.items()}
+
+            # Інформація про останню помилку
+            most_recent = error_data.sort_values("timestamp", ascending=False).iloc[0].to_dict()
+            if "timestamp" in most_recent:
+                most_recent["timestamp"] = most_recent["timestamp"].isoformat()
+
+            # Аналіз типових патернів помилок
+            error_patterns = {}
+            if "error_message" in error_data.columns:
+                # Спрощені повідомлення про помилки для групування схожих випадків
+                error_data["simplified_message"] = error_data["error_message"].str.extract(r'^([^:]+)')[0]
+                message_counts = error_data["simplified_message"].value_counts().head(5).to_dict()
+                error_patterns = message_counts
+
+            # Аналіз функцій, що викликають найбільше помилок
+            function_errors = {}
+            if "function_name" in error_data.columns:
+                function_counts = error_data["function_name"].value_counts().to_dict()
+                function_errors = function_counts
+
+            # Тренд помилок за останній тиждень
+            week_ago = datetime.now() - timedelta(days=7)
+            weekly_errors = error_data[error_data["timestamp"] >= week_ago]
+            weekly_count = len(weekly_errors)
+
+            # Порівняння з попереднім тижнем
+            two_weeks_ago = datetime.now() - timedelta(days=14)
+            prev_week_errors = error_data[(error_data["timestamp"] >= two_weeks_ago) &
+                                          (error_data["timestamp"] < week_ago)]
+            prev_week_count = len(prev_week_errors)
+
+            weekly_change = weekly_count - prev_week_count
+            weekly_change_percent = (weekly_change / max(1, prev_week_count)) * 100
+
+            result = {
+                "total_errors": total_errors,
+                "error_types": error_types,
+                "time_distribution": time_distribution,
+                "most_recent": most_recent,
+                "error_patterns": error_patterns,
+                "function_errors": function_errors,
+                "weekly_stats": {
+                    "current_week": weekly_count,
+                    "previous_week": prev_week_count,
+                    "change": weekly_change,
+                    "change_percent": round(weekly_change_percent, 2)
+                },
+                "analysis_date": datetime.now().isoformat()
+            }
+
+            self.logger.info(f"Отримано статистику з {total_errors} помилок")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні статистики помилок: {str(e)}")
+            return {"error": str(e)}
+
+
+def main():
+    import logging
+
+    # Налаштування логування
+    logging.basicConfig(level=logging.INFO)
+
+    # Ініціалізація скрапера
+    scraper = TwitterScraper(
+        sentiment_model="finiteautomata/bertweet-base-sentiment-analysis",
+        log_level=logging.INFO
+    )
+
+    # Приклад 1: Аналіз твітів про Bitcoin
+    print("\n=== Аналіз твітів про Bitcoin ===")
+    bitcoin_tweets = scraper.search_tweets("#bitcoin OR $BTC", days_back=3, limit=50)
+    analyzed_tweets = scraper.analyze_sentiment(bitcoin_tweets)
+
+    if analyzed_tweets:
+        positive = sum(1 for t in analyzed_tweets if t['sentiment'] == 'positive')
+        negative = sum(1 for t in analyzed_tweets if t['sentiment'] == 'negative')
+        print(f"Результати аналізу: {len(analyzed_tweets)} твітів")
+        print(f"Позитивні: {positive} ({positive / len(analyzed_tweets) * 100:.1f}%)")
+        print(f"Негативні: {negative} ({negative / len(analyzed_tweets) * 100:.1f}%)")
+
+    # Приклад 2: Трендові крипто-теми
+    print("\n=== Трендові крипто-теми ===")
+    trending_topics = scraper.get_trending_crypto_topics(top_n=5)
+    for topic in trending_topics:
+        print(f"{topic['hashtag']}: {topic['count']} згадок ({topic['percentage']:.1f}%)")
+
+    # Приклад 3: Аналіз впливовості користувача
+    print("\n=== Аналіз впливовості користувача ===")
+    influence = scraper.get_user_influence("elonmusk")
+    print(f"Користувач: @{influence['username']}")
+    print(f"Оцінка впливовості: {influence['influence_score']}")
+    print(f"Середня кількість лайків: {influence['engagement']['avg_likes']}")
+
+    # Приклад 4: Відстеження змін настроїв
+    print("\n=== Відстеження змін настроїв ===")
+    sentiment_trend = scraper.track_sentiment_over_time("#ethereum OR $ETH", days=7)
+    if not sentiment_trend.empty:
+        print(sentiment_trend[['date', 'mean_sentiment', 'positive_percent', 'negative_percent']].to_string())
+
+    # Приклад 5: Виявлення подій
+    print("\n=== Виявлення крипто-подій ===")
+    events = scraper.detect_crypto_events(analyzed_tweets)
+    for event in events:
+        print(f"Подія типу '{event['event_type']}' виявлена {event['date']}")
+
+
+if __name__ == "__main__":
+    main()
