@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from psycopg2.extras import RealDictCursor
 from utils.config import *
-
+import json
 class DatabaseManager:
     def __init__(self, db_config=None):
         if db_config is None:
@@ -1002,3 +1002,533 @@ class DatabaseManager:
             print(f"Помилка виконання запиту: {e}")
             self.conn.rollback()
             return False
+
+    # Функції для роботи з твітами
+    def insert_tweet(self, tweet_data):
+        """Додає новий твіт до бази даних"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO tweets_raw
+                                (tweet_id, author_id, author_username, content, created_at, likes_count,
+                                 retweets_count, quotes_count, replies_count, language, hashtags, mentioned_cryptos,
+                                 tweet_url)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (tweet_id) DO
+                                UPDATE SET
+                                    likes_count = EXCLUDED.likes_count,
+                                    retweets_count = EXCLUDED.retweets_count,
+                                    quotes_count = EXCLUDED.quotes_count,
+                                    replies_count = EXCLUDED.replies_count,
+                                    collected_at = CURRENT_TIMESTAMP
+                                ''', (
+                                    tweet_data['tweet_id'],
+                                    tweet_data['author_id'],
+                                    tweet_data['author_username'],
+                                    tweet_data['content'],
+                                    tweet_data['created_at'],
+                                    tweet_data['likes_count'],
+                                    tweet_data['retweets_count'],
+                                    tweet_data.get('quotes_count'),
+                                    tweet_data.get('replies_count'),
+                                    tweet_data['language'],
+                                    tweet_data.get('hashtags'),
+                                    tweet_data.get('mentioned_cryptos'),
+                                    tweet_data.get('tweet_url')
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання твіту: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_tweets(self, filters=None, limit=100):
+        """Отримує твіти з бази даних за заданими фільтрами"""
+        query = 'SELECT * FROM tweets_raw WHERE TRUE'
+        params = []
+
+        if filters:
+            if 'author_username' in filters:
+                query += ' AND author_username = %s'
+                params.append(filters['author_username'])
+            if 'start_date' in filters:
+                query += ' AND created_at >= %s'
+                params.append(filters['start_date'])
+            if 'end_date' in filters:
+                query += ' AND created_at <= %s'
+                params.append(filters['end_date'])
+            if 'crypto' in filters:
+                query += ' AND %s = ANY(mentioned_cryptos)'
+                params.append(filters['crypto'])
+            if 'hashtag' in filters:
+                query += ' AND %s = ANY(hashtags)'
+                params.append(filters['hashtag'])
+
+        query += ' ORDER BY created_at DESC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання твітів: {e}")
+            return pd.DataFrame()
+
+    # Функції для роботи з настроями твітів
+    def insert_tweet_sentiment(self, sentiment_data):
+        """Додає аналіз настрою твіту"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO tweet_sentiments
+                                    (tweet_id, sentiment, sentiment_score, confidence, model_used)
+                                VALUES (%s, %s, %s, %s, %s) ON CONFLICT (tweet_id) DO
+                                UPDATE SET
+                                    sentiment = EXCLUDED.sentiment,
+                                    sentiment_score = EXCLUDED.sentiment_score,
+                                    confidence = EXCLUDED.confidence,
+                                    model_used = EXCLUDED.model_used,
+                                    analyzed_at = CURRENT_TIMESTAMP
+                                ''', (
+                                    sentiment_data['tweet_id'],
+                                    sentiment_data['sentiment'],
+                                    sentiment_data['sentiment_score'],
+                                    sentiment_data['confidence'],
+                                    sentiment_data['model_used']
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання аналізу настрою твіту: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_tweet_sentiments(self, tweet_ids=None, limit=100):
+        """Отримує аналіз настроїв твітів"""
+        query = '''
+                SELECT ts.*, tr.content, tr.author_username, tr.created_at
+                FROM tweet_sentiments ts
+                         JOIN tweets_raw tr ON ts.tweet_id = tr.tweet_id \
+                '''
+        params = []
+
+        if tweet_ids:
+            if isinstance(tweet_ids, list):
+                query += ' WHERE ts.tweet_id = ANY(%s)'
+                params.append(tweet_ids)
+            else:
+                query += ' WHERE ts.tweet_id = %s'
+                params.append(tweet_ids)
+
+        query += ' ORDER BY ts.analyzed_at DESC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання аналізу настроїв твітів: {e}")
+            return pd.DataFrame()
+
+    # Функції для роботи з кешем запитів Twitter
+    def insert_twitter_query_cache(self, cache_data):
+        """Додає кеш запиту Twitter"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO twitter_query_cache
+                                    (query, search_params, cache_expires_at, results_count)
+                                VALUES (%s, %s, %s, %s) ON CONFLICT (query, search_params) DO
+                                UPDATE SET
+                                    cache_expires_at = EXCLUDED.cache_expires_at,
+                                    results_count = EXCLUDED.results_count,
+                                    created_at = CURRENT_TIMESTAMP
+                                ''', (
+                                    cache_data['query'],
+                                    json.dumps(cache_data['search_params']),
+                                    cache_data['cache_expires_at'],
+                                    cache_data['results_count']
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання кешу запиту Twitter: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_twitter_query_cache(self, query, search_params):
+        """Отримує кеш запиту Twitter"""
+        try:
+            self.cursor.execute('''
+                                SELECT *
+                                FROM twitter_query_cache
+                                WHERE query = %s
+                                  AND search_params = %s
+                                  AND cache_expires_at > CURRENT_TIMESTAMP
+                                ''', (query, json.dumps(search_params)))
+
+            result = self.cursor.fetchone()
+            return result
+        except psycopg2.Error as e:
+            print(f"Помилка отримання кешу запиту Twitter: {e}")
+            return None
+
+    def clean_expired_twitter_cache(self):
+        """Видаляє застарілі кеші запитів Twitter"""
+        try:
+            self.cursor.execute('''
+                                DELETE
+                                FROM twitter_query_cache
+                                WHERE cache_expires_at < CURRENT_TIMESTAMP
+                                ''')
+            deleted_count = self.cursor.rowcount
+            self.conn.commit()
+            return deleted_count
+        except psycopg2.Error as e:
+            print(f"Помилка видалення застарілих кешів Twitter: {e}")
+            self.conn.rollback()
+            return 0
+
+    # Функції для роботи з крипто-інфлюенсерами
+    def insert_crypto_influencer(self, influencer_data):
+        """Додає або оновлює інформацію про крипто-інфлюенсера"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO crypto_influencers
+                                (username, display_name, description, followers_count, following_count,
+                                 tweet_count, verified, influence_score, crypto_topics)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (username) DO
+                                UPDATE SET
+                                    display_name = EXCLUDED.display_name,
+                                    description = EXCLUDED.description,
+                                    followers_count = EXCLUDED.followers_count,
+                                    following_count = EXCLUDED.following_count,
+                                    tweet_count = EXCLUDED.tweet_count,
+                                    verified = EXCLUDED.verified,
+                                    influence_score = EXCLUDED.influence_score,
+                                    crypto_topics = EXCLUDED.crypto_topics,
+                                    updated_at = CURRENT_TIMESTAMP
+                                ''', (
+                                    influencer_data['username'],
+                                    influencer_data.get('display_name'),
+                                    influencer_data.get('description'),
+                                    influencer_data.get('followers_count'),
+                                    influencer_data.get('following_count'),
+                                    influencer_data.get('tweet_count'),
+                                    influencer_data.get('verified', False),
+                                    influencer_data.get('influence_score'),
+                                    influencer_data.get('crypto_topics')
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання крипто-інфлюенсера: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_crypto_influencers(self, min_influence_score=None, topics=None, limit=100):
+        """Отримує інформацію про крипто-інфлюенсерів за заданими фільтрами"""
+        query = 'SELECT * FROM crypto_influencers WHERE TRUE'
+        params = []
+
+        if min_influence_score is not None:
+            query += ' AND influence_score >= %s'
+            params.append(min_influence_score)
+
+        if topics:
+            if isinstance(topics, list):
+                query += ' AND crypto_topics && %s'  # Перевірка перетину масивів
+                params.append(topics)
+            else:
+                query += ' AND %s = ANY(crypto_topics)'
+                params.append(topics)
+
+        query += ' ORDER BY influence_score DESC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання крипто-інфлюенсерів: {e}")
+            return pd.DataFrame()
+
+    # Функції для роботи з активністю інфлюенсерів
+    def insert_influencer_activity(self, activity_data):
+        """Додає запис про активність інфлюенсера"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO influencer_activity
+                                    (influencer_id, tweet_id, impact_score)
+                                VALUES (%s, %s, %s) ON CONFLICT (influencer_id, tweet_id) DO
+                                UPDATE SET
+                                    impact_score = EXCLUDED.impact_score
+                                ''', (
+                                    activity_data['influencer_id'],
+                                    activity_data['tweet_id'],
+                                    activity_data.get('impact_score')
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання активності інфлюенсера: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_influencer_activity(self, influencer_id=None, start_date=None, end_date=None, limit=100):
+        """Отримує активність інфлюенсерів"""
+        query = '''
+                SELECT ia.*, ci.username, tr.content, tr.created_at
+                FROM influencer_activity ia
+                         JOIN crypto_influencers ci ON ia.influencer_id = ci.id
+                         JOIN tweets_raw tr ON ia.tweet_id = tr.tweet_id
+                WHERE TRUE \
+                '''
+        params = []
+
+        if influencer_id:
+            query += ' AND ia.influencer_id = %s'
+            params.append(influencer_id)
+
+        if start_date:
+            query += ' AND tr.created_at >= %s'
+            params.append(start_date)
+
+        if end_date:
+            query += ' AND tr.created_at <= %s'
+            params.append(end_date)
+
+        query += ' ORDER BY tr.created_at DESC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання активності інфлюенсерів: {e}")
+            return pd.DataFrame()
+
+    # Функції для роботи з криптовалютними подіями
+    def insert_crypto_event(self, event_data):
+        """Додає запис про криптовалютну подію"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO crypto_events
+                                (event_type, crypto_symbol, description, confidence_score, start_time, end_time,
+                                 related_tweets)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                                ''', (
+                                    event_data['event_type'],
+                                    event_data['crypto_symbol'],
+                                    event_data['description'],
+                                    event_data['confidence_score'],
+                                    event_data['start_time'],
+                                    event_data.get('end_time'),
+                                    event_data.get('related_tweets')
+                                ))
+            event_id = self.cursor.fetchone()['id']
+            self.conn.commit()
+            return event_id
+        except psycopg2.Error as e:
+            print(f"Помилка додавання криптовалютної події: {e}")
+            self.conn.rollback()
+            return None
+
+    def update_crypto_event(self, event_id, event_data):
+        """Оновлює запис про криптовалютну подію"""
+        try:
+            update_parts = []
+            params = []
+
+            for key, value in event_data.items():
+                if key in ['event_type', 'crypto_symbol', 'description', 'confidence_score', 'start_time', 'end_time',
+                           'related_tweets']:
+                    update_parts.append(f"{key} = %s")
+                    params.append(value)
+
+            if not update_parts:
+                return False
+
+            params.append(event_id)  # Додаємо id в кінець для WHERE
+
+            query = f'''
+            UPDATE crypto_events
+            SET {', '.join(update_parts)}
+            WHERE id = %s
+            '''
+
+            self.cursor.execute(query, params)
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка оновлення криптовалютної події: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_crypto_events(self, crypto_symbol=None, event_type=None, start_time=None, end_time=None, limit=100):
+        """Отримує записи про криптовалютні події за заданими фільтрами"""
+        query = 'SELECT * FROM crypto_events WHERE TRUE'
+        params = []
+
+        if crypto_symbol:
+            query += ' AND crypto_symbol = %s'
+            params.append(crypto_symbol)
+
+        if event_type:
+            query += ' AND event_type = %s'
+            params.append(event_type)
+
+        if start_time:
+            query += ' AND start_time >= %s'
+            params.append(start_time)
+
+        if end_time:
+            query += ' AND start_time <= %s'
+            params.append(end_time)
+
+        query += ' ORDER BY start_time DESC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання криптовалютних подій: {e}")
+            return pd.DataFrame()
+
+    # Функції для роботи з часовими рядами настроїв
+    def insert_sentiment_time_series(self, sentiment_data):
+        """Додає запис до часового ряду настроїв"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO sentiment_time_series
+                                (crypto_symbol, time_bucket, interval, positive_count, negative_count,
+                                 neutral_count, average_sentiment, sentiment_volatility, tweet_volume)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                                        %s) ON CONFLICT (crypto_symbol, time_bucket, interval) DO
+                                UPDATE SET
+                                    positive_count = EXCLUDED.positive_count,
+                                    negative_count = EXCLUDED.negative_count,
+                                    neutral_count = EXCLUDED.neutral_count,
+                                    average_sentiment = EXCLUDED.average_sentiment,
+                                    sentiment_volatility = EXCLUDED.sentiment_volatility,
+                                    tweet_volume = EXCLUDED.tweet_volume
+                                ''', (
+                                    sentiment_data['crypto_symbol'],
+                                    sentiment_data['time_bucket'],
+                                    sentiment_data['interval'],
+                                    sentiment_data['positive_count'],
+                                    sentiment_data['negative_count'],
+                                    sentiment_data['neutral_count'],
+                                    sentiment_data['average_sentiment'],
+                                    sentiment_data.get('sentiment_volatility'),
+                                    sentiment_data['tweet_volume']
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання запису до часового ряду настроїв: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_sentiment_time_series(self, crypto_symbol, interval, start_time=None, end_time=None, limit=100):
+        """Отримує часовий ряд настроїв для криптовалюти"""
+        query = '''
+                SELECT * \
+                FROM sentiment_time_series
+                WHERE crypto_symbol = %s
+                  AND interval = %s \
+                '''
+        params = [crypto_symbol, interval]
+
+        if start_time:
+            query += ' AND time_bucket >= %s'
+            params.append(start_time)
+
+        if end_time:
+            query += ' AND time_bucket <= %s'
+            params.append(end_time)
+
+        query += ' ORDER BY time_bucket ASC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання часового ряду настроїв: {e}")
+            return pd.DataFrame()
+
+    # Функції для логування помилок скрапінгу
+    def insert_scraping_error(self, error_data):
+        """Додає запис про помилку скрапінгу"""
+        try:
+            self.cursor.execute('''
+                                INSERT INTO scraping_errors
+                                    (error_type, error_message, query, retry_count)
+                                VALUES (%s, %s, %s, %s)
+                                ''', (
+                                    error_data['error_type'],
+                                    error_data['error_message'],
+                                    error_data.get('query'),
+                                    error_data.get('retry_count', 0)
+                                ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання запису про помилку скрапінгу: {e}")
+            self.conn.rollback()
+            return False
+
+    def get_scraping_errors(self, error_type=None, start_time=None, end_time=None, limit=100):
+        """Отримує записи про помилки скрапінгу за заданими фільтрами"""
+        query = 'SELECT * FROM scraping_errors WHERE TRUE'
+        params = []
+
+        if error_type:
+            query += ' AND error_type = %s'
+            params.append(error_type)
+
+        if start_time:
+            query += ' AND occurred_at >= %s'
+            params.append(start_time)
+
+        if end_time:
+            query += ' AND occurred_at <= %s'
+            params.append(end_time)
+
+        query += ' ORDER BY occurred_at DESC LIMIT %s'
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            rows = self.cursor.fetchall()
+            if not rows:
+                return pd.DataFrame()
+            df = pd.DataFrame(rows)
+            return df
+        except psycopg2.Error as e:
+            print(f"Помилка отримання записів про помилки скрапінгу: {e}")
+            return pd.DataFrame()
+

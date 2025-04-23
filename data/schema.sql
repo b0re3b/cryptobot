@@ -347,3 +347,140 @@ CREATE TABLE IF NOT EXISTS sol_klines_processed (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(interval, open_time);
+-- Таблиця для зберігання сирих твітів
+CREATE TABLE IF NOT EXISTS tweets_raw (
+    id SERIAL PRIMARY KEY,
+    tweet_id BIGINT UNIQUE NOT NULL,
+    author_id TEXT NOT NULL,
+    author_username TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    likes_count INTEGER NOT NULL,
+    retweets_count INTEGER NOT NULL,
+    quotes_count INTEGER,
+    replies_count INTEGER,
+    language TEXT NOT NULL,
+    hashtags TEXT[], -- масив хештегів
+    mentioned_cryptos TEXT[],  -- масив згаданих криптовалют
+    tweet_url TEXT,
+    collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Індекс для швидкого пошуку твітів за часом створення
+CREATE INDEX IF NOT EXISTS idx_tweets_raw_created_at ON tweets_raw(created_at);
+-- Індекс для швидкого пошуку за автором
+CREATE INDEX IF NOT EXISTS idx_tweets_raw_author ON tweets_raw(author_username);
+-- Індекс для швидкого пошуку за згаданими криптовалютами
+CREATE INDEX IF NOT EXISTS idx_tweets_raw_cryptos ON tweets_raw USING GIN(mentioned_cryptos);
+
+-- Таблиця для зберігання результатів аналізу настроїв твітів
+CREATE TABLE IF NOT EXISTS tweet_sentiments (
+    id SERIAL PRIMARY KEY,
+    tweet_id BIGINT NOT NULL REFERENCES tweets_raw(tweet_id),
+    sentiment TEXT NOT NULL, -- 'positive', 'negative', 'neutral'
+    sentiment_score NUMERIC NOT NULL, -- числове значення настрою
+    confidence NUMERIC NOT NULL, -- впевненість моделі
+    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    model_used TEXT NOT NULL, -- назва використаної моделі
+    UNIQUE (tweet_id)
+);
+
+-- Індекс для швидкого пошуку аналізу настроїв за твітом
+CREATE INDEX IF NOT EXISTS idx_tweet_sentiments_tweet_id ON tweet_sentiments(tweet_id);
+
+-- Таблиця для кешування запитів Twitter
+CREATE TABLE IF NOT EXISTS twitter_query_cache (
+    id SERIAL PRIMARY KEY,
+    query TEXT NOT NULL,
+    search_params JSONB NOT NULL, -- параметри пошуку в форматі JSON
+    cache_expires_at TIMESTAMP NOT NULL,
+    results_count INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (query, search_params)
+);
+
+-- Індекс для швидкого пошуку в кеші за запитом
+CREATE INDEX IF NOT EXISTS idx_twitter_query_cache_query ON twitter_query_cache(query);
+-- Індекс для визначення застарілих кешів
+CREATE INDEX IF NOT EXISTS idx_twitter_query_cache_expires ON twitter_query_cache(cache_expires_at);
+
+-- Таблиця для зберігання інформації про крипто-інфлюенсерів
+CREATE TABLE IF NOT EXISTS crypto_influencers (
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    description TEXT,
+    followers_count INTEGER,
+    following_count INTEGER,
+    tweet_count INTEGER,
+    verified BOOLEAN,
+    influence_score NUMERIC, -- обчислювана метрика впливовості
+    crypto_topics TEXT[], -- основні криптовалютні теми
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Індекс для швидкого пошуку інфлюенсерів за іменем користувача
+CREATE INDEX IF NOT EXISTS idx_crypto_influencers_username ON crypto_influencers(username);
+
+-- Таблиця для відстеження активності інфлюенсерів
+CREATE TABLE IF NOT EXISTS influencer_activity (
+    id SERIAL PRIMARY KEY,
+    influencer_id INTEGER NOT NULL REFERENCES crypto_influencers(id),
+    tweet_id BIGINT NOT NULL REFERENCES tweets_raw(tweet_id),
+    impact_score NUMERIC, -- оцінка впливу конкретного твіту
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (influencer_id, tweet_id)
+);
+
+-- Індекс для швидкого пошуку активності за інфлюенсером
+CREATE INDEX IF NOT EXISTS idx_influencer_activity_influencer ON influencer_activity(influencer_id);
+
+-- Таблиця для виявлених криптовалютних подій
+CREATE TABLE IF NOT EXISTS crypto_events (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL, -- 'pump', 'dump', 'announcement', 'regulation', etc.
+    crypto_symbol TEXT NOT NULL, -- 'BTC', 'ETH', etc.
+    description TEXT NOT NULL,
+    confidence_score NUMERIC NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP,
+    related_tweets BIGINT[], -- масив ID твітів, пов'язаних з подією
+    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Індекс для швидкого пошуку подій за криптовалютою
+CREATE INDEX IF NOT EXISTS idx_crypto_events_symbol ON crypto_events(crypto_symbol);
+-- Індекс для швидкого пошуку подій за часом
+CREATE INDEX IF NOT EXISTS idx_crypto_events_time ON crypto_events(start_time);
+
+-- Таблиця для агрегованого аналізу настроїв за часовими інтервалами та криптовалютами
+CREATE TABLE IF NOT EXISTS sentiment_time_series (
+    id SERIAL PRIMARY KEY,
+    crypto_symbol TEXT NOT NULL,
+    time_bucket TIMESTAMP NOT NULL,
+    interval TEXT NOT NULL, -- 'hour', 'day', 'week'
+    positive_count INTEGER NOT NULL,
+    negative_count INTEGER NOT NULL,
+    neutral_count INTEGER NOT NULL,
+    average_sentiment NUMERIC NOT NULL,
+    sentiment_volatility NUMERIC, -- волатильність настрою
+    tweet_volume INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (crypto_symbol, time_bucket, interval)
+);
+
+-- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
+CREATE INDEX IF NOT EXISTS idx_sentiment_time_series ON sentiment_time_series(crypto_symbol, time_bucket);
+
+-- Таблиця для статистики помилок скрапінгу
+CREATE TABLE IF NOT EXISTS scraping_errors (
+    id SERIAL PRIMARY KEY,
+    error_type TEXT NOT NULL, -- 'rate_limit', 'connection', 'parsing', etc.
+    error_message TEXT NOT NULL,
+    query TEXT,
+    retry_count INTEGER,
+    occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Індекс для аналізу частоти помилок за типом
+CREATE INDEX IF NOT EXISTS idx_scraping_errors_type ON scraping_errors(error_type);
