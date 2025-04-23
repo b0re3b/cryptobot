@@ -10,20 +10,20 @@ from sklearn.cluster import KMeans
 from scipy import stats
 import logging
 import ta
+from data.db import DatabaseManager
+from utils.config import db_connection
 
 class FeatureEngineering:
-    def __init__(self, log_level=logging.INFO):
-        """
-        Ініціалізує клас створення та інженерії ознак для криптовалютних даних.
 
-        Parameters:
-        -----------
-        log_level : int, optional
-            Рівень логування
-        """
-        # Ініціалізувати логування
-        # Налаштувати внутрішні змінні для збереження стану
-        pass
+    def __init__(self, log_level=logging.INFO):
+        self.log_level = log_level
+        self.db_connection = db_connection
+        self.db_manager = DatabaseManager()
+        self.supported_symbols = self.db_manager.supported_symbols
+        logging.basicConfig(level=self.log_level)
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Ініціалізація класу...")
+        self.ready = True
 
     def create_lagged_features(self, data: pd.DataFrame,
                                columns: Optional[List[str]] = None,
@@ -471,4 +471,5 @@ class FeatureEngineering:
         # Створити цільову змінну
         # Повернути набір ознак і цільову змінну
         pass
+
 def main():

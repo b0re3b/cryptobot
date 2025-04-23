@@ -572,7 +572,7 @@ class MarketDataProcessor:
 
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               symbol: str = None, interval: str = None,
-                              fetch_missing: bool = False) -> pd.DataFrame:
+                              fetch_missing: bool = True) -> pd.DataFrame:
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data
@@ -1365,8 +1365,8 @@ class MarketDataProcessor:
 
         try:
             from binance.client import Client
-            api_key = self.config.get('BINANCE_API_KEY') or os.environ.get('BINANCE_API_KEY')
-            api_secret = self.config.get('BINANCE_API_SECRET') or os.environ.get('BINANCE_API_SECRET')
+            api_key = BINANCE_API_KEY
+            api_secret = BINANCE_API_SECRET
 
             if not api_key or not api_secret:
                 self.logger.error("Не знайдено ключі API Binance")
@@ -1387,6 +1387,7 @@ class MarketDataProcessor:
                     self.logger.info(f"📥 Отримання даних з Binance: {symbol}, {interval}, {start_time} - {end_time}")
                     start_ms = int(start_time.timestamp() * 1000)
                     end_ms = int(end_time.timestamp() * 1000)
+                    self.logger.info(f"Запит до Binance: {start_time} -> {start_ms} мс, {end_time} -> {end_ms} мс")
 
                     klines = client.get_historical_klines(
                         symbol=symbol,
@@ -2259,91 +2260,87 @@ class MarketDataProcessor:
 
 
 def main():
-    # Конфігурація
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['BTC', 'ETH', 'SOL']
-    INTERVALS = ['1d', '1h', '4h']
-
-    data_source_paths = {
-        'csv': {
-            'BTC': {
-                '1d': '/Users/bogdanresetko/Desktop/kursova/data/crypto_data/BTCUSDT_1d.csv',
-                '1h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/BTCUSDT_1h.csv',
-                '4h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/BTCUSDT_4h.csv'
-            },
-            'ETH': {
-                '1d': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/ETHUSDT_1d.csv',
-                '1h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/ETHUSDT_1h.csv',
-                '4h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/ETHUSDT_4h.csv'
-            },
-            'SOL': {
-                '1d': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/SOLUSDT_1d.csv',
-                '1h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/SOLUSDT_1h.csv',
-                '4h': '/Users/bogdanresetko/Desktop/kursova//data/crypto_data/SOLUSDT_4h.csv'
-            }
-        }
-    }
+    INTERVALS = ['5m', '1h']  # базові таймфрейми (30m буде з 5m, 1d — з 1h)
 
     processor = MarketDataProcessor()
 
     for symbol in SYMBOLS:
         for interval in INTERVALS:
-            print(f"\n🔄 Обробка {symbol} {interval}...")
+            print(f"\n Обробка свічок {interval} для {symbol}...")
 
-            data = processor.load_data(
-                data_source='database',
-                symbol=symbol,
-                interval=interval,
-                data_type='candles'
-            )
-
-            if data.empty:
-                file_path = data_source_paths['csv'].get(symbol, {}).get(interval)
-                if not file_path:
-                    print(f"⚠️ Немає CSV-файлу для {symbol} {interval}")
+            if interval == '5m':
+                # Завантаження з Binance
+                data = processor._fetch_missing_data_from_binance(symbol, interval)
+                if data.empty:
+                    print(f" Не вдалося отримати {interval} для {symbol}")
                     continue
-
-                print(f"📁 Завантаження з CSV: {file_path}")
+            else:
+                # Завантаження з БД або CSV
                 data = processor.load_data(
-                    data_source='csv',
+                    data_source='database',
                     symbol=symbol,
                     interval=interval,
-                    file_path=file_path,
                     data_type='candles'
                 )
-
                 if data.empty:
-                    print(f"⚠️ Дані не знайдено для {symbol} {interval}")
+                    print(f" Немає даних для {symbol} {interval}")
                     continue
 
-                processor.save_klines_to_db(data, symbol, interval)
-                print("📥 Збережено свічки в базу даних")
-
-            print(f"✔️ Завантажено {len(data)} рядків")
+            # Збереження сирих даних
+            processor.save_klines_to_db(data, symbol, interval)
+            print(f" Сирі {interval} свічки збережено")
 
             # Обробка
-            processed_data = processor.preprocess_pipeline(
-                data,
-                symbol=symbol,
-                interval=interval
-            )
+            processed = processor.preprocess_pipeline(data, symbol=symbol, interval=interval)
+            if processed.empty:
+                print(f" Порожній результат обробки {interval} для {symbol}")
+                continue
 
-            if interval != '1d':
-                processed_data = processor.resample_data(processed_data, target_interval='1d')
+            processed = processor.add_time_features(processed, tz=EU_TIMEZONE)
+            processor.save_processed_klines_to_db(processed, symbol, interval)
+            print(f" Оброблені {interval} свічки збережено")
 
-            processed_data = processor.add_time_features(processed_data, tz=EU_TIMEZONE)
+            # Ресемплінг до 30m з 5m
+            if interval == '5m':
+                resampled_30m = processor.resample_data(processed, target_interval='30m')
+                resampled_30m = processor.add_time_features(resampled_30m, tz=EU_TIMEZONE)
+                processor.save_processed_klines_to_db(resampled_30m, symbol, '30m')
+                print(" 30-хвилинні свічки збережено")
 
-            # Збереження оброблених даних
-            processor.save_processed_klines_to_db(processed_data, symbol, '1d')
-            print("✅ Оброблені дані збережено в БД")
+            # Ресемплінг до 1d з 1h
+            if interval == '1h':
+                resampled_1d = processor.resample_data(processed, target_interval='1d')
+                resampled_1d = processor.add_time_features(resampled_1d, tz=EU_TIMEZONE)
+                processor.save_processed_klines_to_db(resampled_1d, symbol, '1d')
+                print(" Денні свічки збережено")
 
-            # Побудова та збереження профілю об'єму
-            volume_profile = processor.aggregate_volume_profile(
-                processed_data, bins=12, time_period='1W'
-            )
-            if not volume_profile.empty:
-                processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
-                print("📊 Профіль об'єму збережено")
+                # Профіль об'єму (для денних)
+                volume_profile = processor.aggregate_volume_profile(resampled_1d, bins=12, time_period='1W')
+                if not volume_profile.empty:
+                    processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
+                    print(" Профіль об'єму збережено")
+
+        # Ордербук
+        print(f"\n Обробка ордербука для {symbol}...")
+        orderbook_data = processor.load_orderbook_data(symbol)
+
+        if orderbook_data.empty:
+            print(f" Ордербук для {symbol} не знайдено. Пропускаємо.")
+            continue
+
+        processed_orderbook = processor.preprocess_orderbook_pipeline(
+            symbol=symbol,
+            add_time_features=True,
+            add_sessions=True
+        )
+
+        if not processed_orderbook.empty:
+            processor.save_processed_orderbook_to_db(symbol, processed_orderbook)
+            print(" Оброблені дані ордербука збережено")
+        else:
+            print(" Не вдалося обробити ордербук")
 
 if __name__ == "__main__":
     main()

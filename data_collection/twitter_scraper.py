@@ -7,10 +7,7 @@ from typing import List, Dict, Optional, Union, Tuple
 
 
 class TwitterScraper:
-    """
-   Клас для збору та обробки твітів про криптовалюти з використанням snscrape.
-   Включає функціонал аналізу настроїв за допомогою моделей transformers.
-   """
+
 
     def __init__(self, sentiment_model: str = "finiteautomata/bertweet-base-sentiment-analysis",
                  cache_dir: Optional[str] = None,
