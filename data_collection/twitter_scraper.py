@@ -1,5 +1,4 @@
 import re
-
 import numpy as np
 import snscrape.modules.twitter as sntwitter
 from transformers import pipeline
