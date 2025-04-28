@@ -8,9 +8,8 @@ import time
 import praw
 from typing import List, Dict, Optional, Union, Tuple
 from random import randint
+from data.db import DatabaseManager
 
-
-# Збір новин з криптовалютних ресурсів
 class CryptoNewsScraper:
 
 
@@ -40,6 +39,25 @@ class CryptoNewsScraper:
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
+
+    def _make_request(self, url, retries=3, backoff_factor=0.3):
+
+        for i in range(retries):
+            try:
+                response = requests.get(url, headers=self.headers, timeout=10)
+                if response.status_code == 200:
+                    return response
+                elif response.status_code in [403, 429]:  # Forbidden or Too Many Requests
+                    self.logger.warning(f"Отримано код {response.status_code} при запиті до {url}. Очікування...")
+                    time.sleep((backoff_factor * (2 ** i)) + randint(1, 3))
+                else:
+                    self.logger.error(f"Помилка при запиті до {url}: HTTP {response.status_code}")
+                    return None
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"Помилка з'єднання при запиті до {url}: {e}")
+                time.sleep((backoff_factor * (2 ** i)) + randint(1, 3))
+
+        return None
 
     def _initialize_reddit(self, client_id, client_secret, user_agent):
 
@@ -610,6 +628,61 @@ class CryptoNewsScraper:
         self.logger.info(f"Всього зібрано {len(unique_news)} унікальних новин з {len(sources_to_scrape)} джерел")
         return unique_news
 
+    def scrape_reddit(self, days_back: int = 1, subreddits: List[str] = None) -> List[Dict]:
+
+        self.logger.info("Збір новин з Reddit...")
+
+        if not self.reddit:
+            self.logger.error("Reddit API не ініціалізовано")
+            return []
+
+        news_data = []
+
+        # Список сабреддітів за замовчуванням
+        if not subreddits:
+            subreddits = ['CryptoCurrency', 'Bitcoin', 'ethereum', 'CryptoMarkets']
+
+        start_date = datetime.now() - timedelta(days=days_back)
+
+        for subreddit_name in subreddits:
+            try:
+                subreddit = self.reddit.subreddit(subreddit_name)
+
+                # Отримання популярних постів
+                for post in subreddit.hot(limit=50):
+                    try:
+                        # Перетворення timestamp у datetime
+                        post_date = datetime.fromtimestamp(post.created_utc)
+
+                        # Перевірка дати
+                        if post_date < start_date:
+                            continue
+
+                        # Додавання в список новин
+                        news_data.append({
+                            'title': post.title,
+                            'summary': post.selftext[:500] if post.selftext else "",
+                            'link': f"https://www.reddit.com{post.permalink}",
+                            'source': 'reddit',
+                            'category': subreddit_name,
+                            'published_at': post_date,
+                            'scraped_at': datetime.now(),
+                            'score': post.score,
+                            'upvote_ratio': post.upvote_ratio,
+                            'num_comments': post.num_comments
+                        })
+                    except Exception as e:
+                        self.logger.error(f"Помилка при обробці поста Reddit: {e}")
+
+                # Затримка між запитами до різних сабреддітів
+                time.sleep(randint(1, 3))
+
+            except Exception as e:
+                self.logger.error(f"Помилка при скрапінгу сабреддіта {subreddit_name}: {e}")
+
+        self.logger.info(f"Зібрано {len(news_data)} новин з Reddit")
+        return news_data
+
     def analyze_news_sentiment(self, news_data: List[Dict]) -> List[Dict]:
 
         self.logger.info(f"Початок аналізу настроїв для {len(news_data)} новин")
@@ -761,82 +834,311 @@ class CryptoNewsScraper:
 
     def filter_by_keywords(self, news_data: List[Dict],
                            keywords: List[str]) -> List[Dict]:
-        """
-        Фільтрація новин за ключовими словами.
 
-        Args:
-            news_data: Список новин для фільтрації
-            keywords: Список ключових слів для пошуку
+        self.logger.info(f"Початок фільтрації {len(news_data)} новин за {len(keywords)} ключовими словами")
 
-        Returns:
-            Відфільтрований список новин
-        """
-        pass
+        if not keywords or not news_data:
+            self.logger.warning("Порожній список ключових слів або новин для фільтрації")
+            return news_data
+
+        # Підготовка регулярних виразів для пошуку (нечутливість до регістру)
+        keyword_patterns = []
+        for keyword in keywords:
+            # Екрануємо спеціальні символи у ключових словах
+            escaped_keyword = re.escape(keyword)
+            # Створюємо шаблон для пошуку цілого слова
+            pattern = re.compile(rf'\b{escaped_keyword}\b', re.IGNORECASE)
+            keyword_patterns.append(pattern)
+
+        filtered_news = []
+
+        for news in news_data:
+            try:
+                # Текст для аналізу (комбінуємо заголовок та опис)
+                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+
+                # Перевірка на наявність хоча б одного ключового слова
+                matches_found = False
+                matched_keywords = []
+
+                for i, pattern in enumerate(keyword_patterns):
+                    if pattern.search(text_to_analyze):
+                        matches_found = True
+                        matched_keywords.append(keywords[i])
+
+                if matches_found:
+                    # Копіюємо новину та додаємо інформацію про знайдені ключові слова
+                    matched_news = news.copy()
+                    matched_news['matched_keywords'] = matched_keywords
+                    filtered_news.append(matched_news)
+
+            except Exception as e:
+                self.logger.error(f"Помилка при фільтрації новини '{news.get('title', 'unknown')}': {e}")
+
+        self.logger.info(f"Відфільтровано {len(filtered_news)} новин з {len(news_data)} за ключовими словами")
+        return filtered_news
 
     def detect_major_events(self, news_data: List[Dict]) -> List[Dict]:
-        """
-        Виявлення важливих подій, які можуть вплинути на ринок.
 
-        Args:
-            news_data: Список новин для аналізу
+        self.logger.info(f"Початок аналізу {len(news_data)} новин для виявлення важливих подій")
 
-        Returns:
-            Список виявлених важливих подій
-        """
-        pass
+        # Ключові слова, що вказують на потенційно важливі події
+        critical_keywords = {
+            'regulation': ['regulation', 'регуляція', 'закон', 'заборона', 'легалізація', 'SEC', 'CFTC'],
+            'hack': ['hack', 'хакер', 'зламали', 'атака', 'викрадено', 'вкрадено', 'безпека'],
+            'market_crash': ['crash', 'collapse', 'обвал', 'крах', 'падіння', 'bear market', 'ведмежий'],
+            'market_boom': ['boom', 'rally', 'ріст', 'буйк', 'bull market', 'бичачий', 'ath', 'all-time high'],
+            'merge': ['merge', 'злиття', 'acquisition', 'поглинання', 'buyout', 'викуп'],
+            'fork': ['fork', 'форк', 'hard fork', 'soft fork', 'chain split', 'розділення'],
+            'adoption': ['adoption', 'впровадження', 'integration', 'інтеграція', 'partnership', 'партнерство'],
+            'scandal': ['scandal', 'скандал', 'controversy', 'контроверсія', 'fraud', 'шахрайство'],
+            'lawsuit': ['lawsuit', 'позов', 'court', 'суд', 'legal action', 'legal', 'investigation'],
+            'innovation': ['innovation', 'інновація', 'breakthrough', 'прорив', 'launch', 'запуск']
+        }
 
-    def save_to_database(self, news_data: List[Dict],
-                         db_connection) -> bool:
-        """
-        Збереження зібраних новин у базу даних.
+        # Створення шаблонів регулярних виразів для кожної категорії
+        category_patterns = {}
+        for category, keywords in critical_keywords.items():
+            patterns = [re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE) for keyword in keywords]
+            category_patterns[category] = patterns
 
-        Args:
-            news_data: Список новин для збереження
-            db_connection: З'єднання з базою даних
+        major_events = []
 
-        Returns:
-            Булеве значення успішності операції
-        """
-        pass
+        # Аналіз новин
+        for news in news_data:
+            try:
+                # Текст для аналізу (комбінуємо заголовок та опис)
+                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
 
-    def save_to_csv(self, news_data: List[Dict],
-                    filename: str) -> bool:
-        """
-        Збереження зібраних новин у CSV файл.
+                # Перевірка по категоріях
+                event_categories = set()
+                matched_keywords = {}
 
-        Args:
-            news_data: Список новин для збереження
-            filename: Ім'я файлу для збереження
+                for category, patterns in category_patterns.items():
+                    for pattern in patterns:
+                        if pattern.search(text_to_analyze):
+                            event_categories.add(category)
 
-        Returns:
-            Булеве значення успішності операції
-        """
-        pass
+                            # Збереження ключових слів, що співпали
+                            if category not in matched_keywords:
+                                matched_keywords[category] = []
+                            keyword = pattern.pattern.replace(r'\b', '')
+                            matched_keywords[category].append(re.escape(keyword))
 
-    def get_trending_topics(self, news_data: List[Dict],
-                            top_n: int = 10) -> List[Dict]:
-        """
-        Отримання трендових тем з новин.
+                # Визначення важливості події
+                importance_level = len(event_categories)
 
-        Args:
-            news_data: Список новин для аналізу
-            top_n: Кількість тем для виведення
+                # Додаткові фактори для визначення важливості:
+                # 1. Перевірка наявності назв великих компаній/проектів
+                major_entities = ['bitcoin', 'ethereum', 'binance', 'coinbase', 'ripple', 'tether',
+                                  'ftx', 'metamask', 'opensea', 'uniswap', 'solana', 'avalanche']
 
-        Returns:
-            Список трендових тем та їх важливість
-        """
-        pass
+                entity_matches = []
+                for entity in major_entities:
+                    if re.search(rf'\b{re.escape(entity)}\b', text_to_analyze, re.IGNORECASE):
+                        entity_matches.append(entity)
+                        importance_level += 0.5  # Додаємо ваги до важливості
 
-    def correlate_with_market(self, news_data: List[Dict],
-                              market_data: pd.DataFrame) -> Dict:
-        """
-        Кореляція новин з рухами ринку.
+                # 2. Перевірка наявності цифр (суми грошей, відсотки тощо)
+                if re.search(r'\$\d+(?:[,.]\d+)?(?:\s*(?:million|billion|m|b|млн|млрд))?|\d+%', text_to_analyze,
+                             re.IGNORECASE):
+                    importance_level += 1  # Наявність фінансових даних підвищує важливість
 
-        Args:
-            news_data: Список новин з аналізом настроїв
-            market_data: DataFrame з ціновими даними ринку
+                # Якщо знайдено хоча б одну категорію або важливість висока - це важлива подія
+                if event_categories or importance_level >= 2:
+                    event_data = {
+                        'title': news.get('title', ''),
+                        'summary': news.get('summary', ''),
+                        'source': news.get('source', ''),
+                        'link': news.get('link', ''),
+                        'published_at': news.get('published_at', datetime.now()),
+                        'categories': list(event_categories),
+                        'matched_keywords': matched_keywords,
+                        'major_entities': entity_matches,
+                        'importance_level': importance_level,
+                        'original_news': news
+                    }
+                    major_events.append(event_data)
 
-        Returns:
-            Дані про кореляцію та статистичну значущість
-        """
-        pass
+            except Exception as e:
+                self.logger.error(f"Помилка при аналізі новини '{news.get('title', 'unknown')}' на важливі події: {e}")
+
+        # Сортування за важливістю (в порядку спадання)
+        major_events.sort(key=lambda x: x['importance_level'], reverse=True)
+
+        self.logger.info(f"Виявлено {len(major_events)} важливих подій")
+        return major_events
+
+    def save_to_database(self, news_data: List[Dict], db_manager) -> bool:
+        self.logger.info(f"Початок збереження {len(news_data)} новин у базу даних")
+
+        if not news_data:
+            self.logger.warning("Порожній список новин для збереження")
+            return False
+
+        success_count = 0
+
+        for news in news_data:
+            try:
+                # Перевірка на існування статті з таким посиланням
+                if db_manager.article_exists_by_link(news.get('link', '')):
+                    self.logger.info(f"Стаття з посиланням {news.get('link', '')[:50]} вже існує в БД")
+                    continue
+
+                # Отримання source_id та category_id з БД або створення нових записів
+                source_id = db_manager.get_or_create_source(news.get('source', ''))
+                category_id = db_manager.get_or_create_category(news.get('category', ''))
+
+                # Підготовка даних для статті
+                article_data = {
+                    'title': news.get('title', ''),
+                    'summary': news.get('summary', ''),
+                    'content': news.get('content', ''),
+                    'link': news.get('link', ''),
+                    'source_id': source_id,
+                    'category_id': category_id,
+                    'published_at': news.get('published_at', datetime.now())
+                }
+
+                # Вставка новинної статті
+                article_id = db_manager.insert_news_article(article_data)
+
+                if not article_id:
+                    self.logger.warning(f"Не вдалося додати статтю: {article_data['title'][:50]}")
+                    continue
+
+                # Якщо є дані про настрій — вставити
+                if 'sentiment' in news and isinstance(news['sentiment'], dict):
+                    sentiment_data = {
+                        'article_id': article_id,
+                        'sentiment_score': news['sentiment'].get('score', 0.0),
+                        'sentiment_magnitude': news['sentiment'].get('confidence', 0.0),
+                        'sentiment_label': news['sentiment'].get('label', 'neutral')
+                    }
+                    db_manager.insert_news_sentiment(sentiment_data)
+
+                # Якщо є дані про згадані монети — вставити
+                if 'mentioned_coins' in news and isinstance(news['mentioned_coins'], dict):
+                    for crypto_symbol, mention_count in news['mentioned_coins'].get('coins', {}).items():
+                        db_manager.insert_article_mention(article_id, crypto_symbol, mention_count)
+
+                success_count += 1
+
+            except Exception as e:
+                self.logger.error(f"Помилка при збереженні новини '{news.get('title', 'unknown')}': {e}")
+                continue
+
+        self.logger.info(f"Успішно збережено {success_count} новин із {len(news_data)}")
+        return success_count > 0
+
+    def get_trending_topics(self, news_data: List[Dict], top_n: int = 10) -> List[Dict]:
+
+        self.logger.info(f"Аналіз трендів серед {len(news_data)} новин")
+
+        # Словник для підрахунку частоти ключових слів
+        word_frequency = {}
+
+        # Слова, які часто зустрічаються і не несуть специфічного значення
+        common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
+                        'to', 'for', 'with', 'by', 'about', 'as', 'of', 'from',
+                        'that', 'this', 'these', 'those', 'is', 'are', 'was', 'were',
+                        'has', 'have', 'had', 'been', 'will', 'would', 'could', 'should'}
+
+        for news in news_data:
+            # Об'єднуємо заголовок і короткий опис
+            text = f"{news.get('title', '')} {news.get('summary', '')}"
+
+            # Нормалізація тексту: нижній регістр і видалення пунктуації
+            text = re.sub(r'[^\w\s]', '', text.lower())
+
+            # Розбиття на слова
+            words = text.split()
+
+            # Підрахунок частоти слів (крім поширених)
+            for word in words:
+                if len(word) > 3 and word not in common_words:
+                    word_frequency[word] = word_frequency.get(word, 0) + 1
+
+        # Сортування за частотою
+        sorted_words = sorted(word_frequency.items(), key=lambda x: x[1], reverse=True)
+
+        # Формування результату
+        trends = []
+        for word, frequency in sorted_words[:top_n]:
+            trends.append({
+                'topic': word,
+                'frequency': frequency,
+                'weight': frequency / len(news_data)
+            })
+
+        self.logger.info(f"Знайдено {len(trends)} трендових тем")
+        return trends
+
+    def correlate_with_market(self, news_data: List[Dict], market_data: pd.DataFrame) -> Dict:
+
+        self.logger.info("Початок аналізу кореляції новин з ринком")
+
+        if not news_data or market_data.empty:
+            self.logger.warning("Недостатньо даних для аналізу кореляції")
+            return {'correlation': 0, 'significance': 0, 'valid': False}
+
+        try:
+            # Створюємо DataFrame з даними настроїв по датам
+            sentiment_data = []
+
+            for news in news_data:
+                if 'sentiment' in news and 'published_at' in news:
+                    date = news['published_at'].date()
+                    score = news['sentiment'].get('score', 0)
+                    sentiment_data.append({
+                        'date': date,
+                        'sentiment_score': score
+                    })
+
+            if not sentiment_data:
+                self.logger.warning("Відсутні дані про настрої для аналізу")
+                return {'correlation': 0, 'significance': 0, 'valid': False}
+
+            sentiment_df = pd.DataFrame(sentiment_data)
+
+            # Агрегація за датою (середній настрій за день)
+            daily_sentiment = sentiment_df.groupby('date')['sentiment_score'].mean().reset_index()
+
+            # Підготовка ринкових даних
+            market_df = market_data.copy()
+            if 'date' not in market_df.columns:
+                market_df['date'] = pd.to_datetime(market_df.index).date
+
+            # Злиття даних по даті
+            merged_data = pd.merge(daily_sentiment, market_df, on='date', how='inner')
+
+            if len(merged_data) < 3:  # Мінімум для розрахунку кореляції
+                self.logger.warning("Недостатньо даних для розрахунку кореляції")
+                return {'correlation': 0, 'significance': 0, 'valid': False}
+
+            # Розрахунок кореляції Пірсона з ціною
+            price_column = next((col for col in merged_data.columns if 'price' in col.lower()), 'close')
+            correlation = merged_data['sentiment_score'].corr(merged_data[price_column])
+
+            # Розрахунок p-value для визначення статистичної значущості
+            from scipy import stats
+            correlation_significance = stats.pearsonr(
+                merged_data['sentiment_score'],
+                merged_data[price_column]
+            )[1]  # p-value
+
+            result = {
+                'correlation': correlation,
+                'significance': correlation_significance,
+                'sample_size': len(merged_data),
+                'valid': True,
+                'period_start': merged_data['date'].min(),
+                'period_end': merged_data['date'].max()
+            }
+
+            self.logger.info(f"Розрахована кореляція: {correlation:.4f} (p={correlation_significance:.4f})")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при аналізі кореляції: {e}")
+            return {'correlation': 0, 'significance': 0, 'valid': False, 'error': str(e)}
