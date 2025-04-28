@@ -1,16 +1,17 @@
 import re
 import numpy as np
+import pandas as pd
+import asyncio
+import aiohttp
 import snscrape.modules.twitter as sntwitter
 from transformers import pipeline
-import pandas as pd
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 import logging
-from typing import List, Dict, Optional, Union, Tuple, Counter
-import psycopg2
-from psycopg2 import pool
+from typing import List, Dict, Optional,  Tuple, Counter, Any
 from data.db import DatabaseManager
 from utils.config import db_connection
 
+import concurrent.futures
 
 class TwitterScraper:
 
@@ -18,17 +19,19 @@ class TwitterScraper:
                  cache_dir: Optional[str] = None,
                  log_level=logging.INFO,
                  db_config: Optional[Dict] = None,
-                 cache_expiry: int = 86400):
+                 cache_expiry: int = 86400,
+                 max_connections: int = 20):
+
 
         self.sentiment_model_name = sentiment_model
         self.cache_dir = cache_dir
         self.log_level = log_level
         self.cache_expiry = cache_expiry
-
+        self.max_connections = max_connections
         # Налаштування логування
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Ініціалізація TwitterScraper...")
+        self.logger.info("Ініціалізація AsyncTwitterScraper...")
 
         # Підключення до бази даних
         self.db_config = db_config if db_config else db_connection
@@ -48,18 +51,50 @@ class TwitterScraper:
 
         # Встановлення прапорця готовності
         self.ready = bool(self.db_manager and self.sentiment_analyzer)
-        self.logger.info(f"TwitterScraper готовий до роботи: {self.ready}")
+        self.logger.info(f"AsyncTwitterScraper готовий до роботи: {self.ready}")
 
-    def search_tweets(self, query: str, days_back: int = 7,
-                      limit: Optional[int] = None, lang: str = "en") -> List[Dict]:
+        # Створення пулу для виконання обчислювально складних завдань
+        self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, max_connections // 2))
+
+    async def initialize(self):
+        """Ініціалізує об'єкти, які потребують асинхронного контексту"""
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+        if not self.DatabaseManager.is_connected:
+             await self.db_manager.connect()
+
+        return self
+
+    async def close(self):
+        """Закриває всі відкриті з'єднання та ресурси"""
+        if self.session:
+            await self.session.close()
+        if self.DatabaseManager.is_connected:
+            await self.db_manager.disconnect()
+
+        self.thread_pool.shutdown()
+
+    async def __aenter__(self):
+        return await self.initialize()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+    def run_in_thread(self, func, *args, **kwargs):
+        """Запускає функцію в окремому потоці для CPU-інтенсивних операцій"""
+        return self.thread_pool.submit(func, *args, **kwargs)
+
+    async def search_tweets(self, query: str, days_back: int = 7,
+                            limit: Optional[int] = None, lang: str = "en") -> List[Dict]:
+        """Асинхронний пошук твітів з використанням snscrape"""
 
         if not self.ready:
-            self.logger.error("TwitterScraper не ініціалізовано належним чином")
+            self.logger.error("AsyncTwitterScraper не ініціалізовано належним чином")
             return []
 
         # Перевірка наявності твітів у кеші
         min_date = datetime.now() - timedelta(days=days_back)
-        cached_tweets = self._get_cached_tweets(query, min_date)
+        cached_tweets = await self._get_cached_tweets(query, min_date)
         if cached_tweets:
             self.logger.info(f"Знайдено {len(cached_tweets)} твітів у кеші для запиту '{query}'")
             return cached_tweets
@@ -71,46 +106,62 @@ class TwitterScraper:
 
         self.logger.info(f"Виконання пошукового запиту: '{search_query}'")
 
-        # Збір твітів
-        collected_tweets = []
-        try:
-            tweet_count = 0
-            for tweet in sntwitter.TwitterSearchScraper(search_query).get_items():
-                # Конвертація твіту в словник
-                tweet_dict = {
-                    "id": tweet.id,
-                    "date": tweet.date,
-                    "content": tweet.rawContent,
-                    "username": tweet.user.username,
-                    "displayname": tweet.user.displayname,
-                    "followers": tweet.user.followersCount,
-                    "retweets": tweet.retweetCount,
-                    "likes": tweet.likeCount,
-                    "query": query,
-                    "lang": tweet.lang,
-                    "collected_at": datetime.now()
-                }
+        # Оскільки snscrape не є асинхронним, запускаємо його в окремому потоці
+        # щоб не блокувати event loop
+        async def scrape_tweets():
+            # Збір твітів
+            collected_tweets = []
+            try:
+                # Виконання snscrape в окремому потоці через ThreadPoolExecutor
+                loop = asyncio.get_event_loop()
 
-                collected_tweets.append(tweet_dict)
-                tweet_count += 1
+                def _fetch_tweets():
+                    tweet_count = 0
+                    tweets = []
+                    for tweet in sntwitter.TwitterSearchScraper(search_query).get_items():
+                        # Конвертація твіту в словник
+                        tweet_dict = {
+                            "id": tweet.id,
+                            "date": tweet.date,
+                            "content": tweet.rawContent,
+                            "username": tweet.user.username,
+                            "displayname": tweet.user.displayname,
+                            "followers": tweet.user.followersCount,
+                            "retweets": tweet.retweetCount,
+                            "likes": tweet.likeCount,
+                            "query": query,
+                            "lang": tweet.lang,
+                            "collected_at": datetime.now()
+                        }
 
-                # Перевірка ліміту
-                if limit and tweet_count >= limit:
-                    break
+                        tweets.append(tweet_dict)
+                        tweet_count += 1
 
-            self.logger.info(f"Зібрано {len(collected_tweets)} твітів для запиту '{query}'")
+                        # Перевірка ліміту
+                        if limit and tweet_count >= limit:
+                            break
+                    return tweets
 
-            # Кешування результатів
-            if collected_tweets:
-                self._cache_tweets(query, collected_tweets)
+                # Виконання у пулі потоків
+                collected_tweets = await loop.run_in_executor(None, _fetch_tweets)
 
-            return collected_tweets
+                self.logger.info(f"Зібрано {len(collected_tweets)} твітів для запиту '{query}'")
 
-        except Exception as e:
-            self.logger.error(f"Помилка при пошуку твітів: {str(e)}")
-            return []
+                # Кешування результатів
+                if collected_tweets:
+                    await self._cache_tweets(query, collected_tweets)
 
-    def _get_cached_tweets(self, query: str, min_date: datetime) -> Optional[List[Dict]]:
+                return collected_tweets
+
+            except Exception as e:
+                self.logger.error(f"Помилка при пошуку твітів: {str(e)}")
+                return []
+
+        # Використовуємо семафор для обмеження кількості одночасних пошукових запитів
+            return await scrape_tweets()
+
+    async def _get_cached_tweets(self, query: str, min_date: datetime) -> Optional[List[Dict]]:
+        """Асинхронно отримує кешовані твіти з бази даних"""
 
         if not self.db_manager:
             self.logger.warning("DatabaseManager не ініціалізовано, отримання кешу неможливе")
@@ -125,28 +176,72 @@ class TwitterScraper:
                 self.logger.info("Запитувані дані виходять за межі терміну дії кешу")
                 return None
 
-            # Налаштування фільтрів для пошуку в базі даних
-            filters = {
+            # SQL запит для отримання кешованих твітів
+            query_sql = """
+                        SELECT * \
+                        FROM tweets
+                        WHERE date >= :start_date
+                          AND (content LIKE :content \
+                           OR query = :query) \
+                        """
+
+            # Параметри запиту
+            params = {
                 'start_date': min_date,
                 'content': f"%{query}%",  # Використовуємо LIKE для пошуку в тексті
                 'query': query  # Точна відповідність запиту
             }
 
-            # Отримання твітів з бази даних
-            tweets_df = self.db_manager.get_tweets(filters=filters)
+            # Виконання запиту асинхронно
+            rows = await self.DatabaseManager.fetch_all(query=query_sql, values=params)
 
-            if tweets_df.empty:
+            if not rows:
                 self.logger.info("Кешованих твітів не знайдено")
                 return None
 
-            self.logger.info(f"Знайдено {len(tweets_df)} кешованих твітів")
-            return tweets_df.to_dict('records')
+            # Конвертація результатів у список словників
+            tweets = [dict(row) for row in rows]
+
+            self.logger.info(f"Знайдено {len(tweets)} кешованих твітів")
+            return tweets
 
         except Exception as e:
             self.logger.error(f"Помилка при отриманні кешованих твітів: {str(e)}")
             return None
 
-    def analyze_sentiment(self, tweets: List[Dict]) -> List[Dict]:
+    async def _cache_tweets(self, query: str, tweets: List[Dict]) -> bool:
+        """Асинхронно зберігає твіти в кеш (базу даних)"""
+        if not tweets:
+            return False
+
+        try:
+            self.logger.info(f"Кешування {len(tweets)} твітів для запиту '{query}'")
+
+            # Підготовка списку задач для паралельного виконання
+            tasks = []
+            for tweet in tweets:
+                # SQL запит для вставки твіту
+                insert_query = """
+                               INSERT INTO tweets (id, date, content, username, displayname, followers, \
+                                                   retweets, likes, query, lang, collected_at) \
+                               VALUES (:id, :date, :content, :username, :displayname, :followers, \
+                                       :retweets, :likes, :query, :lang, :collected_at) ON CONFLICT (id) DO NOTHING \
+                               """
+
+                tasks.append(self.DatabaseManager.execute(insert_query, tweet))
+
+            # Виконання всіх запитів одночасно
+            await asyncio.gather(*tasks)
+
+            self.logger.info(f"Успішно кешовано {len(tweets)} твітів")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Помилка при кешуванні твітів: {str(e)}")
+            return False
+
+    async def analyze_sentiment(self, tweets: List[Dict]) -> List[Dict]:
+        """Асинхронний аналіз настроїв для твітів з використанням батчів"""
 
         if not tweets:
             self.logger.warning("Порожній список твітів для аналізу настроїв")
@@ -162,14 +257,23 @@ class TwitterScraper:
 
             # Групування твітів для пакетного аналізу (оптимізація)
             batch_size = 32  # Оптимальний розмір для більшості моделей
-            for i in range(0, len(tweets), batch_size):
-                batch = tweets[i:i + batch_size]
+            batches = [tweets[i:i + batch_size] for i in range(0, len(tweets), batch_size)]
+
+            # Функція для обробки одного пакету
+            async def process_batch(batch):
                 texts = [tweet['content'] for tweet in batch]
 
-                # Виконання аналізу настроїв
-                sentiment_results = self.sentiment_analyzer(texts, truncation=True)
+                # Виконання аналізу настроїв в окремому потоці через ThreadPoolExecutor
+                # оскільки моделі трансформерів не є асинхронними
+                def run_sentiment_analysis():
+                    return self.sentiment_analyzer(texts, truncation=True)
 
-                # Обробка результатів для кожного твіту в пакеті
+                # Запуск в окремому потоці
+                sentiment_results = await asyncio.get_event_loop().run_in_executor(
+                    self.thread_pool, run_sentiment_analysis
+                )
+
+                batch_results = []
                 for j, result in enumerate(sentiment_results):
                     tweet = batch[j].copy()
 
@@ -194,19 +298,22 @@ class TwitterScraper:
                     tweet['sentiment_confidence'] = score
                     tweet['sentiment_analysis_date'] = datetime.now()
 
-                    analyzed_tweets.append(tweet)
+                    # Асинхронне збереження результатів у базу даних
+                    await self._save_sentiment_result(tweet, sentiment, sentiment_score, score)
 
-                    # Збереження результатів у базі даних
-                    if self.db_manager:
-                        sentiment_data = {
-                            'tweet_id': tweet['id'],
-                            'sentiment': sentiment,
-                            'sentiment_score': sentiment_score,
-                            'confidence': score,
-                            'model_used': self.sentiment_model_name,
-                            'analysis_date': tweet['sentiment_analysis_date']
-                        }
-                        self.db_manager.insert_tweet_sentiment(sentiment_data)
+                    batch_results.append(tweet)
+
+                return batch_results
+
+            # Обробка всіх батчів паралельно з обмеженням кількості одночасних задач
+            tasks = []
+            for batch in batches:
+                tasks.append(process_batch(batch))
+
+            # Збір результатів з усіх пакетів
+            batch_results = await asyncio.gather(*tasks)
+            for results in batch_results:
+                analyzed_tweets.extend(results)
 
             self.logger.info(f"Аналіз настроїв завершено для {len(analyzed_tweets)} твітів")
             return analyzed_tweets
@@ -216,14 +323,45 @@ class TwitterScraper:
             # Повертаємо оригінальні твіти, якщо аналіз не вдався
             return tweets
 
-    def filter_by_keywords(self, tweets: List[Dict], keywords: List[str],
-                           case_sensitive: bool = False) -> List[Dict]:
+    async def _save_sentiment_result(self, tweet: Dict, sentiment: str,
+                                     sentiment_score: float, confidence: float) -> bool:
+        """Асинхронно зберігає результат аналізу настроїв у базу даних"""
+        try:
+            # SQL запит для вставки результату аналізу
+            query = """
+                    INSERT INTO tweet_sentiments (tweet_id, sentiment, sentiment_score, confidence, \
+                                                  model_used, analysis_date) \
+                    VALUES (:tweet_id, :sentiment, :sentiment_score, :confidence, \
+                            :model_used, :analysis_date) ON CONFLICT (tweet_id) DO \
+                    UPDATE \
+                    SET
+                        sentiment = EXCLUDED.sentiment, sentiment_score = EXCLUDED.sentiment_score, confidence = EXCLUDED.confidence, model_used = EXCLUDED.model_used, analysis_date = EXCLUDED.analysis_date \
+                    """
+
+            values = {
+                'tweet_id': tweet['id'],
+                'sentiment': sentiment,
+                'sentiment_score': sentiment_score,
+                'confidence': confidence,
+                'model_used': self.sentiment_model_name,
+                'analysis_date': tweet['sentiment_analysis_date']
+            }
+
+            await self.DatabaseManager.execute(query, values)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні результату аналізу настроїв: {str(e)}")
+            return False
+
+    async def filter_by_keywords(self, tweets: List[Dict], keywords: List[str],
+                                 case_sensitive: bool = False) -> List[Dict]:
+        """Асинхронна фільтрація твітів за ключовими словами"""
 
         if not tweets or not keywords:
             self.logger.warning("Порожній список твітів або ключових слів")
             return tweets
 
-        filtered_tweets = []
         try:
             self.logger.info(f"Фільтрація {len(tweets)} твітів за {len(keywords)} ключовими словами")
 
@@ -231,19 +369,35 @@ class TwitterScraper:
             if not case_sensitive:
                 keywords = [keyword.lower() for keyword in keywords]
 
-            # Фільтрація твітів
-            for tweet in tweets:
-                content = tweet.get('content', '')
-                if not case_sensitive:
-                    content = content.lower()
+            # Функція для паралельної обробки частини твітів
+            async def process_batch(batch):
+                filtered_batch = []
+                for tweet in batch:
+                    content = tweet.get('content', '')
+                    if not case_sensitive:
+                        content = content.lower()
 
-                # Перевірка наявності будь-якого ключового слова в контенті
-                if any(keyword in content for keyword in keywords):
-                    # Додаємо інформацію про знайдені ключові слова
+                    # Перевірка наявності будь-якого ключового слова в контенті
                     matched_keywords = [keyword for keyword in keywords if keyword in content]
-                    tweet_copy = tweet.copy()
-                    tweet_copy['matched_keywords'] = matched_keywords
-                    filtered_tweets.append(tweet_copy)
+                    if matched_keywords:
+                        tweet_copy = tweet.copy()
+                        tweet_copy['matched_keywords'] = matched_keywords
+                        filtered_batch.append(tweet_copy)
+
+                return filtered_batch
+
+            # Розділення твітів на пакети для паралельної обробки
+            batch_size = 1000  # Оптимальний розмір для обробки в пам'яті
+            batches = [tweets[i:i + batch_size] for i in range(0, len(tweets), batch_size)]
+
+            # Обробка всіх пакетів паралельно
+            tasks = [process_batch(batch) for batch in batches]
+            results = await asyncio.gather(*tasks)
+
+            # Об'єднання результатів
+            filtered_tweets = []
+            for batch_results in results:
+                filtered_tweets.extend(batch_results)
 
             self.logger.info(f"Відфільтровано {len(filtered_tweets)} твітів")
             return filtered_tweets
@@ -252,7 +406,8 @@ class TwitterScraper:
             self.logger.error(f"Помилка при фільтрації твітів: {str(e)}")
             return tweets
 
-    def get_trending_crypto_topics(self, top_n: int = 10) -> List[Dict]:
+    async def get_trending_crypto_topics(self, top_n: int = 10) -> List[Dict]:
+        """Асинхронно отримує трендові криптовалютні теми"""
 
         if not self.db_manager:
             self.logger.error("DatabaseManager не ініціалізовано")
@@ -270,27 +425,39 @@ class TwitterScraper:
             # Отримання даних за останні 24 години
             since_date = datetime.now() - timedelta(days=1)
 
-            # Пошук твітів із криптовалютними хештегами
+            # SQL запит для пошуку твітів із криптовалютними хештегами
+            query = """
+                SELECT content FROM tweets 
+                WHERE date >= :since_date
+                AND (
+                    """ + " OR ".join([f"content ILIKE '%{tag}%'" for tag in crypto_base_tags]) + """
+                )
+            """
+
+            rows = await self.DatabaseManager.fetch_all(query=query, values={'since_date': since_date})
+
+            if not rows:
+                self.logger.info("Твітів з криптовалютними хештегами не знайдено")
+                return []
+
+            # Вилучення всіх хештегів з твітів
             all_hashtags = []
-            for crypto_tag in crypto_base_tags:
-                filters = {
-                    'start_date': since_date,
-                    'content': f"%{crypto_tag}%"
-                }
-                tweets_df = self.db_manager.get_tweets(filters=filters)
+            for row in rows:
+                content = row['content']
+                # Знаходження всіх хештегів у твіті
+                hashtags = [
+                    tag.lower() for tag in re.findall(r'#\w+', content)
+                    if tag.lower() not in crypto_base_tags  # Виключення базових тегів
+                ]
+                all_hashtags.extend(hashtags)
 
-                if not tweets_df.empty:
-                    # Вилучення всіх хештегів з твітів
-                    for content in tweets_df['content']:
-                        # Знаходження всіх хештегів у твіті
-                        hashtags = [
-                            tag.lower() for tag in re.findall(r'#\w+', content)
-                            if tag.lower() not in crypto_base_tags  # Виключення базових тегів
-                        ]
-                        all_hashtags.extend(hashtags)
+            # Підрахунок частоти використання хештегів (конкурентно)
+            def count_hashtags():
+                return Counter(all_hashtags)
 
-            # Підрахунок частоти використання хештегів
-            hashtag_counts = Counter(all_hashtags)
+            hashtag_counts = await asyncio.get_event_loop().run_in_executor(
+                self.thread_pool, count_hashtags
+            )
 
             # Вибір топ-N найпопулярніших хештегів
             trending_topics = [
@@ -309,41 +476,8 @@ class TwitterScraper:
             self.logger.error(f"Помилка при пошуку трендових тем: {str(e)}")
             return []
 
-    def save_to_database(self, tweets: List[Dict], table_name: str = "tweets") -> bool:
-
-        if not self.db_manager:
-            self.logger.error("DatabaseManager не ініціалізовано")
-            return False
-
-        try:
-            self.logger.info(f"Збереження {len(tweets)} твітів у таблицю {table_name}")
-
-            # Перевірка наявності вказаної таблиці
-            if table_name != "tweets" and not self.db_manager.table_exists(table_name):
-                self.logger.warning(f"Таблиця {table_name} не існує. Створення нової таблиці...")
-                # Тут можна додати логіку створення таблиці, якщо потрібно
-
-            # Використовуємо метод кешування або окремий метод в залежності від таблиці
-            if table_name == "tweets":
-                return self._cache_tweets("", tweets)
-            else:
-                # Якщо використовується інша таблиця, можна реалізувати спеціальну логіку
-                successful = True
-                for tweet in tweets:
-                    result = self.db_manager.insert_custom_data(table_name, tweet)
-                    if not result:
-                        self.logger.warning(
-                            f"Не вдалося зберегти твіт {tweet.get('id', 'unknown')} у таблицю {table_name}")
-                        successful = False
-
-                self.logger.info(f"Збереження у {table_name} завершено {'успішно' if successful else 'з помилками'}")
-                return successful
-
-        except Exception as e:
-            self.logger.error(f"Помилка при збереженні твітів у базу даних: {str(e)}")
-            return False
-
-    def get_user_influence(self, username: str) -> Dict:
+    async def get_user_influence(self, username: str) -> Dict:
+        """Асинхронний аналіз впливовості користувача"""
 
         if not username:
             self.logger.error("Не вказано ім'я користувача")
@@ -354,7 +488,7 @@ class TwitterScraper:
 
             # Отримання останніх твітів користувача
             user_query = f"from:{username}"
-            user_tweets = self.search_tweets(user_query, days_back=90, limit=100)
+            user_tweets = await self.search_tweets(user_query, days_back=90, limit=100)
 
             if not user_tweets:
                 self.logger.warning(f"Твіти користувача @{username} не знайдено")
@@ -373,25 +507,33 @@ class TwitterScraper:
                 "tweets_analyzed": len(user_tweets)
             }
 
-            # Аналіз взаємодії з твітами
-            total_likes = sum(tweet.get("likes", 0) for tweet in user_tweets)
-            total_retweets = sum(tweet.get("retweets", 0) for tweet in user_tweets)
-            avg_likes = total_likes / max(len(user_tweets), 1)
-            avg_retweets = total_retweets / max(len(user_tweets), 1)
+            # Запуск паралельних задач: аналіз настроїв і пошук згадувань
+            tasks = []
 
-            # Аналіз настроїв твітів користувача
-            analyzed_tweets = self.analyze_sentiment(user_tweets)
+            # Задача 1: Аналіз настроїв твітів користувача
+            tasks.append(self.analyze_sentiment(user_tweets))
+
+            # Задача 2: Аналіз цитування та згадування користувача іншими
+            mentions_query = f"@{username}"
+            tasks.append(self.search_tweets(mentions_query, days_back=30, limit=200))
+
+            # Очікування завершення обох задач
+            results = await asyncio.gather(*tasks)
+            analyzed_tweets, mention_tweets = results
+
+            # Обробка результатів аналізу настроїв
             sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
-
             for tweet in analyzed_tweets:
                 sentiment = tweet.get("sentiment", "neutral")
                 sentiment_counts[sentiment] += 1
 
             dominant_sentiment = max(sentiment_counts, key=sentiment_counts.get)
 
-            # Аналіз цитування та згадування користувача іншими
-            mentions_query = f"@{username}"
-            mention_tweets = self.search_tweets(mentions_query, days_back=30, limit=200)
+            # Аналіз взаємодії з твітами
+            total_likes = sum(tweet.get("likes", 0) for tweet in user_tweets)
+            total_retweets = sum(tweet.get("retweets", 0) for tweet in user_tweets)
+            avg_likes = total_likes / max(len(user_tweets), 1)
+            avg_retweets = total_retweets / max(len(user_tweets), 1)
 
             # Визначення впливових акаунтів, які взаємодіють з користувачем
             influential_interactions = [
@@ -400,34 +542,47 @@ class TwitterScraper:
                 if tweet.get("followers", 0) > 10000  # Поріг впливовості
             ]
 
-            # Аналіз хештегів, які використовує користувач
-            hashtags = []
-            for tweet in user_tweets:
-                content = tweet.get("content", "")
-                found_hashtags = re.findall(r'#\w+', content)
-                hashtags.extend([tag.lower() for tag in found_hashtags])
+            # Аналіз хештегів, які використовує користувач (конкурентно)
+            def analyze_hashtags_and_topics():
+                # Вилучення хештегів
+                hashtags = []
+                for tweet in user_tweets:
+                    content = tweet.get("content", "")
+                    found_hashtags = re.findall(r'#\w+', content)
+                    hashtags.extend([tag.lower() for tag in found_hashtags])
 
-            top_hashtags = Counter(hashtags).most_common(5)
+                # Підрахунок хештегів
+                top_hashtags = Counter(hashtags).most_common(5)
 
-            # Аналіз тем, про які говорить користувач
-            crypto_keywords = [
-                "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
-                "defi", "nft", "token", "coin", "mining", "wallet", "sol"
-            ]
+                # Аналіз тем, про які говорить користувач
+                crypto_keywords = [
+                    "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
+                    "defi", "nft", "token", "coin", "mining", "wallet", "sol"
+                ]
 
-            topics = []
-            for tweet in user_tweets:
-                content = tweet.get("content", "").lower()
-                for keyword in crypto_keywords:
-                    if keyword in content:
-                        topics.append(keyword)
+                topics = []
+                for tweet in user_tweets:
+                    content = tweet.get("content", "").lower()
+                    for keyword in crypto_keywords:
+                        if keyword in content:
+                            topics.append(keyword)
 
-            top_topics = Counter(topics).most_common(5)
+                top_topics = Counter(topics).most_common(5)
+
+                return {
+                    "top_hashtags": [{"tag": tag, "count": count} for tag, count in top_hashtags],
+                    "top_crypto_topics": [{"topic": topic, "count": count} for topic, count in top_topics]
+                }
+
+            # Виконання аналізу хештегів та тем в окремому потоці
+            topics_results = await asyncio.get_event_loop().run_in_executor(
+                self.thread_pool, analyze_hashtags_and_topics
+            )
 
             # Розрахунок індексу впливовості
             engagement_rate = (avg_likes + avg_retweets * 3) / max(user_info["followers_count"], 1) * 100
             mention_influence = len(mention_tweets) / 30  # Середня кількість згадувань на день
-            topic_diversity = len(set(topics)) / len(crypto_keywords)
+            topic_diversity = len(set(topics_results["top_crypto_topics"])) / 13  # 13 = len(crypto_keywords)
 
             influence_score = min(100, (
                     (engagement_rate * 0.4) +
@@ -453,10 +608,7 @@ class TwitterScraper:
                     "mentions_count": len(mention_tweets),
                     "influential_interactions": len(influential_interactions)
                 },
-                "topics": {
-                    "top_hashtags": [{"tag": tag, "count": count} for tag, count in top_hashtags],
-                    "top_crypto_topics": [{"topic": topic, "count": count} for topic, count in top_topics]
-                }
+                "topics": topics_results
             }
 
             self.logger.info(f"Аналіз впливовості користувача @{username} завершено")
@@ -470,8 +622,7 @@ class TwitterScraper:
                 "error": str(e)
             }
 
-    def track_influencers(self, influencers: List[str], days_back: int = 30) -> Dict[str, List[Dict]]:
-
+    async def track_influencers(self, influencers: List[str], days_back: int = 30) -> Dict[str, List[Dict]]:
         if not influencers:
             self.logger.error("Не вказано імена інфлюенсерів")
             return {}
@@ -481,7 +632,7 @@ class TwitterScraper:
 
             # Якщо influencers порожній, спробуємо отримати інфлюенсерів з бази даних
             if not influencers and self.db_manager:
-                influencers_data = self.db_manager.get_crypto_influencers()
+                influencers_data = await self.db_manager.get_crypto_influencers()
                 if not influencers_data.empty:
                     influencers = influencers_data['username'].tolist()
                     self.logger.info(f"Отримано {len(influencers)} інфлюенсерів з бази даних")
@@ -490,50 +641,19 @@ class TwitterScraper:
                 self.logger.warning("Список інфлюенсерів порожній")
                 return {}
 
+            # Асинхронне отримання даних для кожного інфлюенсера
             results = {}
+            tasks = []
+
             for username in influencers:
-                self.logger.info(f"Аналіз активності інфлюенсера @{username}")
+                task = self._process_influencer(username, days_back)
+                tasks.append(task)
 
-                # Отримання твітів інфлюенсера
-                user_query = f"from:{username}"
-                user_tweets = self.search_tweets(user_query, days_back=days_back, limit=100)
+            # Виконуємо всі завдання паралельно
+            influencer_results = await asyncio.gather(*tasks)
 
-                if not user_tweets:
-                    self.logger.warning(f"Твіти користувача @{username} не знайдено")
-                    results[username] = []
-                    continue
-
-                # Аналіз настроїв твітів
-                analyzed_tweets = self.analyze_sentiment(user_tweets)
-
-                # Збереження активності інфлюенсера в базу даних
-                if self.db_manager:
-                    # Базова інформація про інфлюенсера
-                    influencer_info = {
-                        "username": username,
-                        "displayname": user_tweets[0].get("displayname", ""),
-                        "followers": user_tweets[0].get("followers", 0),
-                        "last_updated": datetime.now()
-                    }
-
-                    # Оновлення інформації про інфлюенсера
-                    self.db_manager.insert_crypto_influencer(influencer_info)
-
-                    # Збереження активності інфлюенсера
-                    for tweet in analyzed_tweets:
-                        activity_data = {
-                            "influencer_username": username,
-                            "tweet_id": tweet.get("id"),
-                            "content": tweet.get("content"),
-                            "date": tweet.get("date"),
-                            "likes": tweet.get("likes", 0),
-                            "retweets": tweet.get("retweets", 0),
-                            "sentiment": tweet.get("sentiment", "neutral"),
-                            "sentiment_score": tweet.get("sentiment_score", 0.0)
-                        }
-                        self.db_manager.insert_influencer_activity(activity_data)
-
-                # Додавання даних у результат
+            # Обробляємо результати
+            for username, analyzed_tweets in influencer_results:
                 results[username] = analyzed_tweets
 
             self.logger.info(f"Відстеження активності інфлюенсерів завершено")
@@ -543,9 +663,57 @@ class TwitterScraper:
             self.logger.error(f"Помилка при відстеженні активності інфлюенсерів: {str(e)}")
             return {}
 
-    def track_sentiment_over_time(self, query: str, days: int = 30,
-                                  interval: str = "day") -> pd.DataFrame:
+    async def _process_influencer(self, username: str, days_back: int) -> Tuple[str, List[Dict]]:
+        """Допоміжний метод для асинхронної обробки даних інфлюенсера"""
+        self.logger.info(f"Аналіз активності інфлюенсера @{username}")
 
+        # Отримання твітів інфлюенсера
+        user_query = f"from:{username}"
+        user_tweets = await self.search_tweets(user_query, days_back=days_back, limit=100)
+
+        if not user_tweets:
+            self.logger.warning(f"Твіти користувача @{username} не знайдено")
+            return username, []
+
+        # Аналіз настроїв твітів
+        analyzed_tweets = await self.analyze_sentiment(user_tweets)
+
+        # Збереження активності інфлюенсера в базу даних
+        if self.db_manager:
+            # Базова інформація про інфлюенсера
+            influencer_info = {
+                "username": username,
+                "displayname": user_tweets[0].get("displayname", ""),
+                "followers": user_tweets[0].get("followers", 0),
+                "last_updated": datetime.now()
+            }
+
+            # Оновлення інформації про інфлюенсера (асинхронно)
+            await self.db_manager.insert_crypto_influencer(influencer_info)
+
+            # Збереження активності інфлюенсера (асинхронно)
+            tasks = []
+            for tweet in analyzed_tweets:
+                activity_data = {
+                    "influencer_username": username,
+                    "tweet_id": tweet.get("id"),
+                    "content": tweet.get("content"),
+                    "date": tweet.get("date"),
+                    "likes": tweet.get("likes", 0),
+                    "retweets": tweet.get("retweets", 0),
+                    "sentiment": tweet.get("sentiment", "neutral"),
+                    "sentiment_score": tweet.get("sentiment_score", 0.0)
+                }
+                tasks.append(self.db_manager.insert_sentiment_time_series(activity_data))
+
+            # Очікуємо завершення всіх завдань зі збереження
+            if tasks:
+                await asyncio.gather(*tasks)
+
+        return username, analyzed_tweets
+
+    async def track_sentiment_over_time(self, query: str, days: int = 30,
+                                        interval: str = "day") -> pd.DataFrame:
         if not query:
             self.logger.error("Не вказано пошуковий запит")
             return pd.DataFrame()
@@ -567,7 +735,7 @@ class TwitterScraper:
                     'interval': interval,
                     'start_date': datetime.now() - timedelta(days=days)
                 }
-                historical_data = self.db_manager.get_sentiment_time_series(filters)
+                historical_data = await self.db_manager.get_sentiment_time_series(filters)
 
             # Якщо є достатньо історичних даних, повертаємо їх
             if historical_data is not None and not historical_data.empty:
@@ -579,15 +747,15 @@ class TwitterScraper:
                     return historical_data
 
             # Якщо недостатньо історичних даних, збираємо нові дані
-            # Пошук твітів за вказаний період
-            tweets = self.search_tweets(query, days_back=days, limit=1000)
+            # Пошук твітів за вказаний період (асинхронно)
+            tweets = await self.search_tweets(query, days_back=days, limit=1000)
 
             if not tweets:
                 self.logger.warning(f"Твіти для запиту '{query}' не знайдено")
                 return pd.DataFrame()
 
-            # Аналіз настроїв твітів
-            analyzed_tweets = self.analyze_sentiment(tweets)
+            # Аналіз настроїв твітів (асинхронно)
+            analyzed_tweets = await self.analyze_sentiment(tweets)
 
             # Перетворення у DataFrame для зручності аналізу
             df = pd.DataFrame(analyzed_tweets)
@@ -614,7 +782,7 @@ class TwitterScraper:
                 "sentiment": lambda x: x.value_counts().to_dict()
             })
 
-            # Рестуктуризація для зручності використання
+            # Реструктуризація для зручності використання
             result = pd.DataFrame()
             result["date"] = grouped.index
             result["mean_sentiment"] = grouped[("sentiment_score", "mean")]
@@ -632,8 +800,9 @@ class TwitterScraper:
             result["neutral_percent"] = result["neutral_count"] / result["tweet_count"] * 100
             result["negative_percent"] = result["negative_count"] / result["tweet_count"] * 100
 
-            # Збереження часових рядів у базу даних
+            # Збереження часових рядів у базу даних (асинхронно)
             if self.db_manager:
+                tasks = []
                 for _, row in result.iterrows():
                     time_series_data = {
                         "query": query,
@@ -646,7 +815,10 @@ class TwitterScraper:
                         "neutral_count": row["neutral_count"],
                         "negative_count": row["negative_count"],
                     }
-                    self.db_manager.insert_sentiment_time_series(time_series_data)
+                    tasks.append(self.db_manager.insert_sentiment_time_series(time_series_data))
+
+                if tasks:
+                    await asyncio.gather(*tasks)
 
             self.logger.info(f"Аналіз зміни настроїв завершено, отримано {len(result)} часових точок")
             return result
@@ -655,8 +827,7 @@ class TwitterScraper:
             self.logger.error(f"Помилка при аналізі зміни настроїв: {str(e)}")
             return pd.DataFrame()
 
-    def detect_sentiment_change(self, coin: str, threshold: float = 0.2) -> Dict:
-
+    async def detect_sentiment_change(self, coin: str, threshold: float = 0.2) -> Dict:
         if not coin:
             self.logger.error("Не вказано назву криптовалюти")
             return {"error": "Coin name not provided"}
@@ -664,8 +835,8 @@ class TwitterScraper:
         try:
             self.logger.info(f"Аналіз змін настроїв для {coin} з порогом {threshold}")
 
-            # Отримання даних про настрої за останні 7 днів (тиждень)
-            sentiment_data = self.track_sentiment_over_time(
+            # Отримання даних про настрої за останні 7 днів (тиждень) (асинхронно)
+            sentiment_data = await self.track_sentiment_over_time(
                 query=f"#{coin} OR ${coin}",
                 days=7,
                 interval="day"
@@ -710,9 +881,9 @@ class TwitterScraper:
                 start_date = most_significant["previous_date"]
                 end_date = most_significant["date"]
 
-                # Отримання твітів за цей період
+                # Отримання твітів за цей період (асинхронно)
                 tweets_query = f"#{coin} OR ${coin}"
-                tweets = self.search_tweets(
+                tweets = await self.search_tweets(
                     query=tweets_query,
                     days_back=7,
                     limit=200
@@ -752,7 +923,7 @@ class TwitterScraper:
                     ]
                 }
 
-                # Збереження інформації про зміну настроїв у базу даних
+                # Збереження інформації про зміну настроїв у базу даних (асинхронно)
                 if self.db_manager:
                     event_data = {
                         "coin": coin,
@@ -764,7 +935,7 @@ class TwitterScraper:
                         "current_value": most_significant["current_sentiment"],
                         "detection_date": datetime.now()
                     }
-                    self.db_manager.insert_crypto_event(event_data)
+                    await self.db_manager.insert_crypto_event(event_data)
 
                 self.logger.info(
                     f"Виявлено значну зміну настроїв для {coin}: {direction} ({most_significant['percent_change']:.2f}%)")
@@ -787,8 +958,60 @@ class TwitterScraper:
                 "error": str(e)
             }
 
-    def correlate_with_price(self, tweets: List[Dict], price_data: pd.DataFrame) -> Dict:
+    def _interpret_correlation(correlation_value: float) -> Dict[str, Any]:
+        # Визначення абсолютного значення кореляції для оцінки сили зв'язку
+        abs_corr = abs(correlation_value)
 
+        # Визначення сили зв'язку
+        if abs_corr < 0.2:
+            strength = "дуже слабкий"
+            significance_level = "низька"
+        elif abs_corr < 0.4:
+            strength = "слабкий"
+            significance_level = "низька"
+        elif abs_corr < 0.6:
+            strength = "помірний"
+            significance_level = "середня"
+        elif abs_corr < 0.8:
+            strength = "сильний"
+            significance_level = "висока"
+        else:
+            strength = "дуже сильний"
+            significance_level = "висока"
+
+        # Визначення напрямку зв'язку
+        if correlation_value > 0.1:
+            direction = "позитивний"
+            description = f"Виявлено {strength} {direction} зв'язок: зростання одного параметра корелює зі зростанням іншого."
+        elif correlation_value < -0.1:
+            direction = "негативний"
+            description = f"Виявлено {strength} {direction} зв'язок: зростання одного параметра корелює зі зниженням іншого."
+        else:
+            direction = "нейтральний"
+            strength = "відсутній"
+            significance_level = "відсутня"
+            description = "Значущий зв'язок між параметрами не виявлено."
+
+        # Оцінка практичної значущості
+        if abs_corr > 0.5:
+            practical_significance = "висока практична значущість"
+        elif abs_corr > 0.3:
+            practical_significance = "помірна практична значущість"
+        else:
+            practical_significance = "низька практична значущість"
+
+        # Формування відповіді
+        return {
+            "strength": strength,
+            "direction": direction,
+            "description": description,
+            "statistical_significance": significance_level,
+            "practical_significance": practical_significance,
+            "coefficient": float(correlation_value),
+            "interpretation": f"{description} Коефіцієнт кореляції: {correlation_value:.4f} ({practical_significance})."
+        }
+
+    async def correlate_with_price(self, tweets: List[Dict], price_data: pd.DataFrame) -> Dict:
         if not tweets or price_data.empty:
             self.logger.warning("Порожні дані для кореляційного аналізу")
             return {"error": "Empty data for correlation analysis"}
@@ -799,7 +1022,7 @@ class TwitterScraper:
             # Перевірка наявності аналізу настроїв у твітах
             if "sentiment_score" not in tweets[0]:
                 self.logger.info("Твіти потребують аналізу настроїв")
-                tweets = self.analyze_sentiment(tweets)
+                tweets = await self.analyze_sentiment(tweets)
 
             # Перетворення твітів у DataFrame
             tweets_df = pd.DataFrame(tweets)
@@ -894,9 +1117,9 @@ class TwitterScraper:
                 "strongest_correlation": strongest_lag,
                 "lag_analysis": lag_results,
                 "interpretation": {
-                    "same_day": self._interpret_correlation(correlation_same_day),
-                    "predictive_power": self._interpret_correlation(correlation_next_day),
-                    "reactive_nature": self._interpret_correlation(correlation_prev_day)
+                    "same_day": _interpret_correlation(correlation_same_day),
+                    "predictive_power": _interpret_correlation(correlation_next_day),
+                    "reactive_nature":_interpret_correlation(correlation_prev_day)
                 }
             }
 
@@ -907,25 +1130,7 @@ class TwitterScraper:
             self.logger.error(f"Помилка при кореляційному аналізі: {str(e)}")
             return {"error": str(e)}
 
-    def _interpret_correlation(self, corr_value: float) -> str:
-        abs_corr = abs(corr_value)
-
-        if abs_corr < 0.1:
-            strength = "відсутній"
-        elif abs_corr < 0.3:
-            strength = "слабкий"
-        elif abs_corr < 0.5:
-            strength = "помірний"
-        elif abs_corr < 0.7:
-            strength = "сильний"
-        else:
-            strength = "дуже сильний"
-
-        direction = "позитивний" if corr_value > 0 else "негативний"
-        return f"{strength} {direction} зв'язок"
-
-    def handle_api_rate_limits(self, retry_count: int = 3, cooldown_period: int = 300) -> None:
-
+    async def handle_api_rate_limits(self, retry_count: int = 3, cooldown_period: int = 300) -> None:
         self.logger.info(
             f"Налаштування параметрів обробки обмежень API: повторні спроби={retry_count}, період очікування={cooldown_period}с")
 
@@ -937,9 +1142,9 @@ class TwitterScraper:
         self.api_error_count = 0
         self.last_api_error_time = None
 
-        # Створюємо декоратор для повторних спроб при помилках API
+        # Створюємо асинхронний декоратор для повторних спроб при помилках API
         def retry_on_api_limit(func):
-            def wrapper(*args, **kwargs):
+            async def wrapper(*args, **kwargs):
                 attempts = 0
                 while attempts < self.api_retry_count:
                     try:
@@ -949,10 +1154,10 @@ class TwitterScraper:
                             if time_since_error < self.api_cooldown_period:
                                 wait_time = self.api_cooldown_period - time_since_error
                                 self.logger.info(f"Очікування {wait_time:.1f}с перед наступною спробою")
-                                time.sleep(wait_time)
+                                await asyncio.sleep(wait_time)
 
                         # Виклик оригінального методу
-                        result = func(*args, **kwargs)
+                        result = await func(*args, **kwargs)
 
                         # Скидання лічильника помилок при успішній спробі
                         if attempts > 0:
@@ -983,9 +1188,9 @@ class TwitterScraper:
                                     "function_name": func.__name__,
                                     "timestamp": datetime.now()
                                 }
-                                self.db_manager.insert_error_log(error_data)
+                                await self.db_manager.insert_scraping_error(error_data)
 
-                            time.sleep(wait_time)
+                            await asyncio.sleep(wait_time)
                         else:
                             # Якщо помилка не пов'язана з обмеженням швидкості, передаємо її далі
                             self.logger.error(f"Помилка не пов'язана з обмеженням API: {str(e)}")
@@ -1002,8 +1207,7 @@ class TwitterScraper:
 
         self.logger.info("Обробка обмежень API налаштована успішно")
 
-    def detect_crypto_events(self, tweets: List[Dict], min_mentions: int = 50) -> List[Dict]:
-
+    async def detect_crypto_events(self, tweets: List[Dict], min_mentions: int = 50) -> List[Dict]:
         if not tweets:
             self.logger.warning("Порожній список твітів для виявлення подій")
             return []
@@ -1011,9 +1215,9 @@ class TwitterScraper:
         try:
             self.logger.info(f"Аналіз {len(tweets)} твітів для виявлення криптоподій")
 
-            # Аналіз настроїв, якщо не проведено раніше
+            # Аналіз настроїв, якщо не проведено раніше (асинхронно)
             if "sentiment" not in tweets[0]:
-                tweets = self.analyze_sentiment(tweets)
+                tweets = await self.analyze_sentiment(tweets)
 
             # Перетворення у DataFrame для зручності аналізу
             tweets_df = pd.DataFrame(tweets)
@@ -1035,31 +1239,27 @@ class TwitterScraper:
                 "AVAX": r'#?(?:avalanche|avax)\b'
             }
 
-            # Підрахунок згадувань для кожної криптовалюти
+            # Підрахунок згадувань
             for symbol, pattern in crypto_patterns.items():
                 tweets_df[f"mentions_{symbol}"] = tweets_df["content"].str.lower().str.contains(
                     pattern, regex=True, case=False).astype(int)
                 crypto_mentions[symbol] = tweets_df[f"mentions_{symbol}"].sum()
 
-            # Групування за днями для виявлення сплесків активності
+            # Групування за днями
             daily_activity = tweets_df.groupby("date_day").agg({
                 "id": "count",
                 **{f"mentions_{symbol}": "sum" for symbol in crypto_patterns.keys()},
                 "sentiment_score": "mean"
             }).reset_index()
 
-            # Розрахунок базової лінії та виявлення аномальної активності
             baseline_activity = daily_activity["id"].median()
             anomaly_threshold = baseline_activity * 1.5
 
-            # Виявлення днів з аномальною активністю
+            # Виявлення днів з аномаліями
             anomaly_days = daily_activity[daily_activity["id"] > anomaly_threshold]
 
-            # Перевірка наявності аномальних днів
             if anomaly_days.empty:
                 self.logger.info("Не виявлено днів з аномальною активністю")
-
-                # Повернення найбільш обговорюваних криптовалют
                 top_cryptos = sorted(crypto_mentions.items(), key=lambda x: x[1], reverse=True)
                 return [{
                     "event_type": "most_discussed_cryptos",
@@ -1068,29 +1268,28 @@ class TwitterScraper:
                     "total_tweets_analyzed": len(tweets)
                 }]
 
-            # Аналіз кожного аномального дня для визначення подій
             detected_events = []
-            for _, day_data in anomaly_days.iterrows():
+
+            async def process_anomaly_day(day_data):
                 date = day_data["date_day"]
                 day_tweets = tweets_df[tweets_df["date_day"] == date]
 
-                # Аналіз особливостей твітів цього дня
                 coins_with_spikes = []
                 for symbol in crypto_patterns.keys():
                     mentions = day_data[f"mentions_{symbol}"]
                     if mentions >= min_mentions:
-                        # Отримання найпопулярніших твітів про цю монету
                         coin_tweets = day_tweets[day_tweets[f"mentions_{symbol}"] == 1]
                         if len(coin_tweets) == 0:
                             continue
 
-                        # Сортування за популярністю (ретвіти + лайки)
                         coin_tweets["popularity"] = coin_tweets["retweets"] + coin_tweets["likes"]
                         top_tweets = coin_tweets.sort_values("popularity", ascending=False).head(3)
 
-                        # Середній настрій щодо монети
                         avg_sentiment = coin_tweets["sentiment_score"].mean()
-                        sentiment_direction = "позитивний" if avg_sentiment > 0.1 else "негативний" if avg_sentiment < -0.1 else "нейтральний"
+                        sentiment_direction = (
+                            "позитивний" if avg_sentiment > 0.1 else
+                            "негативний" if avg_sentiment < -0.1 else "нейтральний"
+                        )
 
                         coins_with_spikes.append({
                             "symbol": symbol,
@@ -1101,10 +1300,8 @@ class TwitterScraper:
                         })
 
                 if coins_with_spikes:
-                    # Визначення найбільш обговорюваної монети
                     main_coin = max(coins_with_spikes, key=lambda x: x["mentions"])
 
-                    # Формування події
                     event = {
                         "event_type": "activity_spike",
                         "date": date,
@@ -1116,10 +1313,8 @@ class TwitterScraper:
                         "overall_sentiment": float(day_data["sentiment_score"])
                     }
 
-                    detected_events.append(event)
-
-                    # Збереження події в базу даних
                     if self.db_manager:
+                        db_tasks = []
                         for coin_data in coins_with_spikes:
                             event_data = {
                                 "coin": coin_data["symbol"],
@@ -1127,18 +1322,24 @@ class TwitterScraper:
                                 "event_date": date,
                                 "description": f"Spike in mentions for {coin_data['symbol']} with {sentiment_direction} sentiment",
                                 "magnitude": coin_data["mentions"],
-                                "previous_value": 0,  # Можна розрахувати на основі попереднього дня
+                                "previous_value": 0,
                                 "current_value": coin_data["mentions"],
                                 "detection_date": datetime.now()
                             }
-                            self.db_manager.insert_crypto_event(event_data)
+                            db_tasks.append(self.db_manager.insert_crypto_event(event_data))
+                        if db_tasks:
+                            await asyncio.gather(*db_tasks)
 
-            # Якщо не знайдено подій з активністю вище порогу
+                    return event
+                return None
+
+            anomaly_tasks = [process_anomaly_day(day_data) for _, day_data in anomaly_days.iterrows()]
+            anomaly_results = await asyncio.gather(*anomaly_tasks)
+
+            detected_events.extend([event for event in anomaly_results if event is not None])
+
             if not detected_events:
-                # Знаходження найцікавіших моментів (навіть якщо не досягнуто порогу активності)
                 max_activity_day = daily_activity.loc[daily_activity["id"].idxmax()]
-
-                # Знаходження монети з найвищою волатильністю настроїв
                 sentiment_volatility = {}
                 for symbol in crypto_patterns.keys():
                     symbol_tweets = tweets_df[tweets_df[f"mentions_{symbol}"] == 1]
@@ -1147,25 +1348,41 @@ class TwitterScraper:
 
                 if sentiment_volatility:
                     volatile_coin = max(sentiment_volatility.items(), key=lambda x: x[1])
-
                     detected_events.append({
                         "event_type": "noteworthy_activity",
                         "date": max_activity_day["date_day"],
                         "total_tweets": int(max_activity_day["id"]),
                         "most_volatile_coin": volatile_coin[0],
                         "sentiment_volatility": float(volatile_coin[1]),
-                        "note": "No significant activity spikes detected, but showing the day with highest activity"
+                        "coins_mentioned": [symbol for symbol, mentions in crypto_mentions.items() if mentions > 0]
                     })
 
-            self.logger.info(f"Виявлено {len(detected_events)} подій на криптовалютному ринку")
+            detected_events.append({
+                "event_type": "period_summary",
+                "date_range": {
+                    "start": min(tweets_df["date_day"]),
+                    "end": max(tweets_df["date_day"])
+                },
+                "total_tweets": len(tweets),
+                "most_mentioned_coins": [
+                    {"symbol": symbol, "mentions": count}
+                    for symbol, count in sorted(crypto_mentions.items(), key=lambda x: x[1], reverse=True)[:5]
+                    if count > 0
+                ],
+                "overall_sentiment": float(tweets_df["sentiment_score"].mean())
+            })
+
+            self.logger.info(f"Виявлено {len(detected_events)} криптоподій")
             return detected_events
 
         except Exception as e:
             self.logger.error(f"Помилка при виявленні криптоподій: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return []
 
-    def get_error_stats(self) -> Dict:
 
+async def get_error_stats(self) -> Dict:
         if not self.db_manager:
             self.logger.error("DatabaseManager не ініціалізовано, отримання статистики помилок неможливе")
             return {"error": "Database manager not initialized"}
@@ -1173,8 +1390,8 @@ class TwitterScraper:
         try:
             self.logger.info("Отримання статистики помилок збору даних")
 
-            # Отримання даних про помилки з бази даних
-            error_data = self.db_manager.get_scraping_errors()
+            # Отримання даних про помилки з бази даних (асинхронно)
+            error_data = await self.db_manager.get_scraping_errors_async()
 
             if error_data.empty:
                 self.logger.info("Помилок не знайдено")
@@ -1253,56 +1470,54 @@ class TwitterScraper:
             self.logger.error(f"Помилка при отриманні статистики помилок: {str(e)}")
             return {"error": str(e)}
 
+async def main():
+        import logging
 
-def main():
-    import logging
+        # Налаштування логування
+        logging.basicConfig(level=logging.INFO)
 
-    # Налаштування логування
-    logging.basicConfig(level=logging.INFO)
+        # Ініціалізація скрапера
+        scraper = TwitterScraper(
+            sentiment_model="finiteautomata/bertweet-base-sentiment-analysis",
+            log_level=logging.INFO
+        )
 
-    # Ініціалізація скрапера
-    scraper = TwitterScraper(
-        sentiment_model="finiteautomata/bertweet-base-sentiment-analysis",
-        log_level=logging.INFO
-    )
+        # Приклад 1: Аналіз твітів про Bitcoin
+        print("\n=== Аналіз твітів про Bitcoin ===")
+        bitcoin_tweets = await scraper.search_tweets("#bitcoin OR $BTC", days_back=3, limit=50)
+        analyzed_tweets = await scraper.analyze_sentiment(bitcoin_tweets)
 
-    # Приклад 1: Аналіз твітів про Bitcoin
-    print("\n=== Аналіз твітів про Bitcoin ===")
-    bitcoin_tweets = scraper.search_tweets("#bitcoin OR $BTC", days_back=3, limit=50)
-    analyzed_tweets = scraper.analyze_sentiment(bitcoin_tweets)
+        if analyzed_tweets:
+            positive = sum(1 for t in analyzed_tweets if t['sentiment'] == 'positive')
+            negative = sum(1 for t in analyzed_tweets if t['sentiment'] == 'negative')
+            print(f"Результати аналізу: {len(analyzed_tweets)} твітів")
+            print(f"Позитивні: {positive} ({positive / len(analyzed_tweets) * 100:.1f}%)")
+            print(f"Негативні: {negative} ({negative / len(analyzed_tweets) * 100:.1f}%)")
 
-    if analyzed_tweets:
-        positive = sum(1 for t in analyzed_tweets if t['sentiment'] == 'positive')
-        negative = sum(1 for t in analyzed_tweets if t['sentiment'] == 'negative')
-        print(f"Результати аналізу: {len(analyzed_tweets)} твітів")
-        print(f"Позитивні: {positive} ({positive / len(analyzed_tweets) * 100:.1f}%)")
-        print(f"Негативні: {negative} ({negative / len(analyzed_tweets) * 100:.1f}%)")
+        # Приклад 2: Трендові крипто-теми
+        print("\n=== Трендові крипто-теми ===")
+        trending_topics = await scraper.get_trending_crypto_topics(top_n=5)
+        for topic in trending_topics:
+            print(f"{topic['hashtag']}: {topic['count']} згадок ({topic['percentage']:.1f}%)")
 
-    # Приклад 2: Трендові крипто-теми
-    print("\n=== Трендові крипто-теми ===")
-    trending_topics = scraper.get_trending_crypto_topics(top_n=5)
-    for topic in trending_topics:
-        print(f"{topic['hashtag']}: {topic['count']} згадок ({topic['percentage']:.1f}%)")
+        # Приклад 3: Аналіз впливовості користувача
+        print("\n=== Аналіз впливовості користувача ===")
+        influence = await scraper.get_user_influence("elonmusk")
+        print(f"Користувач: @{influence['username']}")
+        print(f"Оцінка впливовості: {influence['influence_score']}")
+        print(f"Середня кількість лайків: {influence['engagement']['avg_likes']}")
 
-    # Приклад 3: Аналіз впливовості користувача
-    print("\n=== Аналіз впливовості користувача ===")
-    influence = scraper.get_user_influence("elonmusk")
-    print(f"Користувач: @{influence['username']}")
-    print(f"Оцінка впливовості: {influence['influence_score']}")
-    print(f"Середня кількість лайків: {influence['engagement']['avg_likes']}")
+        # Приклад 4: Відстеження змін настроїв
+        print("\n=== Відстеження змін настроїв ===")
+        sentiment_trend = await scraper.track_sentiment_over_time("#ethereum OR $ETH", days=7)
+        if not sentiment_trend.empty:
+            print(sentiment_trend[['date', 'mean_sentiment', 'positive_percent', 'negative_percent']].to_string())
 
-    # Приклад 4: Відстеження змін настроїв
-    print("\n=== Відстеження змін настроїв ===")
-    sentiment_trend = scraper.track_sentiment_over_time("#ethereum OR $ETH", days=7)
-    if not sentiment_trend.empty:
-        print(sentiment_trend[['date', 'mean_sentiment', 'positive_percent', 'negative_percent']].to_string())
-
-    # Приклад 5: Виявлення подій
-    print("\n=== Виявлення крипто-подій ===")
-    events = scraper.detect_crypto_events(analyzed_tweets)
-    for event in events:
-        print(f"Подія типу '{event['event_type']}' виявлена {event['date']}")
-
+        # Приклад 5: Виявлення подій
+        print("\n=== Виявлення крипто-подій ===")
+        events = await scraper.detect_crypto_events(analyzed_tweets)
+        for event in events:
+            print(f"Подія типу '{event['event_type']}' виявлена {event['date']}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
