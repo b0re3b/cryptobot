@@ -1,16 +1,16 @@
-from .time_series import ARIMAModel, SARIMAModel
-from .deep_learning import LSTMModel, GRUModel
+from .time_series import TimeSeriesModels
+from .deep_learning import DeepLearningModels
 from .technical_indicators import TechnicalIndicators
-from .ensemble import EnsemblePredictor
-from .sentiment_models import CryptoSentimentClassifier
+from .ensemble import EnsembleModels
+from .sentiment_models import CryptoSentimentModel
 from data_collection.crypto_news_scraper import CryptoNewsScraper
-
+from tensorflow.keras.models import Sequential, load_model, save_model
+from tensorflow.keras.layers import LSTM, GRU, Dense, Dropout, BatchNormalization
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 __all__ = [
-    'ARIMAModel',
-    'SARIMAModel',
-    'LSTMModel',
-    'GRUModel',
+    'TimeSeriesModels',
+    'DeepLearningModels',
     'TechnicalIndicators',
-    'EnsemblePredictor',
-    'CryptoSentimentClassifier'
+    'EnsembleModels',
+    'CryptoSentimentModel'
 ]

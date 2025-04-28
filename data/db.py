@@ -44,21 +44,29 @@ class DatabaseManager:
             print("З'єднання з базою даних закрито")
 
     def create_schema(self):
-        """Створює схему бази даних"""
+        """Створює схему бази даних без конфліктів тригерів"""
         try:
             schema_path = os.path.join(os.path.dirname(__file__), 'schema.sql')
 
             if os.path.exists(schema_path):
-                # Read the script content
                 with open(schema_path, 'r') as f:
                     schema_script = f.read()
 
-                # Check if the script contains IF NOT EXISTS clauses
-                if "IF NOT EXISTS" in schema_script:
-                    self.cursor.execute(schema_script)
-                else:
-                    print("Warning: schema.sql doesn't contain IF NOT EXISTS clauses. Using built-in table creation.")
-                    self._create_tables()
+                # Спочатку обробимо тригери: знайдемо їх через простий пошук
+                import re
+                trigger_statements = re.findall(
+                    r'CREATE TRIGGER\s+(\w+)\s+BEFORE\s+UPDATE\s+ON\s+(\w+)\s+FOR EACH ROW\s+EXECUTE FUNCTION\s+(\w+\(\));',
+                    schema_script,
+                    re.IGNORECASE
+                )
+
+                for trigger_name, table_name, function_name in trigger_statements:
+                    drop_trigger_sql = f"DROP TRIGGER IF EXISTS {trigger_name} ON {table_name};"
+                    self.cursor.execute(drop_trigger_sql)
+
+                # Після дропу всіх тригерів виконаємо повністю schema.sql
+                self.cursor.execute(schema_script)
+
             else:
                 self._create_tables()
 
@@ -1532,239 +1540,239 @@ class DatabaseManager:
             print(f"Помилка отримання записів про помилки скрапінгу: {e}")
             return pd.DataFrame()
 
-def insert_news_source(self, source_name, base_url, is_active=True):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_sources (source_name, base_url, is_active)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (source_name) DO NOTHING
-        ''', (source_name, base_url, is_active))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання джерела новин: {e}")
-        self.conn.rollback()
-        return False
+    def insert_news_source(self, source_name, base_url, is_active=True):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_sources (source_name, base_url, is_active)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (source_name) DO NOTHING
+            ''', (source_name, base_url, is_active))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання джерела новин: {e}")
+            self.conn.rollback()
+            return False
 
-def get_news_sources(self, only_active=True):
-    try:
-        query = 'SELECT * FROM news_sources'
-        if only_active:
-            query += ' WHERE is_active = TRUE'
-        self.cursor.execute(query)
-        return pd.DataFrame(self.cursor.fetchall())
-    except psycopg2.Error as e:
-        print(f"Помилка отримання джерел новин: {e}")
-        return pd.DataFrame()
-def insert_news_category(self, source_id, category_name, category_url_path=None, is_active=True):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_categories (source_id, category_name, category_url_path, is_active)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (source_id, category_name) DO NOTHING
-        ''', (source_id, category_name, category_url_path, is_active))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання категорії новин: {e}")
-        self.conn.rollback()
-        return False
+    def get_news_sources(self, only_active=True):
+        try:
+            query = 'SELECT * FROM news_sources'
+            if only_active:
+                query += ' WHERE is_active = TRUE'
+            self.cursor.execute(query)
+            return pd.DataFrame(self.cursor.fetchall())
+        except psycopg2.Error as e:
+            print(f"Помилка отримання джерел новин: {e}")
+            return pd.DataFrame()
+    def insert_news_category(self, source_id, category_name, category_url_path=None, is_active=True):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_categories (source_id, category_name, category_url_path, is_active)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (source_id, category_name) DO NOTHING
+            ''', (source_id, category_name, category_url_path, is_active))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання категорії новин: {e}")
+            self.conn.rollback()
+            return False
 
-def get_news_categories(self, source_id=None, only_active=True):
-    try:
-        query = 'SELECT * FROM news_categories WHERE TRUE'
-        params = []
-        if source_id:
-            query += ' AND source_id = %s'
-            params.append(source_id)
-        if only_active:
-            query += ' AND is_active = TRUE'
-        self.cursor.execute(query, params)
-        return pd.DataFrame(self.cursor.fetchall())
-    except psycopg2.Error as e:
-        print(f"Помилка отримання категорій новин: {e}")
-        return pd.DataFrame()
-def insert_news_article(self, article_data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_articles 
-            (title, summary, content, link, source_id, category_id, published_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (link) DO NOTHING
-        ''', (
-            article_data['title'],
-            article_data.get('summary'),
-            article_data.get('content'),
-            article_data['link'],
-            article_data['source_id'],
-            article_data['category_id'],
-            article_data.get('published_at')
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання новинної статті: {e}")
-        self.conn.rollback()
-        return False
-def insert_news_sentiment(self, sentiment_data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_sentiment_analysis 
-            (article_id, sentiment_score, sentiment_magnitude, sentiment_label)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (article_id) DO UPDATE SET
-            sentiment_score = EXCLUDED.sentiment_score,
-            sentiment_magnitude = EXCLUDED.sentiment_magnitude,
-            sentiment_label = EXCLUDED.sentiment_label,
-            processed_at = CURRENT_TIMESTAMP
-        ''', (
-            sentiment_data['article_id'],
-            sentiment_data['sentiment_score'],
-            sentiment_data['sentiment_magnitude'],
-            sentiment_data['sentiment_label']
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання настрою новин: {e}")
-        self.conn.rollback()
-        return False
-def insert_article_mention(self, article_id, crypto_symbol, mention_count=1):
-    try:
-        self.cursor.execute('''
-            INSERT INTO article_mentioned_coins (article_id, crypto_symbol, mention_count)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (article_id, crypto_symbol) DO UPDATE SET
-            mention_count = EXCLUDED.mention_count
-        ''', (article_id, crypto_symbol, mention_count))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка згадки криптовалюти в статті: {e}")
-        self.conn.rollback()
-        return False
-def insert_trending_topic(self, topic_data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO trending_news_topics 
-            (topic_name, start_date, end_date, importance_score)
-            VALUES (%s, %s, %s, %s)
-        ''', (
-            topic_data['topic_name'],
-            topic_data.get('start_date'),
-            topic_data.get('end_date'),
-            topic_data.get('importance_score')
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання трендової теми: {e}")
-        self.conn.rollback()
-        return False
+    def get_news_categories(self, source_id=None, only_active=True):
+        try:
+            query = 'SELECT * FROM news_categories WHERE TRUE'
+            params = []
+            if source_id:
+                query += ' AND source_id = %s'
+                params.append(source_id)
+            if only_active:
+                query += ' AND is_active = TRUE'
+            self.cursor.execute(query, params)
+            return pd.DataFrame(self.cursor.fetchall())
+        except psycopg2.Error as e:
+            print(f"Помилка отримання категорій новин: {e}")
+            return pd.DataFrame()
+    def insert_news_article(self, article_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_articles 
+                (title, summary, content, link, source_id, category_id, published_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (link) DO NOTHING
+            ''', (
+                article_data['title'],
+                article_data.get('summary'),
+                article_data.get('content'),
+                article_data['link'],
+                article_data['source_id'],
+                article_data['category_id'],
+                article_data.get('published_at')
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання новинної статті: {e}")
+            self.conn.rollback()
+            return False
+    def insert_news_sentiment(self, sentiment_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_sentiment_analysis 
+                (article_id, sentiment_score, sentiment_magnitude, sentiment_label)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (article_id) DO UPDATE SET
+                sentiment_score = EXCLUDED.sentiment_score,
+                sentiment_magnitude = EXCLUDED.sentiment_magnitude,
+                sentiment_label = EXCLUDED.sentiment_label,
+                processed_at = CURRENT_TIMESTAMP
+            ''', (
+                sentiment_data['article_id'],
+                sentiment_data['sentiment_score'],
+                sentiment_data['sentiment_magnitude'],
+                sentiment_data['sentiment_label']
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання настрою новин: {e}")
+            self.conn.rollback()
+            return False
+    def insert_article_mention(self, article_id, crypto_symbol, mention_count=1):
+        try:
+            self.cursor.execute('''
+                INSERT INTO article_mentioned_coins (article_id, crypto_symbol, mention_count)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (article_id, crypto_symbol) DO UPDATE SET
+                mention_count = EXCLUDED.mention_count
+            ''', (article_id, crypto_symbol, mention_count))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка згадки криптовалюти в статті: {e}")
+            self.conn.rollback()
+            return False
+    def insert_trending_topic(self, topic_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO trending_news_topics 
+                (topic_name, start_date, end_date, importance_score)
+                VALUES (%s, %s, %s, %s)
+            ''', (
+                topic_data['topic_name'],
+                topic_data.get('start_date'),
+                topic_data.get('end_date'),
+                topic_data.get('importance_score')
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання трендової теми: {e}")
+            self.conn.rollback()
+            return False
 
-def link_article_to_topic(self, article_id, topic_id):
-    try:
-        self.cursor.execute('''
-            INSERT INTO article_topics (article_id, topic_id)
-            VALUES (%s, %s)
-            ON CONFLICT (article_id, topic_id) DO NOTHING
-        ''', (article_id, topic_id))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка зв’язку статті з темою: {e}")
-        self.conn.rollback()
-        return False
-def insert_news_market_correlation(self, correlation_data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_market_correlations 
-            (topic_id, crypto_symbol, time_period, correlation_coefficient, p_value, start_date, end_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (
-            correlation_data['topic_id'],
-            correlation_data['crypto_symbol'],
-            correlation_data['time_period'],
-            correlation_data['correlation_coefficient'],
-            correlation_data['p_value'],
-            correlation_data['start_date'],
-            correlation_data['end_date']
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання кореляції новин і ринку: {e}")
-        self.conn.rollback()
-        return False
-def insert_detected_news_event(self, event_data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_detected_events
-            (event_title, event_description, crypto_symbols, source_articles, confidence_score, detected_at, expected_impact, event_category)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (
-            event_data['event_title'],
-            event_data.get('event_description'),
-            event_data['crypto_symbols'],
-            event_data['source_articles'],
-            event_data['confidence_score'],
-            event_data['detected_at'],
-            event_data['expected_impact'],
-            event_data['event_category']
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка додавання події з новин: {e}")
-        self.conn.rollback()
-        return False
-def insert_news_sentiment_series(self, data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_sentiment_time_series 
-            (crypto_symbol, time_bucket, interval, positive_count, negative_count, neutral_count, average_sentiment, news_volume)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (crypto_symbol, time_bucket, interval) DO UPDATE SET
-            positive_count = EXCLUDED.positive_count,
-            negative_count = EXCLUDED.negative_count,
-            neutral_count = EXCLUDED.neutral_count,
-            average_sentiment = EXCLUDED.average_sentiment,
-            news_volume = EXCLUDED.news_volume
-        ''', (
-            data['crypto_symbol'],
-            data['time_bucket'],
-            data['interval'],
-            data['positive_count'],
-            data['negative_count'],
-            data['neutral_count'],
-            data['average_sentiment'],
-            data['news_volume']
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка запису новинного настрою в часовому ряді: {e}")
-        self.conn.rollback()
-        return False
-def insert_news_scraping_log(self, log_data):
-    try:
-        self.cursor.execute('''
-            INSERT INTO news_scraping_log 
-            (source_id, category_id, start_time, end_time, articles_found, articles_processed, status, error_message)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (
-            log_data['source_id'],
-            log_data['category_id'],
-            log_data['start_time'],
-            log_data['end_time'],
-            log_data['articles_found'],
-            log_data['articles_processed'],
-            log_data['status'],
-            log_data.get('error_message')
-        ))
-        self.conn.commit()
-        return True
-    except psycopg2.Error as e:
-        print(f"Помилка запису логу скрапінгу новин: {e}")
-        self.conn.rollback()
-        return False
+    def link_article_to_topic(self, article_id, topic_id):
+        try:
+            self.cursor.execute('''
+                INSERT INTO article_topics (article_id, topic_id)
+                VALUES (%s, %s)
+                ON CONFLICT (article_id, topic_id) DO NOTHING
+            ''', (article_id, topic_id))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка зв’язку статті з темою: {e}")
+            self.conn.rollback()
+            return False
+    def insert_news_market_correlation(self, correlation_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_market_correlations 
+                (topic_id, crypto_symbol, time_period, correlation_coefficient, p_value, start_date, end_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                correlation_data['topic_id'],
+                correlation_data['crypto_symbol'],
+                correlation_data['time_period'],
+                correlation_data['correlation_coefficient'],
+                correlation_data['p_value'],
+                correlation_data['start_date'],
+                correlation_data['end_date']
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання кореляції новин і ринку: {e}")
+            self.conn.rollback()
+            return False
+    def insert_detected_news_event(self, event_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_detected_events
+                (event_title, event_description, crypto_symbols, source_articles, confidence_score, detected_at, expected_impact, event_category)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                event_data['event_title'],
+                event_data.get('event_description'),
+                event_data['crypto_symbols'],
+                event_data['source_articles'],
+                event_data['confidence_score'],
+                event_data['detected_at'],
+                event_data['expected_impact'],
+                event_data['event_category']
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка додавання події з новин: {e}")
+            self.conn.rollback()
+            return False
+    def insert_news_sentiment_series(self, data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_sentiment_time_series 
+                (crypto_symbol, time_bucket, interval, positive_count, negative_count, neutral_count, average_sentiment, news_volume)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (crypto_symbol, time_bucket, interval) DO UPDATE SET
+                positive_count = EXCLUDED.positive_count,
+                negative_count = EXCLUDED.negative_count,
+                neutral_count = EXCLUDED.neutral_count,
+                average_sentiment = EXCLUDED.average_sentiment,
+                news_volume = EXCLUDED.news_volume
+            ''', (
+                data['crypto_symbol'],
+                data['time_bucket'],
+                data['interval'],
+                data['positive_count'],
+                data['negative_count'],
+                data['neutral_count'],
+                data['average_sentiment'],
+                data['news_volume']
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка запису новинного настрою в часовому ряді: {e}")
+            self.conn.rollback()
+            return False
+    def insert_news_scraping_log(self, log_data):
+        try:
+            self.cursor.execute('''
+                INSERT INTO news_scraping_log 
+                (source_id, category_id, start_time, end_time, articles_found, articles_processed, status, error_message)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                log_data['source_id'],
+                log_data['category_id'],
+                log_data['start_time'],
+                log_data['end_time'],
+                log_data['articles_found'],
+                log_data['articles_processed'],
+                log_data['status'],
+                log_data.get('error_message')
+            ))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            print(f"Помилка запису логу скрапінгу новин: {e}")
+            self.conn.rollback()
+            return False
