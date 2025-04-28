@@ -52,18 +52,7 @@ class TwitterScraper:
 
     def search_tweets(self, query: str, days_back: int = 7,
                       limit: Optional[int] = None, lang: str = "en") -> List[Dict]:
-        """
-        Пошук твітів за заданим запитом.
 
-        Args:
-            query: Пошуковий запит (наприклад, "#bitcoin")
-            days_back: Кількість днів для пошуку назад
-            limit: Максимальна кількість твітів для збору
-            lang: Мова твітів
-
-        Returns:
-            Список зібраних твітів у форматі словника
-        """
         if not self.ready:
             self.logger.error("TwitterScraper не ініціалізовано належним чином")
             return []
@@ -122,16 +111,7 @@ class TwitterScraper:
             return []
 
     def _get_cached_tweets(self, query: str, min_date: datetime) -> Optional[List[Dict]]:
-        """
-        Отримання кешованих твітів з бази даних.
 
-        Args:
-            query: Пошуковий запит
-            min_date: Мінімальна дата для пошуку
-
-        Returns:
-            Список кешованих твітів або None, якщо кеш застарів
-        """
         if not self.db_manager:
             self.logger.warning("DatabaseManager не ініціалізовано, отримання кешу неможливе")
             return None
@@ -167,15 +147,7 @@ class TwitterScraper:
             return None
 
     def analyze_sentiment(self, tweets: List[Dict]) -> List[Dict]:
-        """
-        Аналіз настроїв у зібраних твітах.
 
-        Args:
-            tweets: Список твітів для аналізу
-
-        Returns:
-            Список твітів із доданим полем sentiment та sentiment_score
-        """
         if not tweets:
             self.logger.warning("Порожній список твітів для аналізу настроїв")
             return []
@@ -684,16 +656,7 @@ class TwitterScraper:
             return pd.DataFrame()
 
     def detect_sentiment_change(self, coin: str, threshold: float = 0.2) -> Dict:
-        """
-        Виявлення різких змін настроїв щодо криптовалюти.
 
-        Args:
-            coin: Назва криптовалюти
-            threshold: Поріг зміни настроїв для сповіщення
-
-        Returns:
-            Інформація про зміну настроїв
-        """
         if not coin:
             self.logger.error("Не вказано назву криптовалюти")
             return {"error": "Coin name not provided"}
@@ -1200,94 +1163,6 @@ class TwitterScraper:
         except Exception as e:
             self.logger.error(f"Помилка при виявленні криптоподій: {str(e)}")
             return []
-
-    def get_error_stats(self) -> Dict:
-        if not self.db_manager:
-            self.logger.error("DatabaseManager не ініціалізовано, отримання статистики помилок неможливе")
-            return {"error": "Database manager not initialized"}
-
-        try:
-            self.logger.info("Отримання статистики помилок збору даних")
-
-            # Отримання даних про помилки з бази даних
-            error_data = self.db_manager.get_scraping_errors()
-
-            if error_data.empty:
-                self.logger.info("Помилок не знайдено")
-                return {
-                    "total_errors": 0,
-                    "error_types": {},
-                    "time_distribution": {},
-                    "most_recent": None
-                }
-
-            # Агрегація даних для статистики
-            total_errors = len(error_data)
-            error_types = error_data["error_type"].value_counts().to_dict()
-
-            # Аналіз розподілу помилок за часом
-            error_data["timestamp"] = pd.to_datetime(error_data["timestamp"])
-            error_data["date"] = error_data["timestamp"].dt.date
-            time_distribution = error_data["date"].value_counts().sort_index().to_dict()
-
-            # Конвертація datetime.date в str для серіалізації JSON
-            time_distribution = {str(date): count for date, count in time_distribution.items()}
-
-            # Інформація про останню помилку
-            most_recent = error_data.sort_values("timestamp", ascending=False).iloc[0].to_dict()
-            if "timestamp" in most_recent:
-                most_recent["timestamp"] = most_recent["timestamp"].isoformat()
-
-            # Аналіз типових патернів помилок
-            error_patterns = {}
-            if "error_message" in error_data.columns:
-                # Спрощені повідомлення про помилки для групування схожих випадків
-                error_data["simplified_message"] = error_data["error_message"].str.extract(r'^([^:]+)')[0]
-                message_counts = error_data["simplified_message"].value_counts().head(5).to_dict()
-                error_patterns = message_counts
-
-            # Аналіз функцій, що викликають найбільше помилок
-            function_errors = {}
-            if "function_name" in error_data.columns:
-                function_counts = error_data["function_name"].value_counts().to_dict()
-                function_errors = function_counts
-
-            # Тренд помилок за останній тиждень
-            week_ago = datetime.now() - timedelta(days=7)
-            weekly_errors = error_data[error_data["timestamp"] >= week_ago]
-            weekly_count = len(weekly_errors)
-
-            # Порівняння з попереднім тижнем
-            two_weeks_ago = datetime.now() - timedelta(days=14)
-            prev_week_errors = error_data[(error_data["timestamp"] >= two_weeks_ago) &
-                                          (error_data["timestamp"] < week_ago)]
-            prev_week_count = len(prev_week_errors)
-
-            weekly_change = weekly_count - prev_week_count
-            weekly_change_percent = (weekly_change / max(1, prev_week_count)) * 100
-
-            result = {
-                "total_errors": total_errors,
-                "error_types": error_types,
-                "time_distribution": time_distribution,
-                "most_recent": most_recent,
-                "error_patterns": error_patterns,
-                "function_errors": function_errors,
-                "weekly_stats": {
-                    "current_week": weekly_count,
-                    "previous_week": prev_week_count,
-                    "change": weekly_change,
-                    "change_percent": round(weekly_change_percent, 2)
-                },
-                "analysis_date": datetime.now().isoformat()
-            }
-
-            self.logger.info(f"Отримано статистику з {total_errors} помилок")
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Помилка при отриманні статистики помилок: {str(e)}")
-            return {"error": str(e)}
 
     def get_error_stats(self) -> Dict:
 
