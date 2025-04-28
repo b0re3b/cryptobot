@@ -627,167 +627,167 @@ class RealtimeTechnicalIndicators:
             else:
                 self.last_indicators['overall_signal'] = 0  # Недостатньо даних для сигналу
 
-        def get_all_indicators(self) -> Dict[str, Optional[float]]:
-            """
-            Отримання всіх поточних значень індикаторів
+    def get_all_indicators(self) -> Dict[str, Optional[float]]:
+        """
+        Отримання всіх поточних значень індикаторів
 
-            Returns:
-                Словник з усіма обчисленими індикаторами
-            """
-            return self.last_indicators.copy()
+        Returns:
+            Словник з усіма обчисленими індикаторами
+        """
+        return self.last_indicators.copy()
 
-        def get_indicator(self, indicator_name: str) -> Optional[float]:
-            """
-            Отримання значення конкретного індикатора
+    def get_indicator(self, indicator_name: str) -> Optional[float]:
+        """
+        Отримання значення конкретного індикатора
 
-            Args:
-                indicator_name: Назва індикатора
+        Args:
+            indicator_name: Назва індикатора
 
-            Returns:
-                Значення індикатора або None, якщо індикатор не обчислено
-            """
-            return self.last_indicators.get(indicator_name)
+        Returns:
+            Значення індикатора або None, якщо індикатор не обчислено
+        """
+        return self.last_indicators.get(indicator_name)
 
-        def get_signals(self) -> Dict[str, int]:
-            """
-            Отримання всіх поточних торгових сигналів
+    def get_signals(self) -> Dict[str, int]:
+        """
+        Отримання всіх поточних торгових сигналів
 
-            Returns:
-                Словник з торговими сигналами (1: покупка, -1: продаж, 0: нейтральний)
-            """
-            signal_keys = ['sma_9_20_cross', 'rsi_signal', 'macd_signal_cross',
-                           'stoch_signal', 'bb_signal', 'adx_signal', 'overall_signal']
+        Returns:
+            Словник з торговими сигналами (1: покупка, -1: продаж, 0: нейтральний)
+        """
+        signal_keys = ['sma_9_20_cross', 'rsi_signal', 'macd_signal_cross',
+                       'stoch_signal', 'bb_signal', 'adx_signal', 'overall_signal']
 
-            return {key: self.last_indicators.get(key, 0) for key in signal_keys}
+        return {key: self.last_indicators.get(key, 0) for key in signal_keys}
 
-        def batch_update(self, ohlcv_data: List[Dict[str, float]]) -> Dict[str, List[Optional[float]]]:
-            """
-            Пакетне оновлення індикаторів на основі декількох OHLCV свічок
+    def batch_update(self, ohlcv_data: List[Dict[str, float]]) -> Dict[str, List[Optional[float]]]:
+        """
+        Пакетне оновлення індикаторів на основі декількох OHLCV свічок
 
-            Args:
-                ohlcv_data: Список словників з OHLCV даними
-                          (повинні мати ключі 'close', 'high', 'low', 'volume', опціонально 'timestamp')
+        Args:
+            ohlcv_data: Список словників з OHLCV даними
+                      (повинні мати ключі 'close', 'high', 'low', 'volume', опціонально 'timestamp')
 
-            Returns:
-                Словник з історією значень індикаторів
-            """
-            # Ініціалізація словника для збереження історії індикаторів
-            indicator_history = {key: [] for key in self.last_indicators.keys()}
+        Returns:
+            Словник з історією значень індикаторів
+        """
+        # Ініціалізація словника для збереження історії індикаторів
+        indicator_history = {key: [] for key in self.last_indicators.keys()}
 
-            # Оновлення для кожної свічки
-            for candle in ohlcv_data:
-                close = candle['close']
-                high = candle.get('high', close)
-                low = candle.get('low', close)
-                volume = candle.get('volume', 0)
-                timestamp = candle.get('timestamp', None)
+        # Оновлення для кожної свічки
+        for candle in ohlcv_data:
+            close = candle['close']
+            high = candle.get('high', close)
+            low = candle.get('low', close)
+            volume = candle.get('volume', 0)
+            timestamp = candle.get('timestamp', None)
 
-                # Оновлення індикаторів
-                updated_indicators = self.update(close, high, low, volume, timestamp)
+            # Оновлення індикаторів
+            updated_indicators = self.update(close, high, low, volume, timestamp)
 
-                # Збереження значень у історію
-                for key, value in updated_indicators.items():
-                    indicator_history[key].append(value)
+            # Збереження значень у історію
+            for key, value in updated_indicators.items():
+                indicator_history[key].append(value)
 
-            return indicator_history
+        return indicator_history
 
-        def get_current_state(self) -> Dict[str, Any]:
-            """
-            Отримання поточного стану об'єкта для серіалізації/збереження
+    def get_current_state(self) -> Dict[str, Any]:
+        """
+        Отримання поточного стану об'єкта для серіалізації/збереження
 
-            Returns:
-                Словник з поточним станом індикаторів і буферів
-            """
-            return {
-                'prices': list(self.prices),
-                'high_prices': list(self.high_prices),
-                'low_prices': list(self.low_prices),
-                'volumes': list(self.volumes),
-                'indicators': self.last_indicators.copy(),
-                'timestamp': self.last_update_time,
-                'period_start': self.period_start_time,
-                'instrument': self.instrument,
-                'timeframe': self.timeframe
-            }
+        Returns:
+            Словник з поточним станом індикаторів і буферів
+        """
+        return {
+            'prices': list(self.prices),
+            'high_prices': list(self.high_prices),
+            'low_prices': list(self.low_prices),
+            'volumes': list(self.volumes),
+            'indicators': self.last_indicators.copy(),
+            'timestamp': self.last_update_time,
+            'period_start': self.period_start_time,
+            'instrument': self.instrument,
+            'timeframe': self.timeframe
+        }
 
-        def load_state(self, state: Dict[str, Any]) -> None:
-            """
-            Завантаження збереженого стану об'єкта
+    def load_state(self, state: Dict[str, Any]) -> None:
+        """
+        Завантаження збереженого стану об'єкта
 
-            Args:
-                state: Словник зі збереженим станом (отриманий з get_current_state)
-            """
-            # Скидання буферів
-            self._initialize_buffers()
+        Args:
+            state: Словник зі збереженим станом (отриманий з get_current_state)
+        """
+        # Скидання буферів
+        self._initialize_buffers()
 
-            # Завантаження метаданих
-            self.instrument = state.get('instrument', self.instrument)
-            self.timeframe = state.get('timeframe', self.timeframe)
-            self.last_update_time = state.get('timestamp')
-            self.period_start_time = state.get('period_start')
+        # Завантаження метаданих
+        self.instrument = state.get('instrument', self.instrument)
+        self.timeframe = state.get('timeframe', self.timeframe)
+        self.last_update_time = state.get('timestamp')
+        self.period_start_time = state.get('period_start')
 
-            # Завантаження буферів даних
-            self.prices.extend(state.get('prices', []))
-            self.high_prices.extend(state.get('high_prices', []))
-            self.low_prices.extend(state.get('low_prices', []))
-            self.volumes.extend(state.get('volumes', []))
+        # Завантаження буферів даних
+        self.prices.extend(state.get('prices', []))
+        self.high_prices.extend(state.get('high_prices', []))
+        self.low_prices.extend(state.get('low_prices', []))
+        self.volumes.extend(state.get('volumes', []))
 
-            # Ініціалізація індикаторів
-            if state.get('prices'):
-                self._recalculate_all_indicators()
+        # Ініціалізація індикаторів
+        if state.get('prices'):
+            self._recalculate_all_indicators()
 
-            # Завантаження значень індикаторів
-            self.last_indicators = state.get('indicators', {})
+        # Завантаження значень індикаторів
+        self.last_indicators = state.get('indicators', {})
 
-        def _recalculate_all_indicators(self) -> None:
-            """
-            Перерахунок усіх індикаторів на основі поточних буферів даних
-            (використовується після завантаження стану)
-            """
-            # Тимчасово зберігаємо буфери
-            prices = list(self.prices)
-            highs = list(self.high_prices)
-            lows = list(self.low_prices)
-            volumes = list(self.volumes)
+    def _recalculate_all_indicators(self) -> None:
+        """
+        Перерахунок усіх індикаторів на основі поточних буферів даних
+        (використовується після завантаження стану)
+        """
+        # Тимчасово зберігаємо буфери
+        prices = list(self.prices)
+        highs = list(self.high_prices)
+        lows = list(self.low_prices)
+        volumes = list(self.volumes)
 
-            # Скидання буферів і кешів
-            self._initialize_buffers()
+        # Скидання буферів і кешів
+        self._initialize_buffers()
 
-            # Додаємо дані послідовно для коректного обчислення індикаторів
-            for i in range(len(prices)):
-                self.update(
-                    prices[i],
-                    highs[i] if i < len(highs) else prices[i],
-                    lows[i] if i < len(lows) else prices[i],
-                    volumes[i] if i < len(volumes) else 0
-                )
+        # Додаємо дані послідовно для коректного обчислення індикаторів
+        for i in range(len(prices)):
+            self.update(
+                prices[i],
+                highs[i] if i < len(highs) else prices[i],
+                lows[i] if i < len(lows) else prices[i],
+                volumes[i] if i < len(volumes) else 0
+            )
 
-        def get_indicator_description(self, indicator_name: str) -> str:
-            """
-            Отримання опису конкретного індикатора
+    def get_indicator_description(self, indicator_name: str) -> str:
+        """
+        Отримання опису конкретного індикатора
 
-            Args:
-                indicator_name: Назва індикатора
+        Args:
+            indicator_name: Назва індикатора
 
-            Returns:
-                Опис індикатора
-            """
-            descriptions = {
-                'sma': 'Simple Moving Average - проста ковзна середня',
-                'ema': 'Exponential Moving Average - експоненціальна ковзна середня',
-                'rsi': 'Relative Strength Index - індекс відносної сили',
-                'macd': 'Moving Average Convergence Divergence - конвергенція/дивергенція ковзних середніх',
-                'stoch': 'Stochastic Oscillator - стохастичний осцилятор',
-                'bb': 'Bollinger Bands - смуги Боллінджера',
-                'vwap': 'Volume Weighted Average Price - середньозважена за обсягом ціна',
-                'obv': 'On-Balance Volume - балансовий обсяг',
-                'adx': 'Average Directional Index - середній індекс спрямованості',
-                'psar': 'Parabolic SAR - параболічна система зупинки та розвороту',
-            }
+        Returns:
+            Опис індикатора
+        """
+        descriptions = {
+            'sma': 'Simple Moving Average - проста ковзна середня',
+            'ema': 'Exponential Moving Average - експоненціальна ковзна середня',
+            'rsi': 'Relative Strength Index - індекс відносної сили',
+            'macd': 'Moving Average Convergence Divergence - конвергенція/дивергенція ковзних середніх',
+            'stoch': 'Stochastic Oscillator - стохастичний осцилятор',
+            'bb': 'Bollinger Bands - смуги Боллінджера',
+            'vwap': 'Volume Weighted Average Price - середньозважена за обсягом ціна',
+            'obv': 'On-Balance Volume - балансовий обсяг',
+            'adx': 'Average Directional Index - середній індекс спрямованості',
+            'psar': 'Parabolic SAR - параболічна система зупинки та розвороту',
+        }
 
-            # Пошук відповідного опису за префіксом
-            for prefix, description in descriptions.items():
-                if indicator_name.startswith(prefix):
-                    return description
+        # Пошук відповідного опису за префіксом
+        for prefix, description in descriptions.items():
+            if indicator_name.startswith(prefix):
+                return description
 
-            return 'Невідомий індикатор'
+        return 'Невідомий індикатор'
