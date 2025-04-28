@@ -1,6 +1,6 @@
 from .time_series import TimeSeriesModels
 from .deep_learning import DeepLearningModels
-from .technical_indicators import TechnicalIndicators
+from .realtime_technical_indicators import TechnicalIndicators
 from .ensemble import EnsembleModels
 from .sentiment_models import CryptoSentimentModel
 from data_collection.crypto_news_scraper import CryptoNewsScraper
