@@ -1,5 +1,7 @@
+import os
 import re
-import numpy as np
+import ssl
+import certifi
 import pandas as pd
 import asyncio
 import aiohttp
@@ -9,17 +11,19 @@ from datetime import datetime, timedelta
 import logging
 from typing import List, Dict, Optional, Tuple, Counter, Any
 from data.db import DatabaseManager
-from utils.config import db_connection
 import concurrent.futures
 import numpy as np
+from utils.config import db_connection
+os.environ['SSL_CERT_FILE'] = certifi.where()
 
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+ssl._create_default_https_context = lambda: ssl_context
 
 class TwitterScraper:
 
     def __init__(self, sentiment_model: str = "finiteautomata/bertweet-base-sentiment-analysis",
-                 cache_dir: Optional[str] = None,
+                 cache_dir: Optional[str] ="./data_collection/cachetweet",
                  log_level=logging.INFO,
-                 db_config: Optional[Dict] = None,
                  cache_expiry: int = 86400,
                  max_connections: int = 20):
 
@@ -28,15 +32,13 @@ class TwitterScraper:
         self.log_level = log_level
         self.cache_expiry = cache_expiry
         self.max_connections = max_connections
-        # Ініціалізація сеансу як None
-        self.session = None
-        # Налаштування логування
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація TwitterScraper...")
+        self.session = None
 
         # Підключення до бази даних
-        self.db_config = db_config if db_config else db_connection
+        self.db_config = db_connection
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
 
@@ -230,7 +232,7 @@ class TwitterScraper:
             for tweet in tweets:
                 # SQL запит для вставки твіту
                 insert_query = """
-                               INSERT INTO tweets (id, date, content, username, displayname, followers, \
+                               INSERT INTO tweets_raw (id, date, content, username, displayname, followers, \
                                                    retweets, likes, query, lang, collected_at) \
                                VALUES (:id, :date, :content, :username, :displayname, :followers, \
                                        :retweets, :likes, :query, :lang, :collected_at) ON CONFLICT (id) DO NOTHING \
@@ -632,11 +634,17 @@ class TwitterScraper:
             }
 
     async def track_influencers(self, influencers: List[str], days_back: int = 30) -> Dict[str, List[Dict]]:
-        if not influencers:
-            self.logger.error("Не вказано імена інфлюенсерів")
-            return {}
-
         try:
+            if not influencers and self.db_manager:
+                influencers_data = await self.db_manager.get_crypto_influencers()
+                if not influencers_data.empty:
+                    influencers = influencers_data['username'].tolist()
+                    self.logger.info(f"Отримано {len(influencers)} інфлюенсерів з бази даних")
+
+            if not influencers:
+                self.logger.error("Не вказано імена інфлюенсерів")
+                return {}
+
             self.logger.info(f"Відстеження активності {len(influencers)} крипто-інфлюенсерів за {days_back} днів")
 
             # Якщо influencers порожній, спробуємо отримати інфлюенсерів з бази даних
@@ -703,7 +711,7 @@ class TwitterScraper:
             # Збереження активності інфлюенсера (асинхронно)
             tasks = []
             for tweet in analyzed_tweets:
-                activity_data = {
+                tweet_data = {
                     "influencer_username": username,
                     "tweet_id": tweet.get("id"),
                     "content": tweet.get("content"),
@@ -713,7 +721,7 @@ class TwitterScraper:
                     "sentiment": tweet.get("sentiment", "neutral"),
                     "sentiment_score": tweet.get("sentiment_score", 0.0)
                 }
-                tasks.append(self.db_manager.insert_sentiment_time_series(activity_data))
+                tasks.append(self.db_manager.insert_influencer_tweet(tweet_data))
 
             # Очікуємо завершення всіх завдань зі збереження
             if tasks:
@@ -828,6 +836,7 @@ class TwitterScraper:
 
                 if tasks:
                     await asyncio.gather(*tasks)
+            result["query"] = query
 
             self.logger.info(f"Аналіз зміни настроїв завершено, отримано {len(result)} часових точок")
             return result
@@ -901,7 +910,7 @@ class TwitterScraper:
                 # Фільтрація твітів за датами
                 relevant_tweets = [
                     tweet for tweet in tweets
-                    if start_date <= tweet["date"] <= end_date
+                    if "date" in tweet and start_date <= tweet["date"] <= end_date
                 ]
 
                 # Аналіз найпопулярніших твітів
@@ -1061,8 +1070,7 @@ class TwitterScraper:
             }).reset_index()
 
             # Об'єднання даних для кореляційного аналізу
-            merged_data = pd.merge(daily_sentiment, price_daily, on="date_day", how="inner")
-
+            merged_data = pd.merge(daily_sentiment, price_daily, on="date_day", how="outer").dropna()
             if len(merged_data) < 3:
                 self.logger.warning("Недостатньо точок даних для кореляційного аналізу")
                 return {"error": "Insufficient data points for correlation analysis"}
@@ -1204,7 +1212,8 @@ class TwitterScraper:
                             # Якщо помилка не пов'язана з обмеженням швидкості, передаємо її далі
                             self.logger.error(f"Помилка не пов'язана з обмеженням API: {str(e)}")
                             raise
-
+                original_search_tweets = self.search_tweets
+                self.search_tweets = retry_on_api_limit(original_search_tweets)
                 # Якщо всі спроби вичерпано
                 self.logger.error(f"Вичерпано всі {self.api_retry_count} спроб через обмеження API")
                 raise Exception(f"API rate limit exceeded after {self.api_retry_count} attempts")
@@ -1249,10 +1258,13 @@ class TwitterScraper:
             }
 
             # Підрахунок згадувань
+            # Створити всі індекси одразу
             for symbol, pattern in crypto_patterns.items():
                 tweets_df[f"mentions_{symbol}"] = tweets_df["content"].str.lower().str.contains(
                     pattern, regex=True, case=False).astype(int)
-                crypto_mentions[symbol] = tweets_df[f"mentions_{symbol}"].sum()
+
+            # Потім використовувати їх
+            crypto_mentions = {symbol: tweets_df[f"mentions_{symbol}"].sum() for symbol in crypto_patterns.keys()}
 
             # Групування за днями
             daily_activity = tweets_df.groupby("date_day").agg({
@@ -1513,10 +1525,10 @@ async def main():
         print("\n=== Аналіз впливовості користувача ===")
         influence = await scraper.get_user_influence("elonmusk")
         print(f"Користувач: @{influence['username']}")
-        if influence.get('found'):
+        if 'influence_score' in influence:
             print(f"Оцінка впливовості: {influence['influence_score']}")
         else:
-            print(f"Помилка: {influence.get('error', 'Невідома помилка')}")
+            print("Оцінка впливовості не обчислена")
         print(f"Середня кількість лайків: {influence['engagement']['avg_likes']}")
 
         # Приклад 4: Відстеження змін настроїв
