@@ -555,41 +555,209 @@ class CryptoNewsScraper:
 
     def scrape_all_sources(self, days_back: int = 1,
                            categories: List[str] = None) -> List[Dict]:
-        """
-        Збір новин з усіх доступних джерел.
 
-        Args:
-            days_back: Кількість днів для збору новин назад
-            categories: Категорії новин для фільтрації
+        self.logger.info(f"Початок збору новин з усіх доступних джерел за останні {days_back} днів")
 
-        Returns:
-            Об'єднаний список словників з даними новин
-        """
-        pass
+        all_news = []
+
+        # Словник з функціями для кожного джерела
+        source_functions = {
+            'coindesk': self.scrape_coindesk,
+            'cointelegraph': self.scrape_cointelegraph,
+            'decrypt': self.scrape_decrypt,
+            'cryptoslate': self.scrape_cryptoslate,
+            'theblock': self.scrape_theblock
+        }
+
+        # Визначення, які джерела будуть використовуватися
+        sources_to_scrape = [source for source in self.news_sources if source in source_functions]
+
+        for source in sources_to_scrape:
+            try:
+                self.logger.info(f"Збір новин з джерела {source}")
+
+                # Встановлення категорій для кожного джерела
+                source_categories = None
+                if categories:
+                    # Різні джерела можуть мати різні імена категорій,
+                    # тому можна додати спеціальні категорії для кожного джерела
+                    source_categories = categories
+
+                # Виклик відповідної функції для джерела
+                news_from_source = source_functions[source](days_back=days_back, categories=source_categories)
+
+                if news_from_source:
+                    self.logger.info(f"Успішно зібрано {len(news_from_source)} новин з {source}")
+                    all_news.extend(news_from_source)
+                else:
+                    self.logger.warning(f"Не вдалося зібрати новини з {source}")
+
+                # Затримка між запитами до різних джерел
+                time.sleep(randint(2, 5))
+
+            except Exception as e:
+                self.logger.error(f"Помилка при зборі новин з {source}: {e}")
+
+        # Видалення дублікатів (якщо є)
+        unique_news = []
+        seen_titles = set()
+
+        for news in all_news:
+            if news['title'] not in seen_titles:
+                seen_titles.add(news['title'])
+                unique_news.append(news)
+
+        self.logger.info(f"Всього зібрано {len(unique_news)} унікальних новин з {len(sources_to_scrape)} джерел")
+        return unique_news
 
     def analyze_news_sentiment(self, news_data: List[Dict]) -> List[Dict]:
-        """
-        Аналіз настроїв у зібраних новинах.
 
-        Args:
-            news_data: Список новин для аналізу
+        self.logger.info(f"Початок аналізу настроїв для {len(news_data)} новин")
 
-        Returns:
-            Список новин із доданим полем sentiment
-        """
-        pass
+        # Перевірка наявності аналізатора настроїв
+        if not self.sentiment_analyzer:
+            self.logger.error("Аналізатор настроїв не ініціалізований")
+            # Додаємо нейтральний настрій за замовчуванням
+            for news in news_data:
+                news['sentiment'] = {
+                    'score': 0.0,  # Нейтральний настрій
+                    'label': 'neutral',
+                    'confidence': 0.0,
+                    'analyzed': False
+                }
+            return news_data
+
+        analyzed_news = []
+
+        for idx, news in enumerate(news_data):
+            try:
+                # Текст для аналізу (комбінуємо заголовок та опис)
+                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+
+                # Викликаємо аналізатор настроїв
+                sentiment_result = self.sentiment_analyzer.analyze(text_to_analyze)
+
+                # Копіюємо новину та додаємо результат аналізу
+                news_with_sentiment = news.copy()
+
+                # Форматуємо результат аналізу
+                if isinstance(sentiment_result, dict):
+                    news_with_sentiment['sentiment'] = sentiment_result
+                else:
+                    # Якщо результат не у вигляді словника, створюємо базову структуру
+                    news_with_sentiment['sentiment'] = {
+                        'score': getattr(sentiment_result, 'score', 0.0),
+                        'label': getattr(sentiment_result, 'label', 'neutral'),
+                        'confidence': getattr(sentiment_result, 'confidence', 0.0),
+                        'analyzed': True
+                    }
+
+                analyzed_news.append(news_with_sentiment)
+
+                # Логування прогресу (кожні 50 новин)
+                if idx > 0 and idx % 50 == 0:
+                    self.logger.info(f"Проаналізовано {idx}/{len(news_data)} новин")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при аналізі настроїв для новини '{news.get('title', 'unknown')}': {e}")
+                # Додаємо новину з нейтральним настроєм у випадку помилки
+                news['sentiment'] = {
+                    'score': 0.0,
+                    'label': 'neutral',
+                    'confidence': 0.0,
+                    'analyzed': False,
+                    'error': str(e)
+                }
+                analyzed_news.append(news)
+
+        self.logger.info(f"Аналіз настроїв завершено для {len(analyzed_news)} новин")
+        return analyzed_news
 
     def extract_mentioned_coins(self, news_data: List[Dict]) -> List[Dict]:
-        """
-        Витягнення згаданих криптовалют із новин.
 
-        Args:
-            news_data: Список новин для аналізу
+        self.logger.info(f"Початок пошуку згаданих криптовалют у {len(news_data)} новинах")
 
-        Returns:
-            Список новин із доданим полем mentioned_coins
-        """
-        pass
+        # Словник з популярними криптовалютами та їх скороченнями/синонімами
+        crypto_keywords = {
+            'bitcoin': ['btc', 'xbt', 'bitcoin', 'биткоин', 'біткоїн'],
+            'ethereum': ['eth', 'ethereum', 'эфириум', 'етеріум', 'ether'],
+            'ripple': ['xrp', 'ripple'],
+            'litecoin': ['ltc', 'litecoin'],
+            'cardano': ['ada', 'cardano'],
+            'polkadot': ['dot', 'polkadot'],
+            'binance coin': ['bnb', 'binance coin', 'binance'],
+            'dogecoin': ['doge', 'dogecoin'],
+            'solana': ['sol', 'solana'],
+            'tron': ['trx', 'tron'],
+            'tether': ['usdt', 'tether'],
+            'usd coin': ['usdc', 'usd coin'],
+            'avalanche': ['avax', 'avalanche'],
+            'chainlink': ['link', 'chainlink'],
+            'polygon': ['matic', 'polygon'],
+            'stellar': ['xlm', 'stellar'],
+            'cosmos': ['atom', 'cosmos'],
+            'vechain': ['vet', 'vechain'],
+            'algorand': ['algo', 'algorand'],
+            'uniswap': ['uni', 'uniswap'],
+            'shiba inu': ['shib', 'shiba inu', 'shiba'],
+            'filecoin': ['fil', 'filecoin'],
+            'monero': ['xmr', 'monero'],
+            'aave': ['aave'],
+            'maker': ['mkr', 'maker'],
+            'compound': ['comp', 'compound'],
+            'decentraland': ['mana', 'decentraland']
+        }
+
+        # Компілюємо регулярні вирази для ефективного пошуку
+        coin_patterns = {}
+        for coin, aliases in crypto_keywords.items():
+            # Створюємо шаблон регулярного виразу для кожної монети та її аліасів
+            # \b забезпечує пошук цілих слів, а (?i) - нечутливість до регістру
+            pattern = r'\b(?i)(' + '|'.join(aliases) + r')\b'
+            coin_patterns[coin] = re.compile(pattern)
+
+        for news in news_data:
+            try:
+                # Текст для аналізу (комбінуємо заголовок та опис)
+                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+
+                # Ініціалізуємо словник для згаданих монет та їх кількості
+                mentioned_coins = {}
+
+                # Пошук кожної монети в тексті
+                for coin, pattern in coin_patterns.items():
+                    matches = pattern.findall(text_to_analyze)
+                    if matches:
+                        # Записуємо кількість згадок
+                        mentioned_coins[coin] = len(matches)
+
+                # Сортуємо монети за кількістю згадок (в порядку спадання)
+                sorted_mentions = sorted(
+                    mentioned_coins.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+
+                # Формуємо структурований результат
+                news['mentioned_coins'] = {
+                    'coins': {coin: count for coin, count in sorted_mentions},
+                    'top_mentioned': sorted_mentions[0][0] if sorted_mentions else None,
+                    'total_coins': len(sorted_mentions)
+                }
+
+            except Exception as e:
+                self.logger.error(
+                    f"Помилка при пошуку згаданих криптовалют для новини '{news.get('title', 'unknown')}': {e}")
+                # Додаємо порожнє поле у випадку помилки
+                news['mentioned_coins'] = {
+                    'coins': {},
+                    'top_mentioned': None,
+                    'total_coins': 0,
+                    'error': str(e)
+                }
+
+        self.logger.info("Пошук згаданих криптовалют завершено")
+        return news_data
 
     def filter_by_keywords(self, news_data: List[Dict],
                            keywords: List[str]) -> List[Dict]:
