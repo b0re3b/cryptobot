@@ -17,6 +17,32 @@ from datetime import datetime, timedelta
 class TimeSeriesModels:
     """
     Клас для моделювання часових рядів криптовалют з використанням класичних методів.
+
+    Клас працює з базою даних через об'єкт db_manager, який має містити наступні методи роботи з БД:
+    - get_klines_processed: для отримання оброблених свічок
+    - get_orderbook_processed: для отримання обробленої книги ордерів
+    - get_volume_profile: для отримання профілю об'єму
+    - save_model_metadata: для збереження метаданих моделі
+    - save_model_parameters: для збереження параметрів моделі
+    - save_model_metrics: для збереження метрик ефективності моделі
+    - save_model_forecasts: для збереження прогнозів
+    - save_model_binary: для збереження серіалізованої моделі
+    - save_data_transformations: для збереження інформації про перетворення даних
+    - save_complete_model: для комплексного збереження всіх даних моделі
+    - get_model_by_key: для отримання інформації про модель за ключем
+    - get_model_parameters: для отримання параметрів моделі
+    - get_model_metrics: для отримання метрик ефективності моделі
+    - get_model_forecasts: для отримання прогнозів моделі
+    - load_model_binary: для завантаження серіалізованої моделі
+    - get_data_transformations: для отримання інформації про перетворення даних
+    - load_complete_model: для комплексного завантаження всіх даних моделі
+    - get_models_by_symbol: для отримання всіх моделей для певного символу
+    - get_latest_model_by_symbol: для отримання останньої моделі для певного символу
+    - get_model_performance_history: для отримання історії продуктивності моделі
+    - update_model_status: для оновлення статусу активності моделі
+    - compare_model_forecasts: для порівняння прогнозів декількох моделей
+    - get_model_forecast_accuracy: для розрахунку точності прогнозу
+    - get_available_symbols: для отримання списку доступних символів криптовалют
     """
 
     def __init__(self, db_manager=None, log_level=logging.INFO):
@@ -26,6 +52,10 @@ class TimeSeriesModels:
         Args:
             db_manager: Об'єкт класу DatabaseManager для роботи з базою даних PostgreSQL
             log_level: Рівень логування
+
+        Примітка:
+        - Об'єкт db_manager зберігається як атрибут класу для подальшого використання методами
+        - Його методи використовуються для збереження/завантаження даних моделі та історичних даних криптовалют
         """
         pass
 
@@ -81,6 +111,11 @@ class TimeSeriesModels:
 
         Returns:
             Результати навчання
+
+        Примітка:
+        - Після навчання моделі рекомендується зберегти її в БД за допомогою self.db_manager.save_model_metadata,
+          self.db_manager.save_model_parameters та self.db_manager.save_model_binary
+        - Ключ моделі для збереження повинен бути у форматі f"{symbol}_arima_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         """
         pass
 
@@ -97,6 +132,11 @@ class TimeSeriesModels:
 
         Returns:
             Результати навчання
+
+        Примітка:
+        - Після навчання моделі рекомендується зберегти її в БД за допомогою self.db_manager.save_model_metadata,
+          self.db_manager.save_model_parameters та self.db_manager.save_model_binary
+        - Ключ моделі для збереження повинен бути у форматі f"{symbol}_sarima_{datetime.now().strftime('%Y%m%d%H%M%S')}"
         """
         pass
 
@@ -110,6 +150,10 @@ class TimeSeriesModels:
 
         Returns:
             Прогнозні значення
+
+        Примітка:
+        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
+        - Після прогнозування рекомендується зберегти результати в БД за допомогою self.db_manager.save_model_forecasts
         """
         pass
 
@@ -123,6 +167,11 @@ class TimeSeriesModels:
 
         Returns:
             Метрики точності
+
+        Примітка:
+        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
+        - Після оцінки рекомендується зберегти метрики в БД за допомогою self.db_manager.save_model_metrics
+        - Метрики мають включати MSE, RMSE, MAE, MAPE
         """
         pass
 
@@ -136,6 +185,10 @@ class TimeSeriesModels:
 
         Returns:
             Успішність операції
+
+        Примітка:
+        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
+        - Після завантаження модель зберігається на диск
         """
         pass
 
@@ -149,6 +202,9 @@ class TimeSeriesModels:
 
         Returns:
             Успішність операції
+
+        Примітка:
+        - Після завантаження з диску модель має бути збережена в БД за допомогою self.db_manager.save_complete_model
         """
         pass
 
@@ -162,6 +218,10 @@ class TimeSeriesModels:
 
         Returns:
             Трансформований часовий ряд або кортеж (трансформований ряд, параметр трансформації)
+
+        Примітка:
+        - При використанні у pipeline навчання моделі, слід зберегти інформацію про трансформацію
+          за допомогою self.db_manager.save_data_transformations для можливості зворотної трансформації прогнозів
         """
         pass
 
@@ -209,6 +269,10 @@ class TimeSeriesModels:
 
         Returns:
             Результати валідації
+
+        Примітка:
+        - Результати валідації можуть бути збережені в БД за допомогою self.db_manager.save_model_metrics
+          для кожної ітерації з різними датами тестування
         """
         pass
 
@@ -222,6 +286,9 @@ class TimeSeriesModels:
 
         Returns:
             Результати аналізу залишків
+
+        Примітка:
+        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
         """
         pass
 
@@ -237,6 +304,11 @@ class TimeSeriesModels:
 
         Returns:
             Прогноз та довірчі інтервали
+
+        Примітка:
+        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
+        - Після прогнозування рекомендується зберегти результати в БД за допомогою
+          self.db_manager.save_model_forecasts включно з нижніми та верхніми межами довірчих інтервалів
         """
         pass
 
@@ -250,6 +322,10 @@ class TimeSeriesModels:
 
         Returns:
             Словник з результатами порівняння моделей
+
+        Примітка:
+        - Для кожного ключа моделі потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model
+        - Можна використати self.db_manager.compare_model_forecasts для порівняння прогнозів різних моделей
         """
         pass
 
@@ -264,6 +340,10 @@ class TimeSeriesModels:
 
         Returns:
             Оброблений часовий ряд
+
+        Примітка:
+        - Інформація про pipeline може бути збережена в БД за допомогою self.db_manager.save_data_transformations
+          для подальшого використання при інверсній трансформації прогнозів
         """
         pass
 
@@ -293,6 +373,10 @@ class TimeSeriesModels:
 
         Returns:
             Словник з результатами автоматичного прогнозування
+
+        Примітка:
+        - Результати прогнозування та сама модель можуть бути збережені в БД за допомогою
+          self.db_manager.save_complete_model, який включає в себе збереження всіх компонентів моделі
         """
         pass
 
@@ -313,6 +397,9 @@ class TimeSeriesModels:
 
         Returns:
             DataFrame з даними криптовалюти
+
+        Примітка:
+        - Використовує self.db_manager.get_klines_processed для отримання оброблених свічок з БД
         """
         pass
 
@@ -329,6 +416,10 @@ class TimeSeriesModels:
 
         Returns:
             Успішність операції
+
+        Примітка:
+        - Спочатку потрібно отримати ID моделі за допомогою self.db_manager.get_model_by_key(model_key)
+        - Потім використати self.db_manager.save_model_forecasts для збереження прогнозів
         """
         pass
 
@@ -344,6 +435,10 @@ class TimeSeriesModels:
 
         Returns:
             Дані прогнозу або None, якщо прогноз не знайдено
+
+        Примітка:
+        - Спочатку потрібно отримати ID моделі за допомогою self.db_manager.get_model_by_key(model_key)
+        - Потім використати self.db_manager.get_model_forecasts для отримання прогнозів
         """
         pass
 
@@ -356,6 +451,9 @@ class TimeSeriesModels:
 
         Returns:
             Список доступних символів криптовалют
+
+        Примітка:
+        - Використовує self.db_manager.get_available_symbols для отримання списку символів криптовалют
         """
         pass
 
@@ -371,6 +469,9 @@ class TimeSeriesModels:
 
         Returns:
             Дата і час останнього оновлення або None, якщо дані відсутні
+
+        Примітка:
+        - Може використовувати допоміжні методи db_manager для отримання цієї інформації
         """
         pass
 
@@ -390,5 +491,10 @@ class TimeSeriesModels:
 
         Returns:
             Словник з результатами для кожного символу
+
+        Примітка:
+        - Для кожного символу завантажує дані, навчає модель та зберігає результати в БД
+        - Використовує self.load_crypto_data і self.run_auto_forecast для кожного символу
+        - Зберігає всі результати в БД за допомогою self.db_manager.save_complete_model
         """
         pass
