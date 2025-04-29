@@ -206,17 +206,6 @@ class MarketDataProcessor:
 
         return new_data
 
-
-
-
-
-
-
-
-
-
-
-
     def align_time_series(self, data_list: List[pd.DataFrame],
                           reference_index: int = 0) -> List[pd.DataFrame]:
 
