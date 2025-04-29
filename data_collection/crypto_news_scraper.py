@@ -47,7 +47,7 @@ class CryptoNewsScraper:
                 response = requests.get(url, headers=self.headers, timeout=10)
                 if response.status_code == 200:
                     return response
-                elif response.status_code in [403, 429]:  # Forbidden or Too Many Requests
+                elif response.status_code in [403, 429]:
                     self.logger.warning(f"Отримано код {response.status_code} при запиті до {url}. Очікування...")
                     time.sleep((backoff_factor * (2 ** i)) + randint(1, 3))
                 else:

@@ -13,7 +13,7 @@ import pytz
 from utils.config import db_connection
 from data.db import DatabaseManager
 from utils.config import BINANCE_API_KEY,BINANCE_API_SECRET
-
+import time
 class MarketDataProcessor:
 
     def __init__(self,  log_level=logging.INFO):
