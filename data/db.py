@@ -373,7 +373,7 @@ class DatabaseManager:
         )
         ''')
 
-    def insert_kline(self, symbol, kline_data):
+    def insert_kline(self, symbol, kline_data,table_name):
         """Додає свічку до відповідної таблиці для валюти"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")

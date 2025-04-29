@@ -4,7 +4,7 @@ import hmac
 import json
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import aiohttp
 import pandas as pd
@@ -582,47 +582,88 @@ class BinanceClient:
 
     # ===== Збереження історичних даних в базу даних =====
 
-    def save_historical_data_to_db(self, symbol, interval, start_date, end_date=None):
-        """Зберігає історичні дані свічок в базу даних"""
-        print(f"Починаємо зберігання історичних даних для {symbol} з інтервалом {interval}")
-        self.db_manager.log_event('INFO', f"Починаємо зберігання історичних даних для {symbol} з інтервалом {interval}",
-                                  'BinanceClient')
+    def _prepare_historical_params(self, symbol, start_date=None, end_date=None, intervals=None):
+        """
+        Підготовка параметрів для збору історичних даних
+        """
+        # Словник дат початку для символів
+        symbol_start_dates = {
+            'BTCUSDT': '2017-08-01',
+            'ETHUSDT': '2017-08-01',
+            'SOLUSDT': '2020-08-27'
+        }
 
-        base_asset = symbol[:-4]
-        quote_asset = symbol[-4:]
+        # Встановлення значень за замовчуванням
+        if not intervals:
+            intervals = ['1m', '1h', '1d']
 
-        self.db_manager.insert_cryptocurrency(symbol, base_asset, quote_asset)
+        if not start_date:
+            # Використовуємо дату з словника, якщо вона існує, інакше використовуємо 30 днів тому
+            start_date = symbol_start_dates
 
-        start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp() * 1000)
-        if end_date:
-            end_ts = int(datetime.strptime(end_date, '%Y-%m-%d').timestamp() * 1000)
+        # Конвертуємо дати в timestamp
+        try:
+            start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp() * 1000)
+            if end_date:
+                end_ts = int(datetime.strptime(end_date, '%Y-%m-%d').timestamp() * 1000)
+            else:
+                end_ts = int(datetime.now().timestamp() * 1000)
+        except ValueError as e:
+            self.db_manager.log_event('ERROR', f"Помилка формату дати: {e}", 'BinanceClient')
+            print(f"Помилка формату дати: {e}")
+            raise ValueError(f"Неправильний формат дати: {e}")
+
+        # Виділяємо базовий актив та котирувальний актив
+        # Це буде працювати для форматів XXXUSDT, але потребує доопрацювання для інших пар
+        is_valid, base_asset = self._validate_symbol(symbol)
+        quote_asset = symbol[len(base_asset):]
+
+        # Зберігаємо інформацію про криптовалюту
+        if is_valid:
+            self.db_manager.insert_cryptocurrency(symbol, base_asset, quote_asset)
         else:
-            end_ts = int(datetime.now().timestamp() * 1000)
+            raise ValueError(f"Непідтримуваний символ: {symbol}")
 
-        current_start = start_ts
-        saved_candles_count = 0
+        # Повідомлення про початок збору даних
+        self.db_manager.log_event('INFO',
+                                  f"Починаємо зберігання історичних даних для {symbol} з інтервалами {intervals}",
+                                  'BinanceClient')
+        print(f"Починаємо зберігання історичних даних для {symbol} з інтервалами {intervals}")
 
-        while current_start < end_ts:
-            current_end = min(current_start + (1000 * 60 * 60 * 24), end_ts)  # Обмеження на 1 день данних за запит
+        return {
+            'intervals': intervals,
+            'start_ts': start_ts,
+            'end_ts': end_ts,
+            'start_date': start_date,
+            'end_date': end_date if end_date else 'сьогодні'
+        }
 
-            df = self.get_klines(
-                symbol=symbol,
-                interval=interval,
-                start_time=current_start,
-                end_time=current_end,
-                limit=1000
-            )
+    def _calculate_window_size(self, interval):
+        """
+        Розрахунок оптимального розміру вікна для запиту в залежності від інтервалу
+        """
+        if interval == '1m':
+            # Для хвилинних даних обмежуємо запит до 12 годин (720 хвилин)
+            return 1000 * 60 * 60 * 12  # 12 годин в мілісекундах
+        elif interval == '1h':
+            # Для годинних даних обмежуємо запит до 10 днів (240 годин)
+            return 1000 * 60 * 60 * 24 * 10  # 10 днів в мілісекундах
+        else:
+            # Для інших інтервалів використовуємо 100 днів
+            return 1000 * 60 * 60 * 24 * 100  # 100 днів в мілісекундах
 
-            if df.empty:
-                print(
-                    f"Дані відсутні для {symbol} від {datetime.fromtimestamp(current_start / 1000)} до {datetime.fromtimestamp(current_end / 1000)}")
-                self.db_manager.log_event('WARNING',
-                                          f"Дані відсутні для {symbol} від {datetime.fromtimestamp(current_start / 1000)} до {datetime.fromtimestamp(current_end / 1000)}",
-                                          'BinanceClient')
-                current_start = current_end + 1
-                continue
+    def _process_and_save_klines_batch(self, symbol, interval, df):
+        """
+        Обробка та збереження пакету свічок в базу даних
+        """
+        saved_count = 0
 
-            for _, row in df.iterrows():
+        if df.empty:
+            return 0
+
+        for _, row in df.iterrows():
+            try:
+                # Підготовка даних свічки
                 kline_data = {
                     'symbol': symbol,
                     'interval': interval,
@@ -640,30 +681,148 @@ class BinanceClient:
                     'is_closed': True
                 }
 
-                try:
-                    self._save_kline_to_db(kline_data)
-                    saved_candles_count += 1
-                except Exception as e:
-                    print(f"Помилка збереження свічки в базу даних: {e}")
-                    self.db_manager.log_event('ERROR', f"Помилка збереження свічки в базу даних: {e}", 'BinanceClient')
+                # Отримуємо базову валюту з символа
+                is_valid, crypto_symbol = self._validate_symbol(symbol)
 
-            if len(df) > 0:
-                current_start = int(df.iloc[-1]['close_time'].timestamp() * 1000) + 1
-            else:
-                break
-            time.sleep(2)
+                if not is_valid:
+                    continue
 
-        if saved_candles_count > 0:
-            print(f"Збережено {saved_candles_count} свічок для {symbol} ({interval}) в базу даних")
-            self.db_manager.log_event('INFO',
-                                      f"Збережено {saved_candles_count} свічок для {symbol} ({interval}) в базу даних",
-                                      'BinanceClient')
-            return saved_candles_count
-        else:
-            print(f"Не вдалося зберегти жодної свічки для {symbol} за вказаний період")
-            self.db_manager.log_event('WARNING', f"Не вдалося зберегти жодної свічки для {symbol} за вказаний період",
-                                      'BinanceClient')
-            return 0
+                # Вставка в базу даних в таблицю {symbol}_klines
+                table_name = f"{symbol}_klines"  # Формат таблиці: BTCUSDT_klines, ETHUSDT_klines, тощо
+                result = self.db_manager.insert_kline(crypto_symbol, kline_data, table_name)
+
+                if result:
+                    saved_count += 1
+
+            except Exception as e:
+                error_msg = f"Помилка збереження свічки {symbol} ({interval}) в БД: {e}"
+                self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
+                print(error_msg)
+
+        return saved_count
+
+    def _fetch_and_save_historical_interval(self, symbol, interval, start_ts, end_ts):
+        """
+        Отримання та збереження історичних даних для одного інтервалу
+        """
+        saved_candles_count = 0
+        current_start = start_ts
+        window_size = self._calculate_window_size(interval)
+
+        self.db_manager.log_event('INFO',
+                                  f"Збір даних для {symbol} з інтервалом {interval} (часове вікно: {datetime.fromtimestamp(start_ts / 1000)} - {datetime.fromtimestamp(end_ts / 1000)})",
+                                  'BinanceClient')
+
+        # Проходимо через весь часовий діапазон
+        while current_start < end_ts:
+            try:
+                # Визначаємо кінець поточного вікна
+                current_end = min(current_start + window_size, end_ts)
+
+                # Виводимо діапазон дат, з якого збираємо дані
+                start_date_str = datetime.fromtimestamp(current_start / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                end_date_str = datetime.fromtimestamp(current_end / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                print(f"Отримання даних {symbol} ({interval}) від {start_date_str} до {end_date_str}")
+
+                # Отримуємо дані свічок
+                df = self.get_klines(
+                    symbol=symbol,
+                    interval=interval,
+                    start_time=current_start,
+                    end_time=current_end,
+                    limit=1000,  # Максимальна кількість свічок за один запит
+                    use_cache=False  # Не використовуємо кеш для історичних даних
+                )
+
+                if df.empty:
+                    log_msg = f"Дані відсутні для {symbol} ({interval}) від {start_date_str} до {end_date_str}"
+                    self.db_manager.log_event('WARNING', log_msg, 'BinanceClient')
+                    print(log_msg)
+
+                    # Переходимо до наступного вікна
+                    current_start = current_end + 1
+                    continue
+
+                # Обробка та збереження отриманих даних
+                batch_saved = self._process_and_save_klines_batch(symbol, interval, df)
+                saved_candles_count += batch_saved
+
+                # Виводимо прогрес
+                if batch_saved > 0:
+                    print(f"Збережено {batch_saved} свічок (всього: {saved_candles_count}) для {symbol} ({interval})")
+
+                # Оновлюємо початок вікна на основі останньої отриманої свічки
+                if len(df) > 0:
+                    # Додаємо 1 мс до часу закриття останньої свічки, щоб уникнути дублювання
+                    current_start = int(df.iloc[-1]['close_time'].timestamp() * 1000) + 1
+                else:
+                    # Якщо пустий датафрейм, то переходимо до наступного вікна
+                    current_start = current_end + 1
+
+                # Затримка, щоб уникнути перевищення ліміту запитів API
+                time.sleep(1)
+
+            except requests.exceptions.RequestException as e:
+                error_msg = f"Помилка API запиту для {symbol} ({interval}): {e}"
+                self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
+                print(error_msg)
+                time.sleep(5)  # Довша затримка у випадку помилки API
+                current_start = current_end + 1  # Пропускаємо поточне вікно
+                continue
+
+            except Exception as e:
+                error_msg = f"Неочікувана помилка при обробці даних {symbol} ({interval}): {e}"
+                self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
+                print(error_msg)
+                current_start = current_end + 1  # Пропускаємо поточне вікно
+                continue
+
+        # Виводимо підсумок для інтервалу
+        summary_msg = f"Завершено збір даних для {symbol} ({interval}). Збережено {saved_candles_count} свічок."
+        self.db_manager.log_event('INFO', summary_msg, 'BinanceClient')
+        print(summary_msg)
+
+        return saved_candles_count
+
+    def _summarize_historical_results(self, symbol, results):
+        """
+        Підведення підсумків збору історичних даних
+        """
+        total_candles = sum(results.values())
+
+        # Для кожного інтервалу виводимо кількість збережених свічок
+        for interval, count in results.items():
+            print(f"{symbol} ({interval}): збережено {count} свічок")
+
+        # Загальний підсумок
+        summary_msg = f"Загалом для {symbol} збережено {total_candles} свічок по всіх інтервалах."
+        self.db_manager.log_event('INFO', summary_msg, 'BinanceClient')
+        print(summary_msg)
+
+    def save_historical_data_to_db(self, symbol, start_date=None, end_date=None, intervals=None):
+
+        try:
+            # Підготовка параметрів
+            params = self._prepare_historical_params(symbol, start_date, end_date, intervals)
+
+            # Словник для збереження результатів
+            results = {}
+
+            # Збираємо дані для кожного інтервалу
+            for interval in params['intervals']:
+                results[interval] = self._fetch_and_save_historical_interval(
+                    symbol, interval, params['start_ts'], params['end_ts']
+                )
+
+            # Підведення підсумків
+            self._summarize_historical_results(symbol, results)
+            return results
+
+        except Exception as e:
+            error_msg = f"Помилка при зборі історичних даних для {symbol}: {e}"
+            self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
+            print(error_msg)
+            return {}
 
 def handle_kline_message(ws, message):
     data = json.loads(message)
@@ -684,37 +843,74 @@ def main():
     client = BinanceClient()
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 
+    # Початкові дати для кожного символу
+    symbol_start_dates = {
+        'BTCUSDT': '2017-08-01',
+        'ETHUSDT': '2017-08-01',
+        'SOLUSDT': '2020-08-27'
+    }
+
     try:
-        # Отримання поточних цін для всіх символів
+        # Збір історичних даних
+        print("========== ЗБІР ІСТОРИЧНИХ ДАНИХ ==========")
+
+        # Поточна дата як кінцева
+        end_date = datetime.now().strftime('%Y-%m-%d')
+
+        # Для кожного символу — збір даних з початкової дати до сьогодні
+        for symbol in symbols:
+            print(f"\nЗбираємо історичні дані для {symbol}...")
+
+            # Отримати початкову дату для конкретного символу або дефолт
+            start_date = symbol_start_dates.get(symbol, '2020-01-01')
+
+            # Збір даних для всіх інтервалів: 1 хв, 1 год, 1 день
+            results = client.save_historical_data_to_db(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                intervals=['1m', '1h', '1d']
+            )
+
+            print(f"Результат для {symbol}: {results}")
+
+        print("\n========== ОТРИМАННЯ АКТУАЛЬНИХ ДАНИХ ==========")
+        # Отримання поточних цін
         for symbol in symbols:
             try:
                 price = client.get_ticker_price(symbol=symbol)
                 if price:
-                    print(f"Поточна ціна {symbol}: {price['price']}")
+                    print(f"Поточна ціна для {symbol}: {price['price']}")
                 else:
-                    print(f"Не вдалося отримати ціну {symbol}")
+                    print(f"Не вдалося отримати ціну для {symbol}")
             except Exception as e:
-                print(f"Помилка при отриманні ціни {symbol}: {e}")
+                print(f"Помилка під час отримання ціни для {symbol}: {e}")
 
+        print("\n========== ПІДКЛЮЧЕННЯ ДО WEBSOCKET ==========")
         print("Підключення до WebSocket для отримання даних у реальному часі...")
 
         active_sockets = []
-        # Запуск WebSocket для всіх символів (свічки)
+        # Запуск WebSocket для кожного символу (для 1m, 1h, 1d)
         for symbol in symbols:
             try:
-                # Створення веб-сокетів для свічок (1-хвилинний інтервал)
-                socket1 = client.start_kline_socket(symbol, "1m", handle_kline_message, save_to_db=True)
-                if socket1:
-                    active_sockets.append(socket1)
+                socket_1m = client.start_kline_socket(symbol, "1m", handle_kline_message, save_to_db=True)
+                socket_1h = client.start_kline_socket(symbol, "1h", handle_kline_message, save_to_db=True)
+                socket_1d = client.start_kline_socket(symbol, "1d", handle_kline_message, save_to_db=True)
+
+                for socket in [socket_1m, socket_1h, socket_1d]:
+                    if socket:
+                        active_sockets.append(socket)
+
+                print(f"WebSocket для {symbol} успішно підключено (1m, 1h, 1d)")
 
             except Exception as e:
-                print(f"Помилка при створенні WebSocket для {symbol}: {e}")
+                print(f"Помилка створення WebSocket для {symbol}: {e}")
 
         if not active_sockets:
-            print("Не вдалося створити жодного WebSocket з'єднання!")
+            print("Не вдалося створити жодне WebSocket з’єднання!")
             return
 
-        print("Очікування даних ринку в реальному часі. Натисніть Ctrl+C для виходу.")
+        print("Очікування ринкових даних у реальному часі. Натисніть Ctrl+C для виходу.")
 
         while True:
             time.sleep(5)
@@ -726,6 +922,7 @@ def main():
         print(f"Критична помилка: {e}")
     finally:
         client.cleanup()
+
 
 if __name__ == "__main__":
     main()

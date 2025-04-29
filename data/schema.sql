@@ -142,7 +142,6 @@ CREATE TABLE IF NOT EXISTS data_processing_log (
 );
 
 
-CREATE INDEX IF NOT EXISTS idx_sol_orderbook_processed_time ON sol_orderbook_processed(timestamp);
 
 -- Таблиця для профілю об'єму ETH
 CREATE TABLE IF NOT EXISTS eth_volume_profile (
