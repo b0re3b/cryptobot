@@ -1,5 +1,9 @@
 from datetime import datetime, time
 from typing import Dict,List,Optional,Tuple
+from data_collection.AnomalyDetector import AnomalyDetector
+from data_collection.DataResampler import DataResampler
+from data_collection.DataStorageManager import DataStorageManager
+from data_collection.DataCleaner import DataCleaner
 
 import numpy as np
 import pandas as pd
@@ -185,7 +189,7 @@ class OrderBookProcessor:
             return data
 
         # Перевіряємо цілісність даних перед обробкою
-        integrity_issues = self.validate_data_integrity(data)
+        integrity_issues = AnomalyDetector.validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
@@ -237,7 +241,7 @@ class OrderBookProcessor:
         if add_time_features:
             if isinstance(processed.index, pd.DatetimeIndex):
                 self.logger.info("Додавання часових ознак до даних ордербука...")
-                processed = self.add_time_features(
+                processed = DataCleaner.add_time_features(
                     data=processed,
                     cyclical=cyclical,
                     add_sessions=add_sessions
@@ -253,7 +257,7 @@ class OrderBookProcessor:
         normalize_cols = [col for col in numeric_cols if col not in exclude_cols]
 
         # Застосовуємо робастну нормалізацію, яка менш чутлива до викидів
-        processed, scaler_meta = self.normalize_data(
+        processed, scaler_meta = DataCleaner.normalize_data(
             data=processed,
             method='robust',
             columns=normalize_cols,
@@ -261,7 +265,7 @@ class OrderBookProcessor:
         )
 
         # Перевіряємо цілісність даних після обробки
-        post_integrity_issues = self.validate_data_integrity(processed)
+        post_integrity_issues = AnomalyDetector.validate_data_integrity(processed)
         if post_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in post_integrity_issues.values())
@@ -348,7 +352,7 @@ class OrderBookProcessor:
             self.logger.warning("Для ресемплінгу потрібен DatetimeIndex")
             return data
 
-        pandas_interval = self._convert_interval_to_pandas_format(interval)
+        pandas_interval = DataResampler.convert_interval_to_pandas_format(interval)
 
         # Агрегація даних з оптимізованими правилами
         agg_rules = {
@@ -433,7 +437,7 @@ class OrderBookProcessor:
             self.logger.warning(f"Порожній DataFrame для збереження")
             return False
 
-        formatted_data = self.prepare_data_for_db(processed_data)
+        formatted_data = DataStorageManager.prepare_data_for_db(processed_data)
 
         success_count = 0
         for entry in formatted_data:

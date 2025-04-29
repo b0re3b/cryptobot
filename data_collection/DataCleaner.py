@@ -3,13 +3,16 @@ from typing import List, Tuple, Dict, Optional, Union
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
-
+from data_collection.AnomalyDetector import AnomalyDetector
+from data_collection.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
 
+
 class DataCleaner:
-    def __init__(self,logger,db_manager):
+    def __init__(self, logger, db_manager):
         self.logger = logger
         self.db_manager = db_manager
+
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True, normalize: bool = False,
@@ -24,7 +27,7 @@ class DataCleaner:
         self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
 
         # Виконуємо перевірку цілісності даних перед очищенням
-        integrity_issues = self.validate_data_integrity(data)
+        integrity_issues = AnomalyDetector.validate_data_integrity(data)  # Викликаємо метод з db_manager
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
@@ -65,8 +68,11 @@ class DataCleaner:
         numeric_cols = ['open', 'high', 'low', 'close', 'volume']
         for col in numeric_cols:
             if col in result.columns:
-                result[col] = pd.to_numeric(result[col], errors='coerce')
-                result[col] = result[col].astype(float)
+                # Перевіряємо, чи не є колонка вже числового типу
+                if not pd.api.types.is_numeric_dtype(result[col]):
+                    self.logger.info(f"Конвертування колонки {col} в числовий тип")
+                    result[col] = pd.to_numeric(result[col], errors='coerce')
+                    result[col] = result[col].astype(float)
 
         if remove_outliers:
             self.logger.info("Видалення аномальних значень...")
@@ -85,7 +91,10 @@ class DataCleaner:
                 outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
                 if outliers.any():
                     outlier_count = outliers.sum()
+                    outlier_indexes = result.index[outliers].tolist()
                     self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
+                    self.logger.debug(
+                        f"Індекси перших 10 аномалій: {outlier_indexes[:10]}{'...' if len(outlier_indexes) > 10 else ''}")
                     result.loc[outliers, col] = np.nan
 
         if fill_missing and result.isna().any().any():
@@ -112,7 +121,10 @@ class DataCleaner:
             invalid_hl = result['high'] < result['low']
             if invalid_hl.any():
                 invalid_count = invalid_hl.sum()
+                invalid_indexes = result.index[invalid_hl].tolist()
                 self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
+                self.logger.debug(
+                    f"Індекси проблемних рядків: {invalid_indexes[:10]}{'...' if len(invalid_indexes) > 10 else ''}")
 
                 temp = result.loc[invalid_hl, 'high'].copy()
                 result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
@@ -122,7 +134,7 @@ class DataCleaner:
         if resample and target_interval:
             try:
                 self.logger.info(f"Виконання ресемплінгу даних до інтервалу {target_interval}...")
-                result = self.resample_data(result, target_interval)
+                result = DataResampler.resample_data(result, target_interval)
             except Exception as e:
                 self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
 
@@ -154,7 +166,7 @@ class DataCleaner:
                     self.logger.warning("Не вдалося нормалізувати колонку об'єму")
 
         # Перевіряємо цілісність даних після очищення
-        clean_integrity_issues = self.validate_data_integrity(result)
+        clean_integrity_issues = AnomalyDetector.validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -170,8 +182,8 @@ class DataCleaner:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data
 
-        # Перевіряємо цілісність даних перед обробкою відсутніх значень
-        integrity_issues = self.validate_data_integrity(data)
+
+        integrity_issues = AnomalyDetector.validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
@@ -264,8 +276,8 @@ class DataCleaner:
 
         self.logger.info(f"Заповнено {filled_values} відсутніх значень методом '{method}'")
 
-        # Перевіряємо цілісність даних після обробки відсутніх значень
-        clean_integrity_issues = self.validate_data_integrity(result)
+
+        clean_integrity_issues = AnomalyDetector.validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -344,7 +356,7 @@ class DataCleaner:
 
             for start_time, end_time in missing_periods:
                 try:
-                    self.logger.info(f"📥 Отримання даних з Binance: {symbol}, {interval}, {start_time} - {end_time}")
+                    self.logger.info(f" Отримання даних з Binance: {symbol}, {interval}, {start_time} - {end_time}")
                     start_ms = int(start_time.timestamp() * 1000)
                     end_ms = int(end_time.timestamp() * 1000)
                     self.logger.info(f"Запит до Binance: {start_time} -> {start_ms} мс, {end_time} -> {end_ms} мс")
@@ -357,7 +369,7 @@ class DataCleaner:
                     )
 
                     if not klines:
-                        self.logger.warning(f"⚠️ Порожній результат з Binance: {start_time} - {end_time}")
+                        self.logger.warning(f" Порожній результат з Binance: {start_time} - {end_time}")
                         continue
 
                     columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume',
@@ -387,7 +399,7 @@ class DataCleaner:
                     self.logger.info(f"✅ Отримано {len(new_data)} нових записів")
 
                 except Exception as e:
-                    self.logger.error(f"❌ Помилка при запиті Binance: {e}")
+                    self.logger.error(f" Помилка при запиті Binance: {e}")
 
             if not new_data_frames:
                 return data
@@ -400,13 +412,14 @@ class DataCleaner:
             total_after = len(filled_data)
 
             added_count = total_after - total_before
-            self.logger.info(f"🧩 Загалом додано {added_count} нових рядків після об'єднання")
+            self.logger.info(f" Загалом додано {added_count} нових рядків після об'єднання")
 
             return filled_data
 
         except ImportError:
-            self.logger.error("❌ Модуль binance не встановлено.")
+            self.logger.error(" Модуль binance не встановлено.")
             return data
+
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
                        columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[pd.DataFrame, Dict]:
 

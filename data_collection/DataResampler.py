@@ -21,12 +21,12 @@ class DataResampler:
             self.logger.warning(f"Відсутні необхідні колонки: {missing_cols}")
             return data
 
-        pandas_interval = self._convert_interval_to_pandas_format(target_interval)
+        pandas_interval = self.convert_interval_to_pandas_format(target_interval)
         self.logger.info(f"Ресемплінг даних до інтервалу: {target_interval} (pandas формат: {pandas_interval})")
 
         if len(data) > 1:
             current_interval = pd.Timedelta(data.index[1] - data.index[0])
-            estimated_target_interval = self._parse_interval(target_interval)
+            estimated_target_interval = self.parse_interval(target_interval)
 
             if estimated_target_interval < current_interval:
                 self.logger.warning(f"Цільовий інтервал ({target_interval}) менший за поточний інтервал даних. "
@@ -69,7 +69,7 @@ class DataResampler:
             self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
             raise
 
-    def _convert_interval_to_pandas_format(self, interval: str) -> str:
+    def convert_interval_to_pandas_format(self, interval: str) -> str:
 
         interval_map = {
             's': 'S',
@@ -95,7 +95,7 @@ class DataResampler:
         else:
             raise ValueError(f"Непідтримувана одиниця часу: {unit}")
 
-    def _parse_interval(self, interval: str) -> pd.Timedelta:
+    def parse_interval(self, interval: str) -> pd.Timedelta:
 
         interval_map = {
             's': 'seconds',

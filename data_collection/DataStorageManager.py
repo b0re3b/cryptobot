@@ -3,7 +3,7 @@ from typing import Optional, Union, Dict, List
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from utils.logger import CryptoLogger
+
 class DataStorageManager:
     def __init__(self, db_manager, logger):
         self.db_manager = db_manager

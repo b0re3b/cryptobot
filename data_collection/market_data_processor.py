@@ -25,9 +25,9 @@ class MarketDataProcessor:
         self.ready = True
         self.storage_manager = DataStorageManager(self.db_manager, self.logger)
         self.orderbook_processor = OrderBookProcessor(self.db_manager, self.logger)
-        self.data_resampler = DataResampler(self.logger)
-        self.data_cleaner = DataCleaner(self.logger)
-        self.anomaly_detector = AnomalyDetector(self.logger)
+        self.data_resampler = DataResampler(self.db_manager)
+        self.data_cleaner = DataCleaner(self.db_manager,self.logger)
+        self.anomaly_detector = AnomalyDetector(self.db_manager)
 
     def preprocess_orderbook_pipeline(self, symbol: str,
                                       start_time: Optional[datetime] = None,
@@ -37,10 +37,10 @@ class MarketDataProcessor:
                                       add_sessions: bool = True) -> pd.DataFrame:
         """Повний конвеєр обробки даних ордербука."""
         # Завантаження даних
-        raw_data = self.load_orderbook_data(symbol, start_time, end_time)
+        raw_data = OrderBookProcessor.load_orderbook_data(symbol, start_time, end_time)
 
         # Перевіряємо цілісність сирих даних
-        raw_integrity_issues = self.validate_data_integrity(raw_data)
+        raw_integrity_issues = AnomalyDetector.validate_data_integrity(raw_data)
         if raw_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in raw_integrity_issues.values())
@@ -49,11 +49,11 @@ class MarketDataProcessor:
         # Виявлення пропущених періодів
         if not raw_data.empty and isinstance(raw_data.index, pd.DatetimeIndex):
             expected_diff = pd.Timedelta(minutes=1)  # Припускаємо хвилинні дані
-            missing_periods = self._detect_missing_periods(raw_data, expected_diff)
+            missing_periods = DataCleaner._detect_missing_periods(raw_data, expected_diff)
 
             if missing_periods:
                 self.logger.info(f"Знайдено {len(missing_periods)} пропущених періодів")
-                fetched_data = self.fetch_missing_orderbook_data(symbol, missing_periods)
+                fetched_data = OrderBookProcessor.fetch_missing_orderbook_data(symbol, missing_periods)
 
                 if not fetched_data.empty:
                     # Зберігаємо отримані дані
@@ -63,24 +63,24 @@ class MarketDataProcessor:
                             'bids': [[row['bid_price'], row['bid_qty']]],
                             'asks': [[row['ask_price'], row['ask_qty']]]
                         }
-                        self.save_orderbook_to_db(orderbook_data, symbol, row.name)
+                        OrderBookProcessor.save_orderbook_to_db(orderbook_data, symbol, row.name)
 
                     # Оновлюємо raw_data
                     raw_data = pd.concat([raw_data, fetched_data])
                     raw_data = raw_data[~raw_data.index.duplicated(keep='last')].sort_index()
 
         # Обробка даних
-        processed_data = self.process_orderbook_data(raw_data)
+        processed_data = OrderBookProcessor.process_orderbook_data(raw_data)
 
         # Перевірка цілісності даних після первинної обробки
-        processed_integrity_issues = self.validate_data_integrity(processed_data)
+        processed_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
         if processed_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in processed_integrity_issues.values())
             self.logger.info(f"Після процесу обробки залишилось {issue_count} проблем з цілісністю даних")
 
         # Нормалізація даних перед виявленням аномалій
-        normalized_data, scaler_meta = self.normalize_data(
+        normalized_data, scaler_meta = DataCleaner.normalize_data(
             processed_data,
             method='z-score',
             exclude_columns=['timestamp', 'symbol']  # Виключаємо нечислові колонки
@@ -92,7 +92,7 @@ class MarketDataProcessor:
             self.logger.info(f"Дані нормалізовано методом {scaler_meta['method']}")
 
             # Перевірка цілісності даних після нормалізації
-            norm_integrity_issues = self.validate_data_integrity(processed_data)
+            norm_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
             if norm_integrity_issues:
                 issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                                   for issues in norm_integrity_issues.values())
@@ -106,7 +106,7 @@ class MarketDataProcessor:
         if add_time_features:
             if isinstance(processed_data.index, pd.DatetimeIndex):
                 self.logger.info("Додавання часових ознак до даних ордербука перед виявленням аномалій...")
-                processed_data = self.add_time_features(
+                processed_data = DataCleaner.add_time_features(
                     data=processed_data,
                     cyclical=cyclical,
                     add_sessions=add_sessions
@@ -116,15 +116,15 @@ class MarketDataProcessor:
                 self.logger.warning("Неможливо додати часові ознаки: індекс не є DatetimeIndex")
 
         # Виявлення аномалій
-        anomalies = self.detect_orderbook_anomalies(processed_data)
+        anomalies = OrderBookProcessor.detect_orderbook_anomalies(processed_data)
         processed_data = pd.concat([processed_data, anomalies], axis=1)
 
         # Ресемплінг до більшого інтервалу (якщо потрібно)
         if len(processed_data) > 1000:  # Ресемплінг тільки для великих наборів
-            processed_data = self.resample_orderbook_data(processed_data, '5min')
+            processed_data = OrderBookProcessor.resample_orderbook_data(processed_data, '5min')
 
             # Перевірка цілісності даних після ресемплінгу
-            resample_integrity_issues = self.validate_data_integrity(processed_data)
+            resample_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
             if resample_integrity_issues:
                 issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                                   for issues in resample_integrity_issues.values())
@@ -137,7 +137,7 @@ class MarketDataProcessor:
 
             # Перевірка цілісності відфільтрованих даних
             if not self.filtered_data.empty:
-                filtered_integrity_issues = self.validate_data_integrity(self.filtered_data)
+                filtered_integrity_issues = AnomalyDetector.validate_data_integrity(self.filtered_data)
                 if filtered_integrity_issues:
                     issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                                       for issues in filtered_integrity_issues.values())
@@ -147,7 +147,7 @@ class MarketDataProcessor:
                     self.logger.info("У відфільтрованих даних (без аномалій) проблем з цілісністю не виявлено")
 
         # Фінальна перевірка цілісності даних перед поверненням результату
-        final_integrity_issues = self.validate_data_integrity(processed_data)
+        final_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
         if final_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in final_integrity_issues.values())
@@ -160,7 +160,7 @@ class MarketDataProcessor:
             self.logger.info("Фінальний набір даних не має проблем з цілісністю")
 
         # Розрахунок статистики ордербука
-        statistics = self.get_orderbook_statistics(processed_data)
+        statistics = OrderBookProcessor.get_orderbook_statistics(processed_data)
         self.logger.info(f"Розраховано статистику ордербука: {len(statistics)} показників")
 
         # Зберігаємо статистику для подальшого використання
@@ -172,7 +172,7 @@ class MarketDataProcessor:
     def update_orderbook_data(self, symbol: str):
         """Оновлює дані ордербука до поточного моменту."""
         # Отримуємо останній доступний запис з використанням limit
-        last_entry = self.load_orderbook_data(symbol, limit=1)
+        last_entry = OrderBookProcessor.load_orderbook_data(symbol, limit=1)
 
         if last_entry.empty:
             start_time = datetime.now() - timedelta(days=7)  # За замовчуванням - останні 7 днів
@@ -185,7 +185,7 @@ class MarketDataProcessor:
         self.logger.info(f"Оновлення даних ордербука для {symbol} від {start_time} до {end_time}")
 
         # Отримуємо нові дані
-        new_data = self.fetch_missing_orderbook_data(
+        new_data = OrderBookProcessor.fetch_missing_orderbook_data(
             symbol,
             [(start_time, end_time)]
         )
@@ -198,7 +198,7 @@ class MarketDataProcessor:
                     'bids': [[row['bid_price'], row['bid_qty']]],
                     'asks': [[row['ask_price'], row['ask_qty']]]
                 }
-                self.save_orderbook_to_db(orderbook_data, symbol, row.name)
+                OrderBookProcessor.save_orderbook_to_db(orderbook_data, symbol, row.name)
 
             self.logger.info(f"Оновлено {len(new_data)} записів ордербука для {symbol}")
         else:
@@ -571,7 +571,7 @@ def main():
             print(f"\n Обробка {symbol} ({interval})...")
 
             # 1. Завантаження даних з БД
-            raw_data = processor.load_data(
+            raw_data = DataStorageManager.load_data(
                 data_source='database',
                 symbol=symbol,
                 interval=interval,
@@ -583,7 +583,7 @@ def main():
                 continue
 
             # 2. Обробка відсутніх значень + підтягування з Binance (якщо треба)
-            filled_data = processor.handle_missing_values(
+            filled_data = DataCleaner.handle_missing_values(
                 raw_data,
                 symbol=symbol,
                 interval=interval,
@@ -591,7 +591,7 @@ def main():
             )
 
             # 3. Збереження сирих даних
-            processor.save_klines_to_db(filled_data, symbol, interval)
+            DataStorageManager.save_klines_to_db(filled_data, symbol, interval)
             print(f" Сирі свічки ({interval}) збережено")
 
             # 4. Попередня обробка (пайплайн)
@@ -601,27 +601,27 @@ def main():
                 print(f" Обробка не дала результатів для {symbol} {interval}")
                 continue
 
-            processed = processor.add_time_features(processed, tz=EU_TIMEZONE)
-            processor.save_processed_klines_to_db(processed, symbol, interval)
+            processed = DataCleaner.add_time_features(processed, tz=EU_TIMEZONE)
+            DataStorageManager.save_processed_klines_to_db(processed, symbol, interval)
             print(f" Оброблені свічки ({interval}) збережено")
 
             # 5. Ресемплінг
             if interval == '5m':
-                resampled_30m = processor.resample_data(processed, target_interval='30m')
-                resampled_30m = processor.add_time_features(resampled_30m, tz=EU_TIMEZONE)
-                processor.save_processed_klines_to_db(resampled_30m, symbol, '30m')
+                resampled_30m = DataResampler.resample_data(processed, target_interval='30m')
+                resampled_30m = DataCleaner.add_time_features(resampled_30m, tz=EU_TIMEZONE)
+                DataStorageManager.save_processed_klines_to_db(resampled_30m, symbol, '30m')
                 print(f" 30-хвилинні свічки збережено")
 
             if interval == '1h':
-                resampled_1d = processor.resample_data(processed, target_interval='1d')
-                resampled_1d = processor.add_time_features(resampled_1d, tz=EU_TIMEZONE)
-                processor.save_processed_klines_to_db(resampled_1d, symbol, '1d')
+                resampled_1d = DataResampler.resample_data(processed, target_interval='1d')
+                resampled_1d = DataCleaner.add_time_features(resampled_1d, tz=EU_TIMEZONE)
+                DataStorageManager.save_processed_klines_to_db(resampled_1d, symbol, '1d')
                 print(f" Денні свічки збережено")
 
                 # 6. Профіль об'єму
                 volume_profile = processor.aggregate_volume_profile(resampled_1d, bins=12, time_period='1W')
                 if not volume_profile.empty:
-                    processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
+                    DataStorageManager.save_volume_profile_to_db(volume_profile, symbol, '1d')
                     print(f" Профіль об'єму збережено")
 
         # 7. Ордербук
@@ -633,7 +633,7 @@ def main():
         )
 
         if not processed_orderbook.empty:
-            processor.save_processed_orderbook_to_db(symbol, processed_orderbook)
+            OrderBookProcessor.save_processed_orderbook_to_db(symbol, processed_orderbook)
             print(f" Оброблені дані ордербука збережено")
         else:
             print(f" Не вдалося обробити ордербук для {symbol}")
