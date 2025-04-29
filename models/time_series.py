@@ -1,13 +1,11 @@
 import pandas as pd
 import numpy as np
 import logging
-import matplotlib.pyplot as plt
 from typing import List, Dict, Optional, Union, Tuple, Any
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from scipy import stats
 from scipy.stats import boxcox
 from statsmodels.tsa.seasonal import seasonal_decompose
@@ -1652,75 +1650,787 @@ class TimeSeriesModels:
         return results
 
     def residual_analysis(self, model_key: str, data: pd.Series = None) -> Dict:
-        """
-        Аналіз залишків моделі.
 
-        Args:
-            model_key: Ключ моделі
-            data: Дані для порівняння (якщо None, використовуються дані з моделі)
+        self.logger.info(f"Starting residual analysis for model {model_key}")
 
-        Returns:
-            Результати аналізу залишків
+        # Перевірка наявності моделі
+        if model_key not in self.models:
+            # Спробувати завантажити модель з БД
+            if self.db_manager is not None:
+                try:
+                    model_loaded = self.db_manager.load_complete_model(model_key)
+                    if not model_loaded:
+                        error_msg = f"Model {model_key} not found in database"
+                        self.logger.error(error_msg)
+                        return {"status": "error", "message": error_msg}
+                except Exception as e:
+                    error_msg = f"Error loading model {model_key} from database: {str(e)}"
+                    self.logger.error(error_msg)
+                    return {"status": "error", "message": error_msg}
+            else:
+                error_msg = f"Model {model_key} not found and no database manager available"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
 
-        Примітка:
-        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
-        """
-        pass
+        try:
+            # Отримання моделі
+            model_info = self.models.get(model_key)
+            if not model_info:
+                error_msg = f"Model {model_key} information not available"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
+
+            fit_result = model_info.get("fit_result")
+            if not fit_result:
+                error_msg = f"Fit result for model {model_key} not available"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
+
+            # Використання даних моделі, якщо дані не надані
+            if data is None:
+                # В залежності від моделі, можуть використовуватися різні підходи до отримання даних
+                try:
+                    # Для моделей ARIMA/SARIMA з statsmodels
+                    data = fit_result.model.endog
+                    self.logger.info(f"Using original model data for residual analysis, length: {len(data)}")
+                except Exception as e:
+                    error_msg = f"Error accessing model data: {str(e)}"
+                    self.logger.error(error_msg)
+                    return {"status": "error", "message": error_msg}
+
+            # Отримання залишків
+            residuals = fit_result.resid
+
+            # Базова статистика залишків
+            residuals_stats = {
+                "mean": float(residuals.mean()),
+                "std": float(residuals.std()),
+                "min": float(residuals.min()),
+                "max": float(residuals.max()),
+                "median": float(np.median(residuals))
+            }
+
+            # Тест Льюнга-Бокса на автокореляцію залишків
+            from statsmodels.stats.diagnostic import acorr_ljungbox
+            max_lag = min(10, len(residuals) // 5)  # Не більше 1/5 від довжини ряду
+            lb_results = acorr_ljungbox(residuals, lags=max_lag)
+
+            # Тест на нормальність розподілу залишків (Jarque-Bera)
+            from scipy import stats
+            jb_stat, jb_pvalue = stats.jarque_bera(residuals)
+
+            # Тест на гетероскедастичність (Breusch-Pagan)
+            from statsmodels.stats.diagnostic import het_breuschpagan
+            try:
+                # Створюємо штучний регресор - порядковий номер спостереження
+                X = np.arange(1, len(residuals) + 1).reshape(-1, 1)
+                bp_stat, bp_pvalue, _, _ = het_breuschpagan(residuals, X)
+            except Exception as e:
+                self.logger.warning(f"Error during Breusch-Pagan test: {str(e)}")
+                bp_stat, bp_pvalue = None, None
+
+            # Автокореляційна функція (ACF) та часткова автокореляційна функція (PACF) залишків
+            from statsmodels.tsa.stattools import acf, pacf
+            acf_values = acf(residuals, nlags=max_lag, fft=True)
+            pacf_values = pacf(residuals, nlags=max_lag)
+
+            # Визначення значущості автокореляції
+            # 95% довірчий інтервал для ACF (приблизно ±1.96/sqrt(N))
+            conf_interval = 1.96 / np.sqrt(len(residuals))
+
+            significant_acf = [i for i, v in enumerate(acf_values) if i > 0 and abs(v) > conf_interval]
+            significant_pacf = [i for i, v in enumerate(pacf_values) if i > 0 and abs(v) > conf_interval]
+
+            # Оцінка білого шуму (якщо залишки - білий шум, модель добре підібрана)
+            is_white_noise = len(significant_acf) <= max_lag * 0.05  # Не більше 5% значущих лагів
+
+            # Формування результатів аналізу
+            analysis_results = {
+                "status": "success",
+                "model_key": model_key,
+                "residuals_statistics": residuals_stats,
+                "normality_test": {
+                    "jarque_bera_statistic": float(jb_stat),
+                    "jarque_bera_pvalue": float(jb_pvalue),
+                    "is_normal": jb_pvalue > 0.05
+                },
+                "autocorrelation_test": {
+                    "ljung_box_statistic": [float(stat) for stat in lb_results.lb_stat],
+                    "ljung_box_pvalue": [float(pval) for pval in lb_results.lb_pvalue],
+                    "has_autocorrelation": any(pval < 0.05 for pval in lb_results.lb_pvalue)
+                },
+                "heteroscedasticity_test": {
+                    "breusch_pagan_statistic": float(bp_stat) if bp_stat is not None else None,
+                    "breusch_pagan_pvalue": float(bp_pvalue) if bp_pvalue is not None else None,
+                    "has_heteroscedasticity": bp_pvalue < 0.05 if bp_pvalue is not None else None
+                },
+                "acf_analysis": {
+                    "values": [float(val) for val in acf_values],
+                    "significant_lags": significant_acf,
+                    "confidence_interval": float(conf_interval)
+                },
+                "pacf_analysis": {
+                    "values": [float(val) for val in pacf_values],
+                    "significant_lags": significant_pacf,
+                    "confidence_interval": float(conf_interval)
+                },
+                "white_noise_assessment": {
+                    "is_white_noise": is_white_noise,
+                    "explanation": "Residuals appear to be white noise" if is_white_noise
+                    else "Residuals show patterns, model may be improved"
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # Зберегти результати аналізу в БД, якщо є DB manager
+            if self.db_manager is not None:
+                try:
+                    # Припустимо, що є метод для збереження результатів аналізу залишків
+                    # Якщо такого методу немає, потрібно його додати до db_manager
+                    self.db_manager.save_residual_analysis(model_key, analysis_results)
+                    self.logger.info(f"Residual analysis for model {model_key} saved to database")
+                except Exception as e:
+                    self.logger.warning(f"Error saving residual analysis to database: {str(e)}")
+
+            self.logger.info(f"Residual analysis for model {model_key} completed successfully")
+            return analysis_results
+
+        except Exception as e:
+            error_msg = f"Error during residual analysis: {str(e)}"
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}
 
     def forecast_with_intervals(self, model_key: str, steps: int = 24,
                                 alpha: float = 0.05) -> Dict:
-        """
-        Прогнозування з довірчими інтервалами.
 
-        Args:
-            model_key: Ключ моделі
-            steps: Кількість кроків для прогнозу
-            alpha: Рівень значущості для довірчих інтервалів
+        self.logger.info(f"Starting forecast with intervals for model {model_key}, steps={steps}, alpha={alpha}")
 
-        Returns:
-            Прогноз та довірчі інтервали
+        # Перевірка значення alpha
+        if alpha <= 0 or alpha >= 1:
+            error_msg = f"Invalid alpha value ({alpha}). Must be between 0 and 1."
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}
 
-        Примітка:
-        - Спочатку потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model(model_key)
-        - Після прогнозування рекомендується зберегти результати в БД за допомогою
-          self.db_manager.save_model_forecasts включно з нижніми та верхніми межами довірчих інтервалів
-        """
-        pass
+        # Перевірка наявності моделі
+        if model_key not in self.models:
+            # Спробувати завантажити модель з БД
+            if self.db_manager is not None:
+                try:
+                    model_loaded = self.db_manager.load_complete_model(model_key)
+                    if not model_loaded:
+                        error_msg = f"Model {model_key} not found in database"
+                        self.logger.error(error_msg)
+                        return {"status": "error", "message": error_msg}
+                    self.logger.info(f"Model {model_key} loaded from database")
+                except Exception as e:
+                    error_msg = f"Error loading model {model_key} from database: {str(e)}"
+                    self.logger.error(error_msg)
+                    return {"status": "error", "message": error_msg}
+            else:
+                error_msg = f"Model {model_key} not found and no database manager available"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
+
+        try:
+            # Отримання моделі
+            model_info = self.models.get(model_key)
+            if not model_info:
+                error_msg = f"Model {model_key} information not available"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
+
+            fit_result = model_info.get("fit_result")
+            if not fit_result:
+                error_msg = f"Fit result for model {model_key} not available"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
+
+            metadata = model_info.get("metadata", {})
+            model_type = metadata.get("model_type", "unknown")
+
+            # Отримання інформації про трансформації даних
+            transformations = None
+            if self.db_manager is not None:
+                try:
+                    transformations = self.db_manager.get_data_transformations(model_key)
+                    if transformations:
+                        self.logger.info(f"Found data transformations for model {model_key}")
+                except Exception as e:
+                    self.logger.warning(f"Error getting data transformations: {str(e)}")
+
+            # Виконання прогнозування з довірчими інтервалами
+            try:
+                # Прогнозування з довірчими інтервалами
+                forecast_result = fit_result.get_forecast(steps=steps)
+
+                # Отримання прогнозних значень та інтервалів
+                predicted_mean = forecast_result.predicted_mean
+                confidence_intervals = forecast_result.conf_int(alpha=alpha)
+
+                # Створення часових індексів для прогнозу
+                # Визначаємо частоту даних з оригінальної моделі
+                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                    original_index = fit_result.model.data.dates
+                    # Визначаємо частоту
+                    if isinstance(original_index, pd.DatetimeIndex):
+                        freq = pd.infer_freq(original_index)
+                        if freq is None:
+                            # Спробуємо вгадати частоту на основі різниць
+                            if len(original_index) > 1:
+                                avg_diff = (original_index[-1] - original_index[0]) / (len(original_index) - 1)
+                                if avg_diff.days >= 1:
+                                    freq = f"{avg_diff.days}D"
+                                else:
+                                    hours = avg_diff.seconds // 3600
+                                    if hours >= 1:
+                                        freq = f"{hours}H"
+                                    else:
+                                        minutes = (avg_diff.seconds % 3600) // 60
+                                        if minutes >= 1:
+                                            freq = f"{minutes}min"
+                                        else:
+                                            freq = f"{avg_diff.seconds % 60}S"
+
+                        # Створення нових індексів для прогнозу
+                        last_date = original_index[-1]
+                        forecast_index = pd.date_range(start=last_date, periods=steps + 1, freq=freq)[1:]
+                    else:
+                        # Якщо індекс не datetime, використовуємо числові індекси
+                        last_idx = len(original_index)
+                        forecast_index = pd.RangeIndex(start=last_idx, stop=last_idx + steps)
+                else:
+                    # Якщо немає інформації про дати, використовуємо числові індекси
+                    # Спробуємо вгадати останній індекс
+                    if hasattr(fit_result.model, 'endog') and hasattr(fit_result.model.endog, 'shape'):
+                        last_idx = fit_result.model.endog.shape[0]
+                        forecast_index = pd.RangeIndex(start=last_idx, stop=last_idx + steps)
+                    else:
+                        forecast_index = pd.RangeIndex(start=0, stop=steps)
+
+                # Створення Series для прогнозу та інтервалів
+                forecast_series = pd.Series(predicted_mean, index=forecast_index)
+                lower_bound = pd.Series(confidence_intervals.iloc[:, 0].values, index=forecast_index)
+                upper_bound = pd.Series(confidence_intervals.iloc[:, 1].values, index=forecast_index)
+
+                # Зворотна трансформація, якщо потрібно
+                if transformations:
+                    try:
+                        transform_method = transformations.get("method")
+                        transform_param = transformations.get("lambda_param")
+
+                        if transform_method:
+                            self.logger.info(f"Applying inverse transformation: {transform_method}")
+                            forecast_series = self.inverse_transform(forecast_series, method=transform_method,
+                                                                     lambda_param=transform_param)
+                            lower_bound = self.inverse_transform(lower_bound, method=transform_method,
+                                                                 lambda_param=transform_param)
+                            upper_bound = self.inverse_transform(upper_bound, method=transform_method,
+                                                                 lambda_param=transform_param)
+                    except Exception as e:
+                        self.logger.warning(f"Error during inverse transformation: {str(e)}")
+
+                # Формування результатів прогнозу
+                forecast_data = {
+                    "forecast": forecast_series.tolist(),
+                    "lower_bound": lower_bound.tolist(),
+                    "upper_bound": upper_bound.tolist(),
+                    "indices": [str(idx) for idx in forecast_index],
+                    "confidence_level": 1.0 - alpha
+                }
+
+                # Збереження результатів прогнозу в БД
+                if self.db_manager is not None:
+                    try:
+                        forecast_db_data = {
+                            "model_key": model_key,
+                            "forecast_timestamp": datetime.now(),
+                            "steps": steps,
+                            "alpha": alpha,
+                            "forecast_data": {
+                                "values": forecast_series.tolist(),
+                                "lower_bound": lower_bound.tolist(),
+                                "upper_bound": upper_bound.tolist(),
+                                "indices": [str(idx) for idx in forecast_index],
+                                "confidence_level": 1.0 - alpha
+                            }
+                        }
+                        self.db_manager.save_model_forecasts(model_key, forecast_db_data)
+                        self.logger.info(f"Forecast results for model {model_key} saved to database")
+                    except Exception as e:
+                        self.logger.warning(f"Error saving forecast results to database: {str(e)}")
+
+                # Повний результат
+                result = {
+                    "status": "success",
+                    "model_key": model_key,
+                    "model_type": model_type,
+                    "forecast_timestamp": datetime.now().isoformat(),
+                    "steps": steps,
+                    "alpha": alpha,
+                    "forecast_data": forecast_data
+                }
+
+                self.logger.info(f"Forecast with intervals for model {model_key} completed successfully")
+                return result
+
+            except Exception as e:
+                error_msg = f"Error during forecasting: {str(e)}"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}
+
+        except Exception as e:
+            error_msg = f"Unexpected error during forecast with intervals: {str(e)}"
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}
 
     def compare_models(self, model_keys: List[str], test_data: pd.Series) -> Dict:
-        """
-        Порівняння декількох моделей за метриками точності.
 
-        Args:
-            model_keys: Список ключів моделей для порівняння
-            test_data: Тестові дані для оцінки
+        self.logger.info(f"Starting comparison of models: {model_keys}")
 
-        Returns:
-            Словник з результатами порівняння моделей
+        if len(model_keys) < 2:
+            self.logger.warning("At least two models are required for comparison")
+            return {
+                "status": "error",
+                "message": "At least two models are required for comparison",
+                "results": {}
+            }
 
-        Примітка:
-        - Для кожного ключа моделі потрібно завантажити модель з БД за допомогою self.db_manager.load_complete_model
-        - Можна використати self.db_manager.compare_model_forecasts для порівняння прогнозів різних моделей
-        """
-        pass
+        if test_data.isnull().any():
+            self.logger.warning("Test data contains NaN values. Removing them before comparison.")
+            test_data = test_data.dropna()
+
+        if len(test_data) == 0:
+            self.logger.error("Test data is empty after removing NaN values")
+            return {
+                "status": "error",
+                "message": "Test data is empty",
+                "results": {}
+            }
+
+        comparison_results = {
+            "models": {},
+            "best_model": None,
+            "metrics": {
+                "mse": {},
+                "rmse": {},
+                "mae": {},
+                "mape": {}
+            }
+        }
+
+        try:
+            # Отримати прогнози для кожної моделі і порівняти їх з тестовими даними
+            for model_key in model_keys:
+                try:
+                    # Завантажити модель з БД, якщо потрібно
+                    if model_key not in self.models and self.db_manager is not None:
+                        self.logger.info(f"Loading model {model_key} from database")
+                        loaded_model = self.db_manager.load_complete_model(model_key)
+                        if loaded_model:
+                            self.models[model_key] = loaded_model
+                        else:
+                            self.logger.warning(f"Could not load model {model_key} from database")
+                            continue
+
+                    if model_key not in self.models:
+                        self.logger.error(f"Model {model_key} not found")
+                        continue
+
+                    model_info = self.models[model_key]
+                    fit_result = model_info["fit_result"]
+
+                    # Отримати прогноз на період тестових даних
+                    forecast_start = test_data.index[0]
+                    forecast_end = test_data.index[-1]
+
+                    # Генерування прогнозу
+                    forecast = fit_result.get_prediction(start=forecast_start, end=forecast_end)
+                    pred_mean = forecast.predicted_mean
+
+                    # Вирівняти індекси прогнозу та тестових даних
+                    pred_series = pd.Series(pred_mean, index=test_data.index)
+
+                    # Застосування зворотних трансформацій, якщо потрібно
+                    if self.db_manager is not None:
+                        transformations = self.db_manager.get_data_transformations(model_key)
+                        if transformations:
+                            for transform in reversed(transformations):
+                                if transform.get("method"):
+                                    self.logger.info(f"Applying inverse transformation: {transform['method']}")
+                                    if transform["method"] == "log":
+                                        pred_series = np.exp(pred_series)
+                                    elif transform["method"] == "boxcox":
+                                        from scipy import special
+                                        pred_series = special.inv_boxcox(pred_series, transform.get("lambda", 0))
+                                    elif transform["method"] == "sqrt":
+                                        pred_series = pred_series ** 2
+
+                    # Обчислення метрик
+                    mse = mean_squared_error(test_data, pred_series)
+                    rmse = np.sqrt(mse)
+                    mae = mean_absolute_error(test_data, pred_series)
+
+                    # Обчислення MAPE з обробкою нульових значень
+                    mask = test_data != 0
+                    if mask.any():
+                        mape = np.mean(np.abs((test_data[mask] - pred_series[mask]) / test_data[mask])) * 100
+                    else:
+                        mape = np.nan
+
+                    comparison_results["metrics"]["mse"][model_key] = mse
+                    comparison_results["metrics"]["rmse"][model_key] = rmse
+                    comparison_results["metrics"]["mae"][model_key] = mae
+                    comparison_results["metrics"]["mape"][model_key] = mape
+
+                    comparison_results["models"][model_key] = {
+                        "forecast": pred_series.to_dict(),
+                        "mse": mse,
+                        "rmse": rmse,
+                        "mae": mae,
+                        "mape": mape,
+                        "model_type": model_info["metadata"]["model_type"],
+                        "parameters": model_info["parameters"]
+                    }
+
+                    self.logger.info(
+                        f"Evaluated model {model_key}: MSE={mse:.4f}, RMSE={rmse:.4f}, MAE={mae:.4f}, MAPE={mape:.2f}%")
+
+                except Exception as e:
+                    self.logger.error(f"Error evaluating model {model_key}: {str(e)}")
+                    comparison_results["models"][model_key] = {"error": str(e)}
+
+            # Визначення найкращої моделі за MSE (можна змінити критерій)
+            valid_models = {k: v for k, v in comparison_results["metrics"]["mse"].items()
+                            if isinstance(v, (int, float)) and not np.isnan(v)}
+
+            if valid_models:
+                best_model_key = min(valid_models, key=valid_models.get)
+                comparison_results["best_model"] = {
+                    "key": best_model_key,
+                    "metrics": {
+                        "mse": comparison_results["metrics"]["mse"][best_model_key],
+                        "rmse": comparison_results["metrics"]["rmse"][best_model_key],
+                        "mae": comparison_results["metrics"]["mae"][best_model_key],
+                        "mape": comparison_results["metrics"]["mape"][best_model_key]
+                    }
+                }
+
+                self.logger.info(f"Best model: {best_model_key}")
+
+            # Якщо є db_manager, зберегти результати порівняння
+            if self.db_manager is not None:
+                try:
+                    self.db_manager.compare_model_forecasts(
+                        model_keys=model_keys,
+                        comparison_data={
+                            "test_period": {
+                                "start": test_data.index[0].isoformat() if isinstance(test_data.index[0],
+                                                                                      datetime) else str(
+                                    test_data.index[0]),
+                                "end": test_data.index[-1].isoformat() if isinstance(test_data.index[-1],
+                                                                                     datetime) else str(
+                                    test_data.index[-1]),
+                            },
+                            "metrics": comparison_results["metrics"],
+                            "best_model": comparison_results["best_model"][
+                                "key"] if "best_model" in comparison_results else None
+                        }
+                    )
+                except Exception as db_error:
+                    self.logger.error(f"Error saving comparison results to database: {str(db_error)}")
+
+            return {
+                "status": "success",
+                "message": "Models compared successfully",
+                "results": comparison_results
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error during model comparison: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error during model comparison: {str(e)}",
+                "results": {}
+            }
 
     def apply_preprocessing_pipeline(self, data: pd.Series, operations: List[Dict]) -> pd.Series:
-        """
-        Застосування послідовності операцій препроцесингу до часового ряду.
 
-        Args:
-            data: Вхідний часовий ряд
-            operations: Список словників з операціями та їх параметрами
-                        Приклад: [{'op': 'log'}, {'op': 'diff', 'order': 1}]
+        self.logger.info(f"Applying preprocessing pipeline with {len(operations)} operations")
 
-        Returns:
-            Оброблений часовий ряд
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before preprocessing.")
+            data = data.dropna()
 
-        Примітка:
-        - Інформація про pipeline може бути збережена в БД за допомогою self.db_manager.save_data_transformations
-          для подальшого використання при інверсній трансформації прогнозів
-        """
-        pass
+        if len(data) == 0:
+            self.logger.error("Data is empty after removing NaN values")
+            return pd.Series([], index=pd.DatetimeIndex([]))
+
+        original_data = data.copy()
+        processed_data = data.copy()
+        transformations_info = []
+
+        try:
+            for i, operation in enumerate(operations):
+                op_type = operation.get('op', '').lower()
+
+                if not op_type:
+                    self.logger.warning(f"Operation {i + 1} has no 'op' field, skipping")
+                    continue
+
+                self.logger.info(f"Applying operation {i + 1}: {op_type}")
+
+                if op_type == 'log':
+                    # Перевірка на наявність нульових або від'ємних значень
+                    if (processed_data <= 0).any():
+                        min_positive = processed_data[processed_data > 0].min() if (processed_data > 0).any() else 1e-6
+                        offset = abs(processed_data.min()) + min_positive if processed_data.min() <= 0 else 0
+                        self.logger.warning(f"Negative or zero values found in data. Adding offset {offset}")
+                        processed_data = processed_data + offset
+                        transformations_info.append({
+                            "method": "log",
+                            "params": {"offset": offset}
+                        })
+                    else:
+                        transformations_info.append({
+                            "method": "log",
+                            "params": {}
+                        })
+                    processed_data = np.log(processed_data)
+
+                elif op_type == 'sqrt':
+                    # Перевірка на наявність від'ємних значень
+                    if (processed_data < 0).any():
+                        offset = abs(processed_data.min()) + 1e-6
+                        self.logger.warning(f"Negative values found in data. Adding offset {offset}")
+                        processed_data = processed_data + offset
+                        transformations_info.append({
+                            "method": "sqrt",
+                            "params": {"offset": offset}
+                        })
+                    else:
+                        transformations_info.append({
+                            "method": "sqrt",
+                            "params": {}
+                        })
+                    processed_data = np.sqrt(processed_data)
+
+                elif op_type == 'boxcox':
+                    from scipy import stats
+                    # BoxCox працює тільки з додатними значеннями
+                    if (processed_data <= 0).any():
+                        min_positive = processed_data[processed_data > 0].min() if (processed_data > 0).any() else 1e-6
+                        offset = abs(processed_data.min()) + min_positive
+                        self.logger.warning(f"Non-positive values found in data. Adding offset {offset}")
+                        processed_data = processed_data + offset
+                        processed_data, lambda_param = stats.boxcox(processed_data)
+                        transformations_info.append({
+                            "method": "boxcox",
+                            "params": {
+                                "lambda": lambda_param,
+                                "offset": offset
+                            }
+                        })
+                    else:
+                        processed_data, lambda_param = stats.boxcox(processed_data)
+                        transformations_info.append({
+                            "method": "boxcox",
+                            "params": {
+                                "lambda": lambda_param
+                            }
+                        })
+
+                elif op_type == 'diff':
+                    order = operation.get('order', 1)
+                    if not isinstance(order, int) or order < 1:
+                        self.logger.warning(f"Invalid differencing order {order}, using 1 instead")
+                        order = 1
+
+                    processed_data = processed_data.diff(order).dropna()
+                    transformations_info.append({
+                        "method": "diff",
+                        "params": {"order": order}
+                    })
+
+                elif op_type == 'seasonal_diff':
+                    lag = operation.get('lag', 7)  # За замовчуванням тижнева сезонність
+                    if not isinstance(lag, int) or lag < 1:
+                        self.logger.warning(f"Invalid seasonal lag {lag}, using 7 instead")
+                        lag = 7
+
+                    processed_data = processed_data.diff(lag).dropna()
+                    transformations_info.append({
+                        "method": "seasonal_diff",
+                        "params": {"lag": lag}
+                    })
+
+                elif op_type == 'remove_outliers':
+                    method = operation.get('method', 'iqr')
+                    threshold = operation.get('threshold', 1.5)
+
+                    if method == 'iqr':
+                        # Метод міжквартильного розмаху
+                        q1 = processed_data.quantile(0.25)
+                        q3 = processed_data.quantile(0.75)
+                        iqr = q3 - q1
+                        lower_bound = q1 - threshold * iqr
+                        upper_bound = q3 + threshold * iqr
+
+                        # Зберігаємо інформацію про межі для можливого відновлення
+                        outlier_mask = (processed_data < lower_bound) | (processed_data > upper_bound)
+                        outlier_indices = outlier_mask[outlier_mask].index.tolist()
+                        outlier_values = processed_data[outlier_mask].tolist()
+
+                        # Заміна викидів на межі
+                        processed_data = processed_data.clip(lower=lower_bound, upper=upper_bound)
+
+                        transformations_info.append({
+                            "method": "remove_outliers",
+                            "params": {
+                                "method": method,
+                                "threshold": threshold,
+                                "replaced_outliers": {
+                                    "indices": outlier_indices,
+                                    "values": outlier_values
+                                }
+                            }
+                        })
+
+                    elif method == 'zscore':
+                        # Метод z-оцінки
+                        z_scores = (processed_data - processed_data.mean()) / processed_data.std()
+                        outlier_mask = abs(z_scores) > threshold
+
+                        # Зберігаємо інформацію про викиди
+                        outlier_indices = outlier_mask[outlier_mask].index.tolist()
+                        outlier_values = processed_data[outlier_mask].tolist()
+
+                        # Заміна викидів на None і інтерполяція
+                        processed_data[outlier_mask] = None
+                        processed_data = processed_data.interpolate(method='linear')
+
+                        transformations_info.append({
+                            "method": "remove_outliers",
+                            "params": {
+                                "method": method,
+                                "threshold": threshold,
+                                "replaced_outliers": {
+                                    "indices": outlier_indices,
+                                    "values": outlier_values
+                                }
+                            }
+                        })
+
+                    else:
+                        self.logger.warning(f"Unknown outlier removal method: {method}, skipping")
+
+                elif op_type == 'moving_average':
+                    window = operation.get('window', 3)
+                    center = operation.get('center', False)
+
+                    if not isinstance(window, int) or window < 2:
+                        self.logger.warning(f"Invalid window size {window} for moving average, using 3 instead")
+                        window = 3
+
+                    processed_data = processed_data.rolling(window=window, center=center).mean().dropna()
+                    transformations_info.append({
+                        "method": "moving_average",
+                        "params": {
+                            "window": window,
+                            "center": center
+                        }
+                    })
+
+                elif op_type == 'ewm':
+                    # Експоненційно зважене середнє
+                    span = operation.get('span', 5)
+
+                    if not isinstance(span, int) or span < 2:
+                        self.logger.warning(f"Invalid span {span} for EWM, using 5 instead")
+                        span = 5
+
+                    processed_data = processed_data.ewm(span=span).mean()
+                    transformations_info.append({
+                        "method": "ewm",
+                        "params": {"span": span}
+                    })
+
+                elif op_type == 'normalize':
+                    method = operation.get('method', 'minmax')
+
+                    if method == 'minmax':
+                        # Min-Max масштабування
+                        min_val = processed_data.min()
+                        max_val = processed_data.max()
+                        if max_val > min_val:
+                            processed_data = (processed_data - min_val) / (max_val - min_val)
+                        else:
+                            processed_data = processed_data * 0  # Якщо всі значення однакові
+
+                        transformations_info.append({
+                            "method": "normalize",
+                            "params": {
+                                "method": method,
+                                "min": min_val,
+                                "max": max_val
+                            }
+                        })
+
+                    elif method == 'zscore':
+                        # Z-score стандартизація
+                        mean_val = processed_data.mean()
+                        std_val = processed_data.std()
+                        if std_val > 0:
+                            processed_data = (processed_data - mean_val) / std_val
+                        else:
+                            processed_data = processed_data * 0  # Якщо стандартне відхилення нульове
+
+                        transformations_info.append({
+                            "method": "normalize",
+                            "params": {
+                                "method": method,
+                                "mean": mean_val,
+                                "std": std_val
+                            }
+                        })
+
+                    else:
+                        self.logger.warning(f"Unknown normalization method: {method}, skipping")
+
+                else:
+                    self.logger.warning(f"Unknown operation type: {op_type}, skipping")
+
+                if len(processed_data) == 0:
+                    self.logger.error(f"No data left after operation {i + 1}: {op_type}")
+                    return pd.Series([], index=pd.DatetimeIndex([]))
+
+            # Зберігаємо інформацію про трансформації, якщо є db_manager
+            if self.db_manager is not None and transformations_info:
+                try:
+                    transformation_key = f"transform_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    self.db_manager.save_data_transformations(
+                        key=transformation_key,
+                        transformations=transformations_info,
+                        metadata={
+                            "original_length": len(original_data),
+                            "processed_length": len(processed_data),
+                            "timestamp": datetime.now().isoformat(),
+                            "operations": operations
+                        }
+                    )
+                    # Зберігаємо трансформації в локальному словнику також
+                    self.transformations[transformation_key] = transformations_info
+
+                    self.logger.info(f"Saved transformation pipeline with key: {transformation_key}")
+                except Exception as db_error:
+                    self.logger.error(f"Error saving transformation pipeline to database: {str(db_error)}")
+
+            self.logger.info(
+                f"Preprocessing pipeline applied successfully. Original length: {len(original_data)}, Processed length: {len(processed_data)}")
+            return processed_data
+
+        except Exception as e:
+            self.logger.error(f"Error during preprocessing pipeline: {str(e)}")
+            return pd.Series([], index=pd.DatetimeIndex([]))
 
     def extract_volatility(self, data: pd.Series, window: int = 20) -> pd.Series:
         """
