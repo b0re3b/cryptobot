@@ -164,47 +164,6 @@ class BinanceClient:
             self.db_manager.log_event('ERROR', f"Error getting ticker price: {e}", 'BinanceClient')
             return {}
 
-    # Отримання книги ордерів(поточних пропозицій на купівлю чи продаж)
-    def get_order_book(self, symbol, limit=4500, use_cache=True):
-        # Перевіряємо кеш, якщо дозволено
-        if use_cache and symbol in self.cache['order_book']:
-            cache_time = self.last_cache_update['order_book'].get(symbol, 0)
-            if time.time() - cache_time < self.cache_ttl['order_book']:
-                return self.cache['order_book'][symbol]
-
-        endpoint = f"{self.base_url_v3}/depth"
-        params = {
-            'symbol': symbol,
-            'limit': limit
-        }
-
-        try:
-            response = self.session.get(endpoint, params=params)
-            response.raise_for_status()
-            data = response.json()
-        except requests.exceptions.RequestException as e:
-            self.db_manager.log_event('ERROR', f"Error getting order book: {e}", 'BinanceClient')
-            return {'bids': pd.DataFrame(), 'asks': pd.DataFrame(), 'lastUpdateId': 0}
-
-        bids_df = pd.DataFrame(data['bids'], columns=['price', 'quantity'])
-        asks_df = pd.DataFrame(data['asks'], columns=['price', 'quantity'])
-
-        bids_df[['price', 'quantity']] = bids_df[['price', 'quantity']].apply(pd.to_numeric)
-        asks_df[['price', 'quantity']] = asks_df[['price', 'quantity']].apply(pd.to_numeric)
-
-        result = {
-            'lastUpdateId': data['lastUpdateId'],
-            'bids': bids_df,
-            'asks': asks_df
-        }
-
-        # Оновлюємо кеш
-        if use_cache:
-            self.cache['order_book'][symbol] = result
-            self.last_cache_update['order_book'][symbol] = time.time()
-
-        return result
-
     # Отримання останніх угод
     def get_recent_trades(self, symbol, limit=100):
         endpoint = f"{self.base_url_v3}/trades"
@@ -358,47 +317,6 @@ class BinanceClient:
             self.db_manager.log_event('ERROR', f"Error saving kline to database: {e}", 'BinanceClient')
             return False
 
-    def _save_orderbook_to_db(self, orderbook_data):
-        """Зберігає дані книги ордерів в базу даних"""
-        try:
-            # Отримуємо базову валюту з символа (напр. BTC з BTCUSDT)
-            symbol = orderbook_data['symbol']
-            is_valid, crypto_symbol = self._validate_symbol(symbol)
-
-            if not is_valid:
-                return False
-
-            timestamp = orderbook_data['timestamp']
-            last_update_id = orderbook_data['last_update_id']
-
-            # Обробка ордерів на купівлю (bids)
-            if 'bids' in orderbook_data and orderbook_data['bids']:
-                for bid in orderbook_data['bids']:
-                    orderbook_entry = {
-                        'timestamp': timestamp,
-                        'last_update_id': last_update_id,
-                        'type': 'bid',
-                        'price': float(bid[0]),
-                        'quantity': float(bid[1])
-                    }
-                    self.db_manager.insert_orderbook_entry(crypto_symbol, orderbook_entry)
-
-            # Обробка ордерів на продаж (asks)
-            if 'asks' in orderbook_data and orderbook_data['asks']:
-                for ask in orderbook_data['asks']:
-                    orderbook_entry = {
-                        'timestamp': timestamp,
-                        'last_update_id': last_update_id,
-                        'type': 'ask',
-                        'price': float(ask[0]),
-                        'quantity': float(ask[1])
-                    }
-                    self.db_manager.insert_orderbook_entry(crypto_symbol, orderbook_entry)
-
-            return True
-        except Exception as e:
-            self.db_manager.log_event('ERROR', f"Error saving orderbook to database: {e}", 'BinanceClient')
-            return False
 
     def start_kline_socket(self, symbol, interval, callback, save_to_db=True):
         """Запуск WebSocket для отримання даних свічок"""
@@ -505,100 +423,6 @@ class BinanceClient:
 
         return ws
 
-    def order_book_socket(self, symbol, callback, save_to_db=True):
-        """Запуск WebSocket для отримання даних книги ордерів"""
-        # Перевіряємо, чи є базовий символ допустимим
-        is_valid, _ = self._validate_symbol(symbol)
-        if not is_valid:
-            self.db_manager.log_event('ERROR', f"Cannot start orderbook socket for unsupported symbol: {symbol}",
-                                      'BinanceClient')
-            return None
-
-        socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@depth20@100ms"
-
-        # Додаємо запис про WebSocket-з'єднання в базу даних
-        if save_to_db:
-            self.db_manager.update_websocket_status(symbol, 'orderbook', None, True)
-
-        def on_message(ws, message):
-            try:
-                callback(ws, message)
-
-                if save_to_db:
-                    try:
-                        data = json.loads(message)
-                        timestamp = datetime.now()
-
-                        orderbook_data = {
-                            'symbol': symbol,
-                            'timestamp': timestamp,
-                            'last_update_id': data.get('lastUpdateId', 0),
-                            'bids': data.get('bids', []),
-                            'asks': data.get('asks', [])
-                        }
-
-                        self._save_orderbook_to_db(orderbook_data)
-                    except Exception as e:
-                        self.db_manager.log_event('ERROR', f"Error saving order book data to database: {e}",
-                                                  'BinanceClient')
-            except Exception as e:
-                self.db_manager.log_event('ERROR', f"Error in on_message handler for orderbook: {e}", 'BinanceClient')
-
-        def on_error(ws, error):
-            self.db_manager.log_event('ERROR', f"WebSocket Error: {error}", 'BinanceClient')
-            ws.custom_reconnect_info['needs_reconnect'] = True
-            if save_to_db:
-                self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
-
-        def on_close(ws, close_status_code, close_msg):
-            self.db_manager.log_event('INFO',
-                                      f"WebSocket Connection Closed: {close_status_code}, {close_msg if close_msg else 'No message'}",
-                                      'BinanceClient')
-            ws.custom_reconnect_info['needs_reconnect'] = True
-            if save_to_db:
-                self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
-            # Запускаємо пізніше перепідключення
-            self.reconnect_required = True
-
-        def on_open(ws):
-            self.db_manager.log_event('INFO', f"WebSocket Connection Opened for {symbol} orderbook", 'BinanceClient')
-            ws.custom_reconnect_info['needs_reconnect'] = False
-            if save_to_db:
-                self.db_manager.update_websocket_status(symbol, 'orderbook', None, True)
-
-        ws = websocket.WebSocketApp(
-            socket_url,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-            on_open=on_open
-        )
-
-        # Додаємо механізм пінгу для підтримки з'єднання
-        ws.on_ping = lambda ws, message: ws.send(json.dumps({"type": "pong"}))
-
-        # Додаємо необхідну інформацію для перепідключення
-        ws.custom_reconnect_info = {
-            'needs_reconnect': False,
-            'symbol': symbol,
-            'callback': callback,
-            'save_to_db': save_to_db,
-            'socket_type': 'orderbook',
-            'last_ping_time': time.time()
-        }
-
-        import threading
-        ws_thread = threading.Thread(target=ws.run_forever, kwargs={'ping_interval': 30, 'ping_timeout': 10})
-        ws_thread.daemon = True
-        ws_thread.start()
-
-        # Зберігаємо веб-сокет в активних з'єднаннях
-        ws_key = f"orderbook_{symbol}"
-        self.active_websockets[ws_key] = {
-            'ws': ws
-        }
-
-        return ws
 
     # Перевірка та автоматичне перепідключення сокетів
     def check_websocket_connections(self):
@@ -856,32 +680,6 @@ def handle_kline_message(ws, message):
     print("-----")
 
 
-def handle_order_book_message(ws, message):
-    data = json.loads(message)
-
-    # Отримуємо символ із URL сокета
-    symbol = "Unknown"
-    if hasattr(ws, 'url'):
-        symbol_part = ws.url.split('@')[0].split('/')[-1]
-        symbol = symbol_part.upper()
-
-    print(f"Оновлення книги ордерів {symbol}:")
-    print(f"Час оновлення: {datetime.now()}")
-    print(f"Останній ID оновлення: {data.get('lastUpdateId', 'Немає')}")
-
-    if 'bids' in data and data['bids']:
-        print("Топ 3 ордерів на купівлю:")
-        for i, bid in enumerate(data['bids'][:3]):
-            print(f"  {i + 1}. Ціна: {bid[0]}, Обсяг: {bid[1]}")
-
-    if 'asks' in data and data['asks']:
-        print("Топ 3 ордерів на продаж:")
-        for i, ask in enumerate(data['asks'][:3]):
-            print(f"  {i + 1}. Ціна: {ask[0]}, Обсяг: {ask[1]}")
-
-    print("-----")
-
-
 def main():
     client = BinanceClient()
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
@@ -909,10 +707,6 @@ def main():
                 if socket1:
                     active_sockets.append(socket1)
 
-                # Створення веб-сокетів для книги ордерів
-                socket2 = client.order_book_socket(symbol, handle_order_book_message, save_to_db=True)
-                if socket2:
-                    active_sockets.append(socket2)
             except Exception as e:
                 print(f"Помилка при створенні WebSocket для {symbol}: {e}")
 

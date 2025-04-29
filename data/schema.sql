@@ -67,47 +67,6 @@ CREATE TABLE IF NOT EXISTS sol_klines (
 -- Індекс для швидкого пошуку свічок SOL за часом
 CREATE INDEX IF NOT EXISTS idx_sol_klines_time ON sol_klines(interval, open_time);
 
--- Таблиця для зберігання книги ордерів BTC
-CREATE TABLE IF NOT EXISTS btc_orderbook (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP NOT NULL,
-    last_update_id BIGINT NOT NULL,
-    type TEXT NOT NULL, -- 'bid' або 'ask'
-    price NUMERIC NOT NULL,
-    quantity NUMERIC NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Індекс для швидкого пошуку в книзі ордерів BTC
-CREATE INDEX IF NOT EXISTS idx_btc_orderbook_time ON btc_orderbook(timestamp);
-
--- Таблиця для зберігання книги ордерів ETH
-CREATE TABLE IF NOT EXISTS eth_orderbook (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP NOT NULL,
-    last_update_id BIGINT NOT NULL,
-    type TEXT NOT NULL, -- 'bid' або 'ask'
-    price NUMERIC NOT NULL,
-    quantity NUMERIC NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Індекс для швидкого пошуку в книзі ордерів ETH
-CREATE INDEX IF NOT EXISTS idx_eth_orderbook_time ON eth_orderbook(timestamp);
-
--- Таблиця для зберігання книги ордерів SOL
-CREATE TABLE IF NOT EXISTS sol_orderbook (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP NOT NULL,
-    last_update_id BIGINT NOT NULL,
-    type TEXT NOT NULL, -- 'bid' або 'ask'
-    price NUMERIC NOT NULL,
-    quantity NUMERIC NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Індекс для швидкого пошуку в книзі ордерів SOL
-CREATE INDEX IF NOT EXISTS idx_sol_orderbook_time ON sol_orderbook(timestamp);
 
 -- Таблиця для логування подій
 CREATE TABLE IF NOT EXISTS logs (
@@ -168,28 +127,6 @@ CREATE TABLE IF NOT EXISTS btc_volume_profile (
 
 CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(interval, time_bucket);
 
--- Таблиця для оброблених книг ордерів BTC
-CREATE TABLE IF NOT EXISTS btc_orderbook_processed (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP NOT NULL,
-
-    spread NUMERIC, -- різниця між найвищим bid і найнижчим ask
-    imbalance NUMERIC, -- (bid_volume - ask_volume) / (bid_volume + ask_volume)
-    bid_volume NUMERIC,
-    ask_volume NUMERIC,
-    average_bid_price NUMERIC,
-    average_ask_price NUMERIC,
-
-    volatility_estimate NUMERIC, -- можливо, з minutely рівня
-
-    is_anomaly BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE (timestamp)
-);
-
-CREATE INDEX IF NOT EXISTS idx_btc_orderbook_processed_time ON btc_orderbook_processed(timestamp);
-
 -- Таблиця для логування обробки даних
 CREATE TABLE IF NOT EXISTS data_processing_log (
     id SERIAL PRIMARY KEY,
@@ -204,47 +141,6 @@ CREATE TABLE IF NOT EXISTS data_processing_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблиця для оброблених книг ордерів ETH
-CREATE TABLE IF NOT EXISTS eth_orderbook_processed (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP NOT NULL,
-
-    spread NUMERIC, -- різниця між найвищим bid і найнижчим ask
-    imbalance NUMERIC, -- (bid_volume - ask_volume) / (bid_volume + ask_volume)
-    bid_volume NUMERIC,
-    ask_volume NUMERIC,
-    average_bid_price NUMERIC,
-    average_ask_price NUMERIC,
-
-    volatility_estimate NUMERIC, -- можливо, з minutely рівня
-
-    is_anomaly BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE (timestamp)
-);
-
-CREATE INDEX IF NOT EXISTS idx_eth_orderbook_processed_time ON eth_orderbook_processed(timestamp);
-
--- Таблиця для оброблених книг ордерів SOL
-CREATE TABLE IF NOT EXISTS sol_orderbook_processed (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP NOT NULL,
-
-    spread NUMERIC, -- різниця між найвищим bid і найнижчим ask
-    imbalance NUMERIC, -- (bid_volume - ask_volume) / (bid_volume + ask_volume)
-    bid_volume NUMERIC,
-    ask_volume NUMERIC,
-    average_bid_price NUMERIC,
-    average_ask_price NUMERIC,
-
-    volatility_estimate NUMERIC, -- можливо, з minutely рівня
-
-    is_anomaly BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE (timestamp)
-);
 
 CREATE INDEX IF NOT EXISTS idx_sol_orderbook_processed_time ON sol_orderbook_processed(timestamp);
 

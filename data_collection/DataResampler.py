@@ -3,8 +3,9 @@ import pandas as pd
 
 
 class DataResampler:
-    def __init__(self, logger):
+    def __init__(self, logger, db_manager):
         self.logger = logger
+        self.db_manager = db_manager
 
     def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
 

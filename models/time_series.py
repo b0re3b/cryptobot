@@ -176,60 +176,360 @@ class TimeSeriesModels:
 
     def find_optimal_params(self, data: pd.Series, max_p: int = 5, max_d: int = 2,
                             max_q: int = 5, seasonal: bool = False) -> Dict:
-        """
-        Пошук оптимальних параметрів для ARIMA/SARIMA.
 
-        Args:
-            data: Часовий ряд
-            max_p, max_d, max_q: Максимальні значення параметрів ARIMA
-            seasonal: Чи враховувати сезонність
+        self.logger.info("Starting optimal parameters search")
 
-        Returns:
-            Словник з оптимальними параметрами
-        """
-        pass
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before parameter search.")
+            data = data.dropna()
+
+        if len(data) < 10:
+            self.logger.error("Not enough data points for parameter search")
+            return {
+                "status": "error",
+                "message": "Not enough data points for parameter search",
+                "parameters": None,
+                "model_info": None
+            }
+
+        try:
+            # Використовуємо auto_arima для автоматичного пошуку параметрів
+            if seasonal:
+                # Для SARIMA: визначаємо можливий сезонний період
+                # Типові значення: щотижнева (7), щомісячна (30/31), квартальна (4)
+                seasonal_periods = [7, 12, 24, 30, 365]
+
+                # Автовизначення сезонного періоду, якщо достатньо даних
+                if len(data) >= 2 * max(seasonal_periods):
+                    # Аналізуємо автокореляцію для виявлення можливого сезонного періоду
+                    from statsmodels.tsa.stattools import acf
+                    acf_values = acf(data, nlags=max(seasonal_periods))
+
+                    # Шукаємо піки в ACF, які можуть вказувати на сезонність
+                    potential_seasons = []
+                    for period in seasonal_periods:
+                        if period < len(acf_values) and acf_values[period] > 0.2:  # Поріг кореляції
+                            potential_seasons.append((period, acf_values[period]))
+
+                    # Вибираємо період з найсильнішою автокореляцією
+                    if potential_seasons:
+                        potential_seasons.sort(key=lambda x: x[1], reverse=True)
+                        seasonal_period = potential_seasons[0][0]
+                        self.logger.info(f"Detected potential seasonal period: {seasonal_period}")
+                    else:
+                        # За замовчуванням
+                        seasonal_period = 7  # Тижнева сезонність для фінансових даних
+                        self.logger.info(f"No strong seasonality detected, using default: {seasonal_period}")
+                else:
+                    seasonal_period = 7
+                    self.logger.info(f"Not enough data for seasonal detection, using default: {seasonal_period}")
+
+                # Запускаємо auto_arima з урахуванням сезонності
+                model = auto_arima(
+                    data,
+                    start_p=0, max_p=max_p,
+                    start_q=0, max_q=max_q,
+                    max_d=max_d,
+                    start_P=0, max_P=2,
+                    start_Q=0, max_Q=2,
+                    max_D=1,
+                    m=seasonal_period,
+                    seasonal=True,
+                    trace=True,  # Виведення інформації про процес пошуку
+                    error_action='ignore',
+                    suppress_warnings=True,
+                    stepwise=True,  # Покроковий пошук для прискорення
+                    information_criterion='aic',  # AIC або BIC як критерій
+                    random_state=42
+                )
+
+                order = model.order
+                seasonal_order = model.seasonal_order
+
+                result = {
+                    "status": "success",
+                    "message": "Optimal parameters found",
+                    "parameters": {
+                        "order": order,
+                        "seasonal_order": seasonal_order,
+                        "seasonal_period": seasonal_period
+                    },
+                    "model_info": {
+                        "aic": model.aic(),
+                        "bic": model.bic(),
+                        "model_type": "SARIMA"
+                    }
+                }
+            else:
+                # Для несезонної ARIMA
+                model = auto_arima(
+                    data,
+                    start_p=0, max_p=max_p,
+                    start_q=0, max_q=max_q,
+                    max_d=max_d,
+                    seasonal=False,
+                    trace=True,
+                    error_action='ignore',
+                    suppress_warnings=True,
+                    stepwise=True,
+                    information_criterion='aic',
+                    random_state=42
+                )
+
+                order = model.order
+
+                result = {
+                    "status": "success",
+                    "message": "Optimal parameters found",
+                    "parameters": {
+                        "order": order
+                    },
+                    "model_info": {
+                        "aic": model.aic(),
+                        "bic": model.bic(),
+                        "model_type": "ARIMA"
+                    }
+                }
+
+            self.logger.info(f"Found optimal parameters: {result['parameters']}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error during parameter search: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error during parameter search: {str(e)}",
+                "parameters": None,
+                "model_info": None
+            }
 
     def fit_arima(self, data: pd.Series, order: Tuple[int, int, int],
                   symbol: str = 'default') -> Dict:
-        """
-        Навчання моделі ARIMA.
 
-        Args:
-            data: Часовий ряд
-            order: Параметри ARIMA (p, d, q)
-            symbol: Ідентифікатор моделі
+        self.logger.info(f"Starting ARIMA model training with order {order} for symbol {symbol}")
 
-        Returns:
-            Результати навчання
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before fitting.")
+            data = data.dropna()
 
-        Примітка:
-        - Після навчання моделі рекомендується зберегти її в БД за допомогою self.db_manager.save_model_metadata,
-          self.db_manager.save_model_parameters та self.db_manager.save_model_binary
-        - Ключ моделі для збереження повинен бути у форматі f"{symbol}_arima_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        """
-        pass
+        if len(data) < sum(order) + 1:
+            error_msg = f"Not enough data points for ARIMA{order}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "model_key": None,
+                "model_info": None
+            }
+
+        try:
+            # Генеруємо унікальний ключ для моделі
+            model_key = f"{symbol}_arima_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            # Тренування моделі ARIMA
+            model = ARIMA(data, order=order)
+            fit_result = model.fit()
+
+            # Збираємо метадані моделі
+            model_metadata = {
+                "model_type": "ARIMA",
+                "symbol": symbol,
+                "timestamp": datetime.now(),
+                "data_range": {
+                    "start": data.index[0].isoformat() if isinstance(data.index[0], datetime) else str(data.index[0]),
+                    "end": data.index[-1].isoformat() if isinstance(data.index[-1], datetime) else str(data.index[-1]),
+                    "length": len(data)
+                },
+                "model_key": model_key
+            }
+
+            # Збираємо параметри моделі
+            model_parameters = {
+                "order": order,
+                "training_info": {
+                    "convergence": True if fit_result.mle_retvals.get('converged', False) else False,
+                    "iterations": fit_result.mle_retvals.get('iterations', None)
+                }
+            }
+
+            # Збираємо основну статистику моделі
+            model_stats = {
+                "aic": fit_result.aic,
+                "bic": fit_result.bic,
+                "aicc": fit_result.aicc if hasattr(fit_result, 'aicc') else None,
+                "log_likelihood": fit_result.llf
+            }
+
+            # Зберігаємо модель в словнику
+            self.models[model_key] = {
+                "model": model,
+                "fit_result": fit_result,
+                "metadata": model_metadata,
+                "parameters": model_parameters,
+                "stats": model_stats
+            }
+
+            if self.db_manager is not None:
+                try:
+                    # Зберігаємо метадані
+                    self.db_manager.save_model_metadata(model_key, model_metadata)
+
+                    # Зберігаємо параметри
+                    self.db_manager.save_model_parameters(model_key, model_parameters)
+
+                    # Зберігаємо двійкове представлення моделі
+                    import pickle
+                    model_binary = pickle.dumps(fit_result)
+                    self.db_manager.save_model_binary(model_key, model_binary)
+
+                    self.logger.info(f"Model {model_key} saved to database")
+                except Exception as db_error:
+                    self.logger.error(f"Error saving model to database: {str(db_error)}")
+
+            self.logger.info(f"ARIMA model {model_key} trained successfully")
+
+            return {
+                "status": "success",
+                "message": "ARIMA model trained successfully",
+                "model_key": model_key,
+                "model_info": {
+                    "metadata": model_metadata,
+                    "parameters": model_parameters,
+                    "stats": model_stats
+                }
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error during ARIMA model training: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error during ARIMA model training: {str(e)}",
+                "model_key": None,
+                "model_info": None
+            }
 
     def fit_sarima(self, data: pd.Series, order: Tuple[int, int, int],
                    seasonal_order: Tuple[int, int, int, int], symbol: str = 'default') -> Dict:
-        """
-        Навчання моделі SARIMA.
 
-        Args:
-            data: Часовий ряд
-            order: Параметри ARIMA (p, d, q)
-            seasonal_order: Сезонні параметри (P, D, Q, s)
-            symbol: Ідентифікатор моделі
+        self.logger.info(
+            f"Starting SARIMA model training with order {order}, seasonal_order {seasonal_order} for symbol {symbol}")
 
-        Returns:
-            Результати навчання
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before fitting.")
+            data = data.dropna()
 
-        Примітка:
-        - Після навчання моделі рекомендується зберегти її в БД за допомогою self.db_manager.save_model_metadata,
-          self.db_manager.save_model_parameters та self.db_manager.save_model_binary
-        - Ключ моделі для збереження повинен бути у форматі f"{symbol}_sarima_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        """
-        pass
+        # Перевіряємо мінімальну необхідну довжину даних (p+d+q+P+D+Q+s > елементів)
+        min_required = sum(order) + sum(seasonal_order[:-1]) + 2 * seasonal_order[-1]
+        if len(data) < min_required:
+            error_msg = f"Not enough data points for SARIMA{order}x{seasonal_order}. Need at least {min_required}, got {len(data)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "model_key": None,
+                "model_info": None
+            }
 
+        try:
+            # Генеруємо унікальний ключ для моделі
+            model_key = f"{symbol}_sarima_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            # Тренування моделі SARIMA використовуючи SARIMAX
+            model = SARIMAX(
+                data,
+                order=order,
+                seasonal_order=seasonal_order,
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            )
+
+            # Встановлюємо опції підгонки для кращої збіжності
+            fit_options = {
+                'disp': False,  # Не виводити інформацію про ітерації
+                'maxiter': 200,  # Максимальна кількість ітерацій
+                'method': 'lbfgs'  # Метод оптимізації
+            }
+
+            fit_result = model.fit(**fit_options)
+
+            # Збираємо метадані моделі
+            model_metadata = {
+                "model_type": "SARIMA",
+                "symbol": symbol,
+                "timestamp": datetime.now(),
+                "data_range": {
+                    "start": data.index[0].isoformat() if isinstance(data.index[0], datetime) else str(data.index[0]),
+                    "end": data.index[-1].isoformat() if isinstance(data.index[-1], datetime) else str(data.index[-1]),
+                    "length": len(data)
+                },
+                "model_key": model_key
+            }
+
+            # Збираємо параметри моделі
+            model_parameters = {
+                "order": order,
+                "seasonal_order": seasonal_order,
+                "training_info": {
+                    "convergence": True if fit_result.mle_retvals.get('converged', False) else False,
+                    "iterations": fit_result.mle_retvals.get('iterations', None)
+                }
+            }
+
+            # Збираємо основну статистику моделі
+            model_stats = {
+                "aic": fit_result.aic,
+                "bic": fit_result.bic,
+                "aicc": fit_result.aicc if hasattr(fit_result, 'aicc') else None,
+                "log_likelihood": fit_result.llf
+            }
+
+            # Зберігаємо модель в словнику
+            self.models[model_key] = {
+                "model": model,
+                "fit_result": fit_result,
+                "metadata": model_metadata,
+                "parameters": model_parameters,
+                "stats": model_stats
+            }
+
+            if self.db_manager is not None:
+                try:
+                    # Зберігаємо метадані
+                    self.db_manager.save_model_metadata(model_key, model_metadata)
+
+                    # Зберігаємо параметри
+                    self.db_manager.save_model_parameters(model_key, model_parameters)
+
+                    # Зберігаємо двійкове представлення моделі
+                    import pickle
+                    model_binary = pickle.dumps(fit_result)
+                    self.db_manager.save_model_binary(model_key, model_binary)
+
+                    self.logger.info(f"Model {model_key} saved to database")
+                except Exception as db_error:
+                    self.logger.error(f"Error saving model to database: {str(db_error)}")
+
+            self.logger.info(f"SARIMA model {model_key} trained successfully")
+
+            return {
+                "status": "success",
+                "message": "SARIMA model trained successfully",
+                "model_key": model_key,
+                "model_info": {
+                    "metadata": model_metadata,
+                    "parameters": model_parameters,
+                    "stats": model_stats
+                }
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error during SARIMA model training: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error during SARIMA model training: {str(e)}",
+                "model_key": None,
+                "model_info": None
+            }
     def forecast(self, model_key: str, steps: int = 24) -> pd.Series:
         """
         Прогнозування на основі навченої моделі.

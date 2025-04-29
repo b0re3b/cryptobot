@@ -3,18 +3,18 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataCleaner import DataCleaner
 from data_collection.DataResampler import DataResampler
 from data_collection.DataStorageManager import DataStorageManager
-from data_collection.OrderBookProcessor import OrderBookProcessor
 from utils.config import db_connection
 from data.db import DatabaseManager
 
+
 class MarketDataProcessor:
 
-    def __init__(self,  log_level=logging.INFO):
+    def __init__(self, log_level=logging.INFO):
         self.log_level = log_level
         self.db_connection = db_connection
         self.db_manager = DatabaseManager()
@@ -24,187 +24,12 @@ class MarketDataProcessor:
         self.logger.info("Ініціалізація класу...")
         self.ready = True
         self.storage_manager = DataStorageManager(self.db_manager, self.logger)
-        self.orderbook_processor = OrderBookProcessor(self.db_manager, self.logger)
         self.data_resampler = DataResampler(self.db_manager)
-        self.data_cleaner = DataCleaner(self.db_manager,self.logger)
+        self.data_cleaner = DataCleaner(self.db_manager, self.logger)
         self.anomaly_detector = AnomalyDetector(self.db_manager)
+        self.filtered_data = None
+        self.orderbook_statistics = None
 
-    def preprocess_orderbook_pipeline(self, symbol: str,
-                                      start_time: Optional[datetime] = None,
-                                      end_time: Optional[datetime] = None,
-                                      add_time_features: bool = False,
-                                      cyclical: bool = True,
-                                      add_sessions: bool = True) -> pd.DataFrame:
-        """Повний конвеєр обробки даних ордербука."""
-        # Завантаження даних
-        raw_data = OrderBookProcessor.load_orderbook_data(symbol, start_time, end_time)
-
-        # Перевіряємо цілісність сирих даних
-        raw_integrity_issues = AnomalyDetector.validate_data_integrity(raw_data)
-        if raw_integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in raw_integrity_issues.values())
-            self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю сирих даних ордербука")
-
-        # Виявлення пропущених періодів
-        if not raw_data.empty and isinstance(raw_data.index, pd.DatetimeIndex):
-            expected_diff = pd.Timedelta(minutes=1)  # Припускаємо хвилинні дані
-            missing_periods = DataCleaner._detect_missing_periods(raw_data, expected_diff)
-
-            if missing_periods:
-                self.logger.info(f"Знайдено {len(missing_periods)} пропущених періодів")
-                fetched_data = OrderBookProcessor.fetch_missing_orderbook_data(symbol, missing_periods)
-
-                if not fetched_data.empty:
-                    # Зберігаємо отримані дані
-                    for _, row in fetched_data.iterrows():
-                        # Виправлено формат даних
-                        orderbook_data = {
-                            'bids': [[row['bid_price'], row['bid_qty']]],
-                            'asks': [[row['ask_price'], row['ask_qty']]]
-                        }
-                        OrderBookProcessor.save_orderbook_to_db(orderbook_data, symbol, row.name)
-
-                    # Оновлюємо raw_data
-                    raw_data = pd.concat([raw_data, fetched_data])
-                    raw_data = raw_data[~raw_data.index.duplicated(keep='last')].sort_index()
-
-        # Обробка даних
-        processed_data = OrderBookProcessor.process_orderbook_data(raw_data)
-
-        # Перевірка цілісності даних після первинної обробки
-        processed_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
-        if processed_integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in processed_integrity_issues.values())
-            self.logger.info(f"Після процесу обробки залишилось {issue_count} проблем з цілісністю даних")
-
-        # Нормалізація даних перед виявленням аномалій
-        normalized_data, scaler_meta = DataCleaner.normalize_data(
-            processed_data,
-            method='z-score',
-            exclude_columns=['timestamp', 'symbol']  # Виключаємо нечислові колонки
-        )
-
-        # Якщо нормалізація пройшла успішно, використовуємо нормалізовані дані
-        if scaler_meta is not None:
-            processed_data = normalized_data
-            self.logger.info(f"Дані нормалізовано методом {scaler_meta['method']}")
-
-            # Перевірка цілісності даних після нормалізації
-            norm_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
-            if norm_integrity_issues:
-                issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                                  for issues in norm_integrity_issues.values())
-                self.logger.info(f"Після нормалізації залишилось {issue_count} проблем з цілісністю даних")
-
-                # Перевіряємо на наявність нескінченних або NaN значень після нормалізації
-                if "columns_with_inf" in norm_integrity_issues or "columns_with_na" in norm_integrity_issues:
-                    self.logger.warning("Нормалізація створила проблеми з нескінченними або відсутніми значеннями")
-
-        # Додавання часових ознак перед виявленням аномалій
-        if add_time_features:
-            if isinstance(processed_data.index, pd.DatetimeIndex):
-                self.logger.info("Додавання часових ознак до даних ордербука перед виявленням аномалій...")
-                processed_data = DataCleaner.add_time_features(
-                    data=processed_data,
-                    cyclical=cyclical,
-                    add_sessions=add_sessions
-                )
-                self.logger.info(f"Додано часові ознаки. Нова кількість колонок: {processed_data.shape[1]}")
-            else:
-                self.logger.warning("Неможливо додати часові ознаки: індекс не є DatetimeIndex")
-
-        # Виявлення аномалій
-        anomalies = OrderBookProcessor.detect_orderbook_anomalies(processed_data)
-        processed_data = pd.concat([processed_data, anomalies], axis=1)
-
-        # Ресемплінг до більшого інтервалу (якщо потрібно)
-        if len(processed_data) > 1000:  # Ресемплінг тільки для великих наборів
-            processed_data = OrderBookProcessor.resample_orderbook_data(processed_data, '5min')
-
-            # Перевірка цілісності даних після ресемплінгу
-            resample_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
-            if resample_integrity_issues:
-                issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                                  for issues in resample_integrity_issues.values())
-                self.logger.info(f"Після ресемплінгу залишилось {issue_count} проблем з цілісністю даних")
-
-        # Додаємо фільтрацію аномалій, якщо потрібно
-        if 'is_anomaly' in processed_data.columns:
-            # Зберігаємо відфільтровані дані в атрибуті класу для можливого використання
-            self.filtered_data = processed_data[~processed_data['is_anomaly']]
-
-            # Перевірка цілісності відфільтрованих даних
-            if not self.filtered_data.empty:
-                filtered_integrity_issues = AnomalyDetector.validate_data_integrity(self.filtered_data)
-                if filtered_integrity_issues:
-                    issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                                      for issues in filtered_integrity_issues.values())
-                    self.logger.info(
-                        f"У відфільтрованих даних (без аномалій) залишилось {issue_count} проблем з цілісністю")
-                else:
-                    self.logger.info("У відфільтрованих даних (без аномалій) проблем з цілісністю не виявлено")
-
-        # Фінальна перевірка цілісності даних перед поверненням результату
-        final_integrity_issues = AnomalyDetector.validate_data_integrity(processed_data)
-        if final_integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in final_integrity_issues.values())
-            self.logger.warning(f"У фінальному наборі даних залишилось {issue_count} проблем з цілісністю")
-
-            # Деталізація проблем, які залишились
-            issue_types = list(final_integrity_issues.keys())
-            self.logger.info(f"Типи проблем у фінальному наборі даних: {issue_types}")
-        else:
-            self.logger.info("Фінальний набір даних не має проблем з цілісністю")
-
-        # Розрахунок статистики ордербука
-        statistics = OrderBookProcessor.get_orderbook_statistics(processed_data)
-        self.logger.info(f"Розраховано статистику ордербука: {len(statistics)} показників")
-
-        # Зберігаємо статистику для подальшого використання
-        self.orderbook_statistics = statistics
-
-        self.logger.info(f"Завершено препроцесинг даних ордербука для {symbol}, рядків: {len(processed_data)}")
-        return processed_data
-
-    def update_orderbook_data(self, symbol: str):
-        """Оновлює дані ордербука до поточного моменту."""
-        # Отримуємо останній доступний запис з використанням limit
-        last_entry = OrderBookProcessor.load_orderbook_data(symbol, limit=1)
-
-        if last_entry.empty:
-            start_time = datetime.now() - timedelta(days=7)  # За замовчуванням - останні 7 днів
-        else:
-            start_time = last_entry.index[-1] + timedelta(seconds=1)  # +1 секунда, щоб уникнути дублювання
-
-        end_time = datetime.now()
-
-        # Логування інформації про оновлення
-        self.logger.info(f"Оновлення даних ордербука для {symbol} від {start_time} до {end_time}")
-
-        # Отримуємо нові дані
-        new_data = OrderBookProcessor.fetch_missing_orderbook_data(
-            symbol,
-            [(start_time, end_time)]
-        )
-
-        if not new_data.empty:
-            # Зберігаємо нові дані з покращеною обробкою
-            for _, row in new_data.iterrows():
-                # Виправлено формат даних
-                orderbook_data = {
-                    'bids': [[row['bid_price'], row['bid_qty']]],
-                    'asks': [[row['ask_price'], row['ask_qty']]]
-                }
-                OrderBookProcessor.save_orderbook_to_db(orderbook_data, symbol, row.name)
-
-            self.logger.info(f"Оновлено {len(new_data)} записів ордербука для {symbol}")
-        else:
-            self.logger.info(f"Нових даних для {symbol} не знайдено")
-
-        return new_data
 
     def align_time_series(self, data_list: List[pd.DataFrame],
                           reference_index: int = 0) -> List[pd.DataFrame]:
@@ -312,8 +137,6 @@ class MarketDataProcessor:
 
         return aligned_data_list
 
-
-
     def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 10,
                                  price_col: str = 'close', volume_col: str = 'volume',
                                  time_period: Optional[str] = None) -> pd.DataFrame:
@@ -395,8 +218,8 @@ class MarketDataProcessor:
                 include_lowest=True
             )
 
-            # Виправлено FutureWarning — додано observed=False
-            volume_profile = data.groupby('price_bin', observed=False).agg({
+            # Виправлено FutureWarning — додано observed=True
+            volume_profile = data.groupby('price_bin', observed=True).agg({
                 volume_col: 'sum',
                 price_col: ['count', 'min', 'max']
             })
@@ -499,6 +322,89 @@ class MarketDataProcessor:
         self.logger.info(f"З {total_columns} вхідних колонок, {total_columns - len(result.columns)} були дублікатами")
 
         return result
+
+    def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        """Видаляє рядки з однаковими часовими мітками."""
+        if data.empty:
+            return data
+
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс не є DatetimeIndex. Неможливо видалити дублікати часових міток.")
+            return data
+
+        size_before = len(data)
+        data = data[~data.index.duplicated(keep='last')]
+        size_after = len(data)
+
+        if size_before > size_after:
+            self.logger.info(f"Видалено {size_before - size_after} дублікатів часових міток")
+
+        return data
+
+    def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
+                   fill_missing: bool = True, **kwargs) -> pd.DataFrame:
+        """Очищує дані від викидів та заповнює пропуски."""
+        if data.empty:
+            return data
+
+        result = data.copy()
+
+        # Видалення викидів
+        if remove_outliers:
+            result = self.data_cleaner.remove_outliers(result)
+
+        # Заповнення пропусків
+        if fill_missing:
+            result = self.data_cleaner.fill_missing_values(result)
+
+        return result
+
+    def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
+                              fetch_missing: bool = False, symbol: Optional[str] = None,
+                              interval: Optional[str] = None, **kwargs) -> pd.DataFrame:
+        """Обробляє відсутні значення з можливістю підвантаження даних."""
+        if data.empty:
+            return data
+
+        result = data.copy()
+
+        # Якщо потрібно підвантажити дані з зовнішнього джерела
+        if fetch_missing and symbol and interval:
+            result = self.data_cleaner.handle_missing_values(
+                result,
+                symbol=symbol,
+                interval=interval,
+                fetch_missing=True
+            )
+        else:
+            # Інтерполяція або інша обробка
+            result = self.data_cleaner.fill_missing_values(result, method=method)
+
+        return result
+
+    def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
+                       exclude_columns: List[str] = None, **kwargs) -> Tuple[pd.DataFrame, Dict]:
+        """Нормалізує дані за допомогою вказаного методу."""
+        if data.empty:
+            return data, None
+
+        return self.data_cleaner.normalize_data(
+            data,
+            method=method,
+            exclude_columns=exclude_columns
+        )
+
+    def detect_outliers(self, data: pd.DataFrame, method: str = 'iqr',
+                        threshold: float = 1.5, **kwargs) -> Tuple[pd.DataFrame, Dict]:
+        """Виявляє аномалії у даних."""
+        if data.empty:
+            return data, {}
+
+        return self.anomaly_detector.detect_outliers(
+            data,
+            method=method,
+            threshold=threshold
+        )
 
     def preprocess_pipeline(self, data: pd.DataFrame,
                             steps: Optional[List[Dict]] = None,
@@ -623,20 +529,6 @@ def main():
                 if not volume_profile.empty:
                     DataStorageManager.save_volume_profile_to_db(volume_profile, symbol, '1d')
                     print(f" Профіль об'єму збережено")
-
-        # 7. Ордербук
-        print(f"\n Ордербук для {symbol}...")
-        processed_orderbook = processor.preprocess_orderbook_pipeline(
-            symbol=symbol,
-            add_time_features=True,
-            add_sessions=True
-        )
-
-        if not processed_orderbook.empty:
-            OrderBookProcessor.save_processed_orderbook_to_db(symbol, processed_orderbook)
-            print(f" Оброблені дані ордербука збережено")
-        else:
-            print(f" Не вдалося обробити ордербук для {symbol}")
 
 
 if __name__ == "__main__":

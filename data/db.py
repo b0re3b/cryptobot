@@ -246,24 +246,8 @@ class DatabaseManager:
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed(interval, open_time)')
 
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS btc_orderbook_processed (
-            id SERIAL PRIMARY KEY,
-            timestamp TIMESTAMP NOT NULL,
-            spread NUMERIC,
-            imbalance NUMERIC,
-            bid_volume NUMERIC,
-            ask_volume NUMERIC,
-            average_bid_price NUMERIC,
-            average_ask_price NUMERIC,
-            volatility_estimate NUMERIC,
-            is_anomaly BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (timestamp)
-        )
-        ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_orderbook_processed_time ON btc_orderbook_processed(timestamp)')
+
 
         # Таблиці для оброблених даних ETH
         self.cursor.execute('''
@@ -293,24 +277,7 @@ class DatabaseManager:
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed(interval, open_time)')
 
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS eth_orderbook_processed (
-            id SERIAL PRIMARY KEY,
-            timestamp TIMESTAMP NOT NULL,
-            spread NUMERIC,
-            imbalance NUMERIC,
-            bid_volume NUMERIC,
-            ask_volume NUMERIC,
-            average_bid_price NUMERIC,
-            average_ask_price NUMERIC,
-            volatility_estimate NUMERIC,
-            is_anomaly BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (timestamp)
-        )
-        ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_orderbook_processed_time ON eth_orderbook_processed(timestamp)')
 
         # Таблиці для оброблених даних SOL
         self.cursor.execute('''
@@ -339,25 +306,6 @@ class DatabaseManager:
         ''')
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(interval, open_time)')
-
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sol_orderbook_processed (
-            id SERIAL PRIMARY KEY,
-            timestamp TIMESTAMP NOT NULL,
-            spread NUMERIC,
-            imbalance NUMERIC,
-            bid_volume NUMERIC,
-            ask_volume NUMERIC,
-            average_bid_price NUMERIC,
-            average_ask_price NUMERIC,
-            volatility_estimate NUMERIC,
-            is_anomaly BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (timestamp)
-        )
-        ''')
-
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_orderbook_processed_time ON sol_orderbook_processed(timestamp)')
 
     def _create_volume_profile_tables(self):
         # Таблиці для профілів об'єму BTC
@@ -473,32 +421,6 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def insert_orderbook_entry(self, symbol, orderbook_data):
-        """Додає запис книги ордерів до відповідної таблиці для валюти"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return False
-
-        table_name = f"{symbol.lower()}_orderbook"
-
-        try:
-            self.cursor.execute(f'''
-            INSERT INTO {table_name} 
-            (timestamp, last_update_id, type, price, quantity)
-            VALUES (%s, %s, %s, %s, %s)
-            ''', (
-                orderbook_data['timestamp'],
-                orderbook_data['last_update_id'],
-                orderbook_data['type'],
-                orderbook_data['price'],
-                orderbook_data['quantity']
-            ))
-            self.conn.commit()
-            return True
-        except psycopg2.Error as e:
-            print(f"Помилка додавання запису книги ордерів для {symbol}: {e}")
-            self.conn.rollback()
-            return False
 
     def insert_cryptocurrency(self, symbol, base_asset, quote_asset):
         """Додає інформацію про криптовалюту"""
@@ -568,38 +490,7 @@ class DatabaseManager:
             print(f"Помилка отримання свічок для {symbol}: {e}")
             return pd.DataFrame()
 
-    def get_orderbook(self, symbol, start_time=None, end_time=None, limit=None):
-        """Отримує книгу ордерів для валюти за діапазоном часу"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return pd.DataFrame()
 
-        table_name = f"{symbol.lower()}_orderbook"
-
-        query = f'SELECT * FROM {table_name} WHERE TRUE'
-        params = []
-
-        if start_time:
-            query += ' AND timestamp >= %s'
-            params.append(start_time)
-
-        if end_time:
-            query += ' AND timestamp <= %s'
-            params.append(end_time)
-
-        query += ' ORDER BY timestamp DESC, type, price LIMIT %s'
-        params.append(limit)
-
-        try:
-            self.cursor.execute(query, params)
-            rows = self.cursor.fetchall()
-            if not rows:
-                return pd.DataFrame()
-            df = pd.DataFrame(rows)
-            return df
-        except psycopg2.Error as e:
-            print(f"❌ Помилка отримання книги ордерів для {symbol}: {e}")
-            return pd.DataFrame()
 
     def log_event(self, log_level, message, component):
         """Додає запис в лог"""
@@ -725,46 +616,7 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def insert_orderbook_processed(self, symbol, processed_data):
-        """Додає оброблений запис книги ордерів до відповідної таблиці"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return False
 
-        table_name = f"{symbol.lower()}_orderbook_processed"
-
-        try:
-            self.cursor.execute(f'''
-            INSERT INTO {table_name} 
-            (timestamp, spread, imbalance, bid_volume, ask_volume, 
-            average_bid_price, average_ask_price, volatility_estimate, is_anomaly)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (timestamp) DO UPDATE SET
-            spread = EXCLUDED.spread,
-            imbalance = EXCLUDED.imbalance,
-            bid_volume = EXCLUDED.bid_volume,
-            ask_volume = EXCLUDED.ask_volume,
-            average_bid_price = EXCLUDED.average_bid_price,
-            average_ask_price = EXCLUDED.average_ask_price,
-            volatility_estimate = EXCLUDED.volatility_estimate,
-            is_anomaly = EXCLUDED.is_anomaly
-            ''', (
-                processed_data['timestamp'],
-                processed_data['spread'],
-                processed_data['imbalance'],
-                processed_data['bid_volume'],
-                processed_data['ask_volume'],
-                processed_data['average_bid_price'],
-                processed_data['average_ask_price'],
-                processed_data.get('volatility_estimate'),
-                processed_data.get('is_anomaly', False)
-            ))
-            self.conn.commit()
-            return True
-        except psycopg2.Error as e:
-            print(f"Помилка додавання обробленого запису книги ордерів для {symbol}: {e}")
-            self.conn.rollback()
-            return False
 
     def insert_volume_profile(self, symbol, profile_data):
         """Додає запис профілю об'єму до відповідної таблиці"""
@@ -847,38 +699,7 @@ class DatabaseManager:
             print(f"Помилка отримання оброблених свічок для {symbol}: {e}")
             return pd.DataFrame()
 
-    def get_orderbook_processed(self, symbol, timestamp=None, limit=100):
-        """Отримує оброблену книгу ордерів для валюти"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return pd.DataFrame()
 
-        table_name = f"{symbol.lower()}_orderbook_processed"
-
-        query = f'''
-        SELECT * FROM {table_name}
-        '''
-        params = []
-
-        if timestamp:
-            query += ' WHERE timestamp = %s'
-            params.append(timestamp)
-        else:
-            query += f' WHERE timestamp = (SELECT MAX(timestamp) FROM {table_name})'
-
-        query += ' ORDER BY timestamp DESC LIMIT %s'
-        params.append(limit)
-
-        try:
-            self.cursor.execute(query, params)
-            rows = self.cursor.fetchall()
-            if not rows:
-                return pd.DataFrame()
-            df = pd.DataFrame(rows)
-            return df
-        except psycopg2.Error as e:
-            print(f"Помилка отримання обробленої книги ордерів для {symbol}: {e}")
-            return pd.DataFrame()
 
     def get_volume_profile(self, symbol, interval, time_bucket=None, limit=100):
         """Отримує профіль об'єму для валюти"""

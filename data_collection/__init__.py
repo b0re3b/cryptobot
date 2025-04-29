@@ -8,7 +8,10 @@ from .market_data_processor import MarketDataProcessor
 from .feature_engineering import FeatureEngineering
 from .twitter_scraper import TwitterScraper
 from .crypto_news_scraper import CryptoNewsScraper
-
+from .DataCleaner import DataCleaner
+from .DataStorageManager import DataStorageManager
+from .DataResampler import DataResampler
+from .AnomalyDetector import AnomalyDetector
 # Версія пакету
 __version__ = '0.1.0'
 
@@ -18,5 +21,9 @@ __all__ = [
     'MarketDataProcessor',
     'FeatureEngineering',
     'TwitterScraper',
-    'CryptoNewsScraper'
+    'CryptoNewsScraper',
+    'DataCleaner',
+    'DataStorageManager',
+    'DataResampler',
+    'AnomalyDetector'
 ]
