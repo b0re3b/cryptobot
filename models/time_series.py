@@ -46,43 +46,133 @@ class TimeSeriesModels:
     """
 
     def __init__(self, db_manager=None, log_level=logging.INFO):
-        """
-        Ініціалізація класу моделей часових рядів.
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager для роботи з базою даних PostgreSQL
-            log_level: Рівень логування
+        self.db_manager = db_manager
+        self.models = {}  # Словник для збереження навчених моделей
+        self.transformations = {}  # Словник для збереження параметрів трансформацій
 
-        Примітка:
-        - Об'єкт db_manager зберігається як атрибут класу для подальшого використання методами
-        - Його методи використовуються для збереження/завантаження даних моделі та історичних даних криптовалют
-        """
-        pass
+        # Налаштування логування
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(log_level)
+
+        # Якщо немає обробників логів, додаємо обробник для виведення в консоль
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+
+        self.logger.info("TimeSeriesModels initialized")
 
     def check_stationarity(self, data: pd.Series) -> Dict:
-        """
-        Перевірка стаціонарності часового ряду.
 
-        Args:
-            data: Часовий ряд (pandas Series)
+        from statsmodels.tsa.stattools import adfuller, kpss
 
-        Returns:
-            Словник з результатами тестів на стаціонарність
-        """
-        pass
+        # Перевіряємо, що дані не містять NaN значень
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them for stationarity check.")
+            data = data.dropna()
+
+        # Перевірка об'єму даних
+        if len(data) < 20:
+            self.logger.warning("Data series too short for reliable stationarity tests")
+            return {
+                "adf_test": {"is_stationary": None, "p_value": None, "test_statistic": None, "critical_values": None},
+                "kpss_test": {"is_stationary": None, "p_value": None, "test_statistic": None, "critical_values": None},
+                "rolling_statistics": {"mean_stationary": None, "std_stationary": None},
+                "is_stationary": False
+            }
+
+        # Розрахунок рухомого середнього та стандартного відхилення
+        rolling_mean = data.rolling(window=12).mean()
+        rolling_std = data.rolling(window=12).std()
+
+        # Розрахунок відносної зміни для рухомих статистик
+        if len(data) > 24:
+            mean_change_rel = abs(
+                (rolling_mean.iloc[-12:].mean() - rolling_mean.iloc[12:24].mean()) / rolling_mean.iloc[12:24].mean())
+            std_change_rel = abs(
+                (rolling_std.iloc[-12:].mean() - rolling_std.iloc[12:24].mean()) / rolling_std.iloc[12:24].mean())
+            mean_stationary = mean_change_rel < 0.1  # Вважаємо стаціонарним, якщо зміна < 10%
+            std_stationary = std_change_rel < 0.1
+        else:
+            mean_stationary = None
+            std_stationary = None
+
+        # Тест Дікі-Фуллера (ADF-test) для перевірки наявності одиничного кореня
+        try:
+            adf_result = adfuller(data, autolag='AIC')
+            adf_is_stationary = adf_result[1] < 0.05  # p-значення < 0.05 => стаціонарний ряд
+        except Exception as e:
+            self.logger.error(f"Error during ADF test: {e}")
+            adf_result = [None, None, None, {}]
+            adf_is_stationary = False
+
+        # KPSS тест на тренд-стаціонарність
+        try:
+            kpss_result = kpss(data, regression='ct', nlags='auto')
+            kpss_is_stationary = kpss_result[1] > 0.05  # p-значення > 0.05 => стаціонарний ряд
+        except Exception as e:
+            self.logger.error(f"Error during KPSS test: {e}")
+            kpss_result = [None, None, None, {}]
+            kpss_is_stationary = False
+
+        # Загальний висновок про стаціонарність
+        # Вважаємо ряд стаціонарним, якщо обидва тести підтверджують це
+        is_stationary = adf_is_stationary and kpss_is_stationary
+
+        result = {
+            "adf_test": {
+                "is_stationary": adf_is_stationary,
+                "p_value": adf_result[1],
+                "test_statistic": adf_result[0],
+                "critical_values": adf_result[4]
+            },
+            "kpss_test": {
+                "is_stationary": kpss_is_stationary,
+                "p_value": kpss_result[1],
+                "test_statistic": kpss_result[0],
+                "critical_values": kpss_result[3]
+            },
+            "rolling_statistics": {
+                "mean_stationary": mean_stationary,
+                "std_stationary": std_stationary
+            },
+            "is_stationary": is_stationary
+        }
+
+        self.logger.info(f"Stationarity check completed: {is_stationary}")
+
+        return result
 
     def difference_series(self, data: pd.Series, order: int = 1) -> pd.Series:
-        """
-        Диференціювання часового ряду для досягнення стаціонарності.
 
-        Args:
-            data: Часовий ряд
-            order: Порядок диференціювання
+        if order < 1:
+            self.logger.warning("Differencing order must be at least 1, using order=1 instead")
+            order = 1
 
-        Returns:
-            Диференційований часовий ряд
-        """
-        pass
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before differencing.")
+            data = data.dropna()
+
+        if len(data) <= order:
+            self.logger.error(f"Not enough data points for {order}-order differencing")
+            return pd.Series([], index=pd.DatetimeIndex([]))
+
+        # Застосовуємо послідовне диференціювання
+        diff_data = data.copy()
+        for i in range(order):
+            diff_data = diff_data.diff().dropna()
+
+            # Перевіряємо чи залишились дані після диференціювання
+            if len(diff_data) == 0:
+                self.logger.error(f"No data left after {i + 1}-order differencing")
+                return pd.Series([], index=pd.DatetimeIndex([]))
+
+        self.logger.info(
+            f"Applied {order}-order differencing. Original length: {len(data)}, Result length: {len(diff_data)}")
+
+        return diff_data
 
     def find_optimal_params(self, data: pd.Series, max_p: int = 5, max_d: int = 2,
                             max_q: int = 5, seasonal: bool = False) -> Dict:
