@@ -1,10 +1,13 @@
-from typing import Optional, Union
+import os
+from typing import Optional, Union, Dict, List
 import pandas as pd
 import numpy as np
 from datetime import datetime
 from utils.logger import CryptoLogger
 class DataStorageManager:
-
+    def __init__(self, db_manager, logger):
+        self.db_manager = db_manager
+        self.logger = logger
     def save_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
 
         if df.empty:
@@ -226,3 +229,107 @@ class DataStorageManager:
         except Exception as e:
             self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
             raise
+
+
+    def prepare_data_for_db(self, processed_data: pd.DataFrame) -> List[Dict]:
+        """Перетворює оброблені дані ордербука у формат для збереження в БД"""
+        result = []
+
+        for timestamp, row in processed_data.iterrows():
+            db_entry = {
+                'timestamp': timestamp,
+                'spread': row.get('spread', None),
+                'imbalance': row.get('volume_imbalance', None),  # Мапінг volume_imbalance -> imbalance
+                'bid_volume': row.get('bid_qty', None),  # Мапінг bid_qty -> bid_volume
+                'ask_volume': row.get('ask_qty', None),  # Мапінг ask_qty -> ask_volume
+                'average_bid_price': row.get('bid_price', None),  # Спрощений мапінг
+                'average_ask_price': row.get('ask_price', None),  # Спрощений мапінг
+                'volatility_estimate': row.get('volatility', None),
+                'is_anomaly': row.get('is_anomaly', False)
+            }
+            result.append(db_entry)
+
+        return result
+
+
+
+    def save_processed_data(self, data: pd.DataFrame, filename: str, db_connection=None) -> str:
+
+        if data.empty:
+            self.logger.warning("Спроба зберегти порожній DataFrame")
+            return ""
+
+        # Збереження в базу даних, якщо надано з'єднання
+        if db_connection:
+            try:
+                table_name = os.path.basename(filename).split('.')[0]
+                data.to_sql(table_name, db_connection, if_exists='replace', index=True)
+                self.logger.info(f"Дані збережено в базу даних, таблиця: {table_name}")
+                return table_name
+            except Exception as e:
+                self.logger.error(f"Помилка при збереженні в базу даних: {str(e)}")
+                return ""
+
+        # Забезпечення формату CSV
+        if '.' in filename and filename.split('.')[-1].lower() != 'csv':
+            filename = f"{filename.split('.')[0]}.csv"
+            self.logger.warning(f"Змінено формат файлу на CSV: {filename}")
+
+        if not filename.endswith('.csv'):
+            filename = f"{filename}.csv"
+
+        directory = os.path.dirname(filename)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+            self.logger.info(f"Створено директорію: {directory}")
+
+        try:
+            data.to_csv(filename)
+            self.logger.info(f"Дані збережено у CSV форматі: {filename}")
+            return os.path.abspath(filename)
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні даних: {str(e)}")
+            return ""
+
+    def load_processed_data(self, filename: str) -> pd.DataFrame:
+
+        if not os.path.exists(filename):
+            self.logger.error(f"Файл не знайдено: {filename}")
+            return pd.DataFrame()
+
+        file_extension = filename.split('.')[-1].lower() if '.' in filename else ''
+
+        try:
+            if file_extension == 'csv':
+                data = pd.read_csv(filename)
+                self.logger.info(f"Дані завантажено з CSV файлу: {filename}")
+
+                time_cols = [col for col in data.columns if
+                             any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
+                if time_cols:
+                    time_col = time_cols[0]
+                    data[time_col] = pd.to_datetime(data[time_col])
+                    data.set_index(time_col, inplace=True)
+                    self.logger.info(f"Встановлено індекс за колонкою {time_col}")
+            else:
+                self.logger.error(f"Підтримується лише формат CSV, отримано: {file_extension}")
+                return pd.DataFrame()
+
+            if not isinstance(data.index, pd.DatetimeIndex) and len(data) > 0:
+                self.logger.warning("Завантажені дані не мають DatetimeIndex. Спроба конвертувати.")
+                try:
+                    time_cols = [col for col in data.columns if
+                                 any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
+                    if time_cols:
+                        time_col = time_cols[0]
+                        data[time_col] = pd.to_datetime(data[time_col])
+                        data.set_index(time_col, inplace=True)
+                        self.logger.info(f"Встановлено індекс за колонкою {time_col}")
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося встановити DatetimeIndex: {str(e)}")
+
+            return data
+
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
+            return pd.DataFrame()
