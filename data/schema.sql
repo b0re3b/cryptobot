@@ -749,3 +749,93 @@ INSERT INTO news_categories (source_id, category_name, category_url_path) VALUES
 ((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'business', 'business'),
 ((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'markets', 'markets')
 ON CONFLICT (source_id, category_name) DO NOTHING;
+-- Схема для збереження даних про часові ряди та результати моделювання
+
+-- Таблиця для зберігання метаданих моделей часових рядів
+CREATE TABLE IF NOT EXISTS time_series_models (
+    model_id SERIAL PRIMARY KEY,
+    model_key VARCHAR(100) NOT NULL UNIQUE,
+    symbol VARCHAR(20) NOT NULL,
+    model_type VARCHAR(50) NOT NULL, -- 'arima', 'sarima', etc.
+    interval VARCHAR(10) NOT NULL, -- '1m', '5m', '15m', '1h', '4h', '1d'
+    start_date TIMESTAMP NOT NULL,
+    end_date TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- Таблиця для зберігання параметрів моделей
+CREATE TABLE IF NOT EXISTS model_parameters (
+    parameter_id SERIAL PRIMARY KEY,
+    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
+    param_name VARCHAR(50) NOT NULL,
+    param_value JSONB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(model_id, param_name)
+);
+
+-- Таблиця для зберігання метрик ефективності моделей
+CREATE TABLE IF NOT EXISTS model_metrics (
+    metric_id SERIAL PRIMARY KEY,
+    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
+    metric_name VARCHAR(50) NOT NULL,
+    metric_value FLOAT NOT NULL,
+    test_date TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(model_id, metric_name, test_date)
+);
+
+-- Таблиця для зберігання прогнозів
+CREATE TABLE IF NOT EXISTS model_forecasts (
+    forecast_id SERIAL PRIMARY KEY,
+    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
+    forecast_date TIMESTAMP NOT NULL,
+    forecast_value FLOAT NOT NULL,
+    lower_bound FLOAT,
+    upper_bound FLOAT,
+    confidence_level FLOAT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(model_id, forecast_date)
+);
+
+-- Таблиця для зберігання повних результатів тренування моделі (серіалізована модель)
+CREATE TABLE IF NOT EXISTS model_binary_data (
+    binary_id SERIAL PRIMARY KEY,
+    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
+    model_binary BYTEA NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(model_id)
+);
+
+-- Таблиця для зберігання історії перетворень даних
+CREATE TABLE IF NOT EXISTS data_transformations (
+    transform_id SERIAL PRIMARY KEY,
+    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
+    transform_type VARCHAR(50) NOT NULL, -- 'log', 'diff', 'boxcox', etc.
+    transform_params JSONB,
+    transform_order INTEGER NOT NULL, -- порядок застосування трансформацій
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(model_id, transform_order)
+);
+
+-- Індекси для оптимізації запитів
+CREATE INDEX IF NOT EXISTS idx_time_series_models_symbol ON time_series_models(symbol);
+CREATE INDEX IF NOT EXISTS idx_time_series_models_model_type ON time_series_models(model_type);
+CREATE INDEX IF NOT EXISTS idx_model_forecasts_date ON model_forecasts(forecast_date);
+CREATE INDEX IF NOT EXISTS idx_model_forecasts_model_id_date ON model_forecasts(model_id, forecast_date);
+
+-- Тригер для оновлення updated_at при зміні моделі
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_time_series_models_timestamp
+BEFORE UPDATE ON time_series_models
+FOR EACH ROW
+EXECUTE FUNCTION update_modified_column();

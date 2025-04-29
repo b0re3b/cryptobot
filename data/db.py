@@ -1,4 +1,8 @@
 import os
+import pickle
+from typing import Dict, List, Any, Optional
+
+import numpy as np
 import psycopg2
 import pandas as pd
 from datetime import datetime
@@ -1776,3 +1780,818 @@ class DatabaseManager:
             print(f"Помилка запису логу скрапінгу новин: {e}")
             self.conn.rollback()
             return False
+
+    def save_model_metadata(self, model_key: str, symbol: str, model_type: str,
+                            interval: str, start_date: datetime, end_date: datetime,
+                            description: str = None) -> int:
+        """
+        Збереження метаданих моделі в базу даних.
+
+        Args:
+            model_key: Унікальний ключ моделі
+            symbol: Символ криптовалюти
+            model_type: Тип моделі ('arima', 'sarima', etc.)
+            interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
+            start_date: Початкова дата даних, на яких навчалася модель
+            end_date: Кінцева дата даних, на яких навчалася модель
+            description: Опис моделі
+
+        Returns:
+            ID створеного запису моделі
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                query = """
+                        INSERT INTO time_series_models
+                        (model_key, symbol, model_type, interval, start_date, end_date, description)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (model_key) 
+                DO \
+                        UPDATE SET
+                            symbol = EXCLUDED.symbol, \
+                            model_type = EXCLUDED.model_type, \
+                            interval = EXCLUDED.interval, \
+                            start_date = EXCLUDED.start_date, \
+                            end_date = EXCLUDED.end_date, \
+                            description = EXCLUDED.description, \
+                            updated_at = CURRENT_TIMESTAMP \
+                            RETURNING model_id \
+                        """
+                cursor.execute(query, (model_key, symbol, model_type, interval,
+                                       start_date, end_date, description))
+                model_id = cursor.fetchone()[0]
+                conn.commit()
+                self.logger.info(f"Збережено метадані моделі {model_key} з ID {model_id}")
+                return model_id
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при збереженні метаданих моделі: {str(e)}")
+            raise
+
+    def save_model_parameters(self, model_id: int, parameters: Dict) -> bool:
+        """
+        Збереження параметрів моделі.
+
+        Args:
+            model_id: ID моделі
+            parameters: Словник параметрів моделі
+
+        Returns:
+            Успішність операції
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                for param_name, param_value in parameters.items():
+                    query = """
+                            INSERT INTO model_parameters
+                                (model_id, param_name, param_value)
+                            VALUES (%s, %s, %s) ON CONFLICT (model_id, param_name) 
+                    DO \
+                            UPDATE SET param_value = EXCLUDED.param_value \
+                            """
+                    # Перетворення значення параметра в JSON
+                    param_json = json.dumps(param_value)
+                    cursor.execute(query, (model_id, param_name, param_json))
+                conn.commit()
+                self.logger.info(f"Збережено параметри для моделі з ID {model_id}")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при збереженні параметрів моделі: {str(e)}")
+            return False
+
+    def save_model_metrics(self, model_id: int, metrics: Dict, test_date: datetime = None) -> bool:
+        """
+        Збереження метрик ефективності моделі.
+
+        Args:
+            model_id: ID моделі
+            metrics: Словник з метриками (назва: значення)
+            test_date: Дата тестування моделі
+
+        Returns:
+            Успішність операції
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                for metric_name, metric_value in metrics.items():
+                    query = """
+                            INSERT INTO model_metrics
+                                (model_id, metric_name, metric_value, test_date)
+                            VALUES (%s, %s, %s, %s) ON CONFLICT (model_id, metric_name, test_date) 
+                    DO \
+                            UPDATE SET metric_value = EXCLUDED.metric_value \
+                            """
+                    cursor.execute(query, (model_id, metric_name, float(metric_value), test_date))
+                conn.commit()
+                self.logger.info(f"Збережено метрики для моделі з ID {model_id}")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при збереженні метрик моделі: {str(e)}")
+            return False
+
+    def save_model_forecasts(self, model_id: int, forecasts: pd.Series,
+                             lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
+                             confidence_level: float = 0.95) -> bool:
+        """
+        Збереження прогнозів моделі.
+
+        Args:
+            model_id: ID моделі
+            forecasts: Серія прогнозів з датами як індексом
+            lower_bounds: Нижні межі довірчого інтервалу
+            upper_bounds: Верхні межі довірчого інтервалу
+            confidence_level: Рівень довіри для інтервалів
+
+        Returns:
+            Успішність операції
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                for date, value in forecasts.items():
+                    lower = None if lower_bounds is None else lower_bounds.get(date)
+                    upper = None if upper_bounds is None else upper_bounds.get(date)
+
+                    query = """
+                            INSERT INTO model_forecasts
+                            (model_id, forecast_date, forecast_value, lower_bound, upper_bound, confidence_level)
+                            VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (model_id, forecast_date) 
+                    DO \
+                            UPDATE SET
+                                forecast_value = EXCLUDED.forecast_value, \
+                                lower_bound = EXCLUDED.lower_bound, \
+                                upper_bound = EXCLUDED.upper_bound, \
+                                confidence_level = EXCLUDED.confidence_level \
+                            """
+                    cursor.execute(query, (model_id, date, float(value),
+                                           float(lower) if lower is not None else None,
+                                           float(upper) if upper is not None else None,
+                                           confidence_level))
+                conn.commit()
+                self.logger.info(f"Збережено прогнози для моделі з ID {model_id}")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при збереженні прогнозів моделі: {str(e)}")
+            return False
+
+    def save_model_binary(self, model_id: int, model_obj: Any) -> bool:
+        """
+        Збереження серіалізованої моделі в базу даних.
+
+        Args:
+            model_id: ID моделі
+            model_obj: Об'єкт моделі для серіалізації
+
+        Returns:
+            Успішність операції
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                # Серіалізація моделі
+                model_binary = pickle.dumps(model_obj)
+
+                query = """
+                        INSERT INTO model_binary_data
+                            (model_id, model_binary)
+                        VALUES (%s, %s) ON CONFLICT (model_id) 
+                DO \
+                        UPDATE SET model_binary = EXCLUDED.model_binary \
+                        """
+                cursor.execute(query, (model_id, psycopg2.Binary(model_binary)))
+                conn.commit()
+                self.logger.info(f"Збережено бінарні дані моделі з ID {model_id}")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при збереженні бінарних даних моделі: {str(e)}")
+            return False
+
+    def save_data_transformations(self, model_id: int, transformations: List[Dict]) -> bool:
+        """
+        Збереження інформації про перетворення даних.
+
+        Args:
+            model_id: ID моделі
+            transformations: Список словників з інформацією про перетворення
+                            [{'type': 'log', 'params': {}, 'order': 1}, ...]
+
+        Returns:
+            Успішність операції
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                # Спочатку видаляємо старі записи для цієї моделі
+                cursor.execute("DELETE FROM data_transformations WHERE model_id = %s", (model_id,))
+
+                # Додаємо нові записи
+                for transform in transformations:
+                    query = """
+                            INSERT INTO data_transformations
+                                (model_id, transform_type, transform_params, transform_order)
+                            VALUES (%s, %s, %s, %s) \
+                            """
+                    transform_type = transform.get('type')
+                    transform_params = json.dumps(transform.get('params', {}))
+                    transform_order = transform.get('order')
+
+                    cursor.execute(query, (model_id, transform_type, transform_params, transform_order))
+
+                conn.commit()
+                self.logger.info(f"Збережено перетворення для моделі з ID {model_id}")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при збереженні перетворень даних: {str(e)}")
+            return False
+
+    def get_model_by_key(self, model_key: str) -> Optional[Dict]:
+        """
+        Отримання інформації про модель за ключем.
+
+        Args:
+            model_key: Ключ моделі
+
+        Returns:
+            Словник з інформацією про модель або None
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                query = "SELECT * FROM time_series_models WHERE model_key = %s"
+                cursor.execute(query, (model_key,))
+                model_data = cursor.fetchone()
+
+                if model_data:
+                    return dict(model_data)
+                return None
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні моделі за ключем: {str(e)}")
+            return None
+
+    def get_model_parameters(self, model_id: int) -> Dict:
+        """
+        Отримання параметрів моделі.
+
+        Args:
+            model_id: ID моделі
+
+        Returns:
+            Словник параметрів моделі
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                query = "SELECT param_name, param_value FROM model_parameters WHERE model_id = %s"
+                cursor.execute(query, (model_id,))
+                parameters = {}
+
+                for row in cursor.fetchall():
+                    param_name = row['param_name']
+                    param_value = json.loads(row['param_value'])
+                    parameters[param_name] = param_value
+
+                return parameters
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні параметрів моделі: {str(e)}")
+            return {}
+
+    def get_model_metrics(self, model_id: int, test_date: datetime = None) -> Dict:
+        """
+        Отримання метрик ефективності моделі.
+
+        Args:
+            model_id: ID моделі
+            test_date: Дата тестування (якщо None, повертаються всі метрики)
+
+        Returns:
+            Словник метрик моделі
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                if test_date is None:
+                    query = """SELECT metric_name, metric_value, test_date
+                               FROM model_metrics
+                               WHERE model_id = %s"""
+                    cursor.execute(query, (model_id,))
+                else:
+                    query = """SELECT metric_name, metric_value
+                               FROM model_metrics
+                               WHERE model_id = %s \
+                                 AND test_date = %s"""
+                    cursor.execute(query, (model_id, test_date))
+
+                metrics = {}
+                for row in cursor.fetchall():
+                    metric_name = row['metric_name']
+                    metric_value = row['metric_value']
+
+                    if test_date is None:
+                        test_date_str = row['test_date'].strftime('%Y-%m-%d') if row['test_date'] else 'unknown'
+                        if test_date_str not in metrics:
+                            metrics[test_date_str] = {}
+                        metrics[test_date_str][metric_name] = metric_value
+                    else:
+                        metrics[metric_name] = metric_value
+
+                return metrics
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні метрик моделі: {str(e)}")
+            return {}
+
+    def get_model_forecasts(self, model_id: int, start_date: datetime = None,
+                            end_date: datetime = None) -> pd.DataFrame:
+        """
+        Отримання прогнозів моделі.
+
+        Args:
+            model_id: ID моделі
+            start_date: Початкова дата прогнозів (якщо None, від найранішого)
+            end_date: Кінцева дата прогнозів (якщо None, до найпізнішого)
+
+        Returns:
+            DataFrame з прогнозами та довірчими інтервалами
+        """
+        try:
+            conn = self.connect()
+            query = """SELECT forecast_date, forecast_value, lower_bound, upper_bound, confidence_level
+                       FROM model_forecasts
+                       WHERE model_id = %s"""
+            params = [model_id]
+
+            if start_date:
+                query += " AND forecast_date >= %s"
+                params.append(start_date)
+            if end_date:
+                query += " AND forecast_date <= %s"
+                params.append(end_date)
+
+            query += " ORDER BY forecast_date"
+
+            forecasts_df = pd.read_sql(query, conn, params=params, parse_dates=['forecast_date'])
+
+            if not forecasts_df.empty:
+                forecasts_df.set_index('forecast_date', inplace=True)
+
+            return forecasts_df
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні прогнозів моделі: {str(e)}")
+            return pd.DataFrame()
+
+    def load_model_binary(self, model_id: int) -> Any:
+        """
+        Завантаження серіалізованої моделі з бази даних.
+
+        Args:
+            model_id: ID моделі
+
+        Returns:
+            Десеріалізований об'єкт моделі або None
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                query = "SELECT model_binary FROM model_binary_data WHERE model_id = %s"
+                cursor.execute(query, (model_id,))
+                row = cursor.fetchone()
+
+                if row:
+                    model_binary = row[0]
+                    model_obj = pickle.loads(model_binary)
+                    self.logger.info(f"Завантажено бінарні дані моделі з ID {model_id}")
+                    return model_obj
+
+                self.logger.warning(f"Бінарні дані моделі з ID {model_id} не знайдено")
+                return None
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні бінарних даних моделі: {str(e)}")
+            return None
+
+    def get_data_transformations(self, model_id: int) -> List[Dict]:
+        """
+        Отримання інформації про перетворення даних.
+
+        Args:
+            model_id: ID моделі
+
+        Returns:
+            Список словників з інформацією про перетворення
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                query = """SELECT transform_type, transform_params, transform_order
+                           FROM data_transformations
+                           WHERE model_id = %s
+                           ORDER BY transform_order"""
+                cursor.execute(query, (model_id,))
+
+                transformations = []
+                for row in cursor.fetchall():
+                    transform = {
+                        'type': row['transform_type'],
+                        'params': json.loads(row['transform_params']),
+                        'order': row['transform_order']
+                    }
+                    transformations.append(transform)
+
+                return transformations
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні перетворень даних: {str(e)}")
+            return []
+
+    def delete_model(self, model_id: int) -> bool:
+        """
+        Видалення моделі та всіх пов'язаних даних.
+
+        Args:
+            model_id: ID моделі
+
+        Returns:
+            Успішність операції
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                # Використовуємо каскадне видалення, визначене в схемі БД
+                query = "DELETE FROM time_series_models WHERE model_id = %s"
+                cursor.execute(query, (model_id,))
+                conn.commit()
+                self.logger.info(f"Видалено модель з ID {model_id} та пов'язані дані")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при видаленні моделі: {str(e)}")
+            return False
+
+    def get_models_by_symbol(self, symbol: str, interval: str = None, active_only: bool = True) -> List[Dict]:
+        """
+        Отримання всіх моделей для певного символу.
+
+        Args:
+            symbol: Символ криптовалюти
+            interval: Інтервал даних (якщо None, всі інтервали)
+            active_only: Фільтрувати тільки активні моделі
+
+        Returns:
+            Список словників з інформацією про моделі
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                query = "SELECT * FROM time_series_models WHERE symbol = %s"
+                params = [symbol]
+
+                if interval:
+                    query += " AND interval = %s"
+                    params.append(interval)
+
+                if active_only:
+                    query += " AND is_active = TRUE"
+
+                query += " ORDER BY created_at DESC"
+                cursor.execute(query, params)
+
+                models = []
+                for row in cursor.fetchall():
+                    models.append(dict(row))
+
+                return models
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні моделей за символом: {str(e)}")
+            return []
+
+    def get_latest_model_by_symbol(self, symbol: str, model_type: str = None,
+                                   interval: str = None) -> Optional[Dict]:
+        """
+        Отримання останньої моделі для певного символу.
+
+        Args:
+            symbol: Символ криптовалюти
+            model_type: Тип моделі (якщо None, будь-який тип)
+            interval: Інтервал даних (якщо None, будь-який інтервал)
+
+        Returns:
+            Словник з інформацією про модель або None
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                query = "SELECT * FROM time_series_models WHERE symbol = %s AND is_active = TRUE"
+                params = [symbol]
+
+                if model_type:
+                    query += " AND model_type = %s"
+                    params.append(model_type)
+
+                if interval:
+                    query += " AND interval = %s"
+                    params.append(interval)
+
+                query += " ORDER BY updated_at DESC LIMIT 1"
+                cursor.execute(query, params)
+
+                model_data = cursor.fetchone()
+                if model_data:
+                    return dict(model_data)
+                return None
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні останньої моделі: {str(e)}")
+            return None
+
+    def get_model_performance_history(self, model_id: int) -> pd.DataFrame:
+        """
+        Отримання історії продуктивності моделі по датах тестування.
+
+        Args:
+            model_id: ID моделі
+
+        Returns:
+            DataFrame з історією метрик моделі
+        """
+        try:
+            conn = self.connect()
+            query = """SELECT metric_name, metric_value, test_date
+                       FROM model_metrics
+                       WHERE model_id = %s \
+                         AND test_date IS NOT NULL
+                       ORDER BY test_date"""
+
+            metrics_df = pd.read_sql(query, conn, params=[model_id], parse_dates=['test_date'])
+
+            if not metrics_df.empty:
+                # Перетворення на широкий формат для зручності аналізу
+                metrics_pivot = metrics_df.pivot(index='test_date', columns='metric_name', values='metric_value')
+                return metrics_pivot
+
+            return pd.DataFrame()
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні історії продуктивності: {str(e)}")
+            return pd.DataFrame()
+
+
+def update_model_status(self, model_id: int, is_active: bool) -> bool:
+    """
+    Оновлення статусу активності моделі.
+
+    Args:
+        model_id: ID моделі
+        is_active: Новий статус активності
+
+    Returns:
+        Успішність операції
+    """
+    try:
+        conn = self.connect()
+        with conn.cursor() as cursor:
+            query = "UPDATE time_series_models SET is_active = %s WHERE model_id = %s"
+            cursor.execute(query, (is_active, model_id))
+            conn.commit()
+            self.logger.info(f"Оновлено статус активності для моделі з ID {model_id}: {is_active}")
+            return True
+    except Exception as e:
+        conn.rollback()
+        self.logger.error(f"Помилка при оновленні статусу моделі: {str(e)}")
+        return False
+
+
+def compare_model_forecasts(self, model_ids: List[int], start_date: datetime = None,
+                            end_date: datetime = None) -> pd.DataFrame:
+    """
+    Порівняння прогнозів декількох моделей.
+
+    Args:
+        model_ids: Список ID моделей для порівняння
+        start_date: Початкова дата прогнозів
+        end_date: Кінцева дата прогнозів
+
+    Returns:
+        DataFrame з прогнозами різних моделей
+    """
+    try:
+        results = {}
+
+        for model_id in model_ids:
+            # Отримуємо інформацію про модель
+            conn = self.connect()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                cursor.execute("SELECT model_key FROM time_series_models WHERE model_id = %s", (model_id,))
+                model_info = cursor.fetchone()
+
+                if model_info:
+                    model_key = model_info['model_key']
+
+                    # Отримання прогнозів для цієї моделі
+                    forecasts = self.get_model_forecasts(model_id, start_date, end_date)
+
+                    if not forecasts.empty:
+                        results[model_key] = forecasts['forecast_value']
+
+        if results:
+            # Об'єднуємо всі прогнози в один DataFrame
+            combined_df = pd.DataFrame(results)
+            return combined_df
+
+        return pd.DataFrame()
+    except Exception as e:
+        self.logger.error(f"Помилка при порівнянні прогнозів моделей: {str(e)}")
+        return pd.DataFrame()
+
+
+def get_model_forecast_accuracy(self, model_id: int, actual_data: pd.Series) -> Dict:
+    """
+    Розрахунок точності прогнозу на основі фактичних даних.
+
+    Args:
+        model_id: ID моделі
+        actual_data: Серія з фактичними даними (з датою як індексом)
+
+    Returns:
+        Словник з метриками точності
+    """
+    try:
+        # Отримуємо прогнози моделі
+        forecast_df = self.get_model_forecasts(model_id)
+
+        if forecast_df.empty:
+            return {"error": "Прогнози не знайдено"}
+
+        forecasts = forecast_df['forecast_value']
+
+        # Фільтруємо фактичні дані для співпадіння з прогнозами
+        common_dates = forecasts.index.intersection(actual_data.index)
+
+        if len(common_dates) == 0:
+            return {"error": "Немає спільних дат для порівняння прогнозів і фактичних даних"}
+
+        # Підготовка даних для порівняння
+        y_true = actual_data.loc[common_dates]
+        y_pred = forecasts.loc[common_dates]
+
+        # Розрахунок метрик
+        mse = ((y_true - y_pred) ** 2).mean()
+        rmse = np.sqrt(mse)
+        mae = np.abs(y_true - y_pred).mean()
+        mape = np.abs((y_true - y_pred) / y_true).mean() * 100
+
+        # Збереження метрик в базу даних
+        metrics = {
+            "MSE": mse,
+            "RMSE": rmse,
+            "MAE": mae,
+            "MAPE": mape
+        }
+
+        self.save_model_metrics(model_id, metrics, datetime.now())
+
+        return metrics
+    except Exception as e:
+        self.logger.error(f"Помилка при розрахунку точності прогнозу: {str(e)}")
+        return {"error": str(e)}
+
+
+def get_available_symbols(self) -> List[str]:
+    """
+    Отримання списку унікальних символів криптовалют з бази даних моделей.
+
+    Returns:
+        Список унікальних символів
+    """
+    try:
+        conn = self.connect()
+        with conn.cursor() as cursor:
+            query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
+            cursor.execute(query)
+            symbols = [row[0] for row in cursor.fetchall()]
+            return symbols
+    except Exception as e:
+        self.logger.error(f"Помилка при отриманні списку символів: {str(e)}")
+        return []
+
+
+def get_model_transformation_pipeline(self, model_id: int) -> List[Dict]:
+    """
+    Отримання повного ланцюжка перетворень для моделі.
+
+    Args:
+        model_id: ID моделі
+
+    Returns:
+        Список словників з інформацією про перетворення, впорядкований за порядком виконання
+    """
+    try:
+        transformations = self.get_data_transformations(model_id)
+        return transformations
+    except Exception as e:
+        self.logger.error(f"Помилка при отриманні ланцюжка перетворень: {str(e)}")
+        return []
+
+
+def save_complete_model(self, model_key: str, symbol: str, model_type: str,
+                        interval: str, start_date: datetime, end_date: datetime,
+                        model_obj: Any, parameters: Dict, metrics: Dict = None,
+                        forecasts: pd.Series = None, transformations: List[Dict] = None,
+                        lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
+                        description: str = None) -> int:
+    """
+    Комплексне збереження моделі та всіх пов'язаних даних.
+
+    Args:
+        model_key: Унікальний ключ моделі
+        symbol: Символ криптовалюти
+        model_type: Тип моделі ('arima', 'sarima', etc.)
+        interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
+        start_date: Початкова дата даних, на яких навчалася модель
+        end_date: Кінцева дата даних, на яких навчалася модель
+        model_obj: Об'єкт моделі для серіалізації
+        parameters: Словник з параметрами моделі
+        metrics: Словник з метриками ефективності моделі
+        forecasts: Серія з прогнозами
+        transformations: Список словників з інформацією про перетворення
+        lower_bounds: Нижні межі довірчого інтервалу
+        upper_bounds: Верхні межі довірчого інтервалу
+        description: Опис моделі
+
+    Returns:
+        ID моделі
+    """
+    try:
+        # Зберігаємо метадані моделі
+        model_id = self.save_model_metadata(model_key, symbol, model_type, interval,
+                                            start_date, end_date, description)
+
+        # Зберігаємо параметри моделі
+        if parameters:
+            self.save_model_parameters(model_id, parameters)
+
+        # Зберігаємо метрики моделі
+        if metrics:
+            self.save_model_metrics(model_id, metrics)
+
+        # Зберігаємо прогнози
+        if forecasts is not None:
+            self.save_model_forecasts(model_id, forecasts, lower_bounds, upper_bounds)
+
+        # Зберігаємо перетворення даних
+        if transformations:
+            self.save_data_transformations(model_id, transformations)
+
+        # Зберігаємо бінарні дані моделі
+        if model_obj:
+            self.save_model_binary(model_id, model_obj)
+
+        self.logger.info(f"Комплексне збереження моделі {model_key} з ID {model_id} завершено успішно")
+        return model_id
+    except Exception as e:
+        self.logger.error(f"Помилка при комплексному збереженні моделі: {str(e)}")
+        raise
+
+
+def load_complete_model(self, model_key: str) -> Dict:
+    """
+    Комплексне завантаження моделі та всіх пов'язаних даних.
+
+    Args:
+        model_key: Ключ моделі
+
+    Returns:
+        Словник з даними моделі
+    """
+    try:
+        # Отримуємо метадані моделі
+        model_info = self.get_model_by_key(model_key)
+
+        if not model_info:
+            return {"error": f"Модель з ключем {model_key} не знайдена"}
+
+        model_id = model_info['model_id']
+
+        # Отримуємо всі необхідні дані
+        parameters = self.get_model_parameters(model_id)
+        metrics = self.get_model_metrics(model_id)
+        transformations = self.get_data_transformations(model_id)
+        forecasts = self.get_model_forecasts(model_id)
+        model_obj = self.load_model_binary(model_id)
+
+        # Формуємо повний словник з даними моделі
+        result = {
+            "model_info": model_info,
+            "parameters": parameters,
+            "metrics": metrics,
+            "forecasts": forecasts,
+            "transformations": transformations,
+            "model_obj": model_obj
+        }
+
+        self.logger.info(f"Комплексне завантаження моделі {model_key} з ID {model_id} завершено успішно")
+        return result
+    except Exception as e:
+        self.logger.error(f"Помилка при комплексному завантаженні моделі: {str(e)}")
+        return {"error": str(e)}
