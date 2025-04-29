@@ -2158,261 +2158,261 @@ class DatabaseManager:
             return pd.DataFrame()
 
 
-def update_model_status(self, model_id: int, is_active: bool) -> bool:
-    """
-    Оновлення статусу активності моделі.
+    def update_model_status(self, model_id: int, is_active: bool) -> bool:
+        """
+        Оновлення статусу активності моделі.
 
-    Args:
-        model_id: ID моделі
-        is_active: Новий статус активності
+        Args:
+            model_id: ID моделі
+            is_active: Новий статус активності
 
-    Returns:
-        Успішність операції
-    """
-    try:
-        conn = self.connect()
-        with conn.cursor() as cursor:
-            query = "UPDATE time_series_models SET is_active = %s WHERE model_id = %s"
-            cursor.execute(query, (is_active, model_id))
-            conn.commit()
-            self.logger.info(f"Оновлено статус активності для моделі з ID {model_id}: {is_active}")
-            return True
-    except Exception as e:
-        conn.rollback()
-        self.logger.error(f"Помилка при оновленні статусу моделі: {str(e)}")
-        return False
-
-
-def compare_model_forecasts(self, model_ids: List[int], start_date: datetime = None,
-                            end_date: datetime = None) -> pd.DataFrame:
-    """
-    Порівняння прогнозів декількох моделей.
-
-    Args:
-        model_ids: Список ID моделей для порівняння
-        start_date: Початкова дата прогнозів
-        end_date: Кінцева дата прогнозів
-
-    Returns:
-        DataFrame з прогнозами різних моделей
-    """
-    try:
-        results = {}
-
-        for model_id in model_ids:
-            # Отримуємо інформацію про модель
+        Returns:
+            Успішність операції
+        """
+        try:
             conn = self.connect()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                cursor.execute("SELECT model_key FROM time_series_models WHERE model_id = %s", (model_id,))
-                model_info = cursor.fetchone()
-
-                if model_info:
-                    model_key = model_info['model_key']
-
-                    # Отримання прогнозів для цієї моделі
-                    forecasts = self.get_model_forecasts(model_id, start_date, end_date)
-
-                    if not forecasts.empty:
-                        results[model_key] = forecasts['forecast_value']
-
-        if results:
-            # Об'єднуємо всі прогнози в один DataFrame
-            combined_df = pd.DataFrame(results)
-            return combined_df
-
-        return pd.DataFrame()
-    except Exception as e:
-        self.logger.error(f"Помилка при порівнянні прогнозів моделей: {str(e)}")
-        return pd.DataFrame()
+            with conn.cursor() as cursor:
+                query = "UPDATE time_series_models SET is_active = %s WHERE model_id = %s"
+                cursor.execute(query, (is_active, model_id))
+                conn.commit()
+                self.logger.info(f"Оновлено статус активності для моделі з ID {model_id}: {is_active}")
+                return True
+        except Exception as e:
+            conn.rollback()
+            self.logger.error(f"Помилка при оновленні статусу моделі: {str(e)}")
+            return False
 
 
-def get_model_forecast_accuracy(self, model_id: int, actual_data: pd.Series) -> Dict:
-    """
-    Розрахунок точності прогнозу на основі фактичних даних.
+    def compare_model_forecasts(self, model_ids: List[int], start_date: datetime = None,
+                                end_date: datetime = None) -> pd.DataFrame:
+        """
+        Порівняння прогнозів декількох моделей.
 
-    Args:
-        model_id: ID моделі
-        actual_data: Серія з фактичними даними (з датою як індексом)
+        Args:
+            model_ids: Список ID моделей для порівняння
+            start_date: Початкова дата прогнозів
+            end_date: Кінцева дата прогнозів
 
-    Returns:
-        Словник з метриками точності
-    """
-    try:
-        # Отримуємо прогнози моделі
-        forecast_df = self.get_model_forecasts(model_id)
+        Returns:
+            DataFrame з прогнозами різних моделей
+        """
+        try:
+            results = {}
 
-        if forecast_df.empty:
-            return {"error": "Прогнози не знайдено"}
+            for model_id in model_ids:
+                # Отримуємо інформацію про модель
+                conn = self.connect()
+                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                    cursor.execute("SELECT model_key FROM time_series_models WHERE model_id = %s", (model_id,))
+                    model_info = cursor.fetchone()
 
-        forecasts = forecast_df['forecast_value']
+                    if model_info:
+                        model_key = model_info['model_key']
 
-        # Фільтруємо фактичні дані для співпадіння з прогнозами
-        common_dates = forecasts.index.intersection(actual_data.index)
+                        # Отримання прогнозів для цієї моделі
+                        forecasts = self.get_model_forecasts(model_id, start_date, end_date)
 
-        if len(common_dates) == 0:
-            return {"error": "Немає спільних дат для порівняння прогнозів і фактичних даних"}
+                        if not forecasts.empty:
+                            results[model_key] = forecasts['forecast_value']
 
-        # Підготовка даних для порівняння
-        y_true = actual_data.loc[common_dates]
-        y_pred = forecasts.loc[common_dates]
+            if results:
+                # Об'єднуємо всі прогнози в один DataFrame
+                combined_df = pd.DataFrame(results)
+                return combined_df
 
-        # Розрахунок метрик
-        mse = ((y_true - y_pred) ** 2).mean()
-        rmse = np.sqrt(mse)
-        mae = np.abs(y_true - y_pred).mean()
-        mape = np.abs((y_true - y_pred) / y_true).mean() * 100
-
-        # Збереження метрик в базу даних
-        metrics = {
-            "MSE": mse,
-            "RMSE": rmse,
-            "MAE": mae,
-            "MAPE": mape
-        }
-
-        self.save_model_metrics(model_id, metrics, datetime.now())
-
-        return metrics
-    except Exception as e:
-        self.logger.error(f"Помилка при розрахунку точності прогнозу: {str(e)}")
-        return {"error": str(e)}
+            return pd.DataFrame()
+        except Exception as e:
+            self.logger.error(f"Помилка при порівнянні прогнозів моделей: {str(e)}")
+            return pd.DataFrame()
 
 
-def get_available_symbols(self) -> List[str]:
-    """
-    Отримання списку унікальних символів криптовалют з бази даних моделей.
+    def get_model_forecast_accuracy(self, model_id: int, actual_data: pd.Series) -> Dict:
+        """
+        Розрахунок точності прогнозу на основі фактичних даних.
 
-    Returns:
-        Список унікальних символів
-    """
-    try:
-        conn = self.connect()
-        with conn.cursor() as cursor:
-            query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
-            cursor.execute(query)
-            symbols = [row[0] for row in cursor.fetchall()]
-            return symbols
-    except Exception as e:
-        self.logger.error(f"Помилка при отриманні списку символів: {str(e)}")
-        return []
+        Args:
+            model_id: ID моделі
+            actual_data: Серія з фактичними даними (з датою як індексом)
 
+        Returns:
+            Словник з метриками точності
+        """
+        try:
+            # Отримуємо прогнози моделі
+            forecast_df = self.get_model_forecasts(model_id)
 
-def get_model_transformation_pipeline(self, model_id: int) -> List[Dict]:
-    """
-    Отримання повного ланцюжка перетворень для моделі.
+            if forecast_df.empty:
+                return {"error": "Прогнози не знайдено"}
 
-    Args:
-        model_id: ID моделі
+            forecasts = forecast_df['forecast_value']
 
-    Returns:
-        Список словників з інформацією про перетворення, впорядкований за порядком виконання
-    """
-    try:
-        transformations = self.get_data_transformations(model_id)
-        return transformations
-    except Exception as e:
-        self.logger.error(f"Помилка при отриманні ланцюжка перетворень: {str(e)}")
-        return []
+            # Фільтруємо фактичні дані для співпадіння з прогнозами
+            common_dates = forecasts.index.intersection(actual_data.index)
 
+            if len(common_dates) == 0:
+                return {"error": "Немає спільних дат для порівняння прогнозів і фактичних даних"}
 
-def save_complete_model(self, model_key: str, symbol: str, model_type: str,
-                        interval: str, start_date: datetime, end_date: datetime,
-                        model_obj: Any, parameters: Dict, metrics: Dict = None,
-                        forecasts: pd.Series = None, transformations: List[Dict] = None,
-                        lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
-                        description: str = None) -> int:
-    """
-    Комплексне збереження моделі та всіх пов'язаних даних.
+            # Підготовка даних для порівняння
+            y_true = actual_data.loc[common_dates]
+            y_pred = forecasts.loc[common_dates]
 
-    Args:
-        model_key: Унікальний ключ моделі
-        symbol: Символ криптовалюти
-        model_type: Тип моделі ('arima', 'sarima', etc.)
-        interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
-        start_date: Початкова дата даних, на яких навчалася модель
-        end_date: Кінцева дата даних, на яких навчалася модель
-        model_obj: Об'єкт моделі для серіалізації
-        parameters: Словник з параметрами моделі
-        metrics: Словник з метриками ефективності моделі
-        forecasts: Серія з прогнозами
-        transformations: Список словників з інформацією про перетворення
-        lower_bounds: Нижні межі довірчого інтервалу
-        upper_bounds: Верхні межі довірчого інтервалу
-        description: Опис моделі
+            # Розрахунок метрик
+            mse = ((y_true - y_pred) ** 2).mean()
+            rmse = np.sqrt(mse)
+            mae = np.abs(y_true - y_pred).mean()
+            mape = np.abs((y_true - y_pred) / y_true).mean() * 100
 
-    Returns:
-        ID моделі
-    """
-    try:
-        # Зберігаємо метадані моделі
-        model_id = self.save_model_metadata(model_key, symbol, model_type, interval,
-                                            start_date, end_date, description)
+            # Збереження метрик в базу даних
+            metrics = {
+                "MSE": mse,
+                "RMSE": rmse,
+                "MAE": mae,
+                "MAPE": mape
+            }
 
-        # Зберігаємо параметри моделі
-        if parameters:
-            self.save_model_parameters(model_id, parameters)
+            self.save_model_metrics(model_id, metrics, datetime.now())
 
-        # Зберігаємо метрики моделі
-        if metrics:
-            self.save_model_metrics(model_id, metrics)
-
-        # Зберігаємо прогнози
-        if forecasts is not None:
-            self.save_model_forecasts(model_id, forecasts, lower_bounds, upper_bounds)
-
-        # Зберігаємо перетворення даних
-        if transformations:
-            self.save_data_transformations(model_id, transformations)
-
-        # Зберігаємо бінарні дані моделі
-        if model_obj:
-            self.save_model_binary(model_id, model_obj)
-
-        self.logger.info(f"Комплексне збереження моделі {model_key} з ID {model_id} завершено успішно")
-        return model_id
-    except Exception as e:
-        self.logger.error(f"Помилка при комплексному збереженні моделі: {str(e)}")
-        raise
+            return metrics
+        except Exception as e:
+            self.logger.error(f"Помилка при розрахунку точності прогнозу: {str(e)}")
+            return {"error": str(e)}
 
 
-def load_complete_model(self, model_key: str) -> Dict:
-    """
-    Комплексне завантаження моделі та всіх пов'язаних даних.
+    def get_available_symbols(self) -> List[str]:
+        """
+        Отримання списку унікальних символів криптовалют з бази даних моделей.
 
-    Args:
-        model_key: Ключ моделі
+        Returns:
+            Список унікальних символів
+        """
+        try:
+            conn = self.connect()
+            with conn.cursor() as cursor:
+                query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
+                cursor.execute(query)
+                symbols = [row[0] for row in cursor.fetchall()]
+                return symbols
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні списку символів: {str(e)}")
+            return []
 
-    Returns:
-        Словник з даними моделі
-    """
-    try:
-        # Отримуємо метадані моделі
-        model_info = self.get_model_by_key(model_key)
 
-        if not model_info:
-            return {"error": f"Модель з ключем {model_key} не знайдена"}
+    def get_model_transformation_pipeline(self, model_id: int) -> List[Dict]:
+        """
+        Отримання повного ланцюжка перетворень для моделі.
 
-        model_id = model_info['model_id']
+        Args:
+            model_id: ID моделі
 
-        # Отримуємо всі необхідні дані
-        parameters = self.get_model_parameters(model_id)
-        metrics = self.get_model_metrics(model_id)
-        transformations = self.get_data_transformations(model_id)
-        forecasts = self.get_model_forecasts(model_id)
-        model_obj = self.load_model_binary(model_id)
+        Returns:
+            Список словників з інформацією про перетворення, впорядкований за порядком виконання
+        """
+        try:
+            transformations = self.get_data_transformations(model_id)
+            return transformations
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні ланцюжка перетворень: {str(e)}")
+            return []
 
-        # Формуємо повний словник з даними моделі
-        result = {
-            "model_info": model_info,
-            "parameters": parameters,
-            "metrics": metrics,
-            "forecasts": forecasts,
-            "transformations": transformations,
-            "model_obj": model_obj
-        }
 
-        self.logger.info(f"Комплексне завантаження моделі {model_key} з ID {model_id} завершено успішно")
-        return result
-    except Exception as e:
-        self.logger.error(f"Помилка при комплексному завантаженні моделі: {str(e)}")
-        return {"error": str(e)}
+    def save_complete_model(self, model_key: str, symbol: str, model_type: str,
+                            interval: str, start_date: datetime, end_date: datetime,
+                            model_obj: Any, parameters: Dict, metrics: Dict = None,
+                            forecasts: pd.Series = None, transformations: List[Dict] = None,
+                            lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
+                            description: str = None) -> int:
+        """
+        Комплексне збереження моделі та всіх пов'язаних даних.
+
+        Args:
+            model_key: Унікальний ключ моделі
+            symbol: Символ криптовалюти
+            model_type: Тип моделі ('arima', 'sarima', etc.)
+            interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
+            start_date: Початкова дата даних, на яких навчалася модель
+            end_date: Кінцева дата даних, на яких навчалася модель
+            model_obj: Об'єкт моделі для серіалізації
+            parameters: Словник з параметрами моделі
+            metrics: Словник з метриками ефективності моделі
+            forecasts: Серія з прогнозами
+            transformations: Список словників з інформацією про перетворення
+            lower_bounds: Нижні межі довірчого інтервалу
+            upper_bounds: Верхні межі довірчого інтервалу
+            description: Опис моделі
+
+        Returns:
+            ID моделі
+        """
+        try:
+            # Зберігаємо метадані моделі
+            model_id = self.save_model_metadata(model_key, symbol, model_type, interval,
+                                                start_date, end_date, description)
+
+            # Зберігаємо параметри моделі
+            if parameters:
+                self.save_model_parameters(model_id, parameters)
+
+            # Зберігаємо метрики моделі
+            if metrics:
+                self.save_model_metrics(model_id, metrics)
+
+            # Зберігаємо прогнози
+            if forecasts is not None:
+                self.save_model_forecasts(model_id, forecasts, lower_bounds, upper_bounds)
+
+            # Зберігаємо перетворення даних
+            if transformations:
+                self.save_data_transformations(model_id, transformations)
+
+            # Зберігаємо бінарні дані моделі
+            if model_obj:
+                self.save_model_binary(model_id, model_obj)
+
+            self.logger.info(f"Комплексне збереження моделі {model_key} з ID {model_id} завершено успішно")
+            return model_id
+        except Exception as e:
+            self.logger.error(f"Помилка при комплексному збереженні моделі: {str(e)}")
+            raise
+
+
+    def load_complete_model(self, model_key: str) -> Dict:
+        """
+        Комплексне завантаження моделі та всіх пов'язаних даних.
+
+        Args:
+            model_key: Ключ моделі
+
+        Returns:
+            Словник з даними моделі
+        """
+        try:
+            # Отримуємо метадані моделі
+            model_info = self.get_model_by_key(model_key)
+
+            if not model_info:
+                return {"error": f"Модель з ключем {model_key} не знайдена"}
+
+            model_id = model_info['model_id']
+
+            # Отримуємо всі необхідні дані
+            parameters = self.get_model_parameters(model_id)
+            metrics = self.get_model_metrics(model_id)
+            transformations = self.get_data_transformations(model_id)
+            forecasts = self.get_model_forecasts(model_id)
+            model_obj = self.load_model_binary(model_id)
+
+            # Формуємо повний словник з даними моделі
+            result = {
+                "model_info": model_info,
+                "parameters": parameters,
+                "metrics": metrics,
+                "forecasts": forecasts,
+                "transformations": transformations,
+                "model_obj": model_obj
+            }
+
+            self.logger.info(f"Комплексне завантаження моделі {model_key} з ID {model_id} завершено успішно")
+            return result
+        except Exception as e:
+            self.logger.error(f"Помилка при комплексному завантаженні моделі: {str(e)}")
+            return {"error": str(e)}

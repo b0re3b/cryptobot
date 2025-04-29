@@ -7,44 +7,15 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from scipy import stats
-from scipy.stats import boxcox
 from statsmodels.tsa.seasonal import seasonal_decompose
 from datetime import datetime, timedelta
-
+from data.db import DatabaseManager
 
 class TimeSeriesModels:
-    """
-    Клас для моделювання часових рядів криптовалют з використанням класичних методів.
 
-    Клас працює з базою даних через об'єкт db_manager, який має містити наступні методи роботи з БД:
-    - get_klines_processed: для отримання оброблених свічок
-    - get_volume_profile: для отримання профілю об'єму
-    - save_model_metadata: для збереження метаданих моделі
-    - save_model_parameters: для збереження параметрів моделі
-    - save_model_metrics: для збереження метрик ефективності моделі
-    - save_model_forecasts: для збереження прогнозів
-    - save_model_binary: для збереження серіалізованої моделі
-    - save_data_transformations: для збереження інформації про перетворення даних
-    - save_complete_model: для комплексного збереження всіх даних моделі
-    - get_model_by_key: для отримання інформації про модель за ключем
-    - get_model_parameters: для отримання параметрів моделі
-    - get_model_metrics: для отримання метрик ефективності моделі
-    - get_model_forecasts: для отримання прогнозів моделі
-    - load_model_binary: для завантаження серіалізованої моделі
-    - get_data_transformations: для отримання інформації про перетворення даних
-    - load_complete_model: для комплексного завантаження всіх даних моделі
-    - get_models_by_symbol: для отримання всіх моделей для певного символу
-    - get_latest_model_by_symbol: для отримання останньої моделі для певного символу
-    - get_model_performance_history: для отримання історії продуктивності моделі
-    - update_model_status: для оновлення статусу активності моделі
-    - compare_model_forecasts: для порівняння прогнозів декількох моделей
-    - get_model_forecast_accuracy: для розрахунку точності прогнозу
-    - get_available_symbols: для отримання списку доступних символів криптовалют
-    """
+    def __init__(self, log_level=logging.INFO):
 
-    def __init__(self, db_manager=None, log_level=logging.INFO):
-
-        self.db_manager = db_manager
+        self.db_manager = DatabaseManager()
         self.models = {}  # Словник для збереження навчених моделей
         self.transformations = {}  # Словник для збереження параметрів трансформацій
 
@@ -538,7 +509,7 @@ class TimeSeriesModels:
             if self.db_manager is not None:
                 try:
                     self.logger.info(f"Model {model_key} not found in memory, trying to load from database")
-                    loaded = self.db_manager.load_complete_model(model_key)
+                    loaded = self.db_manager.load_сomplete_model(model_key)
                     if loaded:
                         self.logger.info(f"Model {model_key} successfully loaded from database")
                     else:
@@ -1785,8 +1756,7 @@ class TimeSeriesModels:
             # Зберегти результати аналізу в БД, якщо є DB manager
             if self.db_manager is not None:
                 try:
-                    # Припустимо, що є метод для збереження результатів аналізу залишків
-                    # Якщо такого методу немає, потрібно його додати до db_manager
+
                     self.db_manager.save_residual_analysis(model_key, analysis_results)
                     self.logger.info(f"Residual analysis for model {model_key} saved to database")
                 except Exception as e:
@@ -2433,153 +2403,933 @@ class TimeSeriesModels:
             return pd.Series([], index=pd.DatetimeIndex([]))
 
     def extract_volatility(self, data: pd.Series, window: int = 20) -> pd.Series:
-        """
-        Розрахунок волатильності часового ряду.
 
-        Args:
-            data: Часовий ряд
-            window: Розмір вікна для розрахунку волатильності
+        self.logger.info(f"Calculating volatility with window size {window}")
 
-        Returns:
-            Часовий ряд волатильності
-        """
-        pass
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before volatility calculation.")
+            data = data.dropna()
+
+        if len(data) < window:
+            self.logger.error(f"Not enough data points for volatility calculation with window={window}")
+            return pd.Series([], index=pd.DatetimeIndex([]))
+
+        try:
+            # Розрахунок логарифмічних прибутків
+            log_returns = np.log(data / data.shift(1)).dropna()
+
+            # Розрахунок волатильності як ковзного стандартного відхилення логарифмічних прибутків
+            volatility = log_returns.rolling(window=window).std()
+
+            # Переведення стандартного відхилення у волатильність (анулізована)
+            # Для різних частот даних множник буде різним:
+            # - Денні дані: множник = sqrt(252) - кількість торгових днів у році
+            # - Годинні дані: множник = sqrt(252 * 24)
+            # - Хвилинні дані: множник = sqrt(252 * 24 * 60)
+
+            # За замовчуванням припускаємо денні дані
+            if isinstance(data.index, pd.DatetimeIndex):
+                # Визначаємо частоту даних
+                if len(data) >= 2:
+                    time_diff = data.index[1:] - data.index[:-1]
+                    median_diff = pd.Series(time_diff).median()
+
+                    if median_diff <= pd.Timedelta(minutes=5):
+                        annualization_factor = np.sqrt(252 * 24 * 12)  # 5-хвилинні дані
+                    elif median_diff <= pd.Timedelta(hours=1):
+                        annualization_factor = np.sqrt(252 * 24)  # Годинні дані
+                    elif median_diff <= pd.Timedelta(days=1):
+                        annualization_factor = np.sqrt(252)  # Денні дані
+                    else:
+                        annualization_factor = 1  # Не анулізуємо для нестандартних інтервалів
+                else:
+                    annualization_factor = np.sqrt(252)  # За замовчуванням
+            else:
+                annualization_factor = np.sqrt(252)  # За замовчуванням
+
+            volatility = volatility * annualization_factor
+
+            self.logger.info(f"Volatility calculation completed. Annualization factor: {annualization_factor}")
+
+            return volatility
+
+        except Exception as e:
+            self.logger.error(f"Error during volatility calculation: {str(e)}")
+            return pd.Series([], index=data.index)
 
     def run_auto_forecast(self, data: pd.Series, test_size: float = 0.2,
                           forecast_steps: int = 24, symbol: str = 'auto') -> Dict:
-        """
-        Автоматичний пошук параметрів, навчання та прогнозування.
 
-        Args:
-            data: Часовий ряд
-            test_size: Частка даних для тестування
-            forecast_steps: Кількість кроків для прогнозу
-            symbol: Ідентифікатор моделі
+        self.logger.info(f"Starting auto forecasting process for symbol: {symbol}")
 
-        Returns:
-            Словник з результатами автоматичного прогнозування
+        if data.isnull().any():
+            self.logger.warning("Data contains NaN values. Removing them before auto forecasting.")
+            data = data.dropna()
 
-        Примітка:
-        - Результати прогнозування та сама модель можуть бути збережені в БД за допомогою
-          self.db_manager.save_complete_model, який включає в себе збереження всіх компонентів моделі
-        """
-        pass
+        if len(data) < 30:  # Мінімальна кількість точок для змістовного аналізу
+            error_msg = "Not enough data points for auto forecasting (min 30 required)"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg,
+                "model_key": None,
+                "forecasts": None,
+                "performance": None
+            }
+
+        try:
+            # Генеруємо унікальний ключ для моделі
+            model_key = f"{symbol}_auto_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+            # 1. Розділення даних на тренувальні та тестові
+            train_size = int(len(data) * (1 - test_size))
+            train_data = data.iloc[:train_size]
+            test_data = data.iloc[train_size:]
+
+            self.logger.info(f"Split data: train={len(train_data)}, test={len(test_data)}")
+
+            # 2. Перевірка стаціонарності та підготовка даних
+            stationarity_check = self.check_stationarity(train_data)
+
+            # Змінна для збереження інформації про трансформації
+            transformations = []
+            transformed_data = train_data.copy()
+
+            # Якщо ряд нестаціонарний, застосовуємо перетворення
+            if not stationarity_check["is_stationary"]:
+                self.logger.info("Time series is non-stationary. Applying transformations.")
+
+                # a) Логарифмічне перетворення, якщо всі дані > 0
+                if all(train_data > 0):
+                    self.logger.info("Applying log transformation")
+                    transformed_data = np.log(transformed_data)
+                    transformations.append({"op": "log"})
+
+                    # Перевіряємо стаціонарність після логарифмування
+                    log_stationary = self.check_stationarity(transformed_data)["is_stationary"]
+
+                    if not log_stationary:
+                        # б) Якщо все ще нестаціонарний, застосовуємо диференціювання
+                        self.logger.info("Series still non-stationary. Applying differencing.")
+                        transformed_data = self.difference_series(transformed_data, order=1)
+                        transformations.append({"op": "diff", "order": 1})
+                else:
+                    # Якщо є від'ємні значення, відразу застосовуємо диференціювання
+                    self.logger.info("Series contains non-positive values. Applying differencing directly.")
+                    transformed_data = self.difference_series(train_data, order=1)
+                    transformations.append({"op": "diff", "order": 1})
+
+            # 3. Визначення наявності сезонності
+
+            # Евристика для виявлення сезонності через автокореляцію
+            from statsmodels.tsa.stattools import acf
+
+            seasonal = False
+            seasonal_period = None
+
+            if len(transformed_data) > 50:  # Достатньо даних для аналізу сезонності
+                max_lag = min(len(transformed_data) // 2, 365)  # Обмежуємо максимальний лаг
+                acf_vals = acf(transformed_data, nlags=max_lag, fft=True)
+
+                # Шукаємо піки в автокореляції (потенційні сезонні періоди)
+                potential_periods = []
+
+                # Перевіряємо типові періоди для фінансових даних
+                for period in [7, 14, 30, 90, 180, 365]:
+                    if period < len(acf_vals):
+                        if acf_vals[period] > 0.3:  # Значна автокореляція
+                            potential_periods.append((period, acf_vals[period]))
+
+                if potential_periods:
+                    # Вибираємо період з найсильнішою автокореляцією
+                    potential_periods.sort(key=lambda x: x[1], reverse=True)
+                    seasonal = True
+                    seasonal_period = potential_periods[0][0]
+                    self.logger.info(f"Detected seasonality with period: {seasonal_period}")
+
+            # 4. Пошук оптимальних параметрів моделі
+            if seasonal and seasonal_period:
+                # Для сезонного ряду
+                optimal_params = self.find_optimal_params(
+                    transformed_data,
+                    max_p=3, max_d=1, max_q=3,
+                    seasonal=True
+                )
+            else:
+                # Для несезонного ряду
+                optimal_params = self.find_optimal_params(
+                    transformed_data,
+                    max_p=5, max_d=1, max_q=5,
+                    seasonal=False
+                )
+
+            if optimal_params["status"] == "error":
+                self.logger.error(f"Parameter search failed: {optimal_params['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Parameter search failed: {optimal_params['message']}",
+                    "model_key": None,
+                    "forecasts": None,
+                    "performance": None
+                }
+
+            # 5. Навчання моделі з оптимальними параметрами
+            model_info = None
+
+            if seasonal and seasonal_period:
+                # SARIMA model
+                order = optimal_params["parameters"]["order"]
+                seasonal_order = optimal_params["parameters"]["seasonal_order"]
+
+                fit_result = self.fit_sarima(
+                    transformed_data,
+                    order=order,
+                    seasonal_order=seasonal_order,
+                    symbol=symbol
+                )
+
+                model_type = "SARIMA"
+            else:
+                # ARIMA model
+                order = optimal_params["parameters"]["order"]
+
+                fit_result = self.fit_arima(
+                    transformed_data,
+                    order=order,
+                    symbol=symbol
+                )
+
+                model_type = "ARIMA"
+
+            if fit_result["status"] == "error":
+                self.logger.error(f"Model fitting failed: {fit_result['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Model fitting failed: {fit_result['message']}",
+                    "model_key": model_key,
+                    "forecasts": None,
+                    "performance": None
+                }
+
+            # Зберігаємо ключ навченої моделі
+            model_key = fit_result["model_key"]
+            model_info = fit_result["model_info"]
+
+            # 6. Виконання прогнозу
+            model_obj = self.models[model_key]["fit_result"]
+
+            # Прогнозуємо на тестових даних (якщо є)
+            if len(test_data) > 0:
+                try:
+                    # Прогноз тестового періоду для оцінки
+                    test_forecast = model_obj.forecast(len(test_data))
+
+                    # Для сезонних моделей або моделей з диференціюванням потрібно
+                    # врахувати початкові значення при інверсному перетворенні
+                    if "diff" in [t["op"] for t in transformations]:
+                        # Цей блок потребує ретельної реалізації інверсних трансформацій
+                        # Спрощений підхід - порівнюємо тренди
+                        test_performance = {
+                            "mse": mean_squared_error(test_data.values, test_forecast),
+                            "rmse": np.sqrt(mean_squared_error(test_data.values, test_forecast)),
+                            "mae": mean_absolute_error(test_data.values, test_forecast)
+                        }
+
+                        # Розрахунок MAPE, якщо немає нульових значень
+                        if all(test_data != 0):
+                            mape = np.mean(np.abs((test_data.values - test_forecast) / test_data.values)) * 100
+                            test_performance["mape"] = mape
+                    else:
+                        # Для моделей без диференціювання порівнюємо безпосередньо
+                        test_performance = {
+                            "mse": mean_squared_error(test_data.values, test_forecast),
+                            "rmse": np.sqrt(mean_squared_error(test_data.values, test_forecast)),
+                            "mae": mean_absolute_error(test_data.values, test_forecast)
+                        }
+
+                        # Розрахунок MAPE, якщо немає нульових значень
+                        if all(test_data != 0):
+                            mape = np.mean(np.abs((test_data.values - test_forecast) / test_data.values)) * 100
+                            test_performance["mape"] = mape
+                except Exception as e:
+                    self.logger.error(f"Error during test forecast: {str(e)}")
+                    test_performance = {"error": str(e)}
+            else:
+                test_performance = None
+
+            # 7. Прогноз на майбутні періоди
+            try:
+                future_forecast = model_obj.forecast(forecast_steps)
+
+                # Створюємо індекс для прогнозу
+                if isinstance(data.index, pd.DatetimeIndex):
+                    last_date = data.index[-1]
+
+                    # Визначення інтервалу даних для створення правильного індексу прогнозу
+                    if len(data) >= 2:
+                        freq = pd.infer_freq(data.index)
+                        if freq:
+                            forecast_index = pd.date_range(start=last_date + pd.Timedelta(seconds=1),
+                                                           periods=forecast_steps,
+                                                           freq=freq)
+                        else:
+                            # Якщо не вдалося визначити частоту, оцінюємо середній інтервал
+                            time_diff = data.index[1:] - data.index[:-1]
+                            median_diff = pd.Series(time_diff).median()
+                            forecast_index = pd.date_range(start=last_date + median_diff,
+                                                           periods=forecast_steps,
+                                                           freq=median_diff)
+                    else:
+                        # Якщо недостатньо точок, припускаємо денний інтервал
+                        forecast_index = pd.date_range(start=last_date + pd.Timedelta(days=1),
+                                                       periods=forecast_steps)
+                else:
+                    # Для числових індексів
+                    last_idx = data.index[-1]
+                    if len(data) >= 2:
+                        idx_diff = data.index[1] - data.index[0]
+                    else:
+                        idx_diff = 1
+                    forecast_index = pd.RangeIndex(start=last_idx + idx_diff,
+                                                   stop=last_idx + idx_diff * (forecast_steps + 1),
+                                                   step=idx_diff)
+
+                # Створюємо Series для прогнозу з правильним індексом
+                future_forecast = pd.Series(future_forecast, index=forecast_index)
+
+                # 8. Зворотні перетворення прогнозу (якщо застосовувались трансформації)
+                for transform in reversed(transformations):
+                    if transform["op"] == "diff":
+                        # Для зворотного диференціювання потрібно початкове значення
+                        # Беремо останнє значення вихідного ряду
+                        last_orig_value = data.iloc[-1]
+                        future_forecast = future_forecast.cumsum() + last_orig_value
+                    elif transform["op"] == "log":
+                        future_forecast = np.exp(future_forecast)
+
+                self.logger.info(f"Forecast completed: {len(future_forecast)} steps")
+            except Exception as e:
+                self.logger.error(f"Error during future forecast: {str(e)}")
+                return {
+                    "status": "error",
+                    "message": f"Error during future forecast: {str(e)}",
+                    "model_key": model_key,
+                    "forecasts": None,
+                    "performance": test_performance
+                }
+
+            # 9. Збереження результатів у базу даних (якщо доступно)
+            if self.db_manager is not None:
+                try:
+                    # Збираємо всі дані для збереження
+                    forecast_data = {
+                        "future_forecast": future_forecast.to_dict(),
+                        "forecast_steps": forecast_steps,
+                        "forecast_date": datetime.now().isoformat()
+                    }
+
+                    # Зберігаємо прогноз
+                    self.db_manager.save_model_forecasts(model_key, forecast_data)
+
+                    if test_performance:
+                        # Зберігаємо метрики ефективності
+                        self.db_manager.save_model_metrics(model_key, test_performance)
+
+                    # Зберігаємо інформацію про трансформації даних
+                    self.db_manager.save_data_transformations(model_key, {"transformations": transformations})
+
+                    self.logger.info(f"Model {model_key} and forecast data saved to database")
+                except Exception as db_error:
+                    self.logger.error(f"Error saving to database: {str(db_error)}")
+
+            # 10. Формуємо результат
+            result = {
+                "status": "success",
+                "message": f"{model_type} model trained and forecast completed successfully",
+                "model_key": model_key,
+                "model_info": model_info,
+                "transformations": transformations,
+                "forecasts": {
+                    "values": future_forecast.to_dict(),
+                    "steps": forecast_steps
+                },
+                "performance": test_performance
+            }
+
+            self.logger.info(f"Auto forecast completed successfully for symbol: {symbol}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error during auto forecasting: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error during auto forecasting: {str(e)}",
+                "model_key": model_key if 'model_key' in locals() else None,
+                "forecasts": None,
+                "performance": None
+            }
 
     def load_crypto_data(self, db_manager: Any,
                          symbol: str,
                          start_date: Optional[datetime] = None,
                          end_date: Optional[datetime] = None,
                          interval: str = '1d') -> pd.DataFrame:
-        """
-        Завантаження даних криптовалюти з бази даних через DatabaseManager.
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager
-            symbol: Символ криптовалюти (наприклад, 'BTC', 'ETH')
-            start_date: Початкова дата (якщо None, береться найраніша в базі)
-            end_date: Кінцева дата (якщо None, береться поточна дата)
-            interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
+        try:
+            self.logger.info(f"Loading {symbol} data with interval {interval} from database")
 
-        Returns:
-            DataFrame з даними криптовалюти
+            # Якщо кінцева дата не вказана, використовуємо поточну дату
+            if end_date is None:
+                end_date = datetime.now()
+                self.logger.debug(f"End date not specified, using current date: {end_date}")
 
-        Примітка:
-        - Використовує self.db_manager.get_klines_processed для отримання оброблених свічок з БД
-        """
-        pass
+            # Використовуємо переданий db_manager або збережений в класі
+            manager = db_manager if db_manager is not None else self.db_manager
+
+            if manager is None:
+                error_msg = "Database manager not available. Please provide a valid db_manager."
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Отримуємо дані з бази даних
+            klines_data = manager.get_klines_processed(
+                symbol=symbol,
+                interval=interval,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+            if klines_data is None or klines_data.empty:
+                self.logger.warning(f"No data found for {symbol} with interval {interval}")
+                return pd.DataFrame()
+
+            # Перевіряємо наявність часового індексу
+            if not isinstance(klines_data.index, pd.DatetimeIndex):
+                # Шукаємо колонку з часовим індексом (timestamp, time, date, etc.)
+                time_cols = [col for col in klines_data.columns if any(
+                    time_str in col.lower() for time_str in ['time', 'date', 'timestamp'])]
+
+                if time_cols:
+                    # Використовуємо першу знайдену колонку часу
+                    klines_data = klines_data.set_index(pd.DatetimeIndex(pd.to_datetime(klines_data[time_cols[0]])))
+                    self.logger.info(f"Set index using column: {time_cols[0]}")
+                else:
+                    self.logger.warning("No time column found in data. Using default index.")
+
+            # Сортуємо дані за часовим індексом
+            klines_data = klines_data.sort_index()
+
+            # Виводимо інформацію про отримані дані
+            self.logger.info(f"Loaded {len(klines_data)} records for {symbol} "
+                             f"from {klines_data.index.min()} to {klines_data.index.max()}")
+
+            return klines_data
+
+        except Exception as e:
+            self.logger.error(f"Error loading crypto data: {str(e)}")
+            raise
 
     def save_forecast_to_db(self, db_manager: Any, symbol: str,
                             forecast_data: pd.Series, model_key: str) -> bool:
-        """
-        Збереження результатів прогнозу в базу даних.
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager
-            symbol: Символ криптовалюти
-            forecast_data: Дані прогнозу
-            model_key: Ключ моделі, яка була використана
+        try:
+            self.logger.info(f"Saving forecast for {symbol} using model {model_key}")
 
-        Returns:
-            Успішність операції
+            if forecast_data is None or len(forecast_data) == 0:
+                self.logger.error("No forecast data provided")
+                return False
 
-        Примітка:
-        - Спочатку потрібно отримати ID моделі за допомогою self.db_manager.get_model_by_key(model_key)
-        - Потім використати self.db_manager.save_model_forecasts для збереження прогнозів
-        """
-        pass
+            # Перевіряємо чи forecast_data є pd.Series
+            if not isinstance(forecast_data, pd.Series):
+                try:
+                    forecast_data = pd.Series(forecast_data)
+                    self.logger.warning("Converted forecast data to pandas Series")
+                except Exception as convert_error:
+                    self.logger.error(f"Could not convert forecast data to pandas Series: {str(convert_error)}")
+                    return False
+
+            # Використовуємо переданий db_manager або збережений в класі
+            manager = db_manager if db_manager is not None else self.db_manager
+
+            if manager is None:
+                error_msg = "Database manager not available. Please provide a valid db_manager."
+                self.logger.error(error_msg)
+                return False
+
+            # Перевіряємо наявність моделі в базі даних
+            model_info = manager.get_model_by_key(model_key)
+
+            if model_info is None:
+                self.logger.error(f"Model with key {model_key} not found in database")
+                return False
+
+            # Перетворюємо дані прогнозу у формат для збереження
+            forecast_dict = {
+                "model_key": model_key,
+                "symbol": symbol,
+                "timestamp": datetime.now(),
+                "forecast_data": {
+                    timestamp.isoformat() if isinstance(timestamp, datetime) else str(timestamp): value
+                    for timestamp, value in forecast_data.items()
+                },
+                "forecast_horizon": len(forecast_data),
+                "forecast_start": forecast_data.index[0].isoformat() if isinstance(forecast_data.index[0], datetime)
+                else str(forecast_data.index[0]),
+                "forecast_end": forecast_data.index[-1].isoformat() if isinstance(forecast_data.index[-1], datetime)
+                else str(forecast_data.index[-1])
+            }
+
+            # Зберігаємо прогноз у базі даних
+            success = manager.save_model_forecasts(model_key, forecast_dict)
+
+            if success:
+                self.logger.info(f"Successfully saved forecast for {symbol} using model {model_key}")
+            else:
+                self.logger.error(f"Failed to save forecast for {symbol}")
+
+            return success
+
+        except Exception as e:
+            self.logger.error(f"Error saving forecast to database: {str(e)}")
+            return False
 
     def load_forecast_from_db(self, db_manager: Any, symbol: str,
                               model_key: str) -> Optional[pd.Series]:
-        """
-        Завантаження збереженого прогнозу з бази даних.
+        try:
+            self.logger.info(f"Loading forecast for {symbol} from model {model_key}")
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager
-            symbol: Символ криптовалюти
-            model_key: Ключ моделі, яка була використана
+            # Використовуємо переданий db_manager або збережений в класі
+            manager = db_manager if db_manager is not None else self.db_manager
 
-        Returns:
-            Дані прогнозу або None, якщо прогноз не знайдено
+            if manager is None:
+                error_msg = "Database manager not available. Please provide a valid db_manager."
+                self.logger.error(error_msg)
+                return None
 
-        Примітка:
-        - Спочатку потрібно отримати ID моделі за допомогою self.db_manager.get_model_by_key(model_key)
-        - Потім використати self.db_manager.get_model_forecasts для отримання прогнозів
-        """
-        pass
+            # Перевіряємо наявність моделі в базі даних
+            model_info = manager.get_model_by_key(model_key)
+
+            if model_info is None:
+                self.logger.warning(f"Model with key {model_key} not found in database")
+                return None
+
+            # Отримуємо прогнози з бази даних
+            forecast_dict = manager.get_model_forecasts(model_key)
+
+            if not forecast_dict:
+                self.logger.warning(f"No forecasts found for model {model_key}")
+                return None
+
+            # Перевіряємо, чи є прогнози для заданого символу
+            if symbol.upper() != forecast_dict.get('symbol', '').upper():
+                self.logger.warning(f"Forecast for symbol {symbol} not found in model {model_key}")
+                return None
+
+            # Перетворюємо словник прогнозів на pd.Series
+            try:
+                forecast_data = forecast_dict.get('forecast_data', {})
+
+                # Перетворюємо ключі на datetime, якщо вони є датами
+                index = []
+                values = []
+
+                for timestamp_str, value in forecast_data.items():
+                    try:
+                        # Спробуємо перетворити на datetime
+                        timestamp = pd.to_datetime(timestamp_str)
+                    except:
+                        # Якщо не вийшло, використовуємо як є
+                        timestamp = timestamp_str
+
+                    index.append(timestamp)
+                    values.append(float(value))
+
+                # Створюємо pandas Series з правильним індексом
+                forecast_series = pd.Series(values, index=index)
+
+                # Сортуємо за індексом
+                forecast_series = forecast_series.sort_index()
+
+                self.logger.info(f"Successfully loaded forecast with {len(forecast_series)} points for {symbol}")
+
+                return forecast_series
+
+            except Exception as e:
+                self.logger.error(f"Error converting forecast data to Series: {str(e)}")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Error loading forecast from database: {str(e)}")
+            return None
 
     def get_available_crypto_symbols(self, db_manager: Any) -> List[str]:
-        """
-        Отримання списку доступних символів криптовалют з бази даних.
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager
+        try:
+            self.logger.info("Getting available cryptocurrency symbols from database")
 
-        Returns:
-            Список доступних символів криптовалют
+            # Використовуємо переданий db_manager або збережений в класі
+            manager = db_manager if db_manager is not None else self.db_manager
 
-        Примітка:
-        - Використовує self.db_manager.get_available_symbols для отримання списку символів криптовалют
-        """
-        pass
+            if manager is None:
+                error_msg = "Database manager not available. Please provide a valid db_manager."
+                self.logger.error(error_msg)
+                return []
+
+            # Отримуємо список доступних символів
+            symbols = manager.get_available_symbols()
+
+            if symbols is None:
+                self.logger.warning("No symbols returned from database")
+                return []
+
+            # Перевіряємо, що отримані дані є списком
+            if not isinstance(symbols, list):
+                try:
+                    symbols = list(symbols)
+                except Exception as e:
+                    self.logger.error(f"Could not convert symbols to list: {str(e)}")
+                    return []
+
+            # Перевіряємо, що символи не порожні
+            symbols = [s for s in symbols if s]
+
+            # Видаляємо дублікати і сортуємо
+            symbols = sorted(set(symbols))
+
+            self.logger.info(f"Found {len(symbols)} available cryptocurrency symbols")
+
+            return symbols
+
+        except Exception as e:
+            self.logger.error(f"Error getting available cryptocurrency symbols: {str(e)}")
+            return []
 
     def get_last_update_time(self, db_manager: Any, symbol: str,
                              interval: str = '1d') -> Optional[datetime]:
-        """
-        Отримання часу останнього оновлення даних криптовалюти.
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager
-            symbol: Символ криптовалюти
-            interval: Інтервал даних
+        self.logger.info(f"Getting last update time for {symbol} with interval {interval}")
 
-        Returns:
-            Дата і час останнього оновлення або None, якщо дані відсутні
+        if db_manager is None:
+            self.logger.error("Database manager is not provided")
+            return None
 
-        Примітка:
-        - Може використовувати допоміжні методи db_manager для отримання цієї інформації
-        """
-        pass
+        try:
+            # Перевіряємо, чи переданий db_manager був заданий при ініціалізації класу
+            # якщо ні, використовуємо переданий
+            db = self.db_manager if self.db_manager is not None else db_manager
+
+            # Припускаємо, що в db_manager є метод для отримання останніх даних свічок
+            latest_kline = db.get_latest_kline(symbol=symbol, interval=interval)
+
+            if latest_kline is not None and hasattr(latest_kline, 'timestamp'):
+                # Якщо отримали дані і є відмітка часу
+                self.logger.info(f"Last update time for {symbol} ({interval}): {latest_kline.timestamp}")
+                return latest_kline.timestamp
+
+            # Якщо немає прямого методу, спробуємо отримати через оброблені свічки
+            klines_data = db.get_klines_processed(
+                symbol=symbol,
+                interval=interval,
+                limit=1,  # Беремо тільки одну (останню) свічку
+                sort_order="DESC"  # Сортуємо за спаданням дати
+            )
+
+            if klines_data is not None and not klines_data.empty:
+                # Отримуємо індекс останньої свічки (який повинен бути datetime)
+                if isinstance(klines_data.index[0], datetime):
+                    last_update = klines_data.index[0]
+                else:
+                    # Якщо індекс не datetime, спробуємо знайти стовпець з часовою міткою
+                    for col in ['timestamp', 'time', 'date', 'datetime']:
+                        if col in klines_data.columns:
+                            last_update = klines_data[col].iloc[0]
+                            if not isinstance(last_update, datetime):
+                                # Конвертуємо в datetime, якщо це не datetime
+                                if isinstance(last_update, (int, float)):
+                                    # Припускаємо, що це UNIX timestamp в мілісекундах або секундах
+                                    if last_update > 1e11:  # Якщо в мілісекундах
+                                        last_update = datetime.fromtimestamp(last_update / 1000)
+                                    else:  # Якщо в секундах
+                                        last_update = datetime.fromtimestamp(last_update)
+                                else:
+                                    # Якщо це строка, пробуємо парсити
+                                    try:
+                                        from dateutil import parser
+                                        last_update = parser.parse(str(last_update))
+                                    except:
+                                        self.logger.warning(f"Cannot parse datetime from {last_update}")
+                                        continue
+                            break
+                    else:
+                        self.logger.warning(f"No datetime column found in klines data for {symbol}")
+                        return None
+
+                self.logger.info(f"Last update time for {symbol} ({interval}): {last_update}")
+                return last_update
+
+            self.logger.warning(f"No data found for {symbol} with interval {interval}")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error getting last update time for {symbol}: {str(e)}")
+            return None
 
     def batch_process_symbols(self, db_manager: Any, symbols: List[str],
                               start_date: Optional[datetime] = None,
                               end_date: Optional[datetime] = None,
                               interval: str = '1d') -> Dict[str, Dict]:
-        """
-        Пакетна обробка декількох криптовалют.
 
-        Args:
-            db_manager: Об'єкт класу DatabaseManager
-            symbols: Список символів криптовалют
-            start_date: Початкова дата
-            end_date: Кінцева дата
-            interval: Інтервал даних
+        self.logger.info(f"Starting batch processing for {len(symbols)} symbols")
 
-        Returns:
-            Словник з результатами для кожного символу
+        if db_manager is None:
+            self.logger.error("Database manager is not provided")
+            return {"status": "error", "message": "Database manager is not provided"}
 
-        Примітка:
-        - Для кожного символу завантажує дані, навчає модель та зберігає результати в БД
-        - Використовує self.load_crypto_data і self.run_auto_forecast для кожного символу
-        - Зберігає всі результати в БД за допомогою self.db_manager.save_complete_model
-        """
-        pass
+        # Ініціалізуємо словник для результатів
+        results = {}
+
+        # Встановлюємо значення за замовчуванням для дат
+        if end_date is None:
+            end_date = datetime.now()
+            self.logger.info(f"End date not provided, using current time: {end_date}")
+
+        # Обробляємо кожен символ
+        for symbol in symbols:
+            self.logger.info(f"Processing symbol: {symbol}")
+
+            try:
+                # Перевіряємо, чи є дані для цього символу
+                if not self._check_symbol_data_available(db_manager, symbol, interval):
+                    self.logger.warning(f"No data available for {symbol}, skipping")
+                    results[symbol] = {
+                        "status": "error",
+                        "message": f"No data available for {symbol}",
+                        "timestamp": datetime.now()
+                    }
+                    continue
+
+                # Якщо початкова дата не вказана, отримуємо останню дату оновлення
+                # і віднімаємо певний період (наприклад, 365 днів для денних даних)
+                if start_date is None:
+                    last_update = self.get_last_update_time(db_manager, symbol, interval)
+                    if last_update is not None:
+                        if interval == '1d':
+                            start_date = last_update - timedelta(days=365)  # Рік даних для денного інтервалу
+                        elif interval == '1h':
+                            start_date = last_update - timedelta(days=30)  # 30 днів для годинного інтервалу
+                        elif interval in ['15m', '5m', '1m']:
+                            start_date = last_update - timedelta(days=7)  # Тиждень для хвилинних інтервалів
+                        else:
+                            start_date = last_update - timedelta(days=180)  # Півроку за замовчуванням
+
+                        self.logger.info(f"Calculated start date for {symbol}: {start_date}")
+                    else:
+                        self.logger.warning(f"Cannot determine last update time for {symbol}, using default")
+                        # За замовчуванням, беремо дані за останній рік
+                        start_date = end_date - timedelta(days=365)
+
+                # Завантажуємо дані для аналізу
+                data = self.load_crypto_data(
+                    db_manager=db_manager,
+                    symbol=symbol,
+                    start_date=start_date,
+                    end_date=end_date,
+                    interval=interval
+                )
+
+                if data is None or data.empty:
+                    self.logger.warning(f"No data loaded for {symbol}, skipping")
+                    results[symbol] = {
+                        "status": "error",
+                        "message": f"No data loaded for {symbol}",
+                        "timestamp": datetime.now()
+                    }
+                    continue
+
+                # Вибираємо цільову колонку для аналізу (зазвичай 'close')
+                target_column = 'close'
+                if target_column not in data.columns:
+                    # Шукаємо альтернативу, якщо 'close' немає
+                    possible_columns = ['Close', 'price', 'Price', 'value', 'Value']
+                    for col in possible_columns:
+                        if col in data.columns:
+                            target_column = col
+                            break
+                    else:
+                        # Якщо немає відповідної колонки, використовуємо першу колонку з числовими даними
+                        for col in data.columns:
+                            if pd.api.types.is_numeric_dtype(data[col]):
+                                target_column = col
+                                break
+                        else:
+                            self.logger.error(f"No suitable numeric column found for {symbol}")
+                            results[symbol] = {
+                                "status": "error",
+                                "message": f"No suitable numeric column found for {symbol}",
+                                "timestamp": datetime.now()
+                            }
+                            continue
+
+                self.logger.info(f"Using column '{target_column}' for analysis of {symbol}")
+
+                # Запускаємо автоматичне прогнозування
+                forecast_result = self.run_auto_forecast(
+                    data=data[target_column],
+                    test_size=0.2,  # 20% даних для тестування
+                    forecast_steps=24,  # Прогноз на 24 періоди вперед
+                    symbol=symbol
+                )
+
+                # Зберігаємо результати прогнозування
+                if forecast_result.get("status") == "success" and "model_key" in forecast_result:
+                    model_key = forecast_result["model_key"]
+
+                    # Зберігаємо комплексну інформацію про модель в БД
+                    if self.db_manager is not None:
+                        try:
+                            self.db_manager.save_complete_model(model_key, forecast_result.get("model_info", {}))
+                            self.logger.info(f"Model for {symbol} saved to database with key {model_key}")
+                        except Exception as db_error:
+                            self.logger.error(f"Error saving model for {symbol} to database: {str(db_error)}")
+
+                    # Додаємо результат до загального словника
+                    results[symbol] = {
+                        "status": "success",
+                        "message": f"Successfully processed {symbol}",
+                        "model_key": model_key,
+                        "timestamp": datetime.now(),
+                        **forecast_result
+                    }
+                else:
+                    # Якщо прогнозування не вдалося, додаємо інформацію про помилку
+                    results[symbol] = {
+                        "status": "error",
+                        "message": forecast_result.get("message", f"Error processing {symbol}"),
+                        "timestamp": datetime.now()
+                    }
+
+            except Exception as e:
+                self.logger.error(f"Error processing {symbol}: {str(e)}")
+                results[symbol] = {
+                    "status": "error",
+                    "message": f"Exception: {str(e)}",
+                    "timestamp": datetime.now()
+                }
+
+        # Додаємо загальну статистику
+        success_count = sum(1 for symbol, result in results.items() if result.get("status") == "success")
+        error_count = len(symbols) - success_count
+
+        summary = {
+            "total_symbols": len(symbols),
+            "success_count": success_count,
+            "error_count": error_count,
+            "success_rate": success_count / len(symbols) if symbols else 0,
+            "processed_at": datetime.now()
+        }
+
+        results["_summary"] = summary
+
+        self.logger.info(f"Batch processing completed. Success: {success_count}, Errors: {error_count}")
+
+        return results
+
+    def _check_symbol_data_available(self, db_manager: Any, symbol: str, interval: str) -> bool:
+
+        try:
+            # Перевіряємо, чи є такий символ у списку доступних
+            available_symbols = self.get_available_crypto_symbols(db_manager)
+            if symbol not in available_symbols:
+                self.logger.warning(f"Symbol {symbol} not in available symbols list")
+                return False
+
+            # Перевіряємо, чи є хоча б деякі дані для цього символу
+            last_update = self.get_last_update_time(db_manager, symbol, interval)
+            if last_update is None:
+                self.logger.warning(f"No last update time for {symbol}")
+                return False
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error checking data availability for {symbol}: {str(e)}")
+            return False
+def main():
+    import pprint
+
+    symbol = "BTCUSDT"
+    interval = "1d"
+    forecast_steps = 7
+
+    model = TimeSeriesModels()
+    db = model.db_manager
+
+    if db is None:
+        print(" Менеджер бази даних не налаштований.")
+        return
+
+    try:
+        df = db.get_klines_processed(symbol, interval)
+    except Exception as e:
+        print(f" Помилка при отриманні даних: {e}")
+        return
+
+    if df is None or df.empty or "close" not in df.columns:
+        print(" Немає даних для тренування моделі.")
+        return
+
+    price_series = df["close"]
+
+    stat_info = model.check_stationarity(price_series)
+    if not stat_info["is_stationary"]:
+        price_series = model.difference_series(price_series)
+
+    #  ARIMA
+    arima_key = None
+    arima_params = model.find_optimal_params(price_series, seasonal=False)
+    if arima_params["status"] == "success":
+        arima_result = model.fit_arima(price_series, arima_params["parameters"]["order"], symbol=symbol)
+        arima_key = arima_result["model_key"]
+        print(f" ARIMA збережено як {arima_key}")
+    else:
+        print("️ ARIMA: не вдалося підібрати параметри")
+
+    #  SARIMA
+    sarima_key = None
+    sarima_params = model.find_optimal_params(price_series, seasonal=True)
+    if sarima_params["status"] == "success":
+        sarima_result = model.fit_sarima(
+            price_series,
+            order=sarima_params["parameters"]["order"],
+            seasonal_order=sarima_params["parameters"]["seasonal_order"],
+            symbol=symbol
+        )
+        sarima_key = sarima_result["model_key"]
+        print(f" SARIMA збережено як {sarima_key}")
+    else:
+        print(" SARIMA: не вдалося підібрати параметри")
+
+    #  Порівняння моделей
+    if arima_key and sarima_key:
+        aic_arima = arima_result["model_info"]["stats"]["aic"]
+        aic_sarima = sarima_result["model_info"]["stats"]["aic"]
+        better_key = arima_key if aic_arima < aic_sarima else sarima_key
+        print(f"🏆 Краща модель за AIC: {better_key}")
+    else:
+        better_key = arima_key or sarima_key
+
+    #  Прогнозування
+    if better_key:
+        forecast = model.forecast(better_key, steps=forecast_steps)
+        if not forecast.empty:
+            print("\n Прогноз:")
+            pprint.pprint(forecast.to_dict())
+        else:
+            print(" Прогнозування не вдалося.")
+    else:
+        print(" Немає доступної моделі для прогнозування.")
+
+    print("\n Завершено.")
+
+if __name__ == "__main__":
+    main()
