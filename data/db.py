@@ -3022,22 +3022,307 @@ def get_market_regime_correlations(self, regime_name=None, correlation_type=None
     return processed_results
 
 
+
+def insert_correlated_pair(self, symbol1, symbol2, correlation_value, correlation_type,
+                           timeframe, start_time, end_time, method):
+    """
+    Додає інформацію про кореляцію пари символів
+
+    Args:
+        symbol1: Перший символ пари
+        symbol2: Другий символ пари
+        correlation_value: Значення кореляції
+        correlation_type: Тип кореляції
+        timeframe: Таймфрейм даних
+        start_time: Початковий час періоду аналізу
+        end_time: Кінцевий час періоду аналізу
+        method: Метод обчислення кореляції
+    """
+    # Перетворення часу до строкового формату, якщо потрібно
+    if isinstance(start_time, datetime):
+        start_time = start_time.isoformat()
+    if isinstance(end_time, datetime):
+        end_time = end_time.isoformat()
+
+    query = """
+            INSERT INTO correlated_pairs (symbol1, symbol2, correlation_value, correlation_type,
+                                          timeframe, start_time, end_time, method)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol1, symbol2, correlation_type, timeframe, start_time, end_time, method)
+        DO NOTHING; \
+            """
+    params = (symbol1, symbol2, correlation_value, correlation_type,
+              timeframe, start_time, end_time, method)
+    self.execute_query(query, params)
+
+
+def get_correlated_pairs(self, symbol=None, correlation_type=None, timeframe=None,
+                         min_correlation=None, max_correlation=None, limit=None):
+    """
+    Отримує інформацію про кореляції за різними фільтрами
+
+    Args:
+        symbol: Символ для фільтрації (опціонально)
+        correlation_type: Тип кореляції (опціонально)
+        timeframe: Таймфрейм даних (опціонально)
+        min_correlation: Мінімальне значення кореляції (опціонально)
+        max_correlation: Максимальне значення кореляції (опціонально)
+        limit: Максимальна кількість результатів (опціонально)
+
+    Returns:
+        Список словників з інформацією про корельовані пари
+    """
+    # Складаємо базовий запит
+    query = "SELECT * FROM correlated_pairs WHERE 1=1"
+    params = []
+
+    # Додаємо фільтри
+    if symbol:
+        query += " AND (symbol1 = %s OR symbol2 = %s)"
+        params.extend([symbol, symbol])
+    if correlation_type:
+        query += " AND correlation_type = %s"
+        params.append(correlation_type)
+    if timeframe:
+        query += " AND timeframe = %s"
+        params.append(timeframe)
+    if min_correlation is not None:
+        query += " AND correlation_value >= %s"
+        params.append(min_correlation)
+    if max_correlation is not None:
+        query += " AND correlation_value <= %s"
+        params.append(max_correlation)
+
+    # Додаємо сортування та ліміт
+    query += " ORDER BY correlation_value DESC"
+
+    if limit is not None:
+        query += " LIMIT %s"
+        params.append(limit)
+
+    return self.fetch_dict(query, params)
+
+
+def save_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
+                                 window_size, timestamp, correlation_value, method):
+    """
+    Зберігає часовий ряд кореляції для пари криптовалют
+
+    Args:
+        symbol1: Перший символ пари
+        symbol2: Другий символ пари
+        correlation_type: Тип кореляції
+        timeframe: Таймфрейм даних
+        window_size: Розмір вікна для обчислення кореляції
+        timestamp: Час, для якого обчислена кореляція
+        correlation_value: Значення кореляції
+        method: Метод обчислення кореляції
+    """
+    # Перетворення часу до строкового формату, якщо потрібно
+    if isinstance(timestamp, datetime):
+        timestamp = timestamp.isoformat()
+
+    query = """
+            INSERT INTO correlation_time_series (symbol1, symbol2, correlation_type, timeframe,
+                                                 window_size, timestamp, correlation_value, method)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol1, symbol2, correlation_type, timeframe, window_size, timestamp, method) 
+        DO \
+            UPDATE SET correlation_value = EXCLUDED.correlation_value \
+            """
+    params = (symbol1, symbol2, correlation_type, timeframe,
+              window_size, timestamp, correlation_value, method)
+    self.execute_query(query, params)
+
+
+def get_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
+                                window_size, start_time=None, end_time=None, method=None, limit=None):
+    """
+    Отримує часовий ряд кореляцій для конкретної пари
+
+    Args:
+        symbol1: Перший символ пари
+        symbol2: Другий символ пари
+        correlation_type: Тип кореляції
+        timeframe: Таймфрейм даних
+        window_size: Розмір вікна для обчислення кореляції
+        start_time: Початковий час для фільтрації (опціонально)
+        end_time: Кінцевий час для фільтрації (опціонально)
+        method: Метод обчислення кореляції (опціонально)
+        limit: Максимальна кількість результатів (опціонально)
+
+    Returns:
+        Список словників з даними часового ряду кореляцій
+    """
+    # Перетворення часу до строкового формату, якщо потрібно
+    if isinstance(start_time, datetime):
+        start_time = start_time.isoformat()
+    if isinstance(end_time, datetime):
+        end_time = end_time.isoformat()
+
+    # Складаємо базовий запит
+    query = """
+            SELECT timestamp, correlation_value
+            FROM correlation_time_series
+            WHERE symbol1 = %s
+              AND symbol2 = %s
+              AND correlation_type = %s
+              AND timeframe = %s
+              AND window_size = %s \
+            """
+    params = [symbol1, symbol2, correlation_type, timeframe, window_size]
+
+    # Додаємо фільтри
+    if start_time:
+        query += " AND timestamp >= %s"
+        params.append(start_time)
+    if end_time:
+        query += " AND timestamp <= %s"
+        params.append(end_time)
+    if method:
+        query += " AND method = %s"
+        params.append(method)
+
+    # Додаємо сортування та ліміт
+    query += " ORDER BY timestamp ASC"
+
+    if limit is not None:
+        query += " LIMIT %s"
+        params.append(limit)
+
+    return self.fetch_dict(query, params)
+
+
+def get_most_correlated_pairs(self, symbol=None, correlation_type='pearson', timeframe='1h',
+                              limit=10, min_abs_correlation=0.7):
+    """
+    Отримує найбільш корельовані пари за абсолютним значенням кореляції
+
+    Args:
+        symbol: Символ, для якого шукаємо кореляції (опціонально)
+        correlation_type: Тип кореляції
+        timeframe: Таймфрейм даних
+        limit: Максимальна кількість результатів
+        min_abs_correlation: Мінімальне абсолютне значення кореляції
+
+    Returns:
+        Список словників з інформацією про найбільш корельовані пари
+    """
+    # Складаємо запит з потрібними полями та умовами
+    query = """
+            SELECT symbol1, \
+                   symbol2, \
+                   correlation_value, \
+                   correlation_type, \
+                   timeframe, \
+                   start_time, \
+                   end_time, \
+                   method, \
+                   ABS(correlation_value) as abs_correlation
+            FROM correlated_pairs
+            WHERE correlation_type = %s
+              AND timeframe = %s
+              AND ABS(correlation_value) >= %s \
+            """
+    params = [correlation_type, timeframe, min_abs_correlation]
+
+    # Додаємо фільтр за символом, якщо вказаний
+    if symbol:
+        query += " AND (symbol1 = %s OR symbol2 = %s)"
+        params.extend([symbol, symbol])
+
+    # Додаємо сортування та ліміт
+    query += " ORDER BY abs_correlation DESC LIMIT %s"
+    params.append(limit)
+
+    return self.fetch_dict(query, params)
+
+
+def load_correlation_matrix(self, correlation_type, timeframe, start_time=None, end_time=None, method='pearson'):
+    """
+    Завантажує кореляційну матрицю для всіх символів
+
+    Args:
+        correlation_type: Тип кореляції
+        timeframe: Таймфрейм даних
+        start_time: Початковий час для фільтрації (опціонально)
+        end_time: Кінцевий час для фільтрації (опціонально)
+        method: Метод обчислення кореляції
+
+    Returns:
+        Кортеж (матриця кореляцій, список символів) або None, якщо дані відсутні
+    """
+    # Перетворення часу до строкового формату, якщо потрібно
+    if isinstance(start_time, datetime):
+        start_time = start_time.isoformat()
+    if isinstance(end_time, datetime):
+        end_time = end_time.isoformat()
+
+    # Отримуємо всі пари кореляцій для заданих умов
+    query = """
+            SELECT symbol1, symbol2, correlation_value
+            FROM correlated_pairs
+            WHERE correlation_type = %s
+              AND timeframe = %s
+              AND method = %s \
+            """
+    params = [correlation_type, timeframe, method]
+
+    # Додаємо фільтри за часом
+    if start_time:
+        query += " AND start_time >= %s"
+        params.append(start_time)
+    if end_time:
+        query += " AND end_time <= %s"
+        params.append(end_time)
+
+    pairs = self.fetch_dict(query, params)
+
+    if not pairs:
+        return None
+
+    # Збираємо всі унікальні символи
+    symbols = set()
+    for pair in pairs:
+        symbols.add(pair['symbol1'])
+        symbols.add(pair['symbol2'])
+
+    # Сортуємо символи для стабільного порядку
+    symbols = sorted(list(symbols))
+    n = len(symbols)
+
+    # Створюємо матрицю кореляцій
+    matrix = [[0.0 for _ in range(n)] for _ in range(n)]
+
+    # Заповнюємо матрицю значеннями кореляцій
+    for pair in pairs:
+        i = symbols.index(pair['symbol1'])
+        j = symbols.index(pair['symbol2'])
+        matrix[i][j] = pair['correlation_value']
+        # Симетрично заповнюємо іншу половину матриці
+        matrix[j][i] = pair['correlation_value']
+
+    # Діагональ матриці - кореляція активу з самим собою = 1.0
+    for i in range(n):
+        matrix[i][i] = 1.0
+
+    return matrix, symbols
+
+
 def get_decorrelated_portfolio(self, symbols, correlation_type, timeframe,
                                max_correlation=0.3, start_time=None, end_time=None, method='pearson'):
     """
-    Знаходить набір декорельованих активів для побудови портфеля
+    Створює декорельований портфель із заданих символів
 
-    Аргументи:
+    Args:
         symbols: Список символів для аналізу
         correlation_type: Тип кореляції
-        timeframe: Часовий інтервал
-        max_correlation: Максимальне значення кореляції між активами в портфелі
-        start_time: Початковий час періоду (опціонально)
-        end_time: Кінцевий час періоду (опціонально)
-        method: Метод кореляції
+        timeframe: Таймфрейм даних
+        max_correlation: Максимально допустима кореляція між активами
+        start_time: Початковий час для фільтрації (опціонально)
+        end_time: Кінцевий час для фільтрації (опціонально)
+        method: Метод обчислення кореляції
 
-    Повертає:
-        Список символів, що складають декорельований портфель
+    Returns:
+        Список символів, які формують декорельований портфель
     """
     # Завантажуємо кореляційну матрицю
     matrix_data = self.load_correlation_matrix(correlation_type, timeframe, start_time, end_time, method)

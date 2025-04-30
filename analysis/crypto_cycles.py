@@ -23,7 +23,7 @@ from sklearn.cluster import KMeans
 import warnings
 
 # Internal project imports
-from models.time_series import rr, transform_data
+from models.time_series import TimeSeriesModels.detect_seasonality, TimeSeriesModels.transform_data
 from utils.logger import setup_logger
 from utils.crypto_helpers import get_halving_dates, calculate_roi_periods
 
