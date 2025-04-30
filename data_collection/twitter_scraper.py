@@ -14,6 +14,7 @@ from data.db import DatabaseManager
 import concurrent.futures
 import numpy as np
 from utils.config import db_connection
+
 os.environ['SSL_CERT_FILE'] = certifi.where()
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())

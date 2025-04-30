@@ -1,3 +1,17 @@
+"""
+Deep Learning модуль для прогнозування криптовалютних цін.
+
+Цей модуль включає класи та методи для створення, навчання та використання
+глибоких нейронних мереж для прогнозування ціни криптовалют.
+
+Залежності від інших модулів:
+- data/db.py - для збереження/завантаження моделей та прогнозів
+- data_collection/market_data_processor.py - для попередньої обробки даних
+- data_collection/feature_engineering.py - для створення ознак
+- utils/logger.py - для логування
+- utils/config.py - для конфігурації
+- models/time_series.py - для використання деяких функцій обробки часових рядів
+"""
 import pandas as pd
 import numpy as np
 import logging
@@ -11,331 +25,294 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 
-class DeepLearningModels:
+class DeepLearningModel:
     """
-    Клас для створення та тренування глибоких нейронних мереж для прогнозування криптовалют.
+    Клас для створення, навчання та використання глибоких нейронних мереж
+    для прогнозування криптовалют.
+
+    Залежності:
+    - from utils.logger import setup_logger - для логування
+    - from utils.config import DL_CONFIG - для завантаження конфігурації
+    - from data.db import save_forecast_to_db, load_forecast_from_db, save_model_metadata - для роботи з БД
+    - from models.time_series import check_stationarity, transform_data, inverse_transform - для обробки часових рядів
     """
 
-    def __init__(self, log_level=logging.INFO):
+    def __init__(self, config=None):
         """
-        Ініціалізація класу глибокого навчання.
+        Ініціалізація моделі глибокого навчання.
 
-        Args:
-            log_level: Рівень логування
+        Залежності:
+        - from utils.config import DL_CONFIG - для завантаження конфігурації за замовчуванням
+        - from utils.logger import setup_logger - для налаштування логування
         """
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(log_level)
-        self.models = {}
-        self.scalers = {}
+        pass
 
-    def prepare_sequences(self, data: pd.DataFrame, target_col: str,
-                          lookback: int = 30, forecast_horizon: int = 1,
-                          scaler_key: str = 'default') -> Tuple[np.ndarray, np.ndarray]:
+    def prepare_data(self, df, target_col='close', test_size=0.2, validation_size=0.1):
         """
-        Підготовка послідовностей для тренування LSTM/GRU.
+        Підготовка даних для глибокого навчання.
 
-        Args:
-            data: Дані для тренування
-            target_col: Стовпець-ціль
-            lookback: Кількість попередніх часових кроків
-            forecast_horizon: Горизонт прогнозування
-            scaler_key: Ключ для збереження скейлера
-
-        Returns:
-            X, y: вхідні послідовності та відповідні цільові значення
+        Залежності:
+        - from models.time_series import check_stationarity, transform_data - для перевірки стаціонарності
+        - from data_collection.market_data_processor import clean_data - для очищення даних
         """
-        # Масштабування даних
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_data = scaler.fit_transform(data)
-        self.scalers[scaler_key] = scaler
+        pass
 
-        X, y = [], []
-        for i in range(lookback, len(scaled_data) - forecast_horizon + 1):
-            X.append(scaled_data[i - lookback:i])
-
-            # Для прогнозу використовуємо target_col
-            target_index = data.columns.get_loc(target_col)
-            target_values = scaled_data[i:i + forecast_horizon, target_index]
-            y.append(target_values)
-
-        return np.array(X), np.array(y)
-
-    def create_lstm_model(self, input_shape: Tuple[int, int],
-                          output_size: int = 1,
-                          layers: List[int] = [128, 64, 32],
-                          dropout_rate: float = 0.2) -> Sequential:
+    def _create_sequences(self, X, y):
         """
-        Створення моделі LSTM.
+        Створення послідовностей для роботи з часовим рядом.
 
-        Args:
-            input_shape: Форма вхідних даних (timesteps, features)
-            output_size: Розмір вихідного шару
-            layers: Список з кількістю нейронів для кожного шару LSTM
-            dropout_rate: Коефіцієнт виключення нейронів
-
-        Returns:
-            Модель Keras
+        Внутрішній метод, без зовнішніх залежностей.
         """
-        model = Sequential()
+        pass
 
-        # Додавання шарів LSTM
-        for i, units in enumerate(layers):
-            return_sequences = i < len(layers) - 1  # Повертати послідовності для всіх шарів крім останнього
-            if i == 0:
-                model.add(LSTM(units, return_sequences=return_sequences, input_shape=input_shape))
-            else:
-                model.add(LSTM(units, return_sequences=return_sequences))
-
-            model.add(BatchNormalization())
-            model.add(Dropout(dropout_rate))
-
-        # Вихідний шар
-        model.add(Dense(output_size))
-
-        return model
-
-    def create_gru_model(self, input_shape: Tuple[int, int],
-                         output_size: int = 1,
-                         layers: List[int] = [128, 64, 32],
-                         dropout_rate: float = 0.2) -> Sequential:
+    def build_lstm_model(self):
         """
-        Створення моделі GRU.
+        Створення LSTM моделі.
 
-        Args:
-            input_shape: Форма вхідних даних (timesteps, features)
-            output_size: Розмір вихідного шару
-            layers: Список з кількістю нейронів для кожного шару GRU
-            dropout_rate: Коефіцієнт виключення нейронів
-
-        Returns:
-            Модель Keras
+        Залежності:
+        - from utils.config import DL_CONFIG - для отримання конфігураційних параметрів моделі
         """
-        model = Sequential()
+        pass
 
-        # Додавання шарів GRU
-        for i, units in enumerate(layers):
-            return_sequences = i < len(layers) - 1  # Повертати послідовності для всіх шарів крім останнього
-            if i == 0:
-                model.add(GRU(units, return_sequences=return_sequences, input_shape=input_shape))
-            else:
-                model.add(GRU(units, return_sequences=return_sequences))
-
-            model.add(BatchNormalization())
-            model.add(Dropout(dropout_rate))
-
-        # Вихідний шар
-        model.add(Dense(output_size))
-
-        return model
-
-    def train_model(self, model, X_train: np.ndarray, y_train: np.ndarray,
-                    X_val: np.ndarray = None, y_val: np.ndarray = None,
-                    model_key: str = 'default',
-                    epochs: int = 100, batch_size: int = 32,
-                    patience: int = 10, checkpoint_path: str = None) -> Dict:
+    def build_gru_model(self):
         """
-        Тренування моделі.
+        Створення GRU моделі.
 
-        Args:
-            model: Модель для тренування
-            X_train, y_train: Тренувальні дані
-            X_val, y_val: Валідаційні дані
-            model_key: Ключ для збереження моделі
-            epochs: Кількість епох
-            batch_size: Розмір батчу
-            patience: Кількість епох для раннього зупинення
-            checkpoint_path: Шлях для збереження чекпоінтів
-
-        Returns:
-            Історія тренування
+        Залежності:
+        - from utils.config import DL_CONFIG - для отримання конфігураційних параметрів моделі
         """
-        callbacks = [
-            EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True)
-        ]
+        pass
 
-        if checkpoint_path:
-            callbacks.append(ModelCheckpoint(
-                checkpoint_path, save_best_only=True, monitor='val_loss'
-            ))
-
-        # Компіляція моделі
-        model.compile(optimizer='adam', loss='mse', metrics=['mae'])
-
-        # Тренування
-        if X_val is not None and y_val is not None:
-            history = model.fit(
-                X_train, y_train,
-                validation_data=(X_val, y_val),
-                epochs=epochs,
-                batch_size=batch_size,
-                callbacks=callbacks,
-                verbose=1
-            )
-        else:
-            history = model.fit(
-                X_train, y_train,
-                validation_split=0.2,
-                epochs=epochs,
-                batch_size=batch_size,
-                callbacks=callbacks,
-                verbose=1
-            )
-
-        self.models[model_key] = model
-
-        return {
-            'model': model,
-            'history': history.history
-        }
-
-    def predict(self, model_key: str, X: np.ndarray, scaler_key: str = 'default',
-                target_col_index: int = 0) -> np.ndarray:
+    def build_cnn_lstm_model(self):
         """
-        Виконання прогнозу на основі моделі.
+        Створення гібридної CNN-LSTM моделі.
 
-        Args:
-            model_key: Ключ моделі
-            X: Вхідні дані
-            scaler_key: Ключ скейлера
-            target_col_index: Індекс цільового стовпця для зворотнього масштабування
-
-        Returns:
-            Прогнозні значення
+        Залежності:
+        - from utils.config import DL_CONFIG - для отримання конфігураційних параметрів моделі
         """
-        if model_key not in self.models:
-            self.logger.error(f"Модель {model_key} не знайдена")
-            return None
+        pass
 
-        if scaler_key not in self.scalers:
-            self.logger.error(f"Скейлер {scaler_key} не знайдений")
-            return None
-
-        # Прогнозування масштабованих значень
-        scaled_predictions = self.models[model_key].predict(X)
-
-        # Підготовка структури для зворотнього масштабування
-        dummy = np.zeros((len(scaled_predictions), self.scalers[scaler_key].scale_.shape[0]))
-        dummy[:, target_col_index] = scaled_predictions.reshape(-1)
-
-        # Зворотне масштабування
-        predictions = self.scalers[scaler_key].inverse_transform(dummy)[:, target_col_index]
-
-        return predictions
-
-    def evaluate(self, model_key: str, X_test: np.ndarray, y_test: np.ndarray,
-                 scaler_key: str = 'default', target_col_index: int = 0) -> Dict:
+    def build_attention_model(self):
         """
-        Оцінка точності моделі.
+        Створення LSTM моделі з механізмом уваги (Attention).
 
-        Args:
-            model_key: Ключ моделі
-            X_test, y_test: Тестові дані
-            scaler_key: Ключ скейлера
-            target_col_index: Індекс цільового стовпця
-
-        Returns:
-            Метрики точності
+        Залежності:
+        - from utils.config import DL_CONFIG - для отримання конфігураційних параметрів моделі
         """
-        predictions = self.predict(model_key, X_test, scaler_key, target_col_index)
+        pass
 
-        # Підготовка реальних значень для порівняння
-        dummy = np.zeros((len(y_test), self.scalers[scaler_key].scale_.shape[0]))
-        dummy[:, target_col_index] = y_test.reshape(-1)
-        actual = self.scalers[scaler_key].inverse_transform(dummy)[:, target_col_index]
-
-        # Розрахунок метрик
-        mse = mean_squared_error(actual, predictions)
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(actual, predictions)
-        mape = np.mean(np.abs((actual - predictions) / actual)) * 100
-
-        return {
-            'mse': mse,
-            'rmse': rmse,
-            'mae': mae,
-            'mape': mape
-        }
-
-    def save_model(self, model_key: str, path: str) -> bool:
+    def train(self, X_train, y_train, X_val=None, y_val=None, epochs=100, batch_size=32,
+              early_stopping=True, patience=10, save_best=True):
         """
-        Збереження моделі на диск.
+        Навчання моделі.
 
-        Args:
-            model_key: Ключ моделі
-            path: Шлях для збереження
-
-        Returns:
-            Успішність операції
+        Залежності:
+        - from utils.logger import setup_logger - для логування процесу навчання
         """
-        if model_key not in self.models:
-            self.logger.error(f"Модель {model_key} не знайдена")
-            return False
+        pass
 
-        try:
-            self.models[model_key].save(path)
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка збереження моделі: {e}")
-            return False
-
-    def load_model(self, model_key: str, path: str) -> bool:
+    def predict(self, X):
         """
-        Завантаження моделі з диску.
+        Прогнозування.
 
-        Args:
-            model_key: Ключ для збереження моделі
-            path: Шлях до файлу моделі
-
-        Returns:
-            Успішність операції
+        Залежності:
+        - from models.time_series import inverse_transform - для інверсії нормалізації даних
         """
-        try:
-            model = load_model(path)
-            self.models[model_key] = model
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка завантаження моделі: {e}")
-            return False
+        pass
 
-    def save_scaler(self, scaler_key: str, path: str) -> bool:
+    def evaluate(self, X_test, y_test, show_plots=True):
         """
-        Збереження скейлера.
+        Оцінка якості моделі.
 
-        Args:
-            scaler_key: Ключ скейлера
-            path: Шлях для збереження
-
-        Returns:
-            Успішність операції
+        Залежності:
+        - from utils.logger import setup_logger - для логування результатів
         """
-        if scaler_key not in self.scalers:
-            self.logger.error(f"Скейлер {scaler_key} не знайдений")
-            return False
+        pass
 
-        import joblib
-        try:
-            joblib.dump(self.scalers[scaler_key], path)
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка збереження скейлера: {e}")
-            return False
-
-    def load_scaler(self, scaler_key: str, path: str) -> bool:
+    def save(self, model_path=None, include_weights=True):
         """
-        Завантаження скейлера з диску.
+        Збереження моделі.
 
-        Args:
-            scaler_key: Ключ для збереження скейлера
-            path: Шлях до файлу скейлера
-
-        Returns:
-            Успішність операції
+        Залежності:
+        - from data.db import save_model_metadata - для збереження метаданих моделі
         """
-        import joblib
-        try:
-            scaler = joblib.load(path)
-            self.scalers[scaler_key] = scaler
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка завантаження скейлера: {e}")
-            return False
+        pass
+
+    def load(self, model_path):
+        """
+        Завантаження збереженої моделі.
+
+        Залежності:
+        - from data.db import load_model_metadata - для завантаження метаданих моделі
+        """
+        pass
+
+    def forecast(self, symbol, interval, periods=None, start_date=None):
+        """
+        Створення прогнозу для вказаного символу та інтервалу.
+
+        Залежності:
+        - from data_collection.binance_client import get_klines - для отримання даних
+        - from data_collection.feature_engineering import (create_technical_features,
+          create_volatility_features, create_datetime_features) - для створення ознак
+        - from data_collection.market_data_processor import clean_data, normalize_data - для обробки даних
+        - from data.db import save_forecast_to_db - для збереження прогнозу в БД
+        """
+        pass
+
+    def batch_forecast(self, symbols, interval, periods=None):
+        """
+        Пакетне прогнозування для списку символів.
+
+        Залежності:
+        - self.forecast - для виконання прогнозування для кожного символу
+        - from utils.logger import setup_logger - для логування процесу
+        """
+        pass
+
+    def detect_anomalies(self, actual_data, forecasted_data, threshold=2.0):
+        """
+        Виявлення аномалій шляхом порівняння фактичних та прогнозованих даних.
+
+        Залежності:
+        - from data_collection.market_data_processor import detect_outliers - для виявлення викидів
+        """
+        pass
+
+    def generate_trading_signals(self, forecast_data, confidence_threshold=0.8):
+        """
+        Генерація торгових сигналів на основі прогнозу.
+
+        Залежності:
+        - from models.realtime_technical_indicators import _generate_signals - для генерації сигналів
+        """
+        pass
+
+    def combine_with_sentiment(self, forecast, sentiment_data):
+        """
+        Об'єднання прогнозу з даними про настрої для покращення точності.
+
+        Залежності:
+        - from models.sentiment_models import get_sentiment_score - для отримання оцінки настроїв
+        - from models.ensemble import combine_predictions - для об'єднання прогнозів
+        """
+        pass
+
+    def visualize_forecast(self, actual_data, forecast_data, confidence_intervals=True):
+        """
+        Візуалізація прогнозу та фактичних даних.
+
+        Залежності:
+        - from chatbot.chart_generator import create_forecast_chart - для генерації графіків
+        """
+        pass
+
+    def export_forecast_results(self, forecast_data, format='json', file_path=None):
+        """
+        Експорт результатів прогнозування у вказаний формат.
+
+        Залежності:
+        - from utils.crypto_helpers import format_data_for_export - для форматування даних
+        """
+        pass
+
+
+class HybridDeepEnsembleModel:
+    """
+    Клас для створення ансамблю глибоких моделей для покращення точності прогнозування.
+
+    Залежності:
+    - from models.ensemble import weighted_average, stacking, voting - для методів ансамблювання
+    - from utils.logger import setup_logger - для логування
+    """
+
+    def __init__(self, models=None, weights=None):
+        """
+        Ініціалізація ансамблю моделей.
+
+        Залежності:
+        - from utils.config import ENSEMBLE_CONFIG - для завантаження конфігурації
+        """
+        pass
+
+    def add_model(self, model, weight=1.0):
+        """
+        Додавання моделі до ансамблю.
+
+        Залежності:
+        - DeepLearningModel - перевірка типу моделі
+        """
+        pass
+
+    def train_all(self, X_train, y_train, X_val=None, y_val=None):
+        """
+        Навчання всіх моделей ансамблю.
+
+        Залежності:
+        - DeepLearningModel.train - для навчання кожної моделі
+        """
+        pass
+
+    def predict(self, X, method='weighted'):
+        """
+        Прогнозування за допомогою ансамблю моделей.
+
+        Залежності:
+        - from models.ensemble import weighted_average, voting - для методів ансамблювання
+        """
+        pass
+
+    def evaluate(self, X_test, y_test):
+        """
+        Оцінка якості ансамблю.
+
+        Залежності:
+        - DeepLearningModel.evaluate - для оцінки кожної моделі
+        """
+        pass
+
+
+def create_volatility_forecasting_model(config=None):
+    """
+    Створення спеціалізованої моделі для прогнозування волатильності.
+
+    Залежності:
+    - DeepLearningModel - для створення базової моделі
+    - from data_collection.feature_engineering import create_volatility_features - для створення ознак волатильності
+    - from models.time_series import extract_volatility - для вилучення волатильності
+    """
+    pass
+
+
+def create_trend_detection_model(config=None):
+    """
+    Створення спеціалізованої моделі для виявлення трендів.
+
+    Залежності:
+    - DeepLearningModel - для створення базової моделі
+    - from analysis.trend_detection import extract_trend_features - для вилучення ознак тренду
+    """
+    pass
+
+
+def create_multi_timeframe_model(symbols, timeframes, config=None):
+    """
+    Створення моделі, яка працює з кількома часовими масштабами.
+
+    Залежності:
+    - DeepLearningModel - для створення базових моделей
+    - from data_collection.binance_client import get_klines - для отримання даних
+    - from models.ensemble import combine_timeframes - для об'єднання моделей різних часових періодів
+    """
+    pass
+
+
+def load_crypto_model(symbol, model_type='lstm', custom_path=None):
+    """
+    Завантаження раніше навченої моделі для вказаного символу.
+
+    Залежності:
+    - DeepLearningModel.load - для завантаження моделі
+    - from data.db import get_model_path - для отримання шляху до моделі в БД
+    """
+    pass
