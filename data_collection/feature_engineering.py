@@ -2270,7 +2270,7 @@ def main(telegram_mode=False, bot=None, update=None, context=None):
             bot.send_message(chat_id=chat_id, text=load_msg)
 
         # Використовуємо db_manager для завантаження даних
-        data = fe.db_manager.get_historical_data(
+        data = fe.db_manager.get_klines_processed(
             symbol=symbol,
             start_date=start_date,
             end_date=end_date

@@ -6,6 +6,5 @@ from .fud_fomo_analyzer import FudFomoAnalyzer
 __all__ = [
     'CryptoSentimentAnalyzer',
     'InfluencerTracker',
-    'MemeCoinDetector',
-    'FudFomoAnalyzer'
+
 ]

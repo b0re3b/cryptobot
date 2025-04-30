@@ -9,7 +9,6 @@ import seaborn as sns
 
 # Internal imports
 from data.db import DatabaseManager
-from data_collection.binance_client import BinanceClient
 from data_collection.market_data_processor import MarketDataProcessor
 from utils.logger import setup_logger
 
@@ -42,7 +41,6 @@ class MarketCorrelation:
     def __init__(self):
 
         self.db_manager = DatabaseManager()
-        self.binance_client = BinanceClient()
         self.data_processor = MarketDataProcessor()
 
         logger.info("Ініціалізація аналізатора ринкової кореляції")
