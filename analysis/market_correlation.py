@@ -21,7 +21,6 @@ from data.db import DatabaseManager
 from data_collection.binance_client import BinanceClient
 from data_collection.market_data_processor import MarketDataProcessor
 from utils.logger import setup_logger
-from utils.config import Config
 
 logger = setup_logger(__name__)
 
@@ -40,27 +39,66 @@ class MarketCorrelation:
     It also offers tools for cluster analysis, market segmentation, and correlation visualization.
     """
 
+    # Default configuration values
+    DEFAULT_CONFIG = {
+        'correlation_methods': ['pearson', 'kendall', 'spearman'],
+        'default_correlation_method': 'pearson',
+        'default_timeframe': '1d',
+        'default_correlation_window': 30,
+        'correlation_threshold': 0.7,
+        'anticorrelation_threshold': -0.7,
+        'breakdown_threshold': 0.3,
+        'default_n_clusters': 3,
+        'default_prediction_horizon': 1,
+        'default_lookback_days': 365,
+        'default_lag_periods': [1, 3, 5, 7],
+        'target_portfolio_correlation': 0.3,
+        'visualization': {
+            'heatmap_colormap': 'coolwarm',
+            'network_node_size': 300,
+            'default_figsize': (12, 10)
+        }
+    }
+
     def __init__(self, db_manager: Optional[DatabaseManager] = None,
                  binance_client: Optional[BinanceClient] = None,
-                 config: Optional[Config] = None):
+                 custom_config: Optional[Dict] = None):
         """
         Initialize the MarketCorrelation analyzer.
 
         Args:
             db_manager: Database manager for storing and retrieving correlation data
             binance_client: Client for fetching cryptocurrency data
-            config: Configuration for correlation analysis parameters
+            custom_config: Custom configuration parameters to override defaults
         """
-        self.db_manager = db_manager or DatabaseManager()
-        self.binance_client = binance_client or BinanceClient()
-        self.config = config or Config()
+        self.db_manager = DatabaseManager()
+        self.binance_client = BinanceClient()
         self.data_processor = MarketDataProcessor()
 
+        # Initialize configuration with defaults and override with custom config if provided
+        self.config = self.DEFAULT_CONFIG.copy()
+        if custom_config:
+            self._update_config_recursive(self.config, custom_config)
+
+    def _update_config_recursive(self, target_dict: Dict, source_dict: Dict) -> None:
+        """
+        Recursively update configuration dictionary.
+
+        Args:
+            target_dict: Target dictionary to update
+            source_dict: Source dictionary with new values
+        """
+        for key, value in source_dict.items():
+            if key in target_dict and isinstance(target_dict[key], dict) and isinstance(value, dict):
+                self._update_config_recursive(target_dict[key], value)
+            else:
+                target_dict[key] = value
+
     def calculate_price_correlation(self, symbols: List[str],
-                                    timeframe: str = '1d',
+                                    timeframe: str = None,
                                     start_time: Optional[datetime] = None,
                                     end_time: Optional[datetime] = None,
-                                    method: str = 'pearson') -> pd.DataFrame:
+                                    method: str = None) -> pd.DataFrame:
         """
         Calculate price correlation matrix between specified cryptocurrency symbols.
 
@@ -74,13 +112,16 @@ class MarketCorrelation:
         Returns:
             Correlation matrix as a pandas DataFrame
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        method = method or self.config['default_correlation_method']
         pass
 
     def calculate_volume_correlation(self, symbols: List[str],
-                                     timeframe: str = '1d',
+                                     timeframe: str = None,
                                      start_time: Optional[datetime] = None,
                                      end_time: Optional[datetime] = None,
-                                     method: str = 'pearson') -> pd.DataFrame:
+                                     method: str = None) -> pd.DataFrame:
         """
         Calculate trading volume correlation matrix between cryptocurrency symbols.
 
@@ -94,14 +135,17 @@ class MarketCorrelation:
         Returns:
             Volume correlation matrix as a pandas DataFrame
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        method = method or self.config['default_correlation_method']
         pass
 
     def calculate_returns_correlation(self, symbols: List[str],
-                                      timeframe: str = '1d',
+                                      timeframe: str = None,
                                       start_time: Optional[datetime] = None,
                                       end_time: Optional[datetime] = None,
                                       period: int = 1,
-                                      method: str = 'pearson') -> pd.DataFrame:
+                                      method: str = None) -> pd.DataFrame:
         """
         Calculate return correlation matrix between cryptocurrency symbols.
 
@@ -116,14 +160,17 @@ class MarketCorrelation:
         Returns:
             Returns correlation matrix as a pandas DataFrame
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        method = method or self.config['default_correlation_method']
         pass
 
     def calculate_volatility_correlation(self, symbols: List[str],
-                                         timeframe: str = '1d',
+                                         timeframe: str = None,
                                          start_time: Optional[datetime] = None,
                                          end_time: Optional[datetime] = None,
-                                         window: int = 14,
-                                         method: str = 'pearson') -> pd.DataFrame:
+                                         window: int = None,
+                                         method: str = None) -> pd.DataFrame:
         """
         Calculate volatility correlation matrix between cryptocurrency symbols.
 
@@ -138,10 +185,14 @@ class MarketCorrelation:
         Returns:
             Volatility correlation matrix as a pandas DataFrame
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        window = window or self.config['default_correlation_window']
+        method = method or self.config['default_correlation_method']
         pass
 
     def get_correlated_pairs(self, correlation_matrix: pd.DataFrame,
-                             threshold: float = 0.7) -> List[Tuple[str, str, float]]:
+                             threshold: float = None) -> List[Tuple[str, str, float]]:
         """
         Find highly correlated cryptocurrency pairs from a correlation matrix.
 
@@ -152,10 +203,12 @@ class MarketCorrelation:
         Returns:
             List of tuples containing (symbol1, symbol2, correlation_value)
         """
+        # Use default threshold from config if not specified
+        threshold = threshold or self.config['correlation_threshold']
         pass
 
     def get_anticorrelated_pairs(self, correlation_matrix: pd.DataFrame,
-                                 threshold: float = -0.7) -> List[Tuple[str, str, float]]:
+                                 threshold: float = None) -> List[Tuple[str, str, float]]:
         """
         Find highly anti-correlated cryptocurrency pairs from a correlation matrix.
 
@@ -166,14 +219,16 @@ class MarketCorrelation:
         Returns:
             List of tuples containing (symbol1, symbol2, correlation_value)
         """
+        # Use default threshold from config if not specified
+        threshold = threshold or self.config['anticorrelation_threshold']
         pass
 
     def calculate_rolling_correlation(self, symbol1: str, symbol2: str,
-                                      timeframe: str = '1d',
+                                      timeframe: str = None,
                                       start_time: Optional[datetime] = None,
                                       end_time: Optional[datetime] = None,
-                                      window: int = 30,
-                                      method: str = 'pearson') -> pd.Series:
+                                      window: int = None,
+                                      method: str = None) -> pd.Series:
         """
         Calculate rolling correlation between two cryptocurrencies over time.
 
@@ -189,14 +244,18 @@ class MarketCorrelation:
         Returns:
             Time series of rolling correlation
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        window = window or self.config['default_correlation_window']
+        method = method or self.config['default_correlation_method']
         pass
 
     def detect_correlation_breakdowns(self, symbol1: str, symbol2: str,
-                                      timeframe: str = '1d',
+                                      timeframe: str = None,
                                       start_time: Optional[datetime] = None,
                                       end_time: Optional[datetime] = None,
-                                      window: int = 30,
-                                      threshold: float = 0.3) -> List[datetime]:
+                                      window: int = None,
+                                      threshold: float = None) -> List[datetime]:
         """
         Detect points where correlation between two normally correlated assets breaks down.
 
@@ -212,13 +271,17 @@ class MarketCorrelation:
         Returns:
             List of datetime objects where correlation breakdowns occurred
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        window = window or self.config['default_correlation_window']
+        threshold = threshold or self.config['breakdown_threshold']
         pass
 
     def identify_market_clusters(self, symbols: List[str],
-                                 timeframe: str = '1d',
+                                 timeframe: str = None,
                                  start_time: Optional[datetime] = None,
                                  end_time: Optional[datetime] = None,
-                                 n_clusters: int = 3,
+                                 n_clusters: int = None,
                                  feature_type: str = 'returns') -> Dict[int, List[str]]:
         """
         Identify clusters of cryptocurrencies that move together using clustering algorithms.
@@ -234,13 +297,16 @@ class MarketCorrelation:
         Returns:
             Dictionary mapping cluster IDs to lists of symbols
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        n_clusters = n_clusters or self.config['default_n_clusters']
         pass
 
     def calculate_market_beta(self, symbol: str, market_symbol: str = 'BTCUSDT',
-                              timeframe: str = '1d',
+                              timeframe: str = None,
                               start_time: Optional[datetime] = None,
                               end_time: Optional[datetime] = None,
-                              window: int = 30) -> Union[float, pd.Series]:
+                              window: int = None) -> Union[float, pd.Series]:
         """
         Calculate the beta coefficient of a cryptocurrency relative to a market benchmark.
 
@@ -260,6 +326,9 @@ class MarketCorrelation:
         Returns:
             Either a single beta value or a time series of rolling beta values
         """
+        # Use default values from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
+        window = window or self.config['default_correlation_window']
         pass
 
     def correlation_heatmap(self, correlation_matrix: pd.DataFrame,
@@ -276,10 +345,13 @@ class MarketCorrelation:
         Returns:
             Matplotlib figure object
         """
+        # Use visualization config for styling
+        colormap = self.config['visualization']['heatmap_colormap']
+        figsize = self.config['visualization']['default_figsize']
         pass
 
     def network_graph(self, correlation_matrix: pd.DataFrame,
-                      threshold: float = 0.7,
+                      threshold: float = None,
                       title: str = "Cryptocurrency Correlation Network",
                       save_path: Optional[str] = None) -> plt.Figure:
         """
@@ -294,6 +366,10 @@ class MarketCorrelation:
         Returns:
             Matplotlib figure object
         """
+        # Use default threshold and visualization config for styling
+        threshold = threshold or self.config['correlation_threshold']
+        node_size = self.config['visualization']['network_node_size']
+        figsize = self.config['visualization']['default_figsize']
         pass
 
     def save_correlation_to_db(self, correlation_matrix: pd.DataFrame,
@@ -301,7 +377,7 @@ class MarketCorrelation:
                                timeframe: str,
                                start_time: datetime,
                                end_time: datetime,
-                               method: str = 'pearson') -> bool:
+                               method: str = None) -> bool:
         """
         Save correlation matrix to database for future reference.
 
@@ -316,13 +392,15 @@ class MarketCorrelation:
         Returns:
             True if successful, False otherwise
         """
+        # Use default method from config if not specified
+        method = method or self.config['default_correlation_method']
         pass
 
     def load_correlation_from_db(self, correlation_type: str,
                                  timeframe: str,
                                  start_time: datetime,
                                  end_time: datetime,
-                                 method: str = 'pearson') -> Optional[pd.DataFrame]:
+                                 method: str = None) -> Optional[pd.DataFrame]:
         """
         Load correlation matrix from database.
 
@@ -336,12 +414,14 @@ class MarketCorrelation:
         Returns:
             Correlation matrix DataFrame if found, None otherwise
         """
+        # Use default method from config if not specified
+        method = method or self.config['default_correlation_method']
         pass
 
     def correlation_time_series(self, symbols_pair: Tuple[str, str],
-                                correlation_window: int = 30,
-                                lookback_days: int = 365,
-                                timeframe: str = '1d') -> pd.Series:
+                                correlation_window: int = None,
+                                lookback_days: int = None,
+                                timeframe: str = None) -> pd.Series:
         """
         Get time series of correlation between two cryptocurrencies over time.
 
@@ -354,12 +434,16 @@ class MarketCorrelation:
         Returns:
             Time series of correlation values
         """
+        # Use default values from config if not specified
+        correlation_window = correlation_window or self.config['default_correlation_window']
+        lookback_days = lookback_days or self.config['default_lookback_days']
+        timeframe = timeframe or self.config['default_timeframe']
         pass
 
     def find_leading_indicators(self, target_symbol: str,
                                 candidate_symbols: List[str],
-                                lag_periods: List[int] = [1, 3, 5, 7],
-                                timeframe: str = '1d',
+                                lag_periods: List[int] = None,
+                                timeframe: str = None,
                                 start_time: Optional[datetime] = None,
                                 end_time: Optional[datetime] = None) -> Dict[str, Dict[int, float]]:
         """
@@ -378,10 +462,13 @@ class MarketCorrelation:
         Returns:
             Dictionary mapping symbols to dictionaries of lag periods and correlation values
         """
+        # Use default values from config if not specified
+        lag_periods = lag_periods or self.config['default_lag_periods']
+        timeframe = timeframe or self.config['default_timeframe']
         pass
 
     def sector_correlation_analysis(self, sector_mapping: Dict[str, str],
-                                    timeframe: str = '1d',
+                                    timeframe: str = None,
                                     start_time: Optional[datetime] = None,
                                     end_time: Optional[datetime] = None) -> Dict[str, Dict[str, float]]:
         """
@@ -396,12 +483,14 @@ class MarketCorrelation:
         Returns:
             Dictionary mapping each sector to its correlation with other sectors
         """
+        # Use default timeframe from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
         pass
 
     def correlated_movement_prediction(self, symbol: str,
                                        correlated_symbols: List[str],
-                                       prediction_horizon: int = 1,
-                                       timeframe: str = '1d') -> Dict[str, float]:
+                                       prediction_horizon: int = None,
+                                       timeframe: str = None) -> Dict[str, float]:
         """
         Predict potential movement of target symbol based on highly correlated symbols.
 
@@ -414,11 +503,14 @@ class MarketCorrelation:
         Returns:
             Dictionary with prediction metrics and potential movement
         """
+        # Use default values from config if not specified
+        prediction_horizon = prediction_horizon or self.config['default_prediction_horizon']
+        timeframe = timeframe or self.config['default_timeframe']
         pass
 
     def get_decorrelated_portfolio(self, symbols: List[str],
-                                   target_correlation: float = 0.3,
-                                   timeframe: str = '1d',
+                                   target_correlation: float = None,
+                                   timeframe: str = None,
                                    start_time: Optional[datetime] = None,
                                    end_time: Optional[datetime] = None) -> Dict[str, float]:
         """
@@ -434,11 +526,14 @@ class MarketCorrelation:
         Returns:
             Dictionary mapping symbols to suggested portfolio weights
         """
+        # Use default values from config if not specified
+        target_correlation = target_correlation or self.config['target_portfolio_correlation']
+        timeframe = timeframe or self.config['default_timeframe']
         pass
 
     def analyze_market_regime_correlations(self, symbols: List[str],
                                            market_regimes: Dict[Tuple[datetime, datetime], str],
-                                           timeframe: str = '1d') -> Dict[str, Dict[str, pd.DataFrame]]:
+                                           timeframe: str = None) -> Dict[str, Dict[str, pd.DataFrame]]:
         """
         Analyze how correlations between cryptocurrencies change in different market regimes.
 
@@ -450,11 +545,13 @@ class MarketCorrelation:
         Returns:
             Dictionary mapping regime names to correlation matrices
         """
+        # Use default timeframe from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
         pass
 
     def correlation_with_external_assets(self, crypto_symbols: List[str],
                                          external_data: Dict[str, pd.Series],
-                                         timeframe: str = '1d',
+                                         timeframe: str = None,
                                          start_time: Optional[datetime] = None,
                                          end_time: Optional[datetime] = None) -> pd.DataFrame:
         """
@@ -470,4 +567,6 @@ class MarketCorrelation:
         Returns:
             Correlation matrix of cryptocurrencies vs external assets
         """
+        # Use default timeframe from config if not specified
+        timeframe = timeframe or self.config['default_timeframe']
         pass
