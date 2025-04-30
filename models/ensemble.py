@@ -1,478 +1,532 @@
+"""
+Ensemble модуль для об'єднання різних моделей прогнозування криптовалют.
+
+Цей модуль включає класи та методи для створення ансамблів моделей, 
+що об'єднують різні підходи до прогнозування для досягнення вищої точності.
+
+Залежності від інших модулів:
+- models/time_series.py - для використання моделей часових рядів
+- models/deep_learning.py - для використання нейронних мереж
+- models/sentiment_models.py - для інтеграції з моделями настроїв
+- data/db.py - для збереження/завантаження моделей
+- utils/logger.py - для логування
+- utils/config.py - для конфігурації
+- analysis/market_correlation.py - для аналізу кореляцій між криптовалютами
+- analysis/trend_detection.py - для виявлення ринкових трендів
+"""
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Optional, Union, Tuple
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, VotingRegressor
+from typing import List, Dict, Tuple, Union, Optional, Any, Callable
+from sklearn.ensemble import VotingRegressor, StackingRegressor
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-import joblib
 
 
-class EnsembleModels:
+class EnsembleModel:
     """
-    Клас для створення та використання ансамблів моделей для підвищення точності прогнозів.
+    Клас для створення та використання ансамблю моделей для прогнозування криптовалют.
+
+    Принципи роботи:
+    1. Об'єднання прогнозів різних моделей (ARIMA, LSTM, GRU, технічні індикатори)
+    2. Динамічне зважування моделей на основі їх точності в різних ринкових умовах
+    3. Мета-навчання для оптимального комбінування прогнозів
+    4. Адаптація до різних часових інтервалів і ринкових режимів
+
+    Залежності:
+    - models/time_series.py: для використання ARIMA/SARIMA моделей
+    - models/deep_learning.py: для використання нейронних мереж
+    - models/realtime_technical_indicators.py: для сигналів на основі тех. індикаторів
+    - models/sentiment_models.py: для інтеграції прогнозів на основі настроїв
+    - analysis/market_correlation.py: для врахування кореляцій між криптовалютами
+    - analysis/trend_detection.py: для визначення поточного тренду
+    - utils/logger.py: для логування
+    - utils/config.py: для отримання конфігурації за замовчуванням
     """
 
-    def __init__(self, log_level=logging.INFO):
+    def __init__(self, config=None):
         """
-        Ініціалізація класу ансамблів моделей.
+        Ініціалізація ансамблю моделей.
 
-        Args:
-            log_level: Рівень логування
+        Використовує:
+        - utils/config.py: ENSEMBLE_CONFIG - для завантаження конфігурації
+        - utils/logger.py: setup_logger - для налаштування логування
         """
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(log_level)
         self.models = {}
-        self.base_models = {}
+        self.weights = {}
+        self.meta_model = None
+        self.config = config
+        self.logger = None  # Буде ініціалізовано з utils/logger.py
+        # Додаткові параметри з конфігурації
 
-    def add_base_model(self, model_key: str, model) -> None:
+    def add_model(self, model_id: str, model: Any, initial_weight: float = 1.0) -> None:
         """
-        Додавання базової моделі до ансамблю.
+        Додавання моделі до ансамблю.
 
-        Args:
-            model_key: Ключ для ідентифікації моделі
-            model: Об'єкт моделі (повинен мати методи fit, predict)
+        Parameters:
+        -----------
+        model_id : str
+            Унікальний ідентифікатор моделі
+        model : Any
+            Модель прогнозування (повинна мати методи fit/predict)
+        initial_weight : float, optional
+            Початкова вага моделі в ансамблі (за замовчуванням 1.0)
         """
-        self.base_models[model_key] = model
+        pass
 
-    def create_voting_ensemble(self, models_dict: Dict, weights: Optional[List[float]] = None) -> VotingRegressor:
+    def remove_model(self, model_id: str) -> bool:
         """
-        Створення ансамблю на основі голосування.
+        Видалення моделі з ансамблю.
 
-        Args:
-            models_dict: Словник з моделями {ключ: модель}
-            weights: Список вагів для кожної моделі (опціонально)
+        Parameters:
+        -----------
+        model_id : str
+            Унікальний ідентифікатор моделі для видалення
 
         Returns:
-            Об'єкт VotingRegressor
+        --------
+        bool
+            True, якщо модель успішно видалена, False інакше
         """
-        models_list = [(key, model) for key, model in models_dict.items()]
-        return VotingRegressor(estimators=models_list, weights=weights)
+        pass
 
-    def create_stacking_ensemble(self, base_models_dict: Dict, meta_model=None) -> object:
+    def fit(self, X, y, **kwargs) -> None:
         """
-        Створення ансамблю на основі стекінгу.
+        Навчання всіх моделей в ансамблі.
 
-        Args:
-            base_models_dict: Словник з базовими моделями
-            meta_model: Метамодель для стекінгу (за замовчуванням GradientBoostingRegressor)
+        Parameters:
+        -----------
+        X : pandas.DataFrame або numpy.ndarray
+            Вхідні дані для навчання
+        y : pandas.Series або numpy.ndarray
+            Цільові значення для навчання
+        **kwargs:
+            Додаткові параметри для передачі моделям
+
+        Використовує:
+        - utils/logger.py: setup_logger - для логування процесу навчання
+        """
+        pass
+
+    def predict(self, X) -> np.ndarray:
+        """
+        Прогнозування з використанням зважених прогнозів всіх моделей.
+
+        Parameters:
+        -----------
+        X : pandas.DataFrame або numpy.ndarray
+            Вхідні дані для прогнозування
 
         Returns:
-            Об'єкт моделі стекінгу
+        --------
+        numpy.ndarray
+            Прогнозовані значення
         """
-        from sklearn.ensemble import StackingRegressor
+        pass
 
-        if meta_model is None:
-            meta_model = GradientBoostingRegressor(n_estimators=100)
-
-        models_list = [(key, model) for key, model in base_models_dict.items()]
-
-        return StackingRegressor(
-            estimators=models_list,
-            final_estimator=meta_model
-        )
-
-    def fit_ensemble(self, ensemble_key: str, model, X_train: pd.DataFrame, y_train: pd.Series) -> None:
+    def update_weights(self, X_val, y_val, method: str = 'performance_based') -> Dict[str, float]:
         """
-        Навчання ансамблю моделей.
+        Оновлення вагів моделей на основі їх продуктивності.
 
-        Args:
-            ensemble_key: Ключ для збереження навченої моделі
-            model: Об'єкт ансамблевої моделі
-            X_train, y_train: Тренувальні дані
-        """
-        try:
-            model.fit(X_train, y_train)
-            self.models[ensemble_key] = model
-            self.logger.info(f"Ансамбль {ensemble_key} успішно навчено")
-        except Exception as e:
-            self.logger.error(f"Помилка при навчанні ансамблю {ensemble_key}: {e}")
-
-    def create_and_fit_weighted_ensemble(self, ensemble_key: str,
-                                         base_models_dict: Dict,
-                                         X_train: pd.DataFrame,
-                                         y_train: pd.Series,
-                                         X_val: pd.DataFrame = None,
-                                         y_val: pd.Series = None) -> Dict:
-        """
-        Створення та навчання зваженого ансамблю з оптимізацією вагів.
-
-        Args:
-            ensemble_key: Ключ для ансамблю
-            base_models_dict: Словник базових моделей
-            X_train, y_train: Тренувальні дані
-            X_val, y_val: Валідаційні дані для оптимізації вагів
+        Parameters:
+        -----------
+        X_val : pandas.DataFrame або numpy.ndarray
+            Вхідні дані для валідації
+        y_val : pandas.Series або numpy.ndarray
+            Фактичні цільові значення для порівняння
+        method : str, optional
+            Метод перерахунку вагів: 'performance_based', 'equal', 'market_regime'
 
         Returns:
-            Словник з результатами
+        --------
+        Dict[str, float]
+            Словник з оновленими вагами для кожної моделі
+
+        Використовує:
+        - analysis/trend_detection.py: detect_market_regime - для визначення поточного режиму ринку
         """
-        # Якщо валідаційні дані не вказані, використовуємо частину тренувальних
-        if X_val is None or y_val is None:
-            from sklearn.model_selection import train_test_split
-            X_train, X_val, y_train, y_val = train_test_split(
-                X_train, y_train, test_size=0.2, random_state=42
-            )
+        pass
 
-        # Отримання прогнозів від кожної базової моделі на валідаційних даних
-        predictions = {}
-        for key, model in base_models_dict.items():
-            model.fit(X_train, y_train)
-            predictions[key] = model.predict(X_val)
-
-        # Оптимізація вагів за допомогою мінімізації MSE
-        from scipy.optimize import minimize
-
-        def objective(weights):
-            # Нормалізація вагів для суми 1
-            weights = np.array(weights)
-            weights = weights / np.sum(weights)
-
-            # Зважене поєднання прогнозів
-            weighted_predictions = np.zeros_like(y_val)
-            for i, key in enumerate(predictions.keys()):
-                weighted_predictions += weights[i] * predictions[key]
-
-            # Розрахунок MSE
-            return mean_squared_error(y_val, weighted_predictions)
-
-        # Початкові значення рівних вагів
-        initial_weights = [1.0 / len(base_models_dict)] * len(base_models_dict)
-
-        # Обмеження: всі ваги невід'ємні
-        constraints = {'type': 'ineq', 'fun': lambda w: w}
-
-        # Оптимізація
-        result = minimize(
-            objective,
-            initial_weights,
-            method='SLSQP',
-            constraints=constraints
-        )
-
-        # Нормалізація оптимальних вагів
-        optimal_weights = result['x'] / np.sum(result['x'])
-
-        # Створення та навчання зваженого ансамблю
-        ensemble = self.create_voting_ensemble(base_models_dict, weights=optimal_weights)
-        self.fit_ensemble(ensemble_key, ensemble, X_train, y_train)
-
-        return {
-            'model': ensemble,
-            'weights': dict(zip(base_models_dict.keys(), optimal_weights)),
-            'validation_mse': result['fun']
-        }
-
-    def predict(self, ensemble_key: str, X: pd.DataFrame) -> np.ndarray:
+    def save(self, path: str = None) -> None:
         """
-        Прогнозування з використанням ансамблю.
+        Збереження ансамблю моделей.
 
-        Args:
-            ensemble_key: Ключ ансамблю
-            X: Дані для прогнозування
+        Parameters:
+        -----------
+        path : str, optional
+            Шлях для збереження ансамблю. Якщо None, використовується шлях за замовчуванням
+
+        Використовує:
+        - data/db.py: save_ensemble_metadata - для збереження метаданих
+        """
+        pass
+
+    def load(self, path: str) -> None:
+        """
+        Завантаження ансамблю моделей.
+
+        Parameters:
+        -----------
+        path : str
+            Шлях до збереженого ансамблю
+
+        Використовує:
+        - data/db.py: load_ensemble_metadata - для завантаження метаданих
+        """
+        pass
+
+    def evaluate(self, X_test, y_test, metrics: List[str] = None) -> Dict[str, float]:
+        """
+        Оцінка якості ансамблю моделей та окремих моделей.
+
+        Parameters:
+        -----------
+        X_test : pandas.DataFrame або numpy.ndarray
+            Тестові вхідні дані
+        y_test : pandas.Series або numpy.ndarray
+            Тестові цільові значення
+        metrics : List[str], optional
+            Список метрик для оцінки: 'mse', 'rmse', 'mae', 'mape', тощо
 
         Returns:
-            Прогнозні значення
+        --------
+        Dict[str, float]
+            Словник з оцінками за різними метриками
+
+        Використовує:
+        - models/time_series.py: evaluate_model - для розрахунку метрик
         """
-        if ensemble_key not in self.models:
-            self.logger.error(f"Ансамбль {ensemble_key} не знайдений")
-            return None
+        pass
 
-        try:
-            return self.models[ensemble_key].predict(X)
-        except Exception as e:
-            self.logger.error(f"Помилка прогнозування з ансамблем {ensemble_key}: {e}")
-            return None
-
-    def evaluate(self, ensemble_key: str, X_test: pd.DataFrame, y_test: pd.Series) -> Dict:
+    def cross_validate(self, X, y, n_splits: int = 5) -> Dict[str, List[float]]:
         """
-        Оцінка точності ансамблю.
+        Крос-валідація ансамблю моделей.
 
-        Args:
-            ensemble_key: Ключ ансамблю
-            X_test, y_test: Тестові дані
+        Parameters:
+        -----------
+        X : pandas.DataFrame або numpy.ndarray
+            Вхідні дані
+        y : pandas.Series або numpy.ndarray
+            Цільові значення
+        n_splits : int, optional
+            Кількість розділів для крос-валідації (за замовчуванням 5)
 
         Returns:
-            Метрики точності
+        --------
+        Dict[str, List[float]]
+            Словник з результатами крос-валідації для кожної метрики
+
+        Використовує:
+        - sklearn.model_selection: TimeSeriesSplit - для розділення даних з урахуванням часового ряду
         """
-        predictions = self.predict(ensemble_key, X_test)
-        if predictions is None:
-            return None
+        pass
 
-        mse = mean_squared_error(y_test, predictions)
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(y_test, predictions)
-
-        return {
-            'mse': mse,
-            'rmse': rmse,
-            'mae': mae
-        }
-
-    def evaluate_all_models(self, X_test: pd.DataFrame, y_test: pd.Series) -> Dict[str, Dict]:
+    def train_meta_model(self, X, y, meta_algorithm: str = 'random_forest') -> None:
         """
-        Оцінка точності всіх ансамблів і базових моделей.
+        Навчання мета-моделі для оптимального об'єднання прогнозів.
 
-        Args:
-            X_test, y_test: Тестові дані
+        Parameters:
+        -----------
+        X : pandas.DataFrame або numpy.ndarray
+            Вхідні дані для навчання
+        y : pandas.Series або numpy.ndarray
+            Цільові значення для навчання
+        meta_algorithm : str, optional
+            Алгоритм для мета-моделі: 'random_forest', 'linear', 'gbm'
+
+        Використовує:
+        - sklearn.ensemble: RandomForestRegressor, GradientBoostingRegressor - для мета-навчання
+        """
+        pass
+
+    def combine_predictions(self, predictions: Dict[str, np.ndarray], method: str = 'weighted_average') -> np.ndarray:
+        """
+        Об'єднання прогнозів різних моделей.
+
+        Parameters:
+        -----------
+        predictions : Dict[str, np.ndarray]
+            Словник з прогнозами від різних моделей
+        method : str, optional
+            Метод об'єднання: 'weighted_average', 'meta_model', 'median'
 
         Returns:
-            Словник з метриками для всіх моделей
+        --------
+        numpy.ndarray
+            Об'єднаний прогноз
         """
-        results = {}
+        pass
 
-        # Оцінка базових моделей
-        for key, model in self.base_models.items():
-            try:
-                predictions = model.predict(X_test)
-                mse = mean_squared_error(y_test, predictions)
-                rmse = np.sqrt(mse)
-                mae = mean_absolute_error(y_test, predictions)
-
-                results[f"base_{key}"] = {
-                    'mse': mse,
-                    'rmse': rmse,
-                    'mae': mae
-                }
-            except Exception as e:
-                self.logger.error(f"Помилка при оцінці базової моделі {key}: {e}")
-
-        # Оцінка ансамблевих моделей
-        for key in self.models.keys():
-            result = self.evaluate(key, X_test, y_test)
-            if result:
-                results[key] = result
-
-        return results
-
-    def save_model(self, ensemble_key: str, filepath: str) -> bool:
+    def visualize_model_performance(self, X_test, y_test, show_individual: bool = True) -> None:
         """
-        Збереження ансамблю моделей на диск.
+        Візуалізація продуктивності ансамблю та окремих моделей.
 
-        Args:
-            ensemble_key: Ключ ансамблю
-            filepath: Шлях для збереження
+        Parameters:
+        -----------
+        X_test : pandas.DataFrame або numpy.ndarray
+            Тестові вхідні дані
+        y_test : pandas.Series або numpy.ndarray
+            Тестові цільові значення
+        show_individual : bool, optional
+            Чи відображати продуктивність окремих моделей (за замовчуванням True)
+
+        Використовує:
+        - chatbot/chart_generator.py: create_performance_chart - для генерації графіків
+        """
+        pass
+
+    def forecast(self, symbol: str, interval: str, periods: int, start_date: str = None) -> Dict[str, Any]:
+        """
+        Створення прогнозу для криптовалюти з використанням ансамблю моделей.
+
+        Parameters:
+        -----------
+        symbol : str
+            Символ криптовалюти (наприклад, 'BTCUSDT')
+        interval : str
+            Інтервал даних ('1h', '4h', '1d', тощо)
+        periods : int
+            Кількість періодів для прогнозування вперед
+        start_date : str, optional
+            Дата початку даних для прогнозування у форматі 'YYYY-MM-DD'
 
         Returns:
-            Успішність операції
+        --------
+        Dict[str, Any]
+            Словник з прогнозами та супутньою інформацією
+
+        Використовує:
+        - data/db.py: get_processed_klines - для отримання даних
+        - data/db.py: save_forecast_to_db - для збереження прогнозу
         """
-        if ensemble_key not in self.models:
-            self.logger.error(f"Ансамбль {ensemble_key} не знайдений")
-            return False
+        pass
 
-        try:
-            joblib.dump(self.models[ensemble_key], filepath)
-            self.logger.info(f"Ансамбль {ensemble_key} збережено у {filepath}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка при збереженні ансамблю {ensemble_key}: {e}")
-            return False
-
-    def load_model(self, ensemble_key: str, filepath: str) -> bool:
+    def combine_with_sentiment(self, forecast: pd.DataFrame, sentiment_data: pd.DataFrame) -> pd.DataFrame:
         """
-        Завантаження збереженого ансамблю моделей.
+        Об'єднання технічного прогнозу з даними про настрої.
 
-        Args:
-            ensemble_key: Ключ для збереження ансамблю
-            filepath: Шлях до файлу моделі
+        Parameters:
+        -----------
+        forecast : pandas.DataFrame
+            Дані прогнозу на основі технічного аналізу
+        sentiment_data : pandas.DataFrame
+            Дані про настрої ринку
 
         Returns:
-            Успішність операції
-        """
-        try:
-            self.models[ensemble_key] = joblib.load(filepath)
-            self.logger.info(f"Ансамбль {ensemble_key} завантажено з {filepath}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Помилка при завантаженні ансамблю з {filepath}: {e}")
-            return False
+        --------
+        pandas.DataFrame
+            Об'єднаний прогноз з урахуванням настроїв
 
-    def get_feature_importance(self, ensemble_key: str, features: List[str] = None) -> pd.DataFrame:
+        Використовує:
+        - models/sentiment_models.py: get_sentiment_score - для отримання оцінки настроїв
+        - analysis/market_correlation.py: correlate_with_sentiment - для аналізу кореляцій
         """
-        Отримання важливості ознак для ансамблю.
+        pass
 
-        Args:
-            ensemble_key: Ключ ансамблю
-            features: Список назв ознак
+    def combine_timeframes(self, predictions: Dict[str, pd.DataFrame], target_timeframe: str) -> pd.DataFrame:
+        """
+        Об'єднання прогнозів з різних часових інтервалів.
+
+        Parameters:
+        -----------
+        predictions : Dict[str, pandas.DataFrame]
+            Словник з прогнозами для різних часових інтервалів
+        target_timeframe : str
+            Цільовий часовий інтервал для прогнозу
 
         Returns:
-            DataFrame з важливістю ознак
+        --------
+        pandas.DataFrame
+            Об'єднаний прогноз у цільовому часовому інтервалі
+
+        Використовує:
+        - data_collection/data_resampler.py: resample_data - для перетворення часових рядів
         """
-        if ensemble_key not in self.models:
-            self.logger.error(f"Ансамбль {ensemble_key} не знайдений")
-            return None
+        pass
 
-        model = self.models[ensemble_key]
-
-        try:
-            # Для VotingRegressor отримуємо важливість ознак з базових моделей
-            if hasattr(model, 'estimators_'):
-                importances = np.zeros(len(features) if features else 1)
-
-                for estimator in model.estimators_:
-                    if hasattr(estimator, 'feature_importances_'):
-                        importances += estimator.feature_importances_
-
-                importances /= len(model.estimators_)
-
-                if features:
-                    return pd.DataFrame({'feature': features, 'importance': importances}).sort_values(
-                        'importance', ascending=False)
-                else:
-                    return pd.DataFrame({'importance': importances})
-
-            # Для StackingRegressor отримуємо важливість ознак з метамоделі
-            elif hasattr(model, 'final_estimator_') and hasattr(model.final_estimator_, 'feature_importances_'):
-                importances = model.final_estimator_.feature_importances_
-
-                if features:
-                    return pd.DataFrame({'feature': features, 'importance': importances}).sort_values(
-                        'importance', ascending=False)
-                else:
-                    return pd.DataFrame({'importance': importances})
-
-            else:
-                self.logger.warning(f"Неможливо отримати важливість ознак для ансамблю {ensemble_key}")
-                return None
-
-        except Exception as e:
-            self.logger.error(f"Помилка при отриманні важливості ознак для ансамблю {ensemble_key}: {e}")
-            return None
-
-    def create_bagging_ensemble(self, base_estimator, n_estimators: int = 10,
-                                max_samples: float = 0.8, max_features: float = 0.8,
-                                bootstrap: bool = True, random_state: int = 42) -> object:
+    def detect_market_regime(self, data: pd.DataFrame) -> str:
         """
-        Створення ансамблю на основі бегінгу.
+        Визначення поточного режиму ринку для адаптивного зважування моделей.
 
-        Args:
-            base_estimator: Базовий алгоритм
-            n_estimators: Кількість естіматорів в ансамблі
-            max_samples: Максимальна частка зразків для кожного естіматора
-            max_features: Максимальна частка ознак для кожного естіматора
-            bootstrap: Чи використовувати бутстреп
-            random_state: Ініціалізація генератора випадкових чисел
+        Parameters:
+        -----------
+        data : pandas.DataFrame
+            Дані для аналізу
 
         Returns:
-            Об'єкт BaggingRegressor
+        --------
+        str
+            Визначений режим ринку: 'trending_up', 'trending_down', 'range_bound', 'volatile'
+
+        Використовує:
+        - analysis/trend_detection.py: detect_trend - для виявлення тренду
+        - analysis/volatility_analysis.py: analyze_volatility - для аналізу волатильності
         """
-        from sklearn.ensemble import BaggingRegressor
+        pass
 
-        return BaggingRegressor(
-            base_estimator=base_estimator,
-            n_estimators=n_estimators,
-            max_samples=max_samples,
-            max_features=max_features,
-            bootstrap=bootstrap,
-            random_state=random_state
-        )
-
-    def create_boosting_ensemble(self, base_estimator=None, n_estimators: int = 100,
-                                 learning_rate: float = 0.1, loss: str = 'squared_error',
-                                 random_state: int = 42) -> object:
+    def dynamic_weighting(self, market_regime: str) -> Dict[str, float]:
         """
-        Створення ансамблю на основі бустінгу.
+        Динамічне зважування моделей в залежності від ринкового режиму.
 
-        Args:
-            base_estimator: Базовий алгоритм (за замовчуванням - дерево рішень)
-            n_estimators: Кількість естіматорів в ансамблі
-            learning_rate: Швидкість навчання
-            loss: Функція втрат
-            random_state: Ініціалізація генератора випадкових чисел
+        Parameters:
+        -----------
+        market_regime : str
+            Поточний режим ринку
 
         Returns:
-            Об'єкт AdaBoostRegressor або GradientBoostingRegressor
+        --------
+        Dict[str, float]
+            Словник з оновленими вагами для кожної моделі
         """
-        if base_estimator is None:
-            # Використовуємо GradientBoostingRegressor за замовчуванням
-            return GradientBoostingRegressor(
-                n_estimators=n_estimators,
-                learning_rate=learning_rate,
-                loss=loss,
-                random_state=random_state
-            )
-        else:
-            # Використовуємо AdaBoostRegressor з вказаним базовим естіматором
-            from sklearn.ensemble import AdaBoostRegressor
-            return AdaBoostRegressor(
-                base_estimator=base_estimator,
-                n_estimators=n_estimators,
-                learning_rate=learning_rate,
-                random_state=random_state
-            )
+        pass
 
-    def tune_ensemble_hyperparameters(self, ensemble_type: str, X_train: pd.DataFrame,
-                                      y_train: pd.Series, param_grid: Dict = None) -> Dict:
+    def create_adaptive_ensemble(self, base_models: List[Any], meta_features: List[str] = None) -> None:
         """
-        Оптимізація гіперпараметрів ансамблевої моделі.
+        Створення адаптивного ансамблю, який враховує додаткові мета-ознаки.
 
-        Args:
-            ensemble_type: Тип ансамблю ('voting', 'stacking', 'bagging', 'boosting')
-            X_train, y_train: Тренувальні дані
-            param_grid: Сітка гіперпараметрів для пошуку
+        Parameters:
+        -----------
+        base_models : List[Any]
+            Список базових моделей для ансамблю
+        meta_features : List[str], optional
+            Список додаткових мета-ознак для адаптації
+
+        Використовує:
+        - models/deep_learning.py: DeepLearningModel - для глибоких нейронних мереж
+        - models/time_series.py: fit_arima, fit_sarima - для моделей часових рядів
+        """
+        pass
+
+    def optimize_ensemble(self, X, y, param_grid: Dict[str, List[Any]] = None,
+                          optimization_metric: str = 'rmse', n_iterations: int = 50) -> Dict[str, Any]:
+        """
+        Оптимізація параметрів ансамблю.
+
+        Parameters:
+        -----------
+        X : pandas.DataFrame або numpy.ndarray
+            Вхідні дані для оптимізації
+        y : pandas.Series або numpy.ndarray
+            Цільові значення для оптимізації
+        param_grid : Dict[str, List[Any]], optional
+            Сітка параметрів для оптимізації
+        optimization_metric : str, optional
+            Метрика для оптимізації (за замовчуванням 'rmse')
+        n_iterations : int, optional
+            Кількість ітерацій для оптимізації (за замовчуванням 50)
 
         Returns:
-            Словник з найкращими параметрами та моделлю
+        --------
+        Dict[str, Any]
+            Найкращі знайдені параметри та результати
+
+        Використовує:
+        - sklearn.model_selection: RandomizedSearchCV - для пошуку параметрів
         """
-        from sklearn.model_selection import GridSearchCV
+        pass
 
-        # Визначення базової моделі в залежності від типу ансамблю
-        if ensemble_type == 'voting':
-            base_model = VotingRegressor(estimators=[('rf', RandomForestRegressor()),
-                                                     ('gb', GradientBoostingRegressor())])
-            if param_grid is None:
-                param_grid = {
-                    'weights': [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]]
-                }
 
-        elif ensemble_type == 'stacking':
-            base_model = self.create_stacking_ensemble(
-                {'rf': RandomForestRegressor(), 'gb': GradientBoostingRegressor()}
-            )
-            if param_grid is None:
-                param_grid = {
-                    'final_estimator__n_estimators': [50, 100, 150],
-                    'final_estimator__learning_rate': [0.05, 0.1, 0.2]
-                }
+def create_stacking_ensemble(base_models: List[Any], meta_learner: Any = None, cv: int = 5) -> StackingRegressor:
+    """
+    Створення ансамблю моделей з використанням методу стекінгу.
 
-        elif ensemble_type == 'bagging':
-            base_model = self.create_bagging_ensemble(RandomForestRegressor())
-            if param_grid is None:
-                param_grid = {
-                    'n_estimators': [10, 20, 30],
-                    'max_samples': [0.7, 0.8, 0.9],
-                    'max_features': [0.7, 0.8, 0.9]
-                }
+    Parameters:
+    -----------
+    base_models : List[Any]
+        Список базових моделей для ансамблю
+    meta_learner : Any, optional
+        Мета-модель для об'єднання прогнозів
+    cv : int, optional
+        Кількість блоків для крос-валідації (за замовчуванням 5)
 
-        elif ensemble_type == 'boosting':
-            base_model = self.create_boosting_ensemble()
-            if param_grid is None:
-                param_grid = {
-                    'n_estimators': [50, 100, 150],
-                    'learning_rate': [0.05, 0.1, 0.2],
-                    'max_depth': [3, 4, 5]
-                }
+    Returns:
+    --------
+    StackingRegressor
+        Об'єкт стекінг-регресора
 
-        else:
-            self.logger.error(f"Невідомий тип ансамблю: {ensemble_type}")
-            return None
+    Використовує:
+    - sklearn.ensemble: StackingRegressor - для створення стекінгу
+    """
+    pass
 
-        # Пошук оптимальних параметрів
-        grid_search = GridSearchCV(
-            base_model,
-            param_grid,
-            cv=5,
-            scoring='neg_mean_squared_error',
-            n_jobs=-1
-        )
 
-        try:
-            grid_search.fit(X_train, y_train)
+def create_voting_ensemble(models: List[Tuple[str, Any]], weights: List[float] = None) -> VotingRegressor:
+    """
+    Створення ансамблю моделей з використанням методу голосування.
 
-            return {
-                'best_params': grid_search.best_params_,
-                'best_model': grid_search.best_estimator_,
-                'best_score': -grid_search.best_score_  # перетворюємо назад у MSE
-            }
+    Parameters:
+    -----------
+    models : List[Tuple[str, Any]]
+        Список кортежів (ім'я_моделі, модель) для ансамблю
+    weights : List[float], optional
+        Список вагів для кожної моделі
 
-        except Exception as e:
-            self.logger.error(f"Помилка при оптимізації гіперпараметрів: {e}")
-            return None
+    Returns:
+    --------
+    VotingRegressor
+        Об'єкт голосуючого регресора
+
+    Використовує:
+    - sklearn.ensemble: VotingRegressor - для створення голосуючого регресора
+    """
+    pass
+
+
+def combine_time_series_with_ml(arima_model, ml_model: Any, data: pd.DataFrame,
+                                features: List[str], target: str) -> Dict[str, Any]:
+    """
+    Об'єднання моделі часового ряду (ARIMA/SARIMA) з ML моделлю.
+
+    Parameters:
+    -----------
+    arima_model : Any
+        Модель часового ряду (ARIMA/SARIMA)
+    ml_model : Any
+        ML модель (наприклад, LSTM, RandomForest)
+    data : pandas.DataFrame
+        Вхідні дані
+    features : List[str]
+        Список ознак для ML моделі
+    target : str
+        Цільова змінна для прогнозування
+
+    Returns:
+    --------
+    Dict[str, Any]
+        Результати об'єднання моделей
+
+    Використовує:
+    - models/time_series.py: forecast - для прогнозування з ARIMA
+    - models/deep_learning.py: DeepLearningModel.predict - для прогнозування з ML
+    """
+    pass
+
+
+def ensemble_backtest(ensemble_model: EnsembleModel, test_data: pd.DataFrame,
+                      initial_balance: float = 10000, transaction_fee: float = 0.001,
+                      strategy: str = 'simple') -> Dict[str, Any]:
+    """
+    Бектестінг ансамблю моделей на історичних даних.
+
+    Parameters:
+    -----------
+    ensemble_model : EnsembleModel
+        Ансамбль моделей для тестування
+    test_data : pandas.DataFrame
+        Тестові дані для бектестінгу
+    initial_balance : float, optional
+        Початковий баланс для симуляції (за замовчуванням 10000)
+    transaction_fee : float, optional
+        Комісія за транзакцію у відсотках (за замовчуванням 0.001)
+    strategy : str, optional
+        Торгова стратегія: 'simple', 'trend_following', 'mean_reversion'
+
+    Returns:
+    --------
+    Dict[str, Any]
+        Результати бектестінгу
+
+    Використовує:
+    - analysis/backtesting.py: run_backtest - для запуску бектесту
+    """
+    pass

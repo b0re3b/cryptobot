@@ -734,3 +734,173 @@ CREATE TRIGGER update_time_series_models_timestamp
 BEFORE UPDATE ON time_series_models
 FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
+
+-- Таблиця для збереження кореляційних матриць між криптовалютами
+CREATE TABLE IF NOT EXISTS correlation_matrices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    correlation_type VARCHAR(20) NOT NULL, -- 'price', 'volume', 'returns', 'volatility'
+    timeframe VARCHAR(10) NOT NULL, -- '1m', '5m', '15m', '1h', '4h', '1d', etc.
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    method VARCHAR(10) NOT NULL, -- 'pearson', 'kendall', 'spearman'
+    matrix_json TEXT NOT NULL, -- JSON представлення кореляційної матриці
+    symbols_list TEXT NOT NULL, -- JSON представлення списку символів
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(correlation_type, timeframe, start_time, end_time, method)
+);
+
+-- Індекс для швидкого пошуку кореляційних матриць
+CREATE INDEX IF NOT EXISTS idx_correlation_matrices_lookup
+ON correlation_matrices(correlation_type, timeframe, start_time, end_time, method);
+
+-- Таблиця для збереження пар криптовалют з високою кореляцією
+CREATE TABLE IF NOT EXISTS correlated_pairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol1 VARCHAR(20) NOT NULL,
+    symbol2 VARCHAR(20) NOT NULL,
+    correlation_value FLOAT NOT NULL,
+    correlation_type VARCHAR(20) NOT NULL, -- 'price', 'volume', 'returns', 'volatility'
+    timeframe VARCHAR(10) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol1, symbol2, correlation_type, timeframe, start_time, end_time, method)
+);
+
+-- Індекс для швидкого пошуку корельованих пар за символом
+CREATE INDEX IF NOT EXISTS idx_correlated_pairs_symbol1 ON correlated_pairs(symbol1, correlation_type);
+CREATE INDEX IF NOT EXISTS idx_correlated_pairs_symbol2 ON correlated_pairs(symbol2, correlation_type);
+
+-- Таблиця для збереження часових рядів кореляцій між парами криптовалют
+CREATE TABLE IF NOT EXISTS correlation_time_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol1 VARCHAR(20) NOT NULL,
+    symbol2 VARCHAR(20) NOT NULL,
+    correlation_type VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    window_size INTEGER NOT NULL, -- розмір вікна для обчислення кореляції
+    timestamp TIMESTAMP NOT NULL, -- час, для якого обчислена кореляція
+    correlation_value FLOAT NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol1, symbol2, correlation_type, timeframe, window_size, timestamp, method)
+);
+
+-- Індекс для швидкого пошуку часових рядів кореляцій
+CREATE INDEX IF NOT EXISTS idx_correlation_time_series_lookup
+ON correlation_time_series(symbol1, symbol2, correlation_type, timeframe, window_size);
+
+-- Таблиця для збереження кластерів криптовалют, які рухаються разом
+CREATE TABLE IF NOT EXISTS market_clusters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cluster_id INTEGER NOT NULL,
+    feature_type VARCHAR(20) NOT NULL, -- 'price', 'returns', 'volatility'
+    timeframe VARCHAR(10) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    symbols_list TEXT NOT NULL, -- JSON представлення списку символів у кластері
+    clustering_method VARCHAR(30) NOT NULL, -- метод кластеризації
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(cluster_id, feature_type, timeframe, start_time, end_time, clustering_method)
+);
+
+-- Таблиця для збереження моментів зламу кореляцій між парами криптовалют
+CREATE TABLE IF NOT EXISTS correlation_breakdowns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol1 VARCHAR(20) NOT NULL,
+    symbol2 VARCHAR(20) NOT NULL,
+    breakdown_time TIMESTAMP NOT NULL,
+    correlation_before FLOAT NOT NULL,
+    correlation_after FLOAT NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    window_size INTEGER NOT NULL,
+    threshold FLOAT NOT NULL, -- поріг зміни кореляції для визначення зламу
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol1, symbol2, breakdown_time, timeframe, window_size, method)
+);
+
+-- Таблиця для збереження бета-коефіцієнтів криптовалют відносно ринку
+CREATE TABLE IF NOT EXISTS market_betas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol VARCHAR(20) NOT NULL,
+    market_symbol VARCHAR(20) NOT NULL, -- звичайно 'BTCUSDT'
+    beta_value FLOAT NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, market_symbol, timeframe, start_time, end_time)
+);
+
+-- Таблиця для збереження часових рядів бета-коефіцієнтів
+CREATE TABLE IF NOT EXISTS beta_time_series (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol VARCHAR(20) NOT NULL,
+    market_symbol VARCHAR(20) NOT NULL,
+    timestamp TIMESTAMP NOT NULL,
+    beta_value FLOAT NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    window_size INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, market_symbol, timestamp, timeframe, window_size)
+);
+
+-- Таблиця для збереження кореляцій між секторами криптовалют
+CREATE TABLE IF NOT EXISTS sector_correlations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sector1 VARCHAR(50) NOT NULL,
+    sector2 VARCHAR(50) NOT NULL,
+    correlation_value FLOAT NOT NULL,
+    correlation_type VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(sector1, sector2, correlation_type, timeframe, start_time, end_time, method)
+);
+
+-- Таблиця для збереження провідних індикаторів
+CREATE TABLE IF NOT EXISTS leading_indicators (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_symbol VARCHAR(20) NOT NULL,
+    indicator_symbol VARCHAR(20) NOT NULL,
+    lag_period INTEGER NOT NULL,
+    correlation_value FLOAT NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(target_symbol, indicator_symbol, lag_period, timeframe, start_time, end_time, method)
+);
+
+-- Таблиця для збереження кореляцій з зовнішніми активами
+CREATE TABLE IF NOT EXISTS external_asset_correlations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    crypto_symbol VARCHAR(20) NOT NULL,
+    external_asset VARCHAR(50) NOT NULL,
+    correlation_value FLOAT NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(crypto_symbol, external_asset, timeframe, start_time, end_time, method)
+);
+
+-- Таблиця для збереження аналізу кореляцій у різних ринкових режимах
+CREATE TABLE IF NOT EXISTS market_regime_correlations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regime_name VARCHAR(50) NOT NULL,
+    start_time TIMESTAMP NOT NULL,
+    end_time TIMESTAMP NOT NULL,
+    correlation_type VARCHAR(20) NOT NULL,
+    matrix_json TEXT NOT NULL, -- JSON представлення кореляційної матриці
+    symbols_list TEXT NOT NULL, -- JSON представлення списку символів
+    method VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(regime_name, start_time, end_time, correlation_type, method)
+);
