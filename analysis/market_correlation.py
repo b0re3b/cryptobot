@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Optional, Union
-import logging
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,7 +12,8 @@ from data_collection.market_data_processor import MarketDataProcessor
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
-
+# таблиці які існують correlation_matrices correlated_pairs correlation_time_series market_clusters correlation_breakdowns market_betas
+#beta_time_series sector_correlations leading_indicators external_asset_correlations market_regime_correlations
 
 class MarketCorrelation:
 
@@ -41,8 +41,8 @@ class MarketCorrelation:
                  binance_client: Optional[BinanceClient] = None,
                  custom_config: Optional[Dict] = None):
 
-        self.db_manager = db_manager or DatabaseManager()
-        self.binance_client = binance_client or BinanceClient()
+        self.db_manager = DatabaseManager()
+        self.binance_client = BinanceClient()
         self.data_processor = MarketDataProcessor()
 
         logger.info("Ініціалізація аналізатора ринкової кореляції")
@@ -478,6 +478,7 @@ class MarketCorrelation:
         except Exception as e:
             logger.error(f"Error calculating rolling correlation: {str(e)}")
             raise
+
     def detect_correlation_breakdowns(self, symbol1: str, symbol2: str,
                                       timeframe: str = None,
                                       start_time: Optional[datetime] = None,
@@ -503,7 +504,51 @@ class MarketCorrelation:
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
         threshold = threshold or self.config['breakdown_threshold']
-        pass
+
+        logger.info(f"Detecting correlation breakdowns between {symbol1} and {symbol2} with threshold {threshold}")
+
+        try:
+            # Calculate rolling correlation between the two symbols
+            rolling_corr = self.calculate_rolling_correlation(
+                symbol1=symbol1,
+                symbol2=symbol2,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time,
+                window=window
+            )
+
+            # Calculate absolute changes in correlation
+            correlation_changes = rolling_corr.diff().abs()
+
+            # Identify points where correlation changes more than the threshold
+            breakdown_points = correlation_changes[correlation_changes > threshold].index.tolist()
+
+            logger.info(f"Found {len(breakdown_points)} correlation breakdown points")
+
+            # Save breakdown data to database
+            breakdown_data = []
+            for point in breakdown_points:
+                breakdown_data.append({
+                    'timestamp': point,
+                    'symbol1': symbol1,
+                    'symbol2': symbol2,
+                    'correlation_before': rolling_corr.loc[rolling_corr.index < point].iloc[-1] if not rolling_corr.loc[
+                        rolling_corr.index < point].empty else None,
+                    'correlation_after': rolling_corr.loc[point],
+                    'change_magnitude': correlation_changes.loc[point]
+                })
+
+            # Save to correlation_breakdowns table
+            if breakdown_data:
+                self.db_manager.save_correlation_breakdowns(breakdown_data)
+                logger.debug(f"Saved {len(breakdown_data)} breakdown points to database")
+
+            return breakdown_points
+
+        except Exception as e:
+            logger.error(f"Error detecting correlation breakdowns: {str(e)}")
+            raise
 
     def identify_market_clusters(self, symbols: List[str],
                                  timeframe: str = None,
@@ -528,7 +573,101 @@ class MarketCorrelation:
         # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
         n_clusters = n_clusters or self.config['default_n_clusters']
-        pass
+
+        logger.info(f"Identifying market clusters for {len(symbols)} symbols using {feature_type} data")
+
+        # Set default time range if not specified
+        end_time = end_time or datetime.now()
+        if start_time is None:
+            lookback_days = self.config['default_lookback_days']
+            start_time = end_time - timedelta(days=lookback_days)
+
+        try:
+            # Fetch data for all symbols
+            data_dict = {}
+            for symbol in symbols:
+                data_dict[symbol] = self.db_manager.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+            # Create appropriate feature matrix based on feature_type
+            feature_matrix = pd.DataFrame()
+
+            if feature_type == 'price':
+                # Use normalized price series
+                for symbol, data in data_dict.items():
+                    prices = data['close']
+                    # Normalize to start from 1.0
+                    feature_matrix[symbol] = prices / prices.iloc[0] if not prices.empty else pd.Series()
+
+            elif feature_type == 'returns':
+                # Use return series
+                for symbol, data in data_dict.items():
+                    prices = data['close']
+                    returns = prices.pct_change().dropna()
+                    feature_matrix[symbol] = returns
+
+            elif feature_type == 'volatility':
+                window = self.config['default_correlation_window']
+                # Calculate rolling volatility
+                for symbol, data in data_dict.items():
+                    prices = data['close']
+                    returns = prices.pct_change().dropna()
+                    feature_matrix[symbol] = returns.rolling(window=window).std().dropna()
+
+            # Drop rows with missing values
+            feature_matrix = feature_matrix.dropna()
+
+            if feature_matrix.empty:
+                logger.warning("Empty feature matrix after preprocessing, cannot perform clustering")
+                return {}
+
+            # Apply standardization to features
+            from sklearn.preprocessing import StandardScaler
+            scaler = StandardScaler()
+            scaled_features = scaler.fit_transform(feature_matrix)
+
+            # Apply clustering algorithm (KMeans)
+            from sklearn.cluster import KMeans
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            cluster_labels = kmeans.fit_predict(scaled_features)
+
+            # Create result dictionary
+            clusters = {}
+            for i in range(n_clusters):
+                clusters[i] = []
+
+            # Assign symbols to clusters
+            for i, symbol in enumerate(feature_matrix.columns):
+                cluster_id = kmeans.labels_[i]
+                clusters[cluster_id].append(symbol)
+
+            # Save clustering results to database
+            cluster_records = []
+            for cluster_id, cluster_symbols in clusters.items():
+                for symbol in cluster_symbols:
+                    cluster_records.append({
+                        'cluster_id': cluster_id,
+                        'symbol': symbol,
+                        'feature_type': feature_type,
+                        'timeframe': timeframe,
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'analysis_time': datetime.now()
+                    })
+
+            # Save to market_clusters table
+            self.db_manager.save_market_clusters(cluster_records)
+            logger.info(f"Saved {len(cluster_records)} cluster records to database")
+
+            return clusters
+
+        except Exception as e:
+            logger.error(f"Error identifying market clusters: {str(e)}")
+            raise
 
     def calculate_market_beta(self, symbol: str, market_symbol: str = 'BTCUSDT',
                               timeframe: str = None,
@@ -557,7 +696,95 @@ class MarketCorrelation:
         # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
-        pass
+
+        logger.info(f"Calculating market beta for {symbol} relative to {market_symbol}")
+
+        # Set default time range if not specified
+        end_time = end_time or datetime.now()
+        if start_time is None:
+            lookback_days = self.config['default_lookback_days']
+            start_time = end_time - timedelta(days=lookback_days)
+
+        try:
+            # Fetch price data for asset and market benchmark
+            asset_data = self.db_manager.get_klines(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            market_data = self.db_manager.get_klines(
+                symbol=market_symbol,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            # Calculate returns
+            asset_prices = asset_data['close']
+            market_prices = market_data['close']
+
+            # Align time series
+            df = pd.DataFrame({
+                'asset': asset_prices,
+                'market': market_prices
+            })
+
+            # Calculate returns
+            returns = df.pct_change().dropna()
+
+            # If window is specified, calculate rolling beta
+            if window:
+                # Calculate rolling covariance and market variance
+                rolling_cov = returns['asset'].rolling(window=window).cov(returns['market'])
+                rolling_market_var = returns['market'].rolling(window=window).var()
+
+                # Calculate rolling beta
+                rolling_beta = rolling_cov / rolling_market_var
+
+                # Save beta time series to database
+                beta_records = []
+                for timestamp, beta_value in rolling_beta.items():
+                    if not np.isnan(beta_value) and not np.isinf(beta_value):
+                        beta_records.append({
+                            'timestamp': timestamp,
+                            'symbol': symbol,
+                            'market_symbol': market_symbol,
+                            'beta': beta_value,
+                            'timeframe': timeframe,
+                            'window': window
+                        })
+
+                # Save to beta_time_series table
+                if beta_records:
+                    self.db_manager.save_beta_time_series(beta_records)
+                    logger.debug(f"Saved {len(beta_records)} beta values to database")
+
+                return rolling_beta
+            else:
+                # Calculate overall beta
+                beta = np.cov(returns['asset'], returns['market'])[0, 1] / np.var(returns['market'])
+
+                # Save to market_betas table
+                beta_record = {
+                    'symbol': symbol,
+                    'market_symbol': market_symbol,
+                    'beta': beta,
+                    'timeframe': timeframe,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'analysis_time': datetime.now()
+                }
+
+                self.db_manager.save_market_betas([beta_record])
+                logger.info(f"Saved beta value {beta} for {symbol} to database")
+
+                return beta
+
+        except Exception as e:
+            logger.error(f"Error calculating market beta: {str(e)}")
+            raise
 
     def correlation_heatmap(self, correlation_matrix: pd.DataFrame,
                             title: str = "Cryptocurrency Correlation Heatmap",
@@ -576,7 +803,46 @@ class MarketCorrelation:
         # Use visualization config for styling
         colormap = self.config['visualization']['heatmap_colormap']
         figsize = self.config['visualization']['default_figsize']
-        pass
+
+        logger.info(f"Generating correlation heatmap with {correlation_matrix.shape[0]} assets")
+
+        try:
+            # Create figure and axes
+            fig, ax = plt.subplots(figsize=figsize)
+
+            # Generate mask for upper triangle
+            mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+
+            # Create heatmap
+            sns.heatmap(
+                correlation_matrix,
+                mask=mask,
+                cmap=colormap,
+                vmin=-1,
+                vmax=1,
+                center=0,
+                square=True,
+                linewidths=.5,
+                annot=True if correlation_matrix.shape[0] <= 15 else False,  # Only show annotations for small matrices
+                fmt=".2f" if correlation_matrix.shape[0] <= 15 else None,
+                cbar_kws={"shrink": .8},
+                ax=ax
+            )
+
+            # Set title and adjust layout
+            plt.title(title, fontsize=16)
+            plt.tight_layout()
+
+            # Save figure if path is provided
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                logger.debug(f"Saved heatmap to {save_path}")
+
+            return fig
+
+        except Exception as e:
+            logger.error(f"Error generating correlation heatmap: {str(e)}")
+            raise
 
     def network_graph(self, correlation_matrix: pd.DataFrame,
                       threshold: float = None,
@@ -598,7 +864,83 @@ class MarketCorrelation:
         threshold = threshold or self.config['correlation_threshold']
         node_size = self.config['visualization']['network_node_size']
         figsize = self.config['visualization']['default_figsize']
-        pass
+
+        logger.info(f"Generating correlation network graph with threshold {threshold}")
+
+        try:
+            import networkx as nx
+
+            # Create figure
+            fig, ax = plt.subplots(figsize=figsize)
+
+            # Create network graph
+            G = nx.Graph()
+
+            # Add nodes (symbols)
+            symbols = correlation_matrix.columns
+            for symbol in symbols:
+                G.add_node(symbol)
+
+            # Add edges based on correlation threshold
+            for i in range(len(symbols)):
+                for j in range(i + 1, len(symbols)):
+                    symbol1, symbol2 = symbols[i], symbols[j]
+                    correlation = correlation_matrix.loc[symbol1, symbol2]
+
+                    # Add edge if correlation exceeds threshold
+                    if correlation >= threshold:
+                        # Weight is proportional to correlation
+                        G.add_edge(symbol1, symbol2, weight=correlation)
+
+            # Calculate node positioning using spring layout
+            pos = nx.spring_layout(G, seed=42)
+
+            # Draw nodes
+            nx.draw_networkx_nodes(
+                G,
+                pos,
+                node_size=node_size,
+                node_color='skyblue',
+                alpha=0.8,
+                ax=ax
+            )
+
+            # Draw edges with width proportional to correlation
+            for u, v, data in G.edges(data=True):
+                width = data['weight'] * 3  # Scale width by correlation
+                nx.draw_networkx_edges(
+                    G,
+                    pos,
+                    edgelist=[(u, v)],
+                    width=width,
+                    alpha=0.5,
+                    edge_color='navy',
+                    ax=ax
+                )
+
+            # Draw node labels
+            nx.draw_networkx_labels(
+                G,
+                pos,
+                font_size=10,
+                font_family='sans-serif',
+                ax=ax
+            )
+
+            # Set title and remove axis
+            ax.set_title(title, fontsize=16)
+            ax.axis('off')
+
+            # Save figure if path is provided
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                logger.debug(f"Saved network graph to {save_path}")
+
+            return fig
+
+        except Exception as e:
+            logger.error(f"Error generating network graph: {str(e)}")
+            raise
 
     def save_correlation_to_db(self, correlation_matrix: pd.DataFrame,
                                correlation_type: str,
@@ -622,51 +964,163 @@ class MarketCorrelation:
         """
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
-        pass
+
+        logger.info(f"Saving {correlation_type} correlation matrix to database")
+
+        try:
+            # Create a record for the correlation matrix
+            matrix_id = f"{correlation_type}_{timeframe}_{start_time.strftime('%Y%m%d')}_{end_time.strftime('%Y%m%d')}_{method}"
+
+            # Prepare data for the correlation_matrices table
+            matrix_data = {
+                'matrix_id': matrix_id,
+                'correlation_type': correlation_type,
+                'timeframe': timeframe,
+                'start_time': start_time,
+                'end_time': end_time,
+                'method': method,
+                'analysis_time': datetime.now(),
+                'symbols': correlation_matrix.columns.tolist(),
+                'matrix_json': correlation_matrix.to_json()
+            }
+
+            # Save to correlation_matrices table
+            self.db_manager.save_correlation_matrices([matrix_data])
+
+            # Extract and save highly correlated pairs
+            symbols = correlation_matrix.columns.tolist()
+            pairs_data = []
+
+            for i in range(len(symbols)):
+                for j in range(i + 1, len(symbols)):
+                    symbol1, symbol2 = symbols[i], symbols[j]
+                    correlation = correlation_matrix.loc[symbol1, symbol2]
+
+                    if abs(correlation) >= self.config['correlation_threshold']:
+                        pair_data = {
+                            'matrix_id': matrix_id,
+                            'symbol1': symbol1,
+                            'symbol2': symbol2,
+                            'correlation': correlation,
+                            'correlation_type': correlation_type,
+                            'timeframe': timeframe,
+                            'analysis_time': datetime.now()
+                        }
+                        pairs_data.append(pair_data)
+
+            # Save to correlated_pairs table
+            if pairs_data:
+                self.db_manager.insert_correlated_pair(pairs_data)
+                logger.debug(f"Saved {len(pairs_data)} correlated pairs to database")
+
+            logger.info(f"Successfully saved correlation matrix with ID {matrix_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving correlation to database: {str(e)}")
+            return False
 
     def load_correlation_from_db(self, correlation_type: str,
                                  timeframe: str,
                                  start_time: datetime,
                                  end_time: datetime,
                                  method: str = None) -> Optional[pd.DataFrame]:
-        """
-        Load correlation matrix from database.
 
-        Args:
-            correlation_type: Type of correlation ('price', 'volume', 'returns', 'volatility')
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-            start_time: Start time for the analysis period
-            end_time: End time for the analysis period
-            method: Correlation method used ('pearson', 'kendall', or 'spearman')
-
-        Returns:
-            Correlation matrix DataFrame if found, None otherwise
-        """
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
-        pass
+
+        logger.info(f"Loading {correlation_type} correlation matrix from database")
+
+        try:
+            # Create the matrix ID for lookup
+            matrix_id = f"{correlation_type}_{timeframe}_{start_time.strftime('%Y%m%d')}_{end_time.strftime('%Y%m%d')}_{method}"
+
+            # Load from correlation_matrices table
+            matrix_data = self.db_manager.get_correlation_matrix(matrix_id)
+
+            if matrix_data:
+                # Convert JSON string back to DataFrame
+                matrix_json = matrix_data.get('matrix_json')
+                if matrix_json:
+                    correlation_matrix = pd.read_json(matrix_json)
+                    logger.info(f"Successfully loaded correlation matrix with ID {matrix_id}")
+                    return correlation_matrix
+
+            logger.warning(f"No correlation matrix found with ID {matrix_id}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error loading correlation from database: {str(e)}")
+            return None
 
     def correlation_time_series(self, symbols_pair: Tuple[str, str],
                                 correlation_window: int = None,
                                 lookback_days: int = None,
                                 timeframe: str = None) -> pd.Series:
-        """
-        Get time series of correlation between two cryptocurrencies over time.
 
-        Args:
-            symbols_pair: Tuple of two cryptocurrency symbols
-            correlation_window: Window size for calculating correlation
-            lookback_days: Number of days to look back
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-
-        Returns:
-            Time series of correlation values
-        """
         # Use default values from config if not specified
         correlation_window = correlation_window or self.config['default_correlation_window']
         lookback_days = lookback_days or self.config['default_lookback_days']
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+
+        symbol1, symbol2 = symbols_pair
+        logger.info(f"Calculating correlation time series between {symbol1} and {symbol2}")
+
+        # Set time range
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=lookback_days)
+
+        try:
+            # First check if we already have this data in the database
+            correlation_series = self.db_manager.get_correlation_time_series(
+                symbol1=symbol1,
+                symbol2=symbol2,
+                start_time=start_time,
+                end_time=end_time,
+                timeframe=timeframe,
+                window=correlation_window
+            )
+
+            if correlation_series is not None and not correlation_series.empty:
+                logger.info(f"Found existing correlation time series in database")
+                return correlation_series
+
+            # If not found in database, calculate it
+            logger.info(f"Calculating new correlation time series")
+
+            # Calculate rolling correlation
+            rolling_corr = self.calculate_rolling_correlation(
+                symbol1=symbol1,
+                symbol2=symbol2,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time,
+                window=correlation_window
+            )
+
+            # Save correlation time series to database
+            correlation_data = []
+            for timestamp, corr_value in rolling_corr.items():
+                if not np.isnan(corr_value):
+                    correlation_data.append({
+                        'timestamp': timestamp,
+                        'symbol1': symbol1,
+                        'symbol2': symbol2,
+                        'correlation': corr_value,
+                        'timeframe': timeframe,
+                        'window': correlation_window
+                    })
+
+            # Save to correlation_time_series table
+            if correlation_data:
+                self.db_manager.save_correlation_time_series(correlation_data)
+                logger.debug(f"Saved {len(correlation_data)} correlation values to database")
+
+            return rolling_corr
+
+        except Exception as e:
+            logger.error(f"Error calculating correlation time series: {str(e)}")
+            raise
 
     def find_leading_indicators(self, target_symbol: str,
                                 candidate_symbols: List[str],
@@ -674,26 +1128,105 @@ class MarketCorrelation:
                                 timeframe: str = None,
                                 start_time: Optional[datetime] = None,
                                 end_time: Optional[datetime] = None) -> Dict[str, Dict[int, float]]:
-        """
-        Find cryptocurrencies that may act as leading indicators for target symbol.
 
-        Calculates lagged correlations to identify assets that tend to move before the target.
-
-        Args:
-            target_symbol: Target cryptocurrency symbol
-            candidate_symbols: List of potential leading indicator symbols
-            lag_periods: List of lag periods to test
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-            start_time: Start time for the analysis period
-            end_time: End time for the analysis period
-
-        Returns:
-            Dictionary mapping symbols to dictionaries of lag periods and correlation values
-        """
         # Use default values from config if not specified
         lag_periods = lag_periods or self.config['default_lag_periods']
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+
+        logger.info(f"Finding leading indicators for {target_symbol} among {len(candidate_symbols)} candidates")
+
+        # Set default time range if not specified
+        end_time = end_time or datetime.now()
+        if start_time is None:
+            lookback_days = self.config['default_lookback_days']
+            start_time = end_time - timedelta(days=lookback_days)
+
+        try:
+            # Fetch target data
+            target_data = self.db_manager.get_klines(
+                symbol=target_symbol,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            # Calculate target returns
+            target_prices = target_data['close']
+            target_returns = target_prices.pct_change().dropna()
+
+            # Dictionary to store results
+            leading_indicators = {}
+            leading_indicators_records = []
+
+            # Test each candidate symbol
+            for symbol in candidate_symbols:
+                if symbol == target_symbol:
+                    continue
+
+                logger.debug(f"Testing {symbol} as a leading indicator")
+
+                # Fetch candidate data
+                candidate_data = self.db_manager.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+                # Calculate candidate returns
+                candidate_prices = candidate_data['close']
+                candidate_returns = candidate_prices.pct_change().dropna()
+
+                # Align time series
+                common_index = target_returns.index.intersection(candidate_returns.index)
+                if len(common_index) < max(lag_periods) + 10:  # Need enough data points
+                    logger.warning(f"Insufficient aligned data points for {symbol}")
+                    continue
+
+                aligned_target = target_returns.loc[common_index]
+                aligned_candidate = candidate_returns.loc[common_index]
+
+                # Calculate lagged correlations
+                lag_correlations = {}
+                for lag in lag_periods:
+                    # Shift candidate data forward to test if it leads target
+                    lagged_candidate = aligned_candidate.shift(lag)
+
+                    # Remove NaN values created by shifting
+                    valid_indices = aligned_target.index.intersection(lagged_candidate.dropna().index)
+                    if len(valid_indices) < 10:  # Need enough data points for correlation
+                        continue
+
+                    # Calculate correlation between target and lagged candidate
+                    correlation = aligned_target.loc[valid_indices].corr(lagged_candidate.loc[valid_indices])
+                    lag_correlations[lag] = correlation
+
+                    # Add to records for database
+                    leading_indicators_records.append({
+                        'target_symbol': target_symbol,
+                        'indicator_symbol': symbol,
+                        'lag_periods': lag,
+                        'correlation': correlation,
+                        'timeframe': timeframe,
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'analysis_time': datetime.now()
+                    })
+
+                # Only add to results if at least one lag period had a correlation
+                if lag_correlations:
+                    leading_indicators[symbol] = lag_correlations
+
+            # Save to leading_indicators table
+            if leading_indicators_records:
+                self.db_manager.save_leading_indicators(leading_indicators_records)
+                logger.debug(f"Saved {len(leading_indicators_records)} leading indicator records to database")
+
+            return leading_indicators
+
+        except Exception as e:
+            logger.error(f"Error finding leading indicators: {str(e)}")
+            raise
 
     def sector_correlation_analysis(self, sector_mapping: Dict[str, str],
                                     timeframe: str = None,

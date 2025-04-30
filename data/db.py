@@ -6,7 +6,7 @@ import numpy as np
 import psycopg2
 import pandas as pd
 from datetime import datetime
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_batch
 from utils.config import *
 import json
 class DatabaseManager:
@@ -81,6 +81,34 @@ class DatabaseManager:
             self.conn.rollback()
             raise
 
+    def execute_many(self, query: str, params_list: list) -> None:
+
+        with self.conn.cursor() as cursor:
+            # Using psycopg2's execute_batch for efficient batch execution
+            execute_batch(cursor, query, params_list)
+            self.conn.commit()
+    def fetch_one(self, query: str, params: tuple = ()) -> Optional[tuple]:
+        """Виконує запит і повертає один результат"""
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchone()
+    def fetch_all(self, query: str, params: tuple = ()) -> Optional[List[tuple]]:
+        """Виконує запит і повертає всі результати"""
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+    def execute_query(self, query: str, params: tuple = ()) -> None:
+        """Виконує SQL запит без повернення результату"""
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, params)
+            self.conn.commit()
+
+    def fetch_dict(self, query: str, params: tuple = ()) -> List[Dict]:
+        """Виконує запит і повертає результати у вигляді словників"""
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchall()
     def _create_tables(self):
         # Базові таблиці для BTC, ETH, SOL
         self._create_base_tables()
@@ -1621,7 +1649,7 @@ class DatabaseManager:
             ID створеного запису моделі
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 query = """
                         INSERT INTO time_series_models
@@ -1642,11 +1670,8 @@ class DatabaseManager:
                                        start_date, end_date, description))
                 model_id = cursor.fetchone()[0]
                 conn.commit()
-                self.logger.info(f"Збережено метадані моделі {model_key} з ID {model_id}")
                 return model_id
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при збереженні метаданих моделі: {str(e)}")
             raise
 
     def save_model_parameters(self, model_id: int, parameters: Dict) -> bool:
@@ -1661,7 +1686,7 @@ class DatabaseManager:
             Успішність операції
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 for param_name, param_value in parameters.items():
                     query = """
@@ -1675,11 +1700,8 @@ class DatabaseManager:
                     param_json = json.dumps(param_value)
                     cursor.execute(query, (model_id, param_name, param_json))
                 conn.commit()
-                self.logger.info(f"Збережено параметри для моделі з ID {model_id}")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при збереженні параметрів моделі: {str(e)}")
             return False
 
     def save_model_metrics(self, model_id: int, metrics: Dict, test_date: datetime = None) -> bool:
@@ -1695,7 +1717,7 @@ class DatabaseManager:
             Успішність операції
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 for metric_name, metric_value in metrics.items():
                     query = """
@@ -1707,11 +1729,8 @@ class DatabaseManager:
                             """
                     cursor.execute(query, (model_id, metric_name, float(metric_value), test_date))
                 conn.commit()
-                self.logger.info(f"Збережено метрики для моделі з ID {model_id}")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при збереженні метрик моделі: {str(e)}")
             return False
 
     def save_model_forecasts(self, model_id: int, forecasts: pd.Series,
@@ -1719,7 +1738,7 @@ class DatabaseManager:
                              confidence_level: float = 0.95) -> bool:
 
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 for date, value in forecasts.items():
                     lower = None if lower_bounds is None else lower_bounds.get(date)
@@ -1741,17 +1760,15 @@ class DatabaseManager:
                                            float(upper) if upper is not None else None,
                                            confidence_level))
                 conn.commit()
-                self.logger.info(f"Збережено прогнози для моделі з ID {model_id}")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при збереженні прогнозів моделі: {str(e)}")
+
             return False
 
     def save_model_binary(self, model_id: int, model_obj: Any) -> bool:
 
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 # Серіалізація моделі
                 model_binary = pickle.dumps(model_obj)
@@ -1765,11 +1782,8 @@ class DatabaseManager:
                         """
                 cursor.execute(query, (model_id, psycopg2.Binary(model_binary)))
                 conn.commit()
-                self.logger.info(f"Збережено бінарні дані моделі з ID {model_id}")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при збереженні бінарних даних моделі: {str(e)}")
             return False
 
     def save_data_transformations(self, model_id: int, transformations: List[Dict]) -> bool:
@@ -1785,7 +1799,7 @@ class DatabaseManager:
             Успішність операції
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 # Спочатку видаляємо старі записи для цієї моделі
                 cursor.execute("DELETE FROM data_transformations WHERE model_id = %s", (model_id,))
@@ -1804,11 +1818,9 @@ class DatabaseManager:
                     cursor.execute(query, (model_id, transform_type, transform_params, transform_order))
 
                 conn.commit()
-                self.logger.info(f"Збережено перетворення для моделі з ID {model_id}")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при збереженні перетворень даних: {str(e)}")
+
             return False
 
     def get_model_by_key(self, model_key: str) -> Optional[Dict]:
@@ -1822,7 +1834,7 @@ class DatabaseManager:
             Словник з інформацією про модель або None
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 query = "SELECT * FROM time_series_models WHERE model_key = %s"
                 cursor.execute(query, (model_key,))
@@ -1832,7 +1844,6 @@ class DatabaseManager:
                     return dict(model_data)
                 return None
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні моделі за ключем: {str(e)}")
             return None
 
     def get_model_parameters(self, model_id: int) -> Dict:
@@ -1846,7 +1857,7 @@ class DatabaseManager:
             Словник параметрів моделі
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 query = "SELECT param_name, param_value FROM model_parameters WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
@@ -1859,7 +1870,6 @@ class DatabaseManager:
 
                 return parameters
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні параметрів моделі: {str(e)}")
             return {}
 
     def get_model_metrics(self, model_id: int, test_date: datetime = None) -> Dict:
@@ -1874,7 +1884,7 @@ class DatabaseManager:
             Словник метрик моделі
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 if test_date is None:
                     query = """SELECT metric_name, metric_value, test_date
@@ -1903,7 +1913,6 @@ class DatabaseManager:
 
                 return metrics
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні метрик моделі: {str(e)}")
             return {}
 
     def get_model_forecasts(self, model_id: int, start_date: datetime = None,
@@ -1920,7 +1929,7 @@ class DatabaseManager:
             DataFrame з прогнозами та довірчими інтервалами
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             query = """SELECT forecast_date, forecast_value, lower_bound, upper_bound, confidence_level
                        FROM model_forecasts
                        WHERE model_id = %s"""
@@ -1942,7 +1951,6 @@ class DatabaseManager:
 
             return forecasts_df
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні прогнозів моделі: {str(e)}")
             return pd.DataFrame()
 
     def load_model_binary(self, model_id: int) -> Any:
@@ -1956,7 +1964,7 @@ class DatabaseManager:
             Десеріалізований об'єкт моделі або None
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 query = "SELECT model_binary FROM model_binary_data WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
@@ -1965,13 +1973,10 @@ class DatabaseManager:
                 if row:
                     model_binary = row[0]
                     model_obj = pickle.loads(model_binary)
-                    self.logger.info(f"Завантажено бінарні дані моделі з ID {model_id}")
                     return model_obj
 
-                self.logger.warning(f"Бінарні дані моделі з ID {model_id} не знайдено")
                 return None
         except Exception as e:
-            self.logger.error(f"Помилка при завантаженні бінарних даних моделі: {str(e)}")
             return None
 
     def get_data_transformations(self, model_id: int) -> List[Dict]:
@@ -1985,7 +1990,7 @@ class DatabaseManager:
             Список словників з інформацією про перетворення
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 query = """SELECT transform_type, transform_params, transform_order
                            FROM data_transformations
@@ -2004,7 +2009,6 @@ class DatabaseManager:
 
                 return transformations
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні перетворень даних: {str(e)}")
             return []
 
     def delete_model(self, model_id: int) -> bool:
@@ -2018,17 +2022,15 @@ class DatabaseManager:
             Успішність операції
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 # Використовуємо каскадне видалення, визначене в схемі БД
                 query = "DELETE FROM time_series_models WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
                 conn.commit()
-                self.logger.info(f"Видалено модель з ID {model_id} та пов'язані дані")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при видаленні моделі: {str(e)}")
+
             return False
 
     def get_models_by_symbol(self, symbol: str, interval: str = None, active_only: bool = True) -> List[Dict]:
@@ -2044,7 +2046,7 @@ class DatabaseManager:
             Список словників з інформацією про моделі
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s"
                 params = [symbol]
@@ -2065,7 +2067,6 @@ class DatabaseManager:
 
                 return models
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні моделей за символом: {str(e)}")
             return []
 
     def get_latest_model_by_symbol(self, symbol: str, model_type: str = None,
@@ -2082,7 +2083,7 @@ class DatabaseManager:
             Словник з інформацією про модель або None
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s AND is_active = TRUE"
                 params = [symbol]
@@ -2103,7 +2104,6 @@ class DatabaseManager:
                     return dict(model_data)
                 return None
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні останньої моделі: {str(e)}")
             return None
 
     def get_model_performance_history(self, model_id: int) -> pd.DataFrame:
@@ -2117,7 +2117,7 @@ class DatabaseManager:
             DataFrame з історією метрик моделі
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             query = """SELECT metric_name, metric_value, test_date
                        FROM model_metrics
                        WHERE model_id = %s \
@@ -2133,7 +2133,6 @@ class DatabaseManager:
 
             return pd.DataFrame()
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні історії продуктивності: {str(e)}")
             return pd.DataFrame()
 
 
@@ -2149,16 +2148,14 @@ class DatabaseManager:
             Успішність операції
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 query = "UPDATE time_series_models SET is_active = %s WHERE model_id = %s"
                 cursor.execute(query, (is_active, model_id))
                 conn.commit()
-                self.logger.info(f"Оновлено статус активності для моделі з ID {model_id}: {is_active}")
                 return True
         except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Помилка при оновленні статусу моделі: {str(e)}")
+
             return False
 
 
@@ -2201,7 +2198,6 @@ class DatabaseManager:
 
             return pd.DataFrame()
         except Exception as e:
-            self.logger.error(f"Помилка при порівнянні прогнозів моделей: {str(e)}")
             return pd.DataFrame()
 
 
@@ -2253,7 +2249,6 @@ class DatabaseManager:
 
             return metrics
         except Exception as e:
-            self.logger.error(f"Помилка при розрахунку точності прогнозу: {str(e)}")
             return {"error": str(e)}
 
 
@@ -2265,14 +2260,13 @@ class DatabaseManager:
             Список унікальних символів
         """
         try:
-            conn = self.connect()
+            conn = self.conn()
             with conn.cursor() as cursor:
                 query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
                 cursor.execute(query)
                 symbols = [row[0] for row in cursor.fetchall()]
                 return symbols
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні списку символів: {str(e)}")
             return []
 
 
@@ -2290,7 +2284,6 @@ class DatabaseManager:
             transformations = self.get_data_transformations(model_id)
             return transformations
         except Exception as e:
-            self.logger.error(f"Помилка при отриманні ланцюжка перетворень: {str(e)}")
             return []
 
 
@@ -2347,10 +2340,8 @@ class DatabaseManager:
             if model_obj:
                 self.save_model_binary(model_id, model_obj)
 
-            self.logger.info(f"Комплексне збереження моделі {model_key} з ID {model_id} завершено успішно")
             return model_id
         except Exception as e:
-            self.logger.error(f"Помилка при комплексному збереженні моделі: {str(e)}")
             raise
 
 
@@ -2390,979 +2381,764 @@ class DatabaseManager:
                 "model_obj": model_obj
             }
 
-            self.logger.info(f"Комплексне завантаження моделі {model_key} з ID {model_id} завершено успішно")
             return result
         except Exception as e:
-            self.logger.error(f"Помилка при комплексному завантаженні моделі: {str(e)}")
             return {"error": str(e)}
 
 
 
 
-def save_correlation_matrix(self, correlation_matrix, symbols_list, correlation_type, timeframe,
-                            start_time, end_time, method):
-    """
-    Зберігає кореляційну матрицю в базу даних
+    def save_correlation_matrix(self, correlation_matrix, symbols_list, correlation_type, timeframe,
+                                start_time, end_time, method):
+        """
+        Зберігає кореляційну матрицю в базу даних
 
-    Аргументи:
-        correlation_matrix: Кореляційна матриця (numpy array або pandas DataFrame)
-        symbols_list: Список символів (токенів) у тому ж порядку, що й у матриці
-        correlation_type: Тип кореляції ('price', 'volume', 'returns', 'volatility')
-        timeframe: Часовий інтервал ('1m', '5m', '15m', '1h', '4h', '1d', etc.)
-        start_time: Початковий час періоду аналізу
-        end_time: Кінцевий час періоду аналізу
-        method: Метод кореляції ('pearson', 'kendall', 'spearman')
+        Аргументи:
+            correlation_matrix: Кореляційна матриця (numpy array або pandas DataFrame)
+            symbols_list: Список символів (токенів) у тому ж порядку, що й у матриці
+            correlation_type: Тип кореляції ('price', 'volume', 'returns', 'volatility')
+            timeframe: Часовий інтервал ('1m', '5m', '15m', '1h', '4h', '1d', etc.)
+            start_time: Початковий час періоду аналізу
+            end_time: Кінцевий час періоду аналізу
+            method: Метод кореляції ('pearson', 'kendall', 'spearman')
 
-    Повертає:
-        Результат виконання запиту
-    """
-    start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-    end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-
-    # Конвертація матриці в JSON формат
-    if hasattr(correlation_matrix, 'to_json'):
-        matrix_json = correlation_matrix.to_json()
-    else:
-        # Якщо це numpy array, перетворюємо в список списків
-        matrix_json = json.dumps(correlation_matrix.tolist()
-                                 if hasattr(correlation_matrix, 'tolist')
-                                 else correlation_matrix)
-
-    # Конвертація списку символів в JSON
-    symbols_json = json.dumps(symbols_list)
-
-    query = """
-    INSERT OR REPLACE INTO correlation_matrices 
-    (correlation_type, timeframe, start_time, end_time, method, matrix_json, symbols_list)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-    params = (correlation_type, timeframe, start_time_str, end_time_str, method, matrix_json, symbols_json)
-    return self.execute_query(query, params)
-
-
-def load_correlation_matrix(self, correlation_type, timeframe, start_time=None, end_time=None, method=None):
-    """
-    Завантажує кореляційну матрицю з бази даних
-
-    Аргументи:
-        correlation_type: Тип кореляції ('price', 'volume', 'returns', 'volatility')
-        timeframe: Часовий інтервал ('1m', '5m', '15m', '1h', '4h', '1d', etc.)
-        start_time: Початковий час періоду аналізу (опціонально)
-        end_time: Кінцевий час періоду аналізу (опціонально)
-        method: Метод кореляції ('pearson', 'kendall', 'spearman') (опціонально)
-
-    Повертає:
-        Кортеж (matrix, symbols_list) або None, якщо даних немає
-    """
-    query = """
-            SELECT matrix_json, symbols_list
-            FROM correlation_matrices
-            WHERE correlation_type = ? \
-              AND timeframe = ? \
-            """
-    params = [correlation_type, timeframe]
-
-    if start_time:
+        Повертає:
+            Результат виконання запиту
+        """
         start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND start_time = ?"
-        params.append(start_time_str)
-    if end_time:
         end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND end_time = ?"
-        params.append(end_time_str)
-    if method:
-        query += " AND method = ?"
-        params.append(method)
 
-    query += " ORDER BY created_at DESC LIMIT 1"
-
-    result = self.fetch_one(query, params)
-    if result:
-        matrix_json, symbols_json = result
-        matrix = json.loads(matrix_json)
-        symbols = json.loads(symbols_json)
-        return matrix, symbols
-    return None
-
-
-def get_correlation_breakdowns(self, symbol1=None, symbol2=None, timeframe=None,
-                               start_time=None, end_time=None, method=None):
-    """
-    Отримує інформацію про зламання кореляцій
-
-    Аргументи:
-        symbol1: Перший символ (опціонально)
-        symbol2: Другий символ (опціонально)
-        timeframe: Часовий інтервал (опціонально)
-        start_time: Початковий час для фільтрації зламань (опціонально)
-        end_time: Кінцевий час для фільтрації зламань (опціонально)
-        method: Метод кореляції (опціонально)
-
-    Повертає:
-        Список зламань кореляцій
-    """
-    query = """
-            SELECT symbol1, \
-                   symbol2, \
-                   breakdown_time, \
-                   correlation_before, \
-                   correlation_after,
-                   timeframe, \
-                   window_size, \
-                   threshold, \
-                   method
-            FROM correlation_breakdowns
-            WHERE 1 = 1 \
-            """
-    params = []
-
-    if symbol1 and symbol2:
-        # Переконуємося, що символи впорядковані (це важливо для пошуку)
-        if symbol1 > symbol2:
-            symbol1, symbol2 = symbol2, symbol1
-        query += " AND symbol1 = ? AND symbol2 = ?"
-        params.extend([symbol1, symbol2])
-    elif symbol1:
-        query += " AND (symbol1 = ? OR symbol2 = ?)"
-        params.extend([symbol1, symbol1])
-    elif symbol2:
-        query += " AND (symbol1 = ? OR symbol2 = ?)"
-        params.extend([symbol2, symbol2])
-
-    if timeframe:
-        query += " AND timeframe = ?"
-        params.append(timeframe)
-
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND breakdown_time >= ?"
-        params.append(start_time_str)
-
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND breakdown_time <= ?"
-        params.append(end_time_str)
-
-    if method:
-        query += " AND method = ?"
-        params.append(method)
-
-    query += " ORDER BY breakdown_time DESC"
-
-    return self.fetch_all(query, params)
-
-
-def save_market_beta(self, beta_values, market_symbol, timeframe, start_time, end_time):
-    """
-    Зберігає бета-коефіцієнти для криптовалют відносно ринку
-
-    Аргументи:
-        beta_values: Словник {symbol: beta_value}
-        market_symbol: Символ, що представляє ринок (зазвичай 'BTCUSDT')
-        timeframe: Часовий інтервал
-        start_time: Початковий час періоду аналізу
-        end_time: Кінцевий час періоду аналізу
-
-    Повертає:
-        Результат виконання запиту
-    """
-    start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-    end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-
-    query = """
-    INSERT OR REPLACE INTO market_betas
-    (symbol, market_symbol, beta_value, timeframe, start_time, end_time)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """
-    params = [(symbol, market_symbol, beta, timeframe, start_time_str, end_time_str)
-              for symbol, beta in beta_values.items()]
-    return self.execute_many(query, params)
-
-
-def get_market_beta(self, symbol=None, market_symbol=None, timeframe=None, start_time=None, end_time=None):
-    """
-    Отримує бета-коефіцієнти з бази даних
-
-    Аргументи:
-        symbol: Символ криптовалюти (опціонально)
-        market_symbol: Символ ринку (опціонально)
-        timeframe: Часовий інтервал (опціонально)
-        start_time: Початковий час періоду (опціонально)
-        end_time: Кінцевий час періоду (опціонально)
-
-    Повертає:
-        Список кортежів (symbol, market_symbol, beta_value, timeframe, start_time, end_time)
-    """
-    query = """
-            SELECT symbol, market_symbol, beta_value, timeframe, start_time, end_time
-            FROM market_betas
-            WHERE 1 = 1 \
-            """
-    params = []
-
-    if symbol:
-        query += " AND symbol = ?"
-        params.append(symbol)
-    if market_symbol:
-        query += " AND market_symbol = ?"
-        params.append(market_symbol)
-    if timeframe:
-        query += " AND timeframe = ?"
-        params.append(timeframe)
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND start_time = ?"
-        params.append(start_time_str)
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND end_time = ?"
-        params.append(end_time_str)
-
-    query += " ORDER BY symbol, start_time DESC"
-
-    return self.fetch_all(query, params)
-
-
-def save_beta_time_series(self, symbol, market_symbol, timestamps, beta_values, timeframe, window_size):
-    """
-    Зберігає часовий ряд бета-коефіцієнтів
-
-    Аргументи:
-        symbol: Символ криптовалюти
-        market_symbol: Символ ринку
-        timestamps: Список часових міток
-        beta_values: Список значень бета
-        timeframe: Часовий інтервал
-        window_size: Розмір вікна для розрахунку бета
-
-    Повертає:
-        Результат виконання запиту
-    """
-    timestamp_strs = []
-    for ts in timestamps:
-        if isinstance(ts, datetime):
-            timestamp_strs.append(ts.isoformat())
+        # Конвертація матриці в JSON формат
+        if hasattr(correlation_matrix, 'to_json'):
+            matrix_json = correlation_matrix.to_json()
         else:
-            timestamp_strs.append(ts)
-
-    query = """
-    INSERT OR REPLACE INTO beta_time_series
-    (symbol, market_symbol, timestamp, beta_value, timeframe, window_size)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """
-    params = [(symbol, market_symbol, ts, beta, timeframe, window_size)
-              for ts, beta in zip(timestamp_strs, beta_values)]
-    return self.execute_many(query, params)
-
-
-def get_beta_time_series(self, symbol, market_symbol, timeframe, window_size, start_time=None, end_time=None):
-    """
-    Отримує часовий ряд бета-коефіцієнтів
-
-    Аргументи:
-        symbol: Символ криптовалюти
-        market_symbol: Символ ринку
-        timeframe: Часовий інтервал
-        window_size: Розмір вікна
-        start_time: Початковий час (опціонально)
-        end_time: Кінцевий час (опціонально)
-
-    Повертає:
-        Список кортежів (timestamp, beta_value)
-    """
-    query = """
-            SELECT timestamp, beta_value
-            FROM beta_time_series
-            WHERE symbol = ? AND market_symbol = ? AND timeframe = ? AND window_size = ? \
-            """
-    params = [symbol, market_symbol, timeframe, window_size]
-
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND timestamp >= ?"
-        params.append(start_time_str)
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND timestamp <= ?"
-        params.append(end_time_str)
-
-    query += " ORDER BY timestamp"
-
-    return self.fetch_all(query, params)
-
-
-def save_sector_correlations(self, sector_correlations, correlation_type, timeframe, start_time, end_time, method):
-    """
-    Зберігає кореляції між секторами криптовалют
-
-    Аргументи:
-        sector_correlations: Список кортежів (sector1, sector2, correlation_value)
-        correlation_type: Тип кореляції
-        timeframe: Часовий інтервал
-        start_time: Початковий час періоду
-        end_time: Кінцевий час періоду
-        method: Метод кореляції
-
-    Повертає:
-        Результат виконання запиту
-    """
-    start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-    end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-
-    query = """
-    INSERT OR REPLACE INTO sector_correlations
-    (sector1, sector2, correlation_value, correlation_type, timeframe, start_time, end_time, method)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """
-    params = [(s[0], s[1], s[2], correlation_type, timeframe, start_time_str, end_time_str, method)
-              for s in sector_correlations]
-    return self.execute_many(query, params)
-
-
-def get_sector_correlations(self, sector=None, correlation_type=None, timeframe=None,
-                            min_correlation=0.0, start_time=None, end_time=None, method=None):
-    """
-    Отримує кореляції між секторами
-
-    Аргументи:
-        sector: Сектор, що цікавить (опціонально)
-        correlation_type: Тип кореляції (опціонально)
-        timeframe: Часовий інтервал (опціонально)
-        min_correlation: Мінімальне значення кореляції (опціонально)
-        start_time: Початковий час періоду (опціонально)
-        end_time: Кінцевий час періоду (опціонально)
-        method: Метод кореляції (опціонально)
-
-    Повертає:
-        Список кортежів (sector1, sector2, correlation_value)
-    """
-    query = """
-            SELECT sector1, sector2, correlation_value
-            FROM sector_correlations
-            WHERE correlation_value >= ? \
-            """
-    params = [min_correlation]
-
-    if sector:
-        query += " AND (sector1 = ? OR sector2 = ?)"
-        params.extend([sector, sector])
-    if correlation_type:
-        query += " AND correlation_type = ?"
-        params.append(correlation_type)
-    if timeframe:
-        query += " AND timeframe = ?"
-        params.append(timeframe)
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND start_time = ?"
-        params.append(start_time_str)
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND end_time = ?"
-        params.append(end_time_str)
-    if method:
-        query += " AND method = ?"
-        params.append(method)
-
-    query += " ORDER BY correlation_value DESC"
-
-    return self.fetch_all(query, params)
-
-
-def save_leading_indicators(self, leading_indicators):
-    """
-    Зберігає провідні індикатори
-
-    Аргументи:
-        leading_indicators: Список словників з полями
-            target_symbol, indicator_symbol, lag_period, correlation_value,
-            timeframe, start_time, end_time, method
-
-    Повертає:
-        Результат виконання запиту
-    """
-    for item in leading_indicators:
-        if isinstance(item['start_time'], datetime):
-            item['start_time'] = item['start_time'].isoformat()
-        if isinstance(item['end_time'], datetime):
-            item['end_time'] = item['end_time'].isoformat()
-
-    query = """
-    INSERT OR REPLACE INTO leading_indicators
-    (target_symbol, indicator_symbol, lag_period, correlation_value, 
-     timeframe, start_time, end_time, method)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """
-    params = [(item['target_symbol'], item['indicator_symbol'], item['lag_period'],
-               item['correlation_value'], item['timeframe'], item['start_time'],
-               item['end_time'], item['method'])
-              for item in leading_indicators]
-    return self.execute_many(query, params)
-
-
-def get_leading_indicators(self, target_symbol=None, indicator_symbol=None, timeframe=None,
-                           min_correlation=0.7, start_time=None, end_time=None, method=None):
-    """
-    Отримує провідні індикатори
-
-    Аргументи:
-        target_symbol: Цільовий символ (опціонально)
-        indicator_symbol: Символ індикатора (опціонально)
-        timeframe: Часовий інтервал (опціонально)
-        min_correlation: Мінімальне значення кореляції (опціонально)
-        start_time: Початковий час періоду (опціонально)
-        end_time: Кінцевий час періоду (опціонально)
-        method: Метод кореляції (опціонально)
-
-    Повертає:
-        Список кортежів (target_symbol, indicator_symbol, lag_period, correlation_value)
-    """
-    query = """
-            SELECT target_symbol, indicator_symbol, lag_period, correlation_value
-            FROM leading_indicators
-            WHERE correlation_value >= ? \
-            """
-    params = [min_correlation]
-
-    if target_symbol:
-        query += " AND target_symbol = ?"
-        params.append(target_symbol)
-    if indicator_symbol:
-        query += " AND indicator_symbol = ?"
-        params.append(indicator_symbol)
-    if timeframe:
-        query += " AND timeframe = ?"
-        params.append(timeframe)
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND start_time = ?"
-        params.append(start_time_str)
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND end_time = ?"
-        params.append(end_time_str)
-    if method:
-        query += " AND method = ?"
-        params.append(method)
-
-    query += " ORDER BY correlation_value DESC"
-
-    return self.fetch_all(query, params)
-
-
-def save_external_asset_correlations(self, correlations, timeframe, start_time, end_time, method):
-    """
-    Зберігає кореляції між криптовалютами та зовнішніми активами
-
-    Аргументи:
-        correlations: Список кортежів (crypto_symbol, external_asset, correlation_value)
-        timeframe: Часовий інтервал
-        start_time: Початковий час періоду
-        end_time: Кінцевий час періоду
-        method: Метод кореляції
-
-    Повертає:
-        Результат виконання запиту
-    """
-    start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-    end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-
-    query = """
-    INSERT OR REPLACE INTO external_asset_correlations
-    (crypto_symbol, external_asset, correlation_value, timeframe, start_time, end_time, method)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-    params = [(c[0], c[1], c[2], timeframe, start_time_str, end_time_str, method)
-              for c in correlations]
-    return self.execute_many(query, params)
-
-
-def get_external_asset_correlations(self, crypto_symbol=None, external_asset=None, timeframe=None,
-                                    min_correlation=-1.0, start_time=None, end_time=None, method=None):
-    """
-    Отримує кореляції між криптовалютами та зовнішніми активами
-
-    Аргументи:
-        crypto_symbol: Символ криптовалюти (опціонально)
-        external_asset: Зовнішній актив (опціонально)
-        timeframe: Часовий інтервал (опціонально)
-        min_correlation: Мінімальне значення кореляції (опціонально)
-        start_time: Початковий час періоду (опціонально)
-        end_time: Кінцевий час періоду (опціонально)
-        method: Метод кореляції (опціонально)
-
-    Повертає:
-        Список кортежів (crypto_symbol, external_asset, correlation_value)
-    """
-    query = """
-            SELECT crypto_symbol, external_asset, correlation_value
-            FROM external_asset_correlations
-            WHERE correlation_value >= ? \
-            """
-    params = [min_correlation]
-
-    if crypto_symbol:
-        query += " AND crypto_symbol = ?"
-        params.append(crypto_symbol)
-    if external_asset:
-        query += " AND external_asset = ?"
-        params.append(external_asset)
-    if timeframe:
-        query += " AND timeframe = ?"
-        params.append(timeframe)
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND start_time = ?"
-        params.append(start_time_str)
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND end_time = ?"
-        params.append(end_time_str)
-    if method:
-        query += " AND method = ?"
-        params.append(method)
-
-    query += " ORDER BY ABS(correlation_value) DESC"
-
-    return self.fetch_all(query, params)
-
-
-def save_market_regime_correlations(self, regime_name, correlation_matrix, symbols_list,
-                                    correlation_type, start_time, end_time, method):
-    """
-    Зберігає кореляційні матриці для різних ринкових режимів
-
-    Аргументи:
-        regime_name: Назва ринкового режиму
-        correlation_matrix: Кореляційна матриця
-        symbols_list: Список символів
-        correlation_type: Тип кореляції
-        start_time: Початковий час періоду
-        end_time: Кінцевий час періоду
-        method: Метод кореляції
-
-    Повертає:
-        Результат виконання запиту
-    """
-    start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-    end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-
-    # Конвертація матриці в JSON формат
-    if hasattr(correlation_matrix, 'to_json'):
-        matrix_json = correlation_matrix.to_json()
-    else:
-        # Якщо це numpy array, перетворюємо в список списків
-        matrix_json = json.dumps(correlation_matrix.tolist()
-                                 if hasattr(correlation_matrix, 'tolist')
-                                 else correlation_matrix)
-
-    # Конвертація списку символів в JSON
-    symbols_json = json.dumps(symbols_list)
-
-    query = """
-    INSERT OR REPLACE INTO market_regime_correlations
-    (regime_name, start_time, end_time, correlation_type, matrix_json, symbols_list, method)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-    params = (regime_name, start_time_str, end_time_str, correlation_type, matrix_json, symbols_json, method)
-    return self.execute_query(query, params)
-
-
-def get_market_regime_correlations(self, regime_name=None, correlation_type=None,
-                                   start_time=None, end_time=None, method=None):
-    """
-    Отримує кореляційні матриці для ринкових режимів
-
-    Аргументи:
-        regime_name: Назва ринкового режиму (опціонально)
-        correlation_type: Тип кореляції (опціонально)
-        start_time: Початковий час періоду (опціонально)
-        end_time: Кінцевий час періоду (опціонально)
-        method: Метод кореляції (опціонально)
-
-    Повертає:
-        Список кортежів (regime_name, start_time, end_time, matrix, symbols)
-    """
-    query = """
-            SELECT regime_name, start_time, end_time, matrix_json, symbols_list
-            FROM market_regime_correlations
-            WHERE 1 = 1 \
-            """
-    params = []
-
-    if regime_name:
-        query += " AND regime_name = ?"
-        params.append(regime_name)
-    if correlation_type:
-        query += " AND correlation_type = ?"
-        params.append(correlation_type)
-    if start_time:
-        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-        query += " AND start_time = ?"
-        params.append(start_time_str)
-    if end_time:
-        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-        query += " AND end_time = ?"
-        params.append(end_time_str)
-    if method:
-        query += " AND method = ?"
-        params.append(method)
-
-    query += " ORDER BY regime_name, start_time"
-
-    results = self.fetch_all(query, params)
-
-    processed_results = []
-    for result in results:
-        regime_name, start_time, end_time, matrix_json, symbols_json = result
-        matrix = json.loads(matrix_json)
-        symbols = json.loads(symbols_json)
-        processed_results.append((regime_name, start_time, end_time, matrix, symbols))
-
-    return processed_results
-
-
-
-def insert_correlated_pair(self, symbol1, symbol2, correlation_value, correlation_type,
-                           timeframe, start_time, end_time, method):
-    """
-    Додає інформацію про кореляцію пари символів
-
-    Args:
-        symbol1: Перший символ пари
-        symbol2: Другий символ пари
-        correlation_value: Значення кореляції
-        correlation_type: Тип кореляції
-        timeframe: Таймфрейм даних
-        start_time: Початковий час періоду аналізу
-        end_time: Кінцевий час періоду аналізу
-        method: Метод обчислення кореляції
-    """
-    # Перетворення часу до строкового формату, якщо потрібно
-    if isinstance(start_time, datetime):
-        start_time = start_time.isoformat()
-    if isinstance(end_time, datetime):
-        end_time = end_time.isoformat()
-
-    query = """
-            INSERT INTO correlated_pairs (symbol1, symbol2, correlation_value, correlation_type,
-                                          timeframe, start_time, end_time, method)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol1, symbol2, correlation_type, timeframe, start_time, end_time, method)
-        DO NOTHING; \
-            """
-    params = (symbol1, symbol2, correlation_value, correlation_type,
-              timeframe, start_time, end_time, method)
-    self.execute_query(query, params)
-
-
-def get_correlated_pairs(self, symbol=None, correlation_type=None, timeframe=None,
-                         min_correlation=None, max_correlation=None, limit=None):
-    """
-    Отримує інформацію про кореляції за різними фільтрами
-
-    Args:
-        symbol: Символ для фільтрації (опціонально)
-        correlation_type: Тип кореляції (опціонально)
-        timeframe: Таймфрейм даних (опціонально)
-        min_correlation: Мінімальне значення кореляції (опціонально)
-        max_correlation: Максимальне значення кореляції (опціонально)
-        limit: Максимальна кількість результатів (опціонально)
-
-    Returns:
-        Список словників з інформацією про корельовані пари
-    """
-    # Складаємо базовий запит
-    query = "SELECT * FROM correlated_pairs WHERE 1=1"
-    params = []
-
-    # Додаємо фільтри
-    if symbol:
-        query += " AND (symbol1 = %s OR symbol2 = %s)"
-        params.extend([symbol, symbol])
-    if correlation_type:
-        query += " AND correlation_type = %s"
-        params.append(correlation_type)
-    if timeframe:
-        query += " AND timeframe = %s"
-        params.append(timeframe)
-    if min_correlation is not None:
-        query += " AND correlation_value >= %s"
-        params.append(min_correlation)
-    if max_correlation is not None:
-        query += " AND correlation_value <= %s"
-        params.append(max_correlation)
-
-    # Додаємо сортування та ліміт
-    query += " ORDER BY correlation_value DESC"
-
-    if limit is not None:
-        query += " LIMIT %s"
-        params.append(limit)
-
-    return self.fetch_dict(query, params)
-
-
-def save_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
-                                 window_size, timestamp, correlation_value, method):
-    """
-    Зберігає часовий ряд кореляції для пари криптовалют
-
-    Args:
-        symbol1: Перший символ пари
-        symbol2: Другий символ пари
-        correlation_type: Тип кореляції
-        timeframe: Таймфрейм даних
-        window_size: Розмір вікна для обчислення кореляції
-        timestamp: Час, для якого обчислена кореляція
-        correlation_value: Значення кореляції
-        method: Метод обчислення кореляції
-    """
-    # Перетворення часу до строкового формату, якщо потрібно
-    if isinstance(timestamp, datetime):
-        timestamp = timestamp.isoformat()
-
-    query = """
-            INSERT INTO correlation_time_series (symbol1, symbol2, correlation_type, timeframe,
-                                                 window_size, timestamp, correlation_value, method)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol1, symbol2, correlation_type, timeframe, window_size, timestamp, method) 
-        DO \
-            UPDATE SET correlation_value = EXCLUDED.correlation_value \
-            """
-    params = (symbol1, symbol2, correlation_type, timeframe,
-              window_size, timestamp, correlation_value, method)
-    self.execute_query(query, params)
-
-
-def get_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
-                                window_size, start_time=None, end_time=None, method=None, limit=None):
-    """
-    Отримує часовий ряд кореляцій для конкретної пари
-
-    Args:
-        symbol1: Перший символ пари
-        symbol2: Другий символ пари
-        correlation_type: Тип кореляції
-        timeframe: Таймфрейм даних
-        window_size: Розмір вікна для обчислення кореляції
-        start_time: Початковий час для фільтрації (опціонально)
-        end_time: Кінцевий час для фільтрації (опціонально)
-        method: Метод обчислення кореляції (опціонально)
-        limit: Максимальна кількість результатів (опціонально)
-
-    Returns:
-        Список словників з даними часового ряду кореляцій
-    """
-    # Перетворення часу до строкового формату, якщо потрібно
-    if isinstance(start_time, datetime):
-        start_time = start_time.isoformat()
-    if isinstance(end_time, datetime):
-        end_time = end_time.isoformat()
-
-    # Складаємо базовий запит
-    query = """
-            SELECT timestamp, correlation_value
-            FROM correlation_time_series
-            WHERE symbol1 = %s
-              AND symbol2 = %s
-              AND correlation_type = %s
-              AND timeframe = %s
-              AND window_size = %s \
-            """
-    params = [symbol1, symbol2, correlation_type, timeframe, window_size]
-
-    # Додаємо фільтри
-    if start_time:
-        query += " AND timestamp >= %s"
-        params.append(start_time)
-    if end_time:
-        query += " AND timestamp <= %s"
-        params.append(end_time)
-    if method:
-        query += " AND method = %s"
-        params.append(method)
-
-    # Додаємо сортування та ліміт
-    query += " ORDER BY timestamp ASC"
-
-    if limit is not None:
-        query += " LIMIT %s"
-        params.append(limit)
-
-    return self.fetch_dict(query, params)
-
-
-def get_most_correlated_pairs(self, symbol=None, correlation_type='pearson', timeframe='1h',
-                              limit=10, min_abs_correlation=0.7):
-    """
-    Отримує найбільш корельовані пари за абсолютним значенням кореляції
-
-    Args:
-        symbol: Символ, для якого шукаємо кореляції (опціонально)
-        correlation_type: Тип кореляції
-        timeframe: Таймфрейм даних
-        limit: Максимальна кількість результатів
-        min_abs_correlation: Мінімальне абсолютне значення кореляції
-
-    Returns:
-        Список словників з інформацією про найбільш корельовані пари
-    """
-    # Складаємо запит з потрібними полями та умовами
-    query = """
-            SELECT symbol1, \
-                   symbol2, \
-                   correlation_value, \
-                   correlation_type, \
-                   timeframe, \
-                   start_time, \
-                   end_time, \
-                   method, \
-                   ABS(correlation_value) as abs_correlation
-            FROM correlated_pairs
-            WHERE correlation_type = %s
-              AND timeframe = %s
-              AND ABS(correlation_value) >= %s \
-            """
-    params = [correlation_type, timeframe, min_abs_correlation]
-
-    # Додаємо фільтр за символом, якщо вказаний
-    if symbol:
-        query += " AND (symbol1 = %s OR symbol2 = %s)"
-        params.extend([symbol, symbol])
-
-    # Додаємо сортування та ліміт
-    query += " ORDER BY abs_correlation DESC LIMIT %s"
-    params.append(limit)
-
-    return self.fetch_dict(query, params)
-
-
-def load_correlation_matrix(self, correlation_type, timeframe, start_time=None, end_time=None, method='pearson'):
-    """
-    Завантажує кореляційну матрицю для всіх символів
-
-    Args:
-        correlation_type: Тип кореляції
-        timeframe: Таймфрейм даних
-        start_time: Початковий час для фільтрації (опціонально)
-        end_time: Кінцевий час для фільтрації (опціонально)
-        method: Метод обчислення кореляції
-
-    Returns:
-        Кортеж (матриця кореляцій, список символів) або None, якщо дані відсутні
-    """
-    # Перетворення часу до строкового формату, якщо потрібно
-    if isinstance(start_time, datetime):
-        start_time = start_time.isoformat()
-    if isinstance(end_time, datetime):
-        end_time = end_time.isoformat()
-
-    # Отримуємо всі пари кореляцій для заданих умов
-    query = """
-            SELECT symbol1, symbol2, correlation_value
-            FROM correlated_pairs
-            WHERE correlation_type = %s
-              AND timeframe = %s
-              AND method = %s \
-            """
-    params = [correlation_type, timeframe, method]
-
-    # Додаємо фільтри за часом
-    if start_time:
-        query += " AND start_time >= %s"
-        params.append(start_time)
-    if end_time:
-        query += " AND end_time <= %s"
-        params.append(end_time)
-
-    pairs = self.fetch_dict(query, params)
-
-    if not pairs:
+            # Якщо це numpy array, перетворюємо в список списків
+            matrix_json = json.dumps(correlation_matrix.tolist()
+                                     if hasattr(correlation_matrix, 'tolist')
+                                     else correlation_matrix)
+
+        # Конвертація списку символів в JSON
+        symbols_json = json.dumps(symbols_list)
+
+        query = """
+        INSERT OR REPLACE INTO correlation_matrices 
+        (correlation_type, timeframe, start_time, end_time, method, matrix_json, symbols_list)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (correlation_type, timeframe, start_time_str, end_time_str, method, matrix_json, symbols_json)
+        return self.execute_query(query, params)
+
+
+    def get_correlation_matrix(self, correlation_type, timeframe, start_time=None, end_time=None, method=None):
+        """
+        Завантажує кореляційну матрицю з бази даних
+
+        Аргументи:
+            correlation_type: Тип кореляції ('price', 'volume', 'returns', 'volatility')
+            timeframe: Часовий інтервал ('1m', '5m', '15m', '1h', '4h', '1d', etc.)
+            start_time: Початковий час періоду аналізу (опціонально)
+            end_time: Кінцевий час періоду аналізу (опціонально)
+            method: Метод кореляції ('pearson', 'kendall', 'spearman') (опціонально)
+
+        Повертає:
+            Кортеж (matrix, symbols_list) або None, якщо даних немає
+        """
+        query = """
+                SELECT matrix_json, symbols_list
+                FROM correlation_matrices
+                WHERE correlation_type = ? \
+                  AND timeframe = ? \
+                """
+        params = [correlation_type, timeframe]
+
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND start_time = ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND end_time = ?"
+            params.append(end_time_str)
+        if method:
+            query += " AND method = ?"
+            params.append(method)
+
+        query += " ORDER BY created_at DESC LIMIT 1"
+
+        result = self.fetch_one(query, params)
+        if result:
+            matrix_json, symbols_json = result
+            matrix = json.loads(matrix_json)
+            symbols = json.loads(symbols_json)
+            return matrix, symbols
         return None
 
-    # Збираємо всі унікальні символи
-    symbols = set()
-    for pair in pairs:
-        symbols.add(pair['symbol1'])
-        symbols.add(pair['symbol2'])
 
-    # Сортуємо символи для стабільного порядку
-    symbols = sorted(list(symbols))
-    n = len(symbols)
+    def get_correlation_breakdowns(self, symbol1=None, symbol2=None, timeframe=None,
+                                   start_time=None, end_time=None, method=None):
 
-    # Створюємо матрицю кореляцій
-    matrix = [[0.0 for _ in range(n)] for _ in range(n)]
+        query = """
+                SELECT symbol1, \
+                       symbol2, \
+                       breakdown_time, \
+                       correlation_before, \
+                       correlation_after,
+                       timeframe, \
+                       window_size, \
+                       threshold, \
+                       method
+                FROM correlation_breakdowns
+                WHERE 1 = 1 \
+                """
+        params = []
 
-    # Заповнюємо матрицю значеннями кореляцій
-    for pair in pairs:
-        i = symbols.index(pair['symbol1'])
-        j = symbols.index(pair['symbol2'])
-        matrix[i][j] = pair['correlation_value']
-        # Симетрично заповнюємо іншу половину матриці
-        matrix[j][i] = pair['correlation_value']
+        if symbol1 and symbol2:
+            # Переконуємося, що символи впорядковані (це важливо для пошуку)
+            if symbol1 > symbol2:
+                symbol1, symbol2 = symbol2, symbol1
+            query += " AND symbol1 = ? AND symbol2 = ?"
+            params.extend([symbol1, symbol2])
+        elif symbol1:
+            query += " AND (symbol1 = ? OR symbol2 = ?)"
+            params.extend([symbol1, symbol1])
+        elif symbol2:
+            query += " AND (symbol1 = ? OR symbol2 = ?)"
+            params.extend([symbol2, symbol2])
 
-    # Діагональ матриці - кореляція активу з самим собою = 1.0
-    for i in range(n):
-        matrix[i][i] = 1.0
+        if timeframe:
+            query += " AND timeframe = ?"
+            params.append(timeframe)
 
-    return matrix, symbols
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND breakdown_time >= ?"
+            params.append(start_time_str)
+
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND breakdown_time <= ?"
+            params.append(end_time_str)
+
+        if method:
+            query += " AND method = ?"
+            params.append(method)
+
+        query += " ORDER BY breakdown_time DESC"
+
+        return self.fetch_all(query, params)
 
 
-def get_decorrelated_portfolio(self, symbols, correlation_type, timeframe,
-                               max_correlation=0.3, start_time=None, end_time=None, method='pearson'):
-    """
-    Створює декорельований портфель із заданих символів
+    def save_market_beta(self, beta_values, market_symbol, timeframe, start_time, end_time):
+        """
+        Зберігає бета-коефіцієнти для криптовалют відносно ринку
 
-    Args:
-        symbols: Список символів для аналізу
-        correlation_type: Тип кореляції
-        timeframe: Таймфрейм даних
-        max_correlation: Максимально допустима кореляція між активами
-        start_time: Початковий час для фільтрації (опціонально)
-        end_time: Кінцевий час для фільтрації (опціонально)
-        method: Метод обчислення кореляції
+        Аргументи:
+            beta_values: Словник {symbol: beta_value}
+            market_symbol: Символ, що представляє ринок (зазвичай 'BTCUSDT')
+            timeframe: Часовий інтервал
+            start_time: Початковий час періоду аналізу
+            end_time: Кінцевий час періоду аналізу
 
-    Returns:
-        Список символів, які формують декорельований портфель
-    """
-    # Завантажуємо кореляційну матрицю
-    matrix_data = self.load_correlation_matrix(correlation_type, timeframe, start_time, end_time, method)
-    if not matrix_data:
-        return []
+        Повертає:
+            Результат виконання запиту
+        """
+        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
 
-    matrix, all_symbols = matrix_data
+        query = """
+        INSERT OR REPLACE INTO market_betas
+        (symbol, market_symbol, beta_value, timeframe, start_time, end_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """
+        params = [(symbol, market_symbol, beta, timeframe, start_time_str, end_time_str)
+                  for symbol, beta in beta_values.items()]
+        return self.execute_many(query, params)
 
-    # Конвертуємо матрицю в словник {(symbol1, symbol2): correlation}
-    correlations = {}
-    for i, sym1 in enumerate(all_symbols):
-        for j, sym2 in enumerate(all_symbols):
-            if i != j:  # Виключаємо кореляцію активу з самим собою
-                correlations[(sym1, sym2)] = matrix[i][j] if isinstance(matrix[0], list) else matrix.iloc[i, j]
 
-    # Фільтруємо тільки символи, які нас цікавлять
-    filtered_symbols = [s for s in symbols if s in all_symbols]
+    def get_market_beta(self, symbol=None, market_symbol=None, timeframe=None, start_time=None, end_time=None):
 
-    # Жадібний алгоритм для побудови декорельованого портфеля
-    portfolio = []
-    if filtered_symbols:
-        # Починаємо з першого символу
-        portfolio.append(filtered_symbols[0])
+        query = """
+                SELECT symbol, market_symbol, beta_value, timeframe, start_time, end_time
+                FROM market_betas
+                WHERE 1 = 1 \
+                """
+        params = []
 
-        # Додаємо символи, які не корелюють з уже доданими
-        for symbol in filtered_symbols[1:]:
-            can_add = True
-            for p_symbol in portfolio:
-                if (symbol, p_symbol) in correlations:
-                    corr = abs(correlations[(symbol, p_symbol)])
-                elif (p_symbol, symbol) in correlations:
-                    corr = abs(correlations[(p_symbol, symbol)])
-                else:
-                    continue
+        if symbol:
+            query += " AND symbol = ?"
+            params.append(symbol)
+        if market_symbol:
+            query += " AND market_symbol = ?"
+            params.append(market_symbol)
+        if timeframe:
+            query += " AND timeframe = ?"
+            params.append(timeframe)
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND start_time = ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND end_time = ?"
+            params.append(end_time_str)
 
-                if corr > max_correlation:
-                    can_add = False
-                    break
+        query += " ORDER BY symbol, start_time DESC"
 
-            if can_add:
-                portfolio.append(symbol)
+        return self.fetch_all(query, params)
 
-    return portfolio
+
+    def save_beta_time_series(self, symbol, market_symbol, timestamps, beta_values, timeframe, window_size):
+
+        timestamp_strs = []
+        for ts in timestamps:
+            if isinstance(ts, datetime):
+                timestamp_strs.append(ts.isoformat())
+            else:
+                timestamp_strs.append(ts)
+
+        query = """
+        INSERT OR REPLACE INTO beta_time_series
+        (symbol, market_symbol, timestamp, beta_value, timeframe, window_size)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """
+        params = [(symbol, market_symbol, ts, beta, timeframe, window_size)
+                  for ts, beta in zip(timestamp_strs, beta_values)]
+        return self.execute_many(query, params)
+
+
+    def get_beta_time_series(self, symbol, market_symbol, timeframe, window_size, start_time=None, end_time=None):
+
+        query = """
+                SELECT timestamp, beta_value
+                FROM beta_time_series
+                WHERE symbol = ? AND market_symbol = ? AND timeframe = ? AND window_size = ? \
+                """
+        params = [symbol, market_symbol, timeframe, window_size]
+
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND timestamp >= ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND timestamp <= ?"
+            params.append(end_time_str)
+
+        query += " ORDER BY timestamp"
+
+        return self.fetch_all(query, params)
+
+
+    def save_sector_correlations(self, sector_correlations, correlation_type, timeframe, start_time, end_time, method):
+
+        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+
+        query = """
+        INSERT OR REPLACE INTO sector_correlations
+        (sector1, sector2, correlation_value, correlation_type, timeframe, start_time, end_time, method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        params = [(s[0], s[1], s[2], correlation_type, timeframe, start_time_str, end_time_str, method)
+                  for s in sector_correlations]
+        return self.execute_many(query, params)
+
+
+    def get_sector_correlations(self, sector=None, correlation_type=None, timeframe=None,
+                                min_correlation=0.0, start_time=None, end_time=None, method=None):
+
+        query = """
+                SELECT sector1, sector2, correlation_value
+                FROM sector_correlations
+                WHERE correlation_value >= ? \
+                """
+        params = [min_correlation]
+
+        if sector:
+            query += " AND (sector1 = ? OR sector2 = ?)"
+            params.extend([sector, sector])
+        if correlation_type:
+            query += " AND correlation_type = ?"
+            params.append(correlation_type)
+        if timeframe:
+            query += " AND timeframe = ?"
+            params.append(timeframe)
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND start_time = ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND end_time = ?"
+            params.append(end_time_str)
+        if method:
+            query += " AND method = ?"
+            params.append(method)
+
+        query += " ORDER BY correlation_value DESC"
+
+        return self.fetch_all(query,params)
+
+
+    def save_leading_indicators(self, leading_indicators):
+
+        for item in leading_indicators:
+            if isinstance(item['start_time'], datetime):
+                item['start_time'] = item['start_time'].isoformat()
+            if isinstance(item['end_time'], datetime):
+                item['end_time'] = item['end_time'].isoformat()
+
+        query = """
+        INSERT OR REPLACE INTO leading_indicators
+        (target_symbol, indicator_symbol, lag_period, correlation_value, 
+         timeframe, start_time, end_time, method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        params = [(item['target_symbol'], item['indicator_symbol'], item['lag_period'],
+                   item['correlation_value'], item['timeframe'], item['start_time'],
+                   item['end_time'], item['method'])
+                  for item in leading_indicators]
+        return self.execute_many(query, params)
+
+
+    def get_leading_indicators(self, target_symbol=None, indicator_symbol=None, timeframe=None,
+                               min_correlation=0.7, start_time=None, end_time=None, method=None):
+        """
+        Отримує провідні індикатори
+
+        Аргументи:
+            target_symbol: Цільовий символ (опціонально)
+            indicator_symbol: Символ індикатора (опціонально)
+            timeframe: Часовий інтервал (опціонально)
+            min_correlation: Мінімальне значення кореляції (опціонально)
+            start_time: Початковий час періоду (опціонально)
+            end_time: Кінцевий час періоду (опціонально)
+            method: Метод кореляції (опціонально)
+
+        Повертає:
+            Список кортежів (target_symbol, indicator_symbol, lag_period, correlation_value)
+        """
+        query = """
+                SELECT target_symbol, indicator_symbol, lag_period, correlation_value
+                FROM leading_indicators
+                WHERE correlation_value >= ? \
+                """
+        params = [min_correlation]
+
+        if target_symbol:
+            query += " AND target_symbol = ?"
+            params.append(target_symbol)
+        if indicator_symbol:
+            query += " AND indicator_symbol = ?"
+            params.append(indicator_symbol)
+        if timeframe:
+            query += " AND timeframe = ?"
+            params.append(timeframe)
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND start_time = ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND end_time = ?"
+            params.append(end_time_str)
+        if method:
+            query += " AND method = ?"
+            params.append(method)
+
+        query += " ORDER BY correlation_value DESC"
+
+        return self.fetch_all(query, params)
+
+
+    def save_external_asset_correlations(self, correlations, timeframe, start_time, end_time, method):
+        """
+        Зберігає кореляції між криптовалютами та зовнішніми активами
+
+        Аргументи:
+            correlations: Список кортежів (crypto_symbol, external_asset, correlation_value)
+            timeframe: Часовий інтервал
+            start_time: Початковий час періоду
+            end_time: Кінцевий час періоду
+            method: Метод кореляції
+
+        Повертає:
+            Результат виконання запиту
+        """
+        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+
+        query = """
+        INSERT OR REPLACE INTO external_asset_correlations
+        (crypto_symbol, external_asset, correlation_value, timeframe, start_time, end_time, method)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        params = [(c[0], c[1], c[2], timeframe, start_time_str, end_time_str, method)
+                  for c in correlations]
+        return self.execute_many(query, params)
+
+
+    def get_external_asset_correlations(self, crypto_symbol=None, external_asset=None, timeframe=None,
+                                        min_correlation=-1.0, start_time=None, end_time=None, method=None):
+        """
+        Отримує кореляції між криптовалютами та зовнішніми активами
+
+        Аргументи:
+            crypto_symbol: Символ криптовалюти (опціонально)
+            external_asset: Зовнішній актив (опціонально)
+            timeframe: Часовий інтервал (опціонально)
+            min_correlation: Мінімальне значення кореляції (опціонально)
+            start_time: Початковий час періоду (опціонально)
+            end_time: Кінцевий час періоду (опціонально)
+            method: Метод кореляції (опціонально)
+
+        Повертає:
+            Список кортежів (crypto_symbol, external_asset, correlation_value)
+        """
+        query = """
+                SELECT crypto_symbol, external_asset, correlation_value
+                FROM external_asset_correlations
+                WHERE correlation_value >= ? \
+                """
+        params = [min_correlation]
+
+        if crypto_symbol:
+            query += " AND crypto_symbol = ?"
+            params.append(crypto_symbol)
+        if external_asset:
+            query += " AND external_asset = ?"
+            params.append(external_asset)
+        if timeframe:
+            query += " AND timeframe = ?"
+            params.append(timeframe)
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND start_time = ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND end_time = ?"
+            params.append(end_time_str)
+        if method:
+            query += " AND method = ?"
+            params.append(method)
+
+        query += " ORDER BY ABS(correlation_value) DESC"
+
+        return self.fetch_all(query, params)
+
+
+    def save_market_regime_correlations(self, regime_name, correlation_matrix, symbols_list,
+                                        correlation_type, start_time, end_time, method):
+        """
+        Зберігає кореляційні матриці для різних ринкових режимів
+
+        Аргументи:
+            regime_name: Назва ринкового режиму
+            correlation_matrix: Кореляційна матриця
+            symbols_list: Список символів
+            correlation_type: Тип кореляції
+            start_time: Початковий час періоду
+            end_time: Кінцевий час періоду
+            method: Метод кореляції
+
+        Повертає:
+            Результат виконання запиту
+        """
+        start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+        end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+
+        # Конвертація матриці в JSON формат
+        if hasattr(correlation_matrix, 'to_json'):
+            matrix_json = correlation_matrix.to_json()
+        else:
+            # Якщо це numpy array, перетворюємо в список списків
+            matrix_json = json.dumps(correlation_matrix.tolist()
+                                     if hasattr(correlation_matrix, 'tolist')
+                                     else correlation_matrix)
+
+        # Конвертація списку символів в JSON
+        symbols_json = json.dumps(symbols_list)
+
+        query = """
+        INSERT OR REPLACE INTO market_regime_correlations
+        (regime_name, start_time, end_time, correlation_type, matrix_json, symbols_list, method)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (regime_name, start_time_str, end_time_str, correlation_type, matrix_json, symbols_json, method)
+        return self.execute_query(query, params)
+
+
+    def get_market_regime_correlations(self, regime_name=None, correlation_type=None,
+                                       start_time=None, end_time=None, method=None):
+        """
+        Отримує кореляційні матриці для ринкових режимів
+
+        Аргументи:
+            regime_name: Назва ринкового режиму (опціонально)
+            correlation_type: Тип кореляції (опціонально)
+            start_time: Початковий час періоду (опціонально)
+            end_time: Кінцевий час періоду (опціонально)
+            method: Метод кореляції (опціонально)
+
+        Повертає:
+            Список кортежів (regime_name, start_time, end_time, matrix, symbols)
+        """
+        query = """
+                SELECT regime_name, start_time, end_time, matrix_json, symbols_list
+                FROM market_regime_correlations
+                WHERE 1 = 1 \
+                """
+        params = []
+
+        if regime_name:
+            query += " AND regime_name = ?"
+            params.append(regime_name)
+        if correlation_type:
+            query += " AND correlation_type = ?"
+            params.append(correlation_type)
+        if start_time:
+            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
+            query += " AND start_time = ?"
+            params.append(start_time_str)
+        if end_time:
+            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
+            query += " AND end_time = ?"
+            params.append(end_time_str)
+        if method:
+            query += " AND method = ?"
+            params.append(method)
+
+        query += " ORDER BY regime_name, start_time"
+
+        results = self.fetch_all(query, params)
+
+        processed_results = []
+        for result in results:
+            regime_name, start_time, end_time, matrix_json, symbols_json = result
+            matrix = json.loads(matrix_json)
+            symbols = json.loads(symbols_json)
+            processed_results.append((regime_name, start_time, end_time, matrix, symbols))
+
+        return processed_results
+
+
+
+    def insert_correlated_pair(self, symbol1, symbol2, correlation_value, correlation_type,
+                               timeframe, start_time, end_time, method):
+        """
+        Додає інформацію про кореляцію пари символів
+
+        Args:
+            symbol1: Перший символ пари
+            symbol2: Другий символ пари
+            correlation_value: Значення кореляції
+            correlation_type: Тип кореляції
+            timeframe: Таймфрейм даних
+            start_time: Початковий час періоду аналізу
+            end_time: Кінцевий час періоду аналізу
+            method: Метод обчислення кореляції
+        """
+        # Перетворення часу до строкового формату, якщо потрібно
+        if isinstance(start_time, datetime):
+            start_time = start_time.isoformat()
+        if isinstance(end_time, datetime):
+            end_time = end_time.isoformat()
+
+        query = """
+                INSERT INTO correlated_pairs (symbol1, symbol2, correlation_value, correlation_type,
+                                              timeframe, start_time, end_time, method)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol1, symbol2, correlation_type, timeframe, start_time, end_time, method)
+            DO NOTHING; \
+                """
+        params = (symbol1, symbol2, correlation_value, correlation_type,
+                  timeframe, start_time, end_time, method)
+        self.execute_query(query, params)
+        return True
+
+
+    def get_correlated_pairs(self, symbol=None, correlation_type=None, timeframe=None,
+                             min_correlation=None, max_correlation=None, limit=None):
+        """
+        Отримує інформацію про кореляції за різними фільтрами
+
+        Args:
+            symbol: Символ для фільтрації (опціонально)
+            correlation_type: Тип кореляції (опціонально)
+            timeframe: Таймфрейм даних (опціонально)
+            min_correlation: Мінімальне значення кореляції (опціонально)
+            max_correlation: Максимальне значення кореляції (опціонально)
+            limit: Максимальна кількість результатів (опціонально)
+
+        Returns:
+            Список словників з інформацією про корельовані пари
+        """
+        # Складаємо базовий запит
+        query = "SELECT * FROM correlated_pairs WHERE 1=1"
+        params = []
+
+        # Додаємо фільтри
+        if symbol:
+            query += " AND (symbol1 = %s OR symbol2 = %s)"
+            params.extend([symbol, symbol])
+        if correlation_type:
+            query += " AND correlation_type = %s"
+            params.append(correlation_type)
+        if timeframe:
+            query += " AND timeframe = %s"
+            params.append(timeframe)
+        if min_correlation is not None:
+            query += " AND correlation_value >= %s"
+            params.append(min_correlation)
+        if max_correlation is not None:
+            query += " AND correlation_value <= %s"
+            params.append(max_correlation)
+
+        # Додаємо сортування та ліміт
+        query += " ORDER BY correlation_value DESC"
+
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        return self.fetch_dict(query, params)
+
+
+    def save_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
+                                     window_size, timestamp, correlation_value, method):
+        """
+        Зберігає часовий ряд кореляції для пари криптовалют
+
+        Args:
+            symbol1: Перший символ пари
+            symbol2: Другий символ пари
+            correlation_type: Тип кореляції
+            timeframe: Таймфрейм даних
+            window_size: Розмір вікна для обчислення кореляції
+            timestamp: Час, для якого обчислена кореляція
+            correlation_value: Значення кореляції
+            method: Метод обчислення кореляції
+        """
+        # Перетворення часу до строкового формату, якщо потрібно
+        if isinstance(timestamp, datetime):
+            timestamp = timestamp.isoformat()
+
+        query = """
+                INSERT INTO correlation_time_series (symbol1, symbol2, correlation_type, timeframe,
+                                                     window_size, timestamp, correlation_value, method)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol1, symbol2, correlation_type, timeframe, window_size, timestamp, method) 
+            DO \
+                UPDATE SET correlation_value = EXCLUDED.correlation_value \
+                """
+        params = (symbol1, symbol2, correlation_type, timeframe,
+                  window_size, timestamp, correlation_value, method)
+        self.execute_query(query, params)
+        return True
+
+
+    def get_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
+                                    window_size, start_time=None, end_time=None, method=None, limit=None):
+        """
+        Отримує часовий ряд кореляцій для конкретної пари
+
+        Args:
+            symbol1: Перший символ пари
+            symbol2: Другий символ пари
+            correlation_type: Тип кореляції
+            timeframe: Таймфрейм даних
+            window_size: Розмір вікна для обчислення кореляції
+            start_time: Початковий час для фільтрації (опціонально)
+            end_time: Кінцевий час для фільтрації (опціонально)
+            method: Метод обчислення кореляції (опціонально)
+            limit: Максимальна кількість результатів (опціонально)
+
+        Returns:
+            Список словників з даними часового ряду кореляцій
+        """
+        # Перетворення часу до строкового формату, якщо потрібно
+        if isinstance(start_time, datetime):
+            start_time = start_time.isoformat()
+        if isinstance(end_time, datetime):
+            end_time = end_time.isoformat()
+
+        # Складаємо базовий запит
+        query = """
+                SELECT timestamp, correlation_value
+                FROM correlation_time_series
+                WHERE symbol1 = %s
+                  AND symbol2 = %s
+                  AND correlation_type = %s
+                  AND timeframe = %s
+                  AND window_size = %s \
+                """
+        params = [symbol1, symbol2, correlation_type, timeframe, window_size]
+
+        # Додаємо фільтри
+        if start_time:
+            query += " AND timestamp >= %s"
+            params.append(start_time)
+        if end_time:
+            query += " AND timestamp <= %s"
+            params.append(end_time)
+        if method:
+            query += " AND method = %s"
+            params.append(method)
+
+        # Додаємо сортування та ліміт
+        query += " ORDER BY timestamp ASC"
+
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        return self.fetch_dict(query, params)
+
+
+    def get_most_correlated_pairs(self, symbol=None, correlation_type='pearson', timeframe='1h',
+                                  limit=10, min_abs_correlation=0.7):
+        """
+        Отримує найбільш корельовані пари за абсолютним значенням кореляції
+
+        Args:
+            symbol: Символ, для якого шукаємо кореляції (опціонально)
+            correlation_type: Тип кореляції
+            timeframe: Таймфрейм даних
+            limit: Максимальна кількість результатів
+            min_abs_correlation: Мінімальне абсолютне значення кореляції
+
+        Returns:
+            Список словників з інформацією про найбільш корельовані пари
+        """
+        # Складаємо запит з потрібними полями та умовами
+        query = """
+                SELECT symbol1, \
+                       symbol2, \
+                       correlation_value, \
+                       correlation_type, \
+                       timeframe, \
+                       start_time, \
+                       end_time, \
+                       method, \
+                       ABS(correlation_value) as abs_correlation
+                FROM correlated_pairs
+                WHERE correlation_type = %s
+                  AND timeframe = %s
+                  AND ABS(correlation_value) >= %s \
+                """
+        params = [correlation_type, timeframe, min_abs_correlation]
+
+        # Додаємо фільтр за символом, якщо вказаний
+        if symbol:
+            query += " AND (symbol1 = %s OR symbol2 = %s)"
+            params.extend([symbol, symbol])
+
+        # Додаємо сортування та ліміт
+        query += " ORDER BY abs_correlation DESC LIMIT %s"
+        params.append(limit)
+
+        return self.fetch_dict(query, params)
+
+
+
+
+
