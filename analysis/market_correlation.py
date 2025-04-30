@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Optional, Union
@@ -37,9 +39,7 @@ class MarketCorrelation:
         }
     }
 
-    def __init__(self, db_manager: Optional[DatabaseManager] = None,
-                 binance_client: Optional[BinanceClient] = None,
-                 custom_config: Optional[Dict] = None):
+    def __init__(self):
 
         self.db_manager = DatabaseManager()
         self.binance_client = BinanceClient()
@@ -47,11 +47,8 @@ class MarketCorrelation:
 
         logger.info("Ініціалізація аналізатора ринкової кореляції")
 
-        # Ініціалізація конфігурації зі значеннями за замовчуванням та перевизначення користувацькими, якщо надані
         self.config = self.DEFAULT_CONFIG.copy()
-        if custom_config:
-            logger.debug(f"Застосування користувацької конфігурації: {custom_config}")
-            self._update_config_recursive(self.config, custom_config)
+
 
     def _update_config_recursive(self, target_dict: Dict, source_dict: Dict) -> None:
 
@@ -1232,102 +1229,701 @@ class MarketCorrelation:
                                     timeframe: str = None,
                                     start_time: Optional[datetime] = None,
                                     end_time: Optional[datetime] = None) -> Dict[str, Dict[str, float]]:
-        """
-        Analyze correlations between different cryptocurrency sectors.
 
-        Args:
-            sector_mapping: Dictionary mapping symbols to their sectors
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-            start_time: Start time for the analysis period
-            end_time: End time for the analysis period
-
-        Returns:
-            Dictionary mapping each sector to its correlation with other sectors
-        """
         # Use default timeframe from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+
+        logger.info(f"Performing sector correlation analysis for {len(sector_mapping)} symbols across sectors")
+
+        # Set default time range if not specified
+        end_time = end_time or datetime.now()
+        if start_time is None:
+            lookback_days = self.config['default_lookback_days']
+            start_time = end_time - timedelta(days=lookback_days)
+            logger.debug(f"Using default lookback period: {lookback_days} days")
+
+        try:
+            # Group symbols by sector
+            sectors = {}
+            for symbol, sector in sector_mapping.items():
+                if sector not in sectors:
+                    sectors[sector] = []
+                sectors[sector].append(symbol)
+
+            logger.info(f"Found {len(sectors)} distinct sectors for analysis")
+
+            # Fetch price data for all symbols
+            all_symbols = list(sector_mapping.keys())
+            price_data = {}
+            for symbol in all_symbols:
+                logger.debug(f"Fetching price data for {symbol}")
+                price_data[symbol] = self.db_manager.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+            # Calculate returns for each symbol
+            returns_data = {}
+            for symbol, data in price_data.items():
+                prices = data['close']
+                returns_data[symbol] = prices.pct_change().dropna()
+
+            # Calculate sector returns (average of all symbols in the sector)
+            sector_returns = {}
+            for sector_name, symbols in sectors.items():
+                # Get returns for all symbols in this sector
+                sector_symbol_returns = [returns_data[s] for s in symbols if s in returns_data]
+
+                if not sector_symbol_returns:
+                    logger.warning(f"No return data available for sector {sector_name}")
+                    continue
+
+                # Align all returns to the same index
+                aligned_returns = pd.DataFrame({s: returns_data[s] for s in symbols if s in returns_data})
+
+                # Calculate average returns for the sector (ignoring NaNs)
+                sector_returns[sector_name] = aligned_returns.mean(axis=1).dropna()
+
+                logger.debug(
+                    f"Calculated returns for sector {sector_name} with {len(sector_returns[sector_name])} data points")
+
+            # Create a dataframe of all sector returns
+            all_sector_returns = pd.DataFrame({sector: returns for sector, returns in sector_returns.items()})
+
+            # Handle any missing data
+            if all_sector_returns.isnull().values.any():
+                missing_count = all_sector_returns.isnull().sum().sum()
+                logger.warning(f"Found {missing_count} missing values in sector returns. Filling with forward fill.")
+                all_sector_returns = all_sector_returns.fillna(method='ffill')
+
+            # Calculate correlation matrix between sectors
+            sector_correlation_matrix = all_sector_returns.corr(method=self.config['default_correlation_method'])
+
+            # Convert correlation matrix to dictionary format
+            sector_correlations = {}
+            for sector1 in sector_correlation_matrix.index:
+                sector_correlations[sector1] = {}
+                for sector2 in sector_correlation_matrix.columns:
+                    sector_correlations[sector1][sector2] = sector_correlation_matrix.loc[sector1, sector2]
+
+            # Save results to database
+            correlation_records = []
+            for sector1 in sector_correlations:
+                for sector2, correlation in sector_correlations[sector1].items():
+                    if sector1 != sector2:  # Skip self-correlations
+                        correlation_records.append({
+                            'sector1': sector1,
+                            'sector2': sector2,
+                            'correlation': correlation,
+                            'timeframe': timeframe,
+                            'start_time': start_time,
+                            'end_time': end_time,
+                            'analysis_time': datetime.now()
+                        })
+
+            # Save to sector_correlations table
+            if correlation_records:
+                self.db_manager.save_sector_correlations(correlation_records)
+                logger.info(f"Saved {len(correlation_records)} sector correlation records to database")
+
+            return sector_correlations
+
+        except Exception as e:
+            logger.error(f"Error in sector correlation analysis: {str(e)}")
+            raise
 
     def correlated_movement_prediction(self, symbol: str,
                                        correlated_symbols: List[str],
                                        prediction_horizon: int = None,
                                        timeframe: str = None) -> Dict[str, float]:
-        """
-        Predict potential movement of target symbol based on highly correlated symbols.
 
-        Args:
-            symbol: Target cryptocurrency symbol
-            correlated_symbols: List of highly correlated symbols
-            prediction_horizon: Number of periods to predict ahead
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-
-        Returns:
-            Dictionary with prediction metrics and potential movement
-        """
         # Use default values from config if not specified
         prediction_horizon = prediction_horizon or self.config['default_prediction_horizon']
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+
+        logger.info(
+            f"Predicting movement for {symbol} using {len(correlated_symbols)} correlated symbols with horizon {prediction_horizon}")
+
+        # Set default time range - we need more historical data for training
+        end_time = datetime.now()
+        lookback_days = self.config['default_lookback_days'] * 2  # Double the usual lookback for better training
+        start_time = end_time - timedelta(days=lookback_days)
+
+        try:
+            # Fetch price data for target and all correlated symbols
+            all_symbols = [symbol] + correlated_symbols
+            price_data = {}
+            for sym in all_symbols:
+                price_data[sym] = self.db_manager.get_klines(
+                    symbol=sym,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+            # Extract close prices
+            close_prices = {}
+            for sym, data in price_data.items():
+                close_prices[sym] = data['close']
+
+            # Calculate returns
+            returns = {}
+            for sym, prices in close_prices.items():
+                returns[sym] = prices.pct_change().dropna()
+
+            # Create a dataframe with all returns
+            all_returns = pd.DataFrame({sym: ret for sym, ret in returns.items()})
+
+            # Handle any missing data
+            if all_returns.isnull().values.any():
+                missing_count = all_returns.isnull().sum().sum()
+                logger.warning(f"Found {missing_count} missing values in returns. Filling with forward fill.")
+                all_returns = all_returns.fillna(method='ffill')
+
+            # Create prediction features by shifting correlated symbols' returns
+            # We're shifting backwards because we want to use past values of correlated symbols
+            # to predict future values of the target symbol
+            feature_df = pd.DataFrame()
+            for i, corr_sym in enumerate(correlated_symbols):
+                for lag in range(1, prediction_horizon + 1):
+                    feature_name = f"{corr_sym}_lag_{lag}"
+                    feature_df[feature_name] = all_returns[corr_sym].shift(lag)
+
+            # Target is future return of the symbol we're trying to predict
+            target = all_returns[symbol].shift(-prediction_horizon)
+
+            # Combine features and target
+            model_data = pd.concat([feature_df, target], axis=1)
+            model_data.columns = list(feature_df.columns) + ['target']
+
+            # Remove rows with NaN values
+            model_data = model_data.dropna()
+
+            if len(model_data) < 30:  # Need sufficient data for reliable prediction
+                logger.warning(f"Insufficient data for prediction after preprocessing: {len(model_data)} rows")
+                return {"error": "Insufficient data for prediction"}
+
+            # Split data into training and testing sets
+            train_size = int(len(model_data) * 0.8)
+            train_data = model_data.iloc[:train_size]
+            test_data = model_data.iloc[train_size:]
+
+            # Train a simple linear regression model
+            from sklearn.linear_model import LinearRegression
+
+            X_train = train_data.drop('target', axis=1)
+            y_train = train_data['target']
+
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+
+            # Evaluate on test set
+            X_test = test_data.drop('target', axis=1)
+            y_test = test_data['target']
+
+            test_score = model.score(X_test, y_test)
+            logger.info(f"Prediction model R² score: {test_score:.4f}")
+
+            # Get the most recent data for prediction
+            latest_data = feature_df.iloc[-1:]
+            if latest_data.isnull().values.any():
+                latest_data = latest_data.fillna(0)  # Handle any missing values in latest data
+
+            # Make prediction for future movement
+            predicted_return = model.predict(latest_data)[0]
+
+            # Get feature importances (coefficients)
+            feature_importance = dict(zip(X_train.columns, model.coef_))
+
+            # Sort features by absolute importance
+            sorted_features = sorted(feature_importance.items(), key=lambda x: abs(x[1]), reverse=True)
+            top_features = dict(sorted_features[:5])  # Top 5 most important features
+
+            # Calculate confidence metric based on historical accuracy
+            from sklearn.metrics import mean_squared_error
+            y_pred_test = model.predict(X_test)
+            mse = mean_squared_error(y_test, y_pred_test)
+            rmse = np.sqrt(mse)
+
+            # Normalize RMSE to get a confidence score between 0 and 1
+            avg_abs_return = np.mean(np.abs(y_test))
+            confidence = max(0, min(1, 1 - (rmse / (avg_abs_return * 2))))
+
+            # Get current price for the symbol
+            current_price = close_prices[symbol].iloc[-1]
+
+            # Calculate predicted price
+            predicted_price = current_price * (1 + predicted_return)
+
+            # Prepare results
+            results = {
+                "symbol": symbol,
+                "current_price": current_price,
+                "predicted_return": predicted_return,
+                "predicted_price": predicted_price,
+                "prediction_horizon": prediction_horizon,
+                "prediction_direction": "up" if predicted_return > 0 else "down",
+                "confidence": confidence,
+                "model_r2": test_score,
+                "top_indicators": top_features,
+                "prediction_timestamp": datetime.now()
+            }
+
+            # Save prediction to database
+            prediction_record = {
+                "target_symbol": symbol,
+                "predicted_return": predicted_return,
+                "prediction_horizon": prediction_horizon,
+                "confidence": confidence,
+                "model_type": "linear_regression",
+                "prediction_time": datetime.now(),
+                "timeframe": timeframe
+                # Additional fields could be added if needed
+            }
+
+            # self.db_manager.save_prediction(prediction_record)
+
+            logger.info(f"Successfully generated prediction for {symbol} with {prediction_horizon} periods horizon")
+            return results
+
+        except Exception as e:
+            logger.error(f"Error in correlated movement prediction: {str(e)}")
+            return {"error": str(e)}
 
     def get_decorrelated_portfolio(self, symbols: List[str],
                                    target_correlation: float = None,
                                    timeframe: str = None,
                                    start_time: Optional[datetime] = None,
                                    end_time: Optional[datetime] = None) -> Dict[str, float]:
-        """
-        Generate weights for a portfolio of cryptocurrencies with low mutual correlation.
 
-        Args:
-            symbols: List of cryptocurrency symbols to include in portfolio
-            target_correlation: Target maximum average correlation between assets
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-            start_time: Start time for the analysis period
-            end_time: End time for the analysis period
-
-        Returns:
-            Dictionary mapping symbols to suggested portfolio weights
-        """
         # Use default values from config if not specified
         target_correlation = target_correlation or self.config['target_portfolio_correlation']
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+
+        logger.info(
+            f"Calculating decorrelated portfolio for {len(symbols)} symbols with target correlation {target_correlation}")
+
+        # Set default time range if not specified
+        end_time = end_time or datetime.now()
+        if start_time is None:
+            lookback_days = self.config['default_lookback_days']
+            start_time = end_time - timedelta(days=lookback_days)
+            logger.debug(f"Using default lookback period of {lookback_days} days")
+
+        try:
+            # First calculate returns correlation matrix
+            returns_corr = self.calculate_returns_correlation(
+                symbols=symbols,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            # Fetch historical price data for all symbols to calculate risk/return metrics
+            price_data = {}
+            returns_data = {}
+
+            for symbol in symbols:
+                # Get price data from database
+                symbol_data = self.db_manager.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+                # Store price data
+                price_data[symbol] = symbol_data['close']
+
+                # Calculate returns
+                returns = price_data[symbol].pct_change().dropna()
+                returns_data[symbol] = returns
+
+            # Create a DataFrame of returns
+            returns_df = pd.DataFrame(returns_data)
+
+            # Calculate mean returns and volatility (risk)
+            mean_returns = returns_df.mean()
+            volatilities = returns_df.std()
+
+            # Define optimization objective: maximize portfolio Sharpe ratio
+            # while keeping average correlation below target
+            from scipy.optimize import minimize
+
+            # Number of assets
+            n = len(symbols)
+
+            # Initial weights (equal allocation)
+            initial_weights = np.ones(n) / n
+
+            # Bounds for weights (0% to 100% for each asset)
+            bounds = tuple((0, 1) for _ in range(n))
+
+            # Constraint: weights sum to 1
+            constraints = [{'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}]
+
+            # Objective function: maximize Sharpe ratio (negative since we're minimizing)
+            # and penalize high average correlation
+            def objective(weights):
+                portfolio_return = np.sum(mean_returns * weights) * 252  # Annualized
+                portfolio_volatility = np.sqrt(
+                    np.dot(weights.T, np.dot(returns_df.cov() * 252, weights))
+                )
+                sharpe_ratio = portfolio_return / portfolio_volatility
+
+                # Calculate weighted average correlation
+                weighted_corr = 0
+                for i in range(n):
+                    for j in range(i + 1, n):
+                        if i != j:
+                            weighted_corr += weights[i] * weights[j] * returns_corr.iloc[i, j]
+
+                # Total possible pairs
+                total_pairs = (n * (n - 1)) / 2
+                avg_corr = weighted_corr / total_pairs if total_pairs > 0 else 0
+
+                # Penalty for exceeding target correlation
+                correlation_penalty = max(0, avg_corr - target_correlation) * 10
+
+                # Return negative Sharpe ratio plus correlation penalty
+                return -sharpe_ratio + correlation_penalty
+
+            # Run optimization
+            logger.info("Starting portfolio optimization...")
+            result = minimize(
+                objective,
+                initial_weights,
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints
+            )
+
+            # Get optimized weights
+            optimized_weights = result['x']
+
+            # Create dictionary of symbol to weight
+            portfolio_weights = {symbol: weight for symbol, weight in zip(symbols, optimized_weights)}
+
+            # Filter out very small allocations (less than 1%)
+            cleaned_weights = {k: v for k, v in portfolio_weights.items() if v >= 0.01}
+
+            # Renormalize remaining weights
+            total_weight = sum(cleaned_weights.values())
+            if total_weight > 0:
+                cleaned_weights = {k: v / total_weight for k, v in cleaned_weights.items()}
+
+            # Calculate portfolio statistics
+            portfolio_return = np.sum(
+                [mean_returns[symbol] * cleaned_weights.get(symbol, 0) for symbol in symbols]) * 252
+            portfolio_volatility = np.sqrt(
+                np.dot(
+                    np.array(list(cleaned_weights.values())).T,
+                    np.dot(
+                        returns_df[list(cleaned_weights.keys())].cov() * 252,
+                        np.array(list(cleaned_weights.values()))
+                    )
+                )
+            )
+            sharpe_ratio = portfolio_return / portfolio_volatility if portfolio_volatility > 0 else 0
+
+            # Calculate average correlation of final portfolio
+            corr_sum = 0
+            count = 0
+            final_symbols = list(cleaned_weights.keys())
+            for i in range(len(final_symbols)):
+                for j in range(i + 1, len(final_symbols)):
+                    corr_sum += returns_corr.loc[final_symbols[i], final_symbols[j]]
+                    count += 1
+
+            avg_correlation = corr_sum / count if count > 0 else 0
+
+            logger.info(f"Portfolio optimization complete. Expected annual return: {portfolio_return:.4f}, "
+                        f"Volatility: {portfolio_volatility:.4f}, Sharpe: {sharpe_ratio:.4f}, "
+                        f"Avg Correlation: {avg_correlation:.4f}")
+
+            # Save portfolio to database
+            portfolio_record = {
+                'portfolio_id': f"decorr_{timeframe}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                'target_correlation': target_correlation,
+                'actual_correlation': avg_correlation,
+                'expected_return': portfolio_return,
+                'expected_volatility': portfolio_volatility,
+                'sharpe_ratio': sharpe_ratio,
+                'timeframe': timeframe,
+                'start_time': start_time,
+                'end_time': end_time,
+                'creation_time': datetime.now(),
+                'weights_json': json.dumps(cleaned_weights)
+            }
+
+            # Assuming we have a method to save portfolio data
+            if hasattr(self.db_manager, 'save_portfolio'):
+                self.db_manager.save_portfolio(portfolio_record)
+                logger.debug(f"Saved decorrelated portfolio to database")
+
+            return cleaned_weights
+
+        except Exception as e:
+            logger.error(f"Error calculating decorrelated portfolio: {str(e)}")
+            raise
 
     def analyze_market_regime_correlations(self, symbols: List[str],
                                            market_regimes: Dict[Tuple[datetime, datetime], str],
                                            timeframe: str = None) -> Dict[str, Dict[str, pd.DataFrame]]:
-        """
-        Analyze how correlations between cryptocurrencies change in different market regimes.
 
-        Args:
-            symbols: List of cryptocurrency symbols to analyze
-            market_regimes: Dictionary mapping time periods to regime names
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-
-        Returns:
-            Dictionary mapping regime names to correlation matrices
-        """
         # Use default timeframe from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+
+        logger.info(
+            f"Analyzing market regime correlations for {len(symbols)} symbols across {len(market_regimes)} regimes")
+
+        # Dictionary to store results by regime
+        regime_correlations = {}
+
+        # Correlation types to calculate
+        correlation_types = ['price', 'returns', 'volatility', 'volume']
+
+        try:
+            # Process each market regime
+            for (regime_start, regime_end), regime_name in market_regimes.items():
+                logger.info(f"Analyzing regime '{regime_name}' from {regime_start} to {regime_end}")
+
+                # Skip regimes with invalid time ranges
+                if regime_start >= regime_end:
+                    logger.warning(f"Invalid time range for regime {regime_name}: {regime_start} to {regime_end}")
+                    continue
+
+                # Initialize regime entry in results dictionary if not exists
+                if regime_name not in regime_correlations:
+                    regime_correlations[regime_name] = {}
+
+                # Calculate price correlation for this regime
+                try:
+                    price_corr = self.calculate_price_correlation(
+                        symbols=symbols,
+                        timeframe=timeframe,
+                        start_time=regime_start,
+                        end_time=regime_end
+                    )
+                    regime_correlations[regime_name]['price'] = price_corr
+                    logger.debug(f"Calculated price correlation for regime {regime_name}")
+                except Exception as e:
+                    logger.warning(f"Error calculating price correlation for regime {regime_name}: {str(e)}")
+
+                # Calculate returns correlation
+                try:
+                    returns_corr = self.calculate_returns_correlation(
+                        symbols=symbols,
+                        timeframe=timeframe,
+                        start_time=regime_start,
+                        end_time=regime_end
+                    )
+                    regime_correlations[regime_name]['returns'] = returns_corr
+                    logger.debug(f"Calculated returns correlation for regime {regime_name}")
+                except Exception as e:
+                    logger.warning(f"Error calculating returns correlation for regime {regime_name}: {str(e)}")
+
+                # Calculate volatility correlation
+                try:
+                    volatility_corr = self.calculate_volatility_correlation(
+                        symbols=symbols,
+                        timeframe=timeframe,
+                        start_time=regime_start,
+                        end_time=regime_end
+                    )
+                    regime_correlations[regime_name]['volatility'] = volatility_corr
+                    logger.debug(f"Calculated volatility correlation for regime {regime_name}")
+                except Exception as e:
+                    logger.warning(f"Error calculating volatility correlation for regime {regime_name}: {str(e)}")
+
+                # Calculate volume correlation
+                try:
+                    volume_corr = self.calculate_volume_correlation(
+                        symbols=symbols,
+                        timeframe=timeframe,
+                        start_time=regime_start,
+                        end_time=regime_end
+                    )
+                    regime_correlations[regime_name]['volume'] = volume_corr
+                    logger.debug(f"Calculated volume correlation for regime {regime_name}")
+                except Exception as e:
+                    logger.warning(f"Error calculating volume correlation for regime {regime_name}: {str(e)}")
+
+                # Calculate average correlations for this regime
+                if 'returns' in regime_correlations[regime_name]:
+                    returns_matrix = regime_correlations[regime_name]['returns']
+
+                    # Get average correlation value (excluding self-correlations)
+                    corr_values = []
+                    for i in range(len(symbols)):
+                        for j in range(i + 1, len(symbols)):
+                            corr_values.append(returns_matrix.iloc[i, j])
+
+                    avg_corr = sum(corr_values) / len(corr_values) if corr_values else 0
+                    logger.info(f"Regime {regime_name} - Average correlation: {avg_corr:.4f}")
+
+            # Save regime correlation analysis to database
+            for regime_name, correlation_data in regime_correlations.items():
+                for corr_type, corr_matrix in correlation_data.items():
+                    # Create record
+                    regime_start, regime_end = None, None
+                    for (start, end), name in market_regimes.items():
+                        if name == regime_name:
+                            regime_start, regime_end = start, end
+                            break
+
+                    if regime_start and regime_end:
+                        record = {
+                            'regime_name': regime_name,
+                            'correlation_type': corr_type,
+                            'timeframe': timeframe,
+                            'start_time': regime_start,
+                            'end_time': regime_end,
+                            'analysis_time': datetime.now(),
+                            'symbols': symbols,
+                            'matrix_json': corr_matrix.to_json()
+                        }
+
+                        # Assuming we have a method to save regime correlation data
+                        if hasattr(self.db_manager, 'save_market_regime_correlation'):
+                            self.db_manager.save_market_regime_correlation(record)
+                            logger.debug(f"Saved {corr_type} correlation for regime {regime_name} to database")
+
+            logger.info(f"Market regime correlation analysis complete for {len(regime_correlations)} regimes")
+            return regime_correlations
+
+        except Exception as e:
+            logger.error(f"Error analyzing market regime correlations: {str(e)}")
+            raise
 
     def correlation_with_external_assets(self, crypto_symbols: List[str],
                                          external_data: Dict[str, pd.Series],
                                          timeframe: str = None,
                                          start_time: Optional[datetime] = None,
-                                         end_time: Optional[datetime] = None) -> pd.DataFrame:
-        """
-        Calculate correlations between cryptocurrencies and external financial assets.
+                                         end_time: Optional[datetime] = None,
+                                         method: str = None) -> pd.DataFrame:
 
-        Args:
-            crypto_symbols: List of cryptocurrency symbols to analyze
-            external_data: Dictionary mapping asset names to price time series
-            timeframe: Time interval for the data (1m, 5m, 15m, 1h, 4h, 1d, etc.)
-            start_time: Start time for the analysis period
-            end_time: End time for the analysis period
-
-        Returns:
-            Correlation matrix of cryptocurrencies vs external assets
-        """
-        # Use default timeframe from config if not specified
+        # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
-        pass
+        method = method or self.config['default_correlation_method']
+
+        logger.info(
+            f"Calculating correlations between {len(crypto_symbols)} cryptocurrencies and {len(external_data)} external assets")
+
+        # Set default time range if not specified
+        end_time = end_time or datetime.now()
+        if start_time is None:
+            lookback_days = self.config['default_lookback_days']
+            start_time = end_time - timedelta(days=lookback_days)
+            logger.debug(f"Using default lookback period of {lookback_days} days")
+
+        try:
+            # Fetch crypto price data
+            crypto_prices = {}
+            for symbol in crypto_symbols:
+                logger.debug(f"Fetching data for {symbol}")
+                data = self.db_manager.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+                crypto_prices[symbol] = data['close']
+
+            # Create DataFrame for crypto prices
+            crypto_df = pd.DataFrame(crypto_prices)
+
+            # Create DataFrame for external asset prices
+            external_df = pd.DataFrame(external_data)
+
+            # Resample external data to match crypto timeframe if needed
+            if timeframe.endswith('m'):  # Minutes
+                freq = f"{timeframe[:-1]}min"
+            elif timeframe.endswith('h'):  # Hours
+                freq = f"{timeframe[:-1]}H"
+            elif timeframe.endswith('d'):  # Days
+                freq = f"{timeframe[:-1]}D"
+            else:
+                freq = '1D'  # Default to daily
+
+            # Check if resampling is needed (depends on input data frequency)
+            for col in external_df.columns:
+                if not isinstance(external_df.index, pd.DatetimeIndex):
+                    logger.warning(f"External data for {col} does not have DatetimeIndex, attempting conversion")
+                    external_df.index = pd.to_datetime(external_df.index)
+
+            # Resample if necessary
+            if external_df.index.freq != freq:
+                logger.debug(f"Resampling external data to {freq} frequency")
+                external_df = external_df.resample(freq).last()
+
+            # Align crypto and external data timeframes
+            # First, ensure both have datetime indices
+            if not isinstance(crypto_df.index, pd.DatetimeIndex):
+                crypto_df.index = pd.to_datetime(crypto_df.index)
+
+            # Find common date range
+            common_start = max(crypto_df.index.min(), external_df.index.min())
+            common_end = min(crypto_df.index.max(), external_df.index.max())
+
+            # Filter both dataframes to common date range
+            crypto_df = crypto_df.loc[(crypto_df.index >= common_start) & (crypto_df.index <= common_end)]
+            external_df = external_df.loc[(external_df.index >= common_start) & (external_df.index <= common_end)]
+
+            # Merge dataframes on dates
+            merged_df = pd.merge(
+                crypto_df,
+                external_df,
+                left_index=True,
+                right_index=True,
+                how='inner'
+            )
+
+            if merged_df.empty:
+                logger.warning("No overlapping data points between crypto and external assets")
+                return pd.DataFrame()
+
+            # Check for missing data
+            if merged_df.isnull().values.any():
+                missing_count = merged_df.isnull().sum().sum()
+                logger.warning(f"Found {missing_count} missing values in merged data. Filling with forward fill method")
+                merged_df = merged_df.fillna(method='ffill').fillna(method='bfill')
+
+            # Calculate returns for correlation analysis (often more meaningful than raw prices)
+            returns_df = merged_df.pct_change().dropna()
+
+            # Calculate correlation matrix
+            correlation_matrix = returns_df.corr(method=method)
+
+            # Extract only crypto-to-external correlations (not crypto-to-crypto or external-to-external)
+            crypto_vs_external = correlation_matrix.loc[crypto_symbols, external_df.columns]
+
+            logger.info(f"Successfully calculated correlations between cryptocurrencies and external assets")
+
+            # Save results to database
+            records = []
+            for crypto in crypto_symbols:
+                for ext_asset in external_df.columns:
+                    records.append({
+                        'crypto_symbol': crypto,
+                        'external_asset': ext_asset,
+                        'correlation': crypto_vs_external.loc[crypto, ext_asset],
+                        'timeframe': timeframe,
+                        'start_time': common_start,
+                        'end_time': common_end,
+                        'method': method,
+                        'analysis_time': datetime.now()
+                    })
+
+            # Save to external_asset_correlations table
+            if records:
+                self.db_manager.save_external_asset_correlations(records)
+                logger.debug(f"Saved {len(records)} external asset correlation records to database")
+
+            return crypto_vs_external
+
+        except Exception as e:
+            logger.error(f"Error calculating correlations with external assets: {str(e)}")
+            raise

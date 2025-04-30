@@ -1,7 +1,6 @@
 import os
 import pickle
 from typing import Dict, List, Any, Optional
-
 import numpy as np
 import psycopg2
 import pandas as pd
@@ -2465,7 +2464,7 @@ class DatabaseManager:
 
         query += " ORDER BY created_at DESC LIMIT 1"
 
-        result = self.fetch_one(query, params)
+        result = self.fetch_one(query, tuple(params))
         if result:
             matrix_json, symbols_json = result
             matrix = json.loads(matrix_json)
@@ -2525,23 +2524,11 @@ class DatabaseManager:
 
         query += " ORDER BY breakdown_time DESC"
 
-        return self.fetch_all(query, params)
+        return self.fetch_all(query, tuple(params))
 
 
     def save_market_beta(self, beta_values, market_symbol, timeframe, start_time, end_time):
-        """
-        Зберігає бета-коефіцієнти для криптовалют відносно ринку
 
-        Аргументи:
-            beta_values: Словник {symbol: beta_value}
-            market_symbol: Символ, що представляє ринок (зазвичай 'BTCUSDT')
-            timeframe: Часовий інтервал
-            start_time: Початковий час періоду аналізу
-            end_time: Кінцевий час періоду аналізу
-
-        Повертає:
-            Результат виконання запиту
-        """
         start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
         end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
 
@@ -2584,7 +2571,7 @@ class DatabaseManager:
 
         query += " ORDER BY symbol, start_time DESC"
 
-        return self.fetch_all(query, params)
+        return self.fetch_all(query, tuple(params))
 
 
     def save_beta_time_series(self, symbol, market_symbol, timestamps, beta_values, timeframe, window_size):
@@ -2626,7 +2613,7 @@ class DatabaseManager:
 
         query += " ORDER BY timestamp"
 
-        return self.fetch_all(query, params)
+        return self.fetch_all(query, tuple(params))
 
 
     def save_sector_correlations(self, sector_correlations, correlation_type, timeframe, start_time, end_time, method):
@@ -2677,7 +2664,7 @@ class DatabaseManager:
 
         query += " ORDER BY correlation_value DESC"
 
-        return self.fetch_all(query,params)
+        return self.fetch_all(query,tuple(params))
 
 
     def save_leading_indicators(self, leading_indicators):
@@ -2748,7 +2735,7 @@ class DatabaseManager:
 
         query += " ORDER BY correlation_value DESC"
 
-        return self.fetch_all(query, params)
+        return self.fetch_all(query, tuple(params))
 
 
     def save_external_asset_correlations(self, correlations, timeframe, start_time, end_time, method):
@@ -2825,7 +2812,7 @@ class DatabaseManager:
 
         query += " ORDER BY ABS(correlation_value) DESC"
 
-        return self.fetch_all(query, params)
+        return self.fetch_all(query, tuple(params))
 
 
     def save_market_regime_correlations(self, regime_name, correlation_matrix, symbols_list,
@@ -2911,7 +2898,7 @@ class DatabaseManager:
 
         query += " ORDER BY regime_name, start_time"
 
-        results = self.fetch_all(query, params)
+        results = self.fetch_all(query, tuple(params))
 
         processed_results = []
         for result in results:
@@ -3001,7 +2988,7 @@ class DatabaseManager:
             query += " LIMIT %s"
             params.append(limit)
 
-        return self.fetch_dict(query, params)
+        return self.fetch_dict(query, tuple(params))
 
 
     def save_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
@@ -3035,33 +3022,16 @@ class DatabaseManager:
         self.execute_query(query, params)
         return True
 
-
     def get_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
                                     window_size, start_time=None, end_time=None, method=None, limit=None):
         """
         Отримує часовий ряд кореляцій для конкретної пари
-
-        Args:
-            symbol1: Перший символ пари
-            symbol2: Другий символ пари
-            correlation_type: Тип кореляції
-            timeframe: Таймфрейм даних
-            window_size: Розмір вікна для обчислення кореляції
-            start_time: Початковий час для фільтрації (опціонально)
-            end_time: Кінцевий час для фільтрації (опціонально)
-            method: Метод обчислення кореляції (опціонально)
-            limit: Максимальна кількість результатів (опціонально)
-
-        Returns:
-            Список словників з даними часового ряду кореляцій
         """
-        # Перетворення часу до строкового формату, якщо потрібно
         if isinstance(start_time, datetime):
             start_time = start_time.isoformat()
         if isinstance(end_time, datetime):
             end_time = end_time.isoformat()
 
-        # Складаємо базовий запит
         query = """
                 SELECT timestamp, correlation_value
                 FROM correlation_time_series
@@ -3069,11 +3039,10 @@ class DatabaseManager:
                   AND symbol2 = %s
                   AND correlation_type = %s
                   AND timeframe = %s
-                  AND window_size = %s \
+                  AND window_size = %s
                 """
         params = [symbol1, symbol2, correlation_type, timeframe, window_size]
 
-        # Додаємо фільтри
         if start_time:
             query += " AND timestamp >= %s"
             params.append(start_time)
@@ -3084,59 +3053,44 @@ class DatabaseManager:
             query += " AND method = %s"
             params.append(method)
 
-        # Додаємо сортування та ліміт
         query += " ORDER BY timestamp ASC"
 
         if limit is not None:
             query += " LIMIT %s"
             params.append(limit)
 
-        return self.fetch_dict(query, params)
-
+        return self.fetch_dict(query, tuple(params))
 
     def get_most_correlated_pairs(self, symbol=None, correlation_type='pearson', timeframe='1h',
                                   limit=10, min_abs_correlation=0.7):
         """
         Отримує найбільш корельовані пари за абсолютним значенням кореляції
-
-        Args:
-            symbol: Символ, для якого шукаємо кореляції (опціонально)
-            correlation_type: Тип кореляції
-            timeframe: Таймфрейм даних
-            limit: Максимальна кількість результатів
-            min_abs_correlation: Мінімальне абсолютне значення кореляції
-
-        Returns:
-            Список словників з інформацією про найбільш корельовані пари
         """
-        # Складаємо запит з потрібними полями та умовами
         query = """
-                SELECT symbol1, \
-                       symbol2, \
-                       correlation_value, \
-                       correlation_type, \
-                       timeframe, \
-                       start_time, \
-                       end_time, \
-                       method, \
+                SELECT symbol1,
+                       symbol2,
+                       correlation_value,
+                       correlation_type,
+                       timeframe,
+                       start_time,
+                       end_time,
+                       method,
                        ABS(correlation_value) as abs_correlation
                 FROM correlated_pairs
                 WHERE correlation_type = %s
                   AND timeframe = %s
-                  AND ABS(correlation_value) >= %s \
+                  AND ABS(correlation_value) >= %s
                 """
         params = [correlation_type, timeframe, min_abs_correlation]
 
-        # Додаємо фільтр за символом, якщо вказаний
         if symbol:
             query += " AND (symbol1 = %s OR symbol2 = %s)"
             params.extend([symbol, symbol])
 
-        # Додаємо сортування та ліміт
         query += " ORDER BY abs_correlation DESC LIMIT %s"
         params.append(limit)
 
-        return self.fetch_dict(query, params)
+        return self.fetch_dict(query, tuple(params))
 
 
 

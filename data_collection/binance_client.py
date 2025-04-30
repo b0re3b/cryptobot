@@ -4,7 +4,7 @@ import hmac
 import json
 import time
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import urlencode
 import aiohttp
 import pandas as pd
@@ -479,15 +479,7 @@ class BinanceClient:
                 reconnect_info['callback'],
                 reconnect_info['save_to_db']
             )
-        elif reconnect_info['socket_type'] == 'orderbook':
-            print(f"Reconnecting orderbook WebSocket for {reconnect_info['symbol']}...")
-            self.db_manager.log_event('INFO', f"Reconnecting orderbook WebSocket for {reconnect_info['symbol']}...",
-                                      'BinanceClient')
-            self.order_book_socket(
-                reconnect_info['symbol'],
-                reconnect_info['callback'],
-                reconnect_info['save_to_db']
-            )
+
 
         print(f"Successfully reconnected WebSocket: {ws_key}")
         self.db_manager.log_event('INFO', f"Successfully reconnected WebSocket: {ws_key}", 'BinanceClient')
