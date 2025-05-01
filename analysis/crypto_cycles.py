@@ -1,69 +1,18 @@
-"""
-Enhanced Crypto Cycles Analysis Module
-
-This module provides functionality to analyze cryptocurrency market cycles,
-including Bitcoin halving cycles, Ethereum network upgrades, Solana ecosystem events,
-bull/bear market detection, and other cyclical patterns that can be used
-as features for deep learning models.
-
-This class is designed to work with pre-processed data rather than raw
-candle data to improve efficiency and performance.
-"""
-
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Union, Optional
 
-# Import from project modules
-from models.time_series import detect_seasonality
 from data.db import DatabaseManager
-from utils.crypto_helpers import calculate_drawdown, calculate_roi
-from analysis.trend_detection import detect_trend_change_points
 
-""""
-функції для роботи з базою даних
-get_klines_processed
-save_market_cycle
-update_market_cycle
-get_market_cycle_by_id
-get_market_cycles_by_symbol
-get_active_market_cycles
-delete_market_cycle
-save_cycle_feature
-get_cycle_features
-get_latest_cycle_features
-delete_cycle_feature
-save_cycle_similarity
-get_cycle_similarities_by_reference
-get_most_similar_cycles
-save_predicted_turning_point
-update_turning_point_outcome
-get_pending_turning_points
-get_turning_points_by_date_range
-insert_cycle_feature_performance
-get_cycle_feature_performance
-"""
+
+
 class CryptoCycles:
-    """
-    A class for analyzing cryptocurrency market cycles to enhance prediction models.
-    Serves as a helper class for deep_learning.py by providing additional cyclical
-    features that can improve deep learning model performance.
 
-    Enhanced with support for ETH and SOL specific cycles and events.
-    """
 
     def __init__(self):
-        """
-        Initialize the CryptoCycles analyzer.
 
-        Parameters:
-        -----------
-        db_connection : connection object, optional
-            Database connection for retrieving historical data.
-            If None, a new connection will be created when needed.
-        """
         self.db_connection = DatabaseManager()
 
         # Bitcoin halving dates
@@ -114,9 +63,7 @@ class CryptoCycles:
     def load_processed_data(self, symbol: str, timeframe: str,
                             start_date: Optional[str] = None,
                             end_date: Optional[str] = None) -> pd.DataFrame:
-        """
-        Load pre-processed price data from the database or cache.
-        """
+
         cache_key = f"{symbol}_{timeframe}_{start_date}_{end_date}"
 
         if cache_key in self.cached_processed_data:
@@ -1553,53 +1500,503 @@ class CryptoCycles:
         return result_df
 
     def calculate_volatility_by_cycle_phase(self, processed_data: pd.DataFrame,
-                                          symbol: str,
-                                          cycle_type: str = 'auto',
-                                          window: int = 14) -> pd.DataFrame:
-        """
-        Calculate volatility metrics for different cycle phases.
+                                            symbol: str,
+                                            cycle_type: str = 'auto',
+                                            window: int = 14) -> pd.DataFrame:
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            Pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol to determine which cycle definitions to use.
-        cycle_type : str, default='auto'
-            Type of cycle to analyze (automatic selection based on symbol).
-        window : int, default=14
-            Window size for volatility calculation.
+        # Create a copy of the input DataFrame
+        result_df = processed_data.copy()
 
-        Returns:
-        --------
-        pd.DataFrame
-            DataFrame with volatility metrics for different cycle phases.
-        """
-        # Implementation with symbol-specific logic would go here
-        pass
+        # Ensure we have the required columns
+        if 'close' not in result_df.columns:
+            raise ValueError("Required column 'close' not found in processed_data")
+
+        # Ensure the DataFrame has a datetime index
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            raise ValueError("DataFrame index must be a DatetimeIndex")
+
+        # Clean symbol format
+        clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+
+        # Determine the cycle type based on the symbol if set to 'auto'
+        if cycle_type == 'auto':
+            if clean_symbol == 'BTC':
+                cycle_type = 'halving'
+            elif clean_symbol == 'ETH':
+                cycle_type = 'network_upgrade'
+            elif clean_symbol == 'SOL':
+                cycle_type = 'ecosystem_event'
+            else:
+                cycle_type = 'bull_bear'  # Default for other cryptocurrencies
+
+        # Calculate price volatility (rolling standard deviation)
+        result_df['volatility'] = result_df['close'].pct_change().rolling(window=window).std()
+
+        # Calculate log returns for additional volatility metrics
+        result_df['log_return'] = np.log(result_df['close'] / result_df['close'].shift(1))
+
+        # Calculate additional volatility metrics
+        result_df['volatility_normalized'] = result_df['volatility'] / result_df['close'].rolling(window=window).mean()
+        result_df['volatility_sq'] = result_df['log_return'] ** 2  # Squared returns (for GARCH-like analysis)
+
+        # Determine cycle phases based on the cycle type
+        if cycle_type == 'halving':
+            # For BTC halving cycles
+            halving_data = self.calculate_btc_halving_cycle_features(result_df)
+
+            # Define cycle phases based on halving cycle phase
+            # Four phases: Phase 1 (0-0.25), Phase 2 (0.25-0.5), Phase 3 (0.5-0.75), Phase 4 (0.75-1.0)
+            phase_conditions = [
+                (halving_data['halving_cycle_phase'] <= 0.25),
+                (halving_data['halving_cycle_phase'] > 0.25) & (halving_data['halving_cycle_phase'] <= 0.5),
+                (halving_data['halving_cycle_phase'] > 0.5) & (halving_data['halving_cycle_phase'] <= 0.75),
+                (halving_data['halving_cycle_phase'] > 0.75)
+            ]
+            phase_values = ['Phase 1 (Early Post-Halving)', 'Phase 2 (Mid Cycle)',
+                            'Phase 3 (Late Cycle)', 'Phase 4 (Pre-Halving)']
+
+            halving_data['cycle_phase'] = np.select(phase_conditions, phase_values, default='Unknown')
+
+            # Add halving cycle columns to the result
+            for col in ['cycle_number', 'halving_cycle_phase', 'cycle_phase']:
+                if col in halving_data.columns:
+                    result_df[col] = halving_data[col]
+
+        elif cycle_type == 'network_upgrade':
+            # For ETH network upgrades
+            # (Simplified implementation - in production would call calculate_eth_event_cycle_features)
+            eth_events = [pd.Timestamp(event['date']) for event in self.eth_significant_events]
+            result_df['cycle_phase'] = 'Between Upgrades'
+
+            # Mark dates near events
+            for event in self.eth_significant_events:
+                event_date = pd.Timestamp(event['date'])
+                event_name = event['name']
+
+                # Mark 30 days before event as "Pre-Upgrade" phase
+                pre_upgrade_mask = (result_df.index >= event_date - pd.Timedelta(days=30)) & (
+                            result_df.index < event_date)
+                result_df.loc[pre_upgrade_mask, 'cycle_phase'] = f'Pre-{event_name}'
+
+                # Mark 30 days after event as "Post-Upgrade" phase
+                post_upgrade_mask = (result_df.index >= event_date) & (
+                            result_df.index < event_date + pd.Timedelta(days=30))
+                result_df.loc[post_upgrade_mask, 'cycle_phase'] = f'Post-{event_name}'
+
+        elif cycle_type == 'ecosystem_event':
+            # For SOL ecosystem events
+            # (Simplified implementation - in production would call calculate_sol_event_cycle_features)
+            sol_events = [pd.Timestamp(event['date']) for event in self.sol_significant_events]
+            result_df['cycle_phase'] = 'Normal Operation'
+
+            # Mark dates near events
+            for event in self.sol_significant_events:
+                event_date = pd.Timestamp(event['date'])
+                event_name = event['name']
+
+                # Mark 15 days after events (especially outages) for analysis
+                if 'Outage' in event_name:
+                    outage_mask = (result_df.index >= event_date) & (
+                                result_df.index < event_date + pd.Timedelta(days=15))
+                    result_df.loc[outage_mask, 'cycle_phase'] = f'Post-{event_name}'
+
+        elif cycle_type == 'bull_bear':
+            # For general bull/bear cycles
+            bull_bear_data = self.identify_bull_bear_cycles(result_df)
+
+            # Add bull/bear cycle columns to the result
+            for col in ['cycle_state', 'cycle_id']:
+                if col in bull_bear_data.columns:
+                    result_df[col] = bull_bear_data[col]
+
+            # Use cycle_state as cycle_phase for consistency
+            if 'cycle_state' in result_df.columns:
+                result_df['cycle_phase'] = result_df['cycle_state']
+
+        # Group by cycle phase and calculate summary statistics
+        if 'cycle_phase' in result_df.columns:
+            phase_stats = []
+
+            for phase in result_df['cycle_phase'].unique():
+                phase_data = result_df[result_df['cycle_phase'] == phase]
+
+                # Skip if not enough data points
+                if len(phase_data) < window:
+                    continue
+
+                stats = {
+                    'cycle_phase': phase,
+                    'avg_volatility': phase_data['volatility'].mean(),
+                    'median_volatility': phase_data['volatility'].median(),
+                    'max_volatility': phase_data['volatility'].max(),
+                    'min_volatility': phase_data['volatility'].min(),
+                    'volatility_of_volatility': phase_data['volatility'].std(),  # Meta-volatility
+                    'count': len(phase_data),
+                    # Add percentiles
+                    'volatility_25pct': phase_data['volatility'].quantile(0.25),
+                    'volatility_75pct': phase_data['volatility'].quantile(0.75),
+                }
+                phase_stats.append(stats)
+
+            # Create a summary DataFrame
+            phase_stats_df = pd.DataFrame(phase_stats)
+
+            # Attach the summary as an attribute of the result DataFrame
+            result_df.phase_volatility_summary = phase_stats_df
+
+        # Clean up intermediate columns
+        result_df = result_df.drop(['log_return', 'volatility_sq'], axis=1, errors='ignore')
+
+        return result_df
 
     def detect_cycle_anomalies(self, processed_data: pd.DataFrame,
-                              symbol: str,
-                              cycle_type: str = 'auto') -> pd.DataFrame:
-        """
-        Detect anomalies in current cycle compared to historical cycles.
+                               symbol: str,
+                               cycle_type: str = 'auto') -> pd.DataFrame:
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            Pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol to determine which cycle definitions to use.
-        cycle_type : str, default='auto'
-            Type of cycle to analyze (automatic selection based on symbol).
+        # Create a copy of the input DataFrame
+        result_df = processed_data.copy()
 
-        Returns:
-        --------
-        pd.DataFrame
-            DataFrame containing detected anomalies with their significance scores.
-        """
-        # Implementation with symbol-specific logic would go here
-        pass
+        # Ensure we have the required columns
+        if 'close' not in result_df.columns:
+            raise ValueError("Required column 'close' not found in processed_data")
+
+        # Ensure the DataFrame has a datetime index
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            raise ValueError("DataFrame index must be a DatetimeIndex")
+
+        # Clean symbol format
+        clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+
+        # Determine the cycle type based on the symbol if set to 'auto'
+        if cycle_type == 'auto':
+            if clean_symbol == 'BTC':
+                cycle_type = 'halving'
+            elif clean_symbol == 'ETH':
+                cycle_type = 'network_upgrade'
+            elif clean_symbol == 'SOL':
+                cycle_type = 'ecosystem_event'
+            else:
+                cycle_type = 'bull_bear'  # Default for other cryptocurrencies
+
+        # Initialize the anomalies DataFrame
+        anomalies = pd.DataFrame(index=result_df.index)
+        anomalies['date'] = anomalies.index
+        anomalies['symbol'] = symbol
+        anomalies['anomaly_detected'] = False
+        anomalies['anomaly_type'] = None
+        anomalies['significance_score'] = 0.0
+        anomalies['description'] = None
+
+        # Calculate baseline metrics for anomaly detection
+        result_df['price_change_1d'] = result_df['close'].pct_change(1)
+        result_df['price_change_7d'] = result_df['close'].pct_change(7)
+        result_df['price_change_30d'] = result_df['close'].pct_change(30)
+        result_df['volatility_14d'] = result_df['close'].pct_change().rolling(window=14).std()
+
+        # Calculate rolling metrics for baseline comparison
+        result_df['price_change_1d_zscore'] = (
+                (result_df['price_change_1d'] - result_df['price_change_1d'].rolling(window=365).mean()) /
+                result_df['price_change_1d'].rolling(window=365).std()
+        )
+        result_df['price_change_7d_zscore'] = (
+                (result_df['price_change_7d'] - result_df['price_change_7d'].rolling(window=365).mean()) /
+                result_df['price_change_7d'].rolling(window=365).std()
+        )
+        result_df['volatility_14d_zscore'] = (
+                (result_df['volatility_14d'] - result_df['volatility_14d'].rolling(window=365).mean()) /
+                result_df['volatility_14d'].rolling(window=365).std()
+        )
+
+        # Add cycle-specific features based on cycle_type
+        if cycle_type == 'halving':
+            # Get halving cycle features
+            halving_df = self.calculate_btc_halving_cycle_features(result_df)
+
+            # Merge the relevant columns with result_df
+            for col in ['halving_cycle_phase', 'days_since_last_halving', 'days_to_next_halving', 'cycle_number']:
+                if col in halving_df.columns:
+                    result_df[col] = halving_df[col]
+
+            # Group historical data by cycle number for comparison
+            if 'cycle_number' in result_df.columns and 'halving_cycle_phase' in result_df.columns:
+                cycles_data = {}
+                current_cycle = result_df['cycle_number'].max()
+
+                for cycle in result_df['cycle_number'].unique():
+                    if cycle < current_cycle:  # Historical cycles
+                        cycle_data = result_df[result_df['cycle_number'] == cycle]
+                        cycles_data[cycle] = cycle_data
+
+                # Get current cycle data
+                current_cycle_data = result_df[result_df['cycle_number'] == current_cycle]
+
+                # For each point in the current cycle, compare with historical cycles at the same phase
+                for idx, row in current_cycle_data.iterrows():
+                    if pd.isna(row['halving_cycle_phase']):
+                        continue
+
+                    current_phase = row['halving_cycle_phase']
+                    phase_margin = 0.05  # 5% phase window for comparison
+
+                    # Collect historical prices at similar cycle phases
+                    historical_values = []
+
+                    for cycle, cycle_data in cycles_data.items():
+                        similar_phase_data = cycle_data[
+                            (cycle_data['halving_cycle_phase'] >= current_phase - phase_margin) &
+                            (cycle_data['halving_cycle_phase'] <= current_phase + phase_margin)
+                            ]
+
+                        if not similar_phase_data.empty:
+                            # Use normalized price change from cycle start
+                            if 'price_change_since_halving' in similar_phase_data.columns:
+                                historical_values.extend(similar_phase_data['price_change_since_halving'].tolist())
+
+                    # If we have enough historical data points for comparison
+                    if len(historical_values) >= 3:
+                        historical_mean = np.mean(historical_values)
+                        historical_std = np.std(historical_values)
+
+                        # Calculate z-score compared to historical cycles
+                        if 'price_change_since_halving' in current_cycle_data.columns and historical_std > 0:
+                            current_value = row.get('price_change_since_halving', 0)
+                            z_score = (current_value - historical_mean) / historical_std
+
+                            # Check for significant deviation
+                            if abs(z_score) > 2.0:  # More than 2 standard deviations
+                                anomalies.loc[idx, 'anomaly_detected'] = True
+                                anomalies.loc[idx, 'significance_score'] = abs(z_score)
+
+                                if z_score > 0:
+                                    anomalies.loc[idx, 'anomaly_type'] = 'higher_than_historical'
+                                    anomalies.loc[idx, 'description'] = (
+                                        f"Price is {z_score:.2f} std devs higher than historical cycles "
+                                        f"at similar phase ({current_phase:.2f})"
+                                    )
+                                else:
+                                    anomalies.loc[idx, 'anomaly_type'] = 'lower_than_historical'
+                                    anomalies.loc[idx, 'description'] = (
+                                        f"Price is {abs(z_score):.2f} std devs lower than historical cycles "
+                                        f"at similar phase ({current_phase:.2f})"
+                                    )
+
+        elif cycle_type == 'bull_bear':
+            # Get bull/bear cycle information
+            bull_bear_df = self.identify_bull_bear_cycles(result_df)
+
+            # Merge the relevant columns with result_df
+            for col in ['cycle_state', 'cycle_id', 'days_in_cycle', 'cycle_max_roi', 'cycle_max_drawdown']:
+                if col in bull_bear_df.columns:
+                    result_df[col] = bull_bear_df[col]
+
+            # Check for anomalies in ROI or drawdown compared to typical bull/bear cycles
+            if 'cycle_state' in result_df.columns and 'cycle_id' in result_df.columns:
+                # Group by cycle_state to get typical metrics for bull and bear markets
+                if hasattr(bull_bear_df, 'cycles_summary') and not bull_bear_df.cycles_summary.empty:
+                    cycles_summary = bull_bear_df.cycles_summary
+
+                    # Get metrics by cycle type
+                    bull_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bull']
+                    bear_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bear']
+
+                    # Calculate average duration and ROI metrics
+                    if not bull_cycles.empty:
+                        avg_bull_duration = bull_cycles['duration_days'].mean()
+                        avg_bull_roi = bull_cycles['max_roi'].mean()
+                        std_bull_roi = bull_cycles['max_roi'].std()
+
+                    if not bear_cycles.empty:
+                        avg_bear_duration = bear_cycles['duration_days'].mean()
+                        avg_bear_drawdown = bear_cycles['max_drawdown'].mean()
+                        std_bear_drawdown = bear_cycles['max_drawdown'].std()
+
+                    # Identify current cycle
+                    current_cycle_id = result_df['cycle_id'].max()
+                    current_cycle_data = result_df[result_df['cycle_id'] == current_cycle_id]
+
+                    if not current_cycle_data.empty:
+                        current_state = current_cycle_data['cycle_state'].iloc[0]
+                        current_duration = current_cycle_data['days_in_cycle'].max()
+
+                        # Check for duration anomalies
+                        if current_state == 'bull' and 'avg_bull_duration' in locals():
+                            if current_duration > 1.5 * avg_bull_duration:
+                                # Extended bull market
+                                for idx in current_cycle_data.index[-30:]:  # Last 30 days
+                                    anomalies.loc[idx, 'anomaly_detected'] = True
+                                    anomalies.loc[idx, 'anomaly_type'] = 'extended_bull_market'
+                                    anomalies.loc[idx, 'significance_score'] = current_duration / avg_bull_duration
+                                    anomalies.loc[idx, 'description'] = (
+                                        f"Extended bull market: {current_duration} days vs. "
+                                        f"typical {avg_bull_duration:.0f} days"
+                                    )
+
+                        elif current_state == 'bear' and 'avg_bear_duration' in locals():
+                            if current_duration > 1.5 * avg_bear_duration:
+                                # Extended bear market
+                                for idx in current_cycle_data.index[-30:]:  # Last 30 days
+                                    anomalies.loc[idx, 'anomaly_detected'] = True
+                                    anomalies.loc[idx, 'anomaly_type'] = 'extended_bear_market'
+                                    anomalies.loc[idx, 'significance_score'] = current_duration / avg_bear_duration
+                                    anomalies.loc[idx, 'description'] = (
+                                        f"Extended bear market: {current_duration} days vs. "
+                                        f"typical {avg_bear_duration:.0f} days"
+                                    )
+
+                        # Check for ROI/drawdown anomalies
+                        if current_state == 'bull' and 'std_bull_roi' in locals() and std_bull_roi > 0:
+                            current_roi = current_cycle_data['cycle_max_roi'].max()
+                            roi_z_score = (current_roi - avg_bull_roi) / std_bull_roi
+
+                            if abs(roi_z_score) > 2.0:
+                                anomaly_type = 'stronger_bull' if roi_z_score > 0 else 'weaker_bull'
+                                for idx in current_cycle_data.index[-15:]:  # Last 15 days
+                                    anomalies.loc[idx, 'anomaly_detected'] = True
+                                    anomalies.loc[idx, 'anomaly_type'] = anomaly_type
+                                    anomalies.loc[idx, 'significance_score'] = abs(roi_z_score)
+                                    anomalies.loc[idx, 'description'] = (
+                                        f"{'Stronger' if roi_z_score > 0 else 'Weaker'} than typical bull market: "
+                                        f"{current_roi:.1%} ROI vs. typical {avg_bull_roi:.1%}"
+                                    )
+
+                        elif current_state == 'bear' and 'std_bear_drawdown' in locals() and std_bear_drawdown > 0:
+                            current_drawdown = current_cycle_data['cycle_max_drawdown'].min()
+                            drawdown_z_score = (current_drawdown - avg_bear_drawdown) / std_bear_drawdown
+
+                            if abs(drawdown_z_score) > 2.0:
+                                anomaly_type = 'milder_bear' if drawdown_z_score > 0 else 'severe_bear'
+                                for idx in current_cycle_data.index[-15:]:  # Last 15 days
+                                    anomalies.loc[idx, 'anomaly_detected'] = True
+                                    anomalies.loc[idx, 'anomaly_type'] = anomaly_type
+                                    anomalies.loc[idx, 'significance_score'] = abs(drawdown_z_score)
+                                    anomalies.loc[idx, 'description'] = (
+                                        f"{'Milder' if drawdown_z_score > 0 else 'More severe'} than typical bear market: "
+                                        f"{current_drawdown:.1%} drawdown vs. typical {avg_bear_drawdown:.1%}"
+                                    )
+
+        elif cycle_type == 'network_upgrade' or cycle_type == 'ecosystem_event':
+            # For ETH or SOL, detect anomalies around significant events
+            events = self.get_significant_events_for_symbol(clean_symbol)
+
+            # If we have events data
+            if events:
+                # Analyze volatility and price changes around events
+                for event in events:
+                    # Skip if event data is not a dictionary (for BTC it's just dates)
+                    if not isinstance(event, dict):
+                        continue
+
+                    event_date = pd.Timestamp(event['date'])
+                    event_name = event['name']
+
+                    # Skip events that are too recent or future events
+                    if event_date > result_df.index.max():
+                        continue
+
+                    # Define pre and post event windows
+                    pre_event_window = 7  # 7 days before
+                    post_event_window = 30  # 30 days after
+
+                    # Get data around the event
+                    pre_event_mask = (result_df.index >= event_date - pd.Timedelta(days=pre_event_window)) & (
+                                result_df.index < event_date)
+                    post_event_mask = (result_df.index >= event_date) & (
+                                result_df.index < event_date + pd.Timedelta(days=post_event_window))
+
+                    pre_event_data = result_df[pre_event_mask]
+                    post_event_data = result_df[post_event_mask]
+
+                    # Skip if not enough data
+                    if len(pre_event_data) < 3 or len(post_event_data) < 3:
+                        continue
+
+                    # Calculate metrics
+                    pre_event_volatility = pre_event_data[
+                        'volatility_14d'].mean() if 'volatility_14d' in pre_event_data.columns else 0
+                    post_event_volatility = post_event_data[
+                        'volatility_14d'].mean() if 'volatility_14d' in post_event_data.columns else 0
+
+                    # Price change from event day
+                    if event_date in result_df.index:
+                        event_price = result_df.loc[event_date, 'close']
+                        post_event_data['price_change_from_event'] = post_event_data['close'] / event_price - 1
+
+                        # Check for significant price changes after the event
+                        for idx, row in post_event_data.iterrows():
+                            days_after_event = (idx - event_date).days
+
+                            # If price change is >10% within 7 days or >20% within 30 days of the event
+                            if (days_after_event <= 7 and abs(row['price_change_from_event']) > 0.1) or \
+                                    (days_after_event > 7 and abs(row['price_change_from_event']) > 0.2):
+                                anomalies.loc[idx, 'anomaly_detected'] = True
+                                anomalies.loc[idx, 'anomaly_type'] = 'significant_post_event_move'
+                                anomalies.loc[idx, 'significance_score'] = abs(
+                                    row['price_change_from_event']) * 5  # Scale for comparison
+                                anomalies.loc[idx, 'description'] = (
+                                    f"Significant price change of {row['price_change_from_event']:.1%} "
+                                    f"{days_after_event} days after {event_name}"
+                                )
+
+                    # Check for volatility anomalies
+                    if post_event_volatility > 1.5 * pre_event_volatility:
+                        # Increased volatility after event
+                        for idx in post_event_data.index[:10]:  # First 10 days after event
+                            anomalies.loc[idx, 'anomaly_detected'] = True
+                            anomalies.loc[idx, 'anomaly_type'] = 'increased_post_event_volatility'
+                            anomalies.loc[idx, 'significance_score'] = post_event_volatility / pre_event_volatility
+                            anomalies.loc[idx, 'description'] = (
+                                f"Increased volatility after {event_name}: "
+                                f"{post_event_volatility:.4f} vs pre-event {pre_event_volatility:.4f}"
+                            )
+
+        # General price anomalies (applicable to all cycle types)
+        for idx, row in result_df.iterrows():
+            # Skip rows with insufficient data for z-scores
+            if pd.isna(row.get('price_change_1d_zscore')) or pd.isna(row.get('volatility_14d_zscore')):
+                continue
+
+            # 1. Check for extreme daily price changes
+            if abs(row['price_change_1d_zscore']) > 3.0:  # More than 3 standard deviations
+                anomalies.loc[idx, 'anomaly_detected'] = True
+                anomalies.loc[idx, 'anomaly_type'] = 'extreme_daily_move'
+                anomalies.loc[idx, 'significance_score'] = abs(row['price_change_1d_zscore'])
+                direction = "up" if row['price_change_1d'] > 0 else "down"
+                anomalies.loc[idx, 'description'] = (
+                    f"Extreme daily price move {direction} ({row['price_change_1d']:.1%}), "
+                    f"z-score: {row['price_change_1d_zscore']:.2f}"
+                )
+
+            # 2. Check for extreme volatility
+            if row['volatility_14d_zscore'] > 3.0:  # More than 3 standard deviations
+                # Only mark as anomaly if not already detected for price change
+                if not anomalies.loc[idx, 'anomaly_detected']:
+                    anomalies.loc[idx, 'anomaly_detected'] = True
+                    anomalies.loc[idx, 'anomaly_type'] = 'extreme_volatility'
+                    anomalies.loc[idx, 'significance_score'] = row['volatility_14d_zscore']
+                    anomalies.loc[idx, 'description'] = (
+                        f"Extreme volatility detected ({row['volatility_14d']:.4f}), "
+                        f"z-score: {row['volatility_14d_zscore']:.2f}"
+                    )
+
+            # 3. Check for volatility collapse (can precede large moves)
+            if row['volatility_14d_zscore'] < -2.0:  # More than 2 standard deviations below mean
+                # Only mark as anomaly if not already detected
+                if not anomalies.loc[idx, 'anomaly_detected']:
+                    anomalies.loc[idx, 'anomaly_detected'] = True
+                    anomalies.loc[idx, 'anomaly_type'] = 'volatility_collapse'
+                    anomalies.loc[idx, 'significance_score'] = abs(row['volatility_14d_zscore'])
+                    anomalies.loc[idx, 'description'] = (
+                        f"Unusually low volatility ({row['volatility_14d']:.4f}), "
+                        f"z-score: {row['volatility_14d_zscore']:.2f}"
+                    )
+
+        # Filter to only include detected anomalies
+        anomalies = anomalies[anomalies['anomaly_detected']]
+
+        # Sort by significance score
+        anomalies = anomalies.sort_values('significance_score', ascending=False)
+
+        return anomalies
 
     def get_significant_events_for_symbol(self, symbol: str) -> List:
         """
@@ -1619,56 +2016,571 @@ class CryptoCycles:
         return self.symbol_events_map.get(symbol, [])
 
     def compare_current_to_historical_cycles(self, processed_data: pd.DataFrame,
-                                           symbol: str,
-                                           cycle_type: str = 'auto',
-                                           normalize: bool = True) -> Dict:
-        """
-        Compare the current market cycle to historical cycles using pattern matching.
+                                             symbol: str,
+                                             cycle_type: str = 'auto',
+                                             normalize: bool = True) -> Dict:
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            Pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol to analyze.
-        cycle_type : str, default='auto'
-            Type of cycle to compare (automatic selection based on symbol).
-        normalize : bool, default=True
-            Whether to normalize prices for comparison.
+        symbol = symbol.upper().replace('USDT', '').replace('USD', '')
 
-        Returns:
-        --------
-        Dict
-            Dictionary containing similarity scores and closest historical cycles.
-        """
-        # Implementation with symbol-specific logic would go here
-        pass
+        # Determine the appropriate cycle type if 'auto' is specified
+        if cycle_type == 'auto':
+            if symbol == 'BTC':
+                cycle_type = 'halving'
+            elif symbol == 'ETH':
+                cycle_type = 'network_upgrade'
+            elif symbol == 'SOL':
+                cycle_type = 'ecosystem_event'
+            else:
+                cycle_type = 'bull_bear'
+
+        # Ensure the DataFrame has a datetime index
+        if not isinstance(processed_data.index, pd.DatetimeIndex):
+            raise ValueError("DataFrame index must be a DatetimeIndex")
+
+        # Identify cycles in the data based on cycle_type
+        if cycle_type == 'bull_bear':
+            # Use the bull_bear cycle identification logic
+            cycles_data = self.identify_bull_bear_cycles(processed_data)
+            cycle_column = 'cycle_id'
+        elif cycle_type == 'halving' and symbol == 'BTC':
+            # Use halving cycles for BTC
+            cycles_data = self.calculate_btc_halving_cycle_features(processed_data)
+            cycle_column = 'cycle_number'
+        elif cycle_type == 'network_upgrade' and symbol == 'ETH':
+            # For ETH, use network upgrades as cycle boundaries
+            # Implementation would depend on how ETH cycles are defined
+            cycles_data = processed_data.copy()
+            # This is just a placeholder - the actual implementation would need
+            # to process ETH network upgrade cycles
+            cycle_column = 'cycle_id'
+        elif cycle_type == 'ecosystem_event' and symbol == 'SOL':
+            # For SOL, use ecosystem events as cycle boundaries
+            # Implementation would depend on how SOL cycles are defined
+            cycles_data = processed_data.copy()
+            # This is just a placeholder - the actual implementation would need
+            # to process SOL ecosystem event cycles
+            cycle_column = 'cycle_id'
+        else:
+            # Default to bull/bear cycles for unknown combinations
+            cycles_data = self.identify_bull_bear_cycles(processed_data)
+            cycle_column = 'cycle_id'
+
+        # Extract the current cycle
+        if cycle_column in cycles_data.columns:
+            current_cycle_id = cycles_data[cycle_column].iloc[-1]
+            current_cycle_data = cycles_data[cycles_data[cycle_column] == current_cycle_id]
+        else:
+            # If cycle column is not found, assume the last 90 days is the current cycle
+            lookback_days = 90
+            current_date = cycles_data.index[-1]
+            start_date = current_date - pd.Timedelta(days=lookback_days)
+            current_cycle_data = cycles_data[cycles_data.index >= start_date]
+
+        # Extract historical cycles
+        historical_cycles = {}
+
+        if cycle_column in cycles_data.columns:
+            for cycle_id in cycles_data[cycle_column].unique():
+                if cycle_id != current_cycle_id:  # Skip the current cycle
+                    cycle_data = cycles_data[cycles_data[cycle_column] == cycle_id]
+                    if len(cycle_data) > 0:
+                        historical_cycles[str(cycle_id)] = cycle_data
+
+        # If no historical cycles found or cycle column not present, create them by year
+        if not historical_cycles:
+            # Group by year as a fallback
+            for year in set(cycles_data.index.year):
+                if year != cycles_data.index[-1].year:  # Skip current year
+                    year_data = cycles_data[cycles_data.index.year == year]
+                    if len(year_data) > 0:
+                        historical_cycles[str(year)] = year_data
+
+        # Prepare data for comparison
+        comparison_results = {}
+
+        # Check if we have enough data for comparison
+        if len(current_cycle_data) < 10 or not historical_cycles:
+            return {"error": "Insufficient data for comparison", "similarity_scores": {}}
+
+        # Extract price data for comparison
+        current_prices = current_cycle_data['close'].values
+
+        # If normalize is True, normalize the current prices
+        if normalize:
+            current_prices = current_prices / current_prices[0]
+
+        # Compare with each historical cycle
+        similarity_scores = {}
+
+        for cycle_id, cycle_data in historical_cycles.items():
+            historical_prices = cycle_data['close'].values
+
+            # Skip if not enough data points
+            if len(historical_prices) < len(current_prices):
+                continue
+
+            # If normalize is True, normalize the historical prices
+            if normalize:
+                historical_prices = historical_prices / historical_prices[0]
+
+            # Calculate similarity using Dynamic Time Warping (DTW)
+            # We'll use Euclidean distance as a simple measure here
+            # DTW would be more accurate but requires additional libraries
+
+            # For each possible starting point in the historical data
+            min_distance = float('inf')
+            best_start_idx = 0
+
+            for start_idx in range(len(historical_prices) - len(current_prices) + 1):
+                segment = historical_prices[start_idx:start_idx + len(current_prices)]
+
+                # Calculate Euclidean distance
+                distance = np.sqrt(np.sum((segment - current_prices) ** 2))
+
+                if distance < min_distance:
+                    min_distance = distance
+                    best_start_idx = start_idx
+
+            # Convert to similarity score (higher is better)
+            similarity = 1 / (1 + min_distance)
+
+            # Store the results
+            similarity_scores[cycle_id] = {
+                "similarity": similarity,
+                "start_idx": best_start_idx,
+                "matched_length": len(current_prices)
+            }
+
+        # Sort cycles by similarity
+        sorted_scores = {k: v for k, v in sorted(
+            similarity_scores.items(),
+            key=lambda item: item[1]["similarity"],
+            reverse=True
+        )}
+
+        # Get the most similar cycle
+        most_similar_cycle_id = next(iter(sorted_scores), None)
+        most_similar_cycle_data = None
+
+        if most_similar_cycle_id:
+            most_similar_cycle_data = historical_cycles[most_similar_cycle_id]
+            best_start_idx = sorted_scores[most_similar_cycle_id]["start_idx"]
+            matched_length = sorted_scores[most_similar_cycle_id]["matched_length"]
+
+            # Calculate potential continuation based on the most similar historical cycle
+            current_length = len(current_cycle_data)
+            if len(most_similar_cycle_data) > best_start_idx + matched_length:
+                # Extract the continuation segment
+                continuation_segment = most_similar_cycle_data.iloc[best_start_idx + matched_length:]
+
+                # If normalized, adjust the continuation to match the current price level
+                if normalize:
+                    adjustment_factor = current_prices[-1] / (
+                                most_similar_cycle_data['close'].iloc[best_start_idx + matched_length - 1] /
+                                most_similar_cycle_data['close'].iloc[best_start_idx])
+                    predicted_continuation = continuation_segment['close'].values * adjustment_factor
+                else:
+                    adjustment_factor = current_prices[-1] / most_similar_cycle_data['close'].iloc[
+                        best_start_idx + matched_length - 1]
+                    predicted_continuation = continuation_segment['close'].values * adjustment_factor
+
+        # Prepare the return dictionary
+        comparison_results = {
+            "similarity_scores": sorted_scores,
+            "current_cycle_length": len(current_cycle_data),
+            "current_cycle_start": current_cycle_data.index[0].strftime('%Y-%m-%d'),
+            "current_cycle_end": current_cycle_data.index[-1].strftime('%Y-%m-%d'),
+            "most_similar_cycle": most_similar_cycle_id if most_similar_cycle_id else None,
+        }
+
+        # Add potential continuation data if available
+        if most_similar_cycle_id and 'predicted_continuation' in locals():
+            comparison_results["potential_continuation"] = {
+                "prices": predicted_continuation.tolist(),
+                "duration_days": len(continuation_segment),
+                "based_on_cycle": most_similar_cycle_id,
+                "confidence_score": sorted_scores[most_similar_cycle_id]["similarity"]
+            }
+
+        return comparison_results
 
     def predict_cycle_turning_points(self, processed_data: pd.DataFrame,
-                                    symbol: str,
-                                    cycle_type: str = 'auto',
-                                    confidence_interval: float = 0.9) -> pd.DataFrame:
-        """
-        Predict potential turning points in the current market cycle.
+                                     symbol: str,
+                                     cycle_type: str = 'auto',
+                                     confidence_interval: float = 0.9) -> pd.DataFrame:
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            Pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol to analyze.
-        cycle_type : str, default='auto'
-            Type of cycle to analyze for turning points (auto-selected based on symbol).
-        confidence_interval : float, default=0.9
-            Confidence interval for predictions.
+        symbol = symbol.upper().replace('USDT', '').replace('USD', '')
 
-        Returns:
-        --------
-        pd.DataFrame
-            DataFrame containing predicted turning points with probabilities.
-        """
-        # Implementation with symbol-specific logic would go here
-        pass
+        # Determine the appropriate cycle type if 'auto' is specified
+        if cycle_type == 'auto':
+            if symbol == 'BTC':
+                cycle_type = 'halving'
+            elif symbol == 'ETH':
+                cycle_type = 'network_upgrade'
+            elif symbol == 'SOL':
+                cycle_type = 'ecosystem_event'
+            else:
+                cycle_type = 'bull_bear'
+
+        # Ensure the DataFrame has a datetime index
+        if not isinstance(processed_data.index, pd.DatetimeIndex):
+            raise ValueError("DataFrame index must be a DatetimeIndex")
+
+        # Create a copy of the processed data
+        df = processed_data.copy()
+
+        # Get historical cycles comparison for context
+        cycle_comparison = self.compare_current_to_historical_cycles(
+            processed_data=df,
+            symbol=symbol,
+            cycle_type=cycle_type,
+            normalize=True
+        )
+
+        # Initialize technical indicators for turning point detection
+        # Moving averages
+        df['sma_20'] = df['close'].rolling(window=20).mean()
+        df['sma_50'] = df['close'].rolling(window=50).mean()
+        df['sma_200'] = df['close'].rolling(window=200).mean()
+
+        # Calculate RSI
+        delta = df['close'].diff()
+        gain = delta.where(delta > 0, 0).fillna(0)
+        loss = -delta.where(delta < 0, 0).fillna(0)
+
+        avg_gain = gain.rolling(window=14).mean()
+        avg_loss = loss.rolling(window=14).mean()
+
+        rs = avg_gain / avg_loss.replace(0, 0.00001)  # Avoid division by zero
+        df['rsi'] = 100 - (100 / (1 + rs))
+
+        # Calculate MACD
+        df['ema_12'] = df['close'].ewm(span=12, adjust=False).mean()
+        df['ema_26'] = df['close'].ewm(span=26, adjust=False).mean()
+        df['macd'] = df['ema_12'] - df['ema_26']
+        df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+        df['macd_hist'] = df['macd'] - df['macd_signal']
+
+        # Calculate volatility
+        df['volatility'] = df['close'].rolling(window=20).std() / df['close'].rolling(window=20).mean()
+
+        # Initialize result dataframe for turning points
+        turning_points = pd.DataFrame(columns=[
+            'date', 'price', 'direction', 'strength', 'confidence', 'indicators',
+            'days_since_last_tp', 'cycle_phase'
+        ])
+
+        # Define functions to detect turning point signals
+        def detect_potential_bottom(row, prev_rows):
+            signals = []
+            strength = 0
+
+            # RSI oversold condition
+            if row['rsi'] < 30:
+                signals.append('RSI_oversold')
+                strength += 1
+
+                # RSI bullish divergence (price making lower low but RSI making higher low)
+                if (len(prev_rows) >= 10 and
+                        row['close'] < prev_rows['close'].min() and
+                        row['rsi'] > prev_rows['rsi'].min()):
+                    signals.append('RSI_bullish_divergence')
+                    strength += 2
+
+            # MACD bullish crossover
+            if row['macd'] > row['macd_signal'] and prev_rows['macd'].iloc[-2] <= prev_rows['macd_signal'].iloc[-2]:
+                signals.append('MACD_bullish_cross')
+                strength += 1
+
+            # MACD bullish divergence
+            if (len(prev_rows) >= 10 and
+                    row['close'] < prev_rows['close'].min() and
+                    row['macd'] > prev_rows['macd'].min()):
+                signals.append('MACD_bullish_divergence')
+                strength += 2
+
+            # Moving average support
+            if (abs(row['close'] - row['sma_200']) / row['sma_200'] < 0.03 and
+                    row['close'] < row['sma_200']):
+                signals.append('MA200_support')
+                strength += 1
+
+            # Volume spike
+            if 'volume' in row and row['volume'] > prev_rows['volume'].mean() * 2:
+                signals.append('volume_spike')
+                strength += 1
+
+            return signals, strength
+
+        def detect_potential_top(row, prev_rows):
+            signals = []
+            strength = 0
+
+            # RSI overbought condition
+            if row['rsi'] > 70:
+                signals.append('RSI_overbought')
+                strength += 1
+
+                # RSI bearish divergence (price making higher high but RSI making lower high)
+                if (len(prev_rows) >= 10 and
+                        row['close'] > prev_rows['close'].max() and
+                        row['rsi'] < prev_rows['rsi'].max()):
+                    signals.append('RSI_bearish_divergence')
+                    strength += 2
+
+            # MACD bearish crossover
+            if row['macd'] < row['macd_signal'] and prev_rows['macd'].iloc[-2] >= prev_rows['macd_signal'].iloc[-2]:
+                signals.append('MACD_bearish_cross')
+                strength += 1
+
+            # MACD bearish divergence
+            if (len(prev_rows) >= 10 and
+                    row['close'] > prev_rows['close'].max() and
+                    row['macd'] < prev_rows['macd'].max()):
+                signals.append('MACD_bearish_divergence')
+                strength += 2
+
+            # Moving average resistance
+            if (abs(row['close'] - row['sma_200']) / row['sma_200'] < 0.03 and
+                    row['close'] > row['sma_200']):
+                signals.append('MA200_resistance')
+                strength += 1
+
+            # Volume spike with price rejection
+            if ('volume' in row and
+                    'high' in row and 'low' in row and 'open' in row and 'close' in row and
+                    row['volume'] > prev_rows['volume'].mean() * 2 and
+                    row['close'] < row['open'] and
+                    (row['high'] - max(row['open'], row['close'])) > (min(row['open'], row['close']) - row['low'])):
+                signals.append('volume_spike_rejection')
+                strength += 1
+
+            return signals, strength
+
+        # Get cycle-specific information based on cycle_type
+        if cycle_type == 'halving' and symbol == 'BTC':
+            # For BTC halving cycles, add halving-specific indicators
+            if 'halving_cycle_phase' in df.columns:
+                # Historical analysis shows tops tend to occur 300-500 days after halving
+                df['days_since_last_halving'] = df['days_since_last_halving'].fillna(0)
+                df['halving_top_probability'] = (
+                    np.exp(-0.5 * ((df['days_since_last_halving'] - 400) / 100) ** 2)
+                )
+
+                # Historical analysis shows bottoms tend to occur 100-200 days before halving
+                df['days_to_next_halving'] = df['days_to_next_halving'].fillna(2000)
+                df['halving_bottom_probability'] = (
+                    np.exp(-0.5 * ((df['days_to_next_halving'] - 150) / 50) ** 2)
+                )
+
+        # Define lookback window for turning point detection
+        lookback_window = 30
+
+        # Process each data point, skipping the first lookback_window points
+        for i in range(lookback_window, len(df)):
+            row = df.iloc[i]
+            prev_rows = df.iloc[i - lookback_window:i]
+
+            # Detect potential bottom
+            bottom_signals, bottom_strength = detect_potential_bottom(row, prev_rows)
+
+            # Detect potential top
+            top_signals, top_strength = detect_potential_top(row, prev_rows)
+
+            # Adjust strength based on cycle-specific factors
+            if cycle_type == 'halving' and symbol == 'BTC' and 'halving_top_probability' in df.columns:
+                top_strength *= (1 + row['halving_top_probability'])
+                bottom_strength *= (1 + row.get('halving_bottom_probability', 0))
+
+            # Determine if this is a significant turning point
+            if bottom_signals and bottom_strength >= 3:
+                # Calculate days since last turning point
+                if len(turning_points) > 0:
+                    days_since_last_tp = (row.name - turning_points['date'].iloc[-1]).days
+                else:
+                    days_since_last_tp = None
+
+                # Calculate confidence based on strength and other factors
+                confidence = min(0.95, bottom_strength / 6)
+
+                # Determine cycle phase
+                if 'market_phase' in row:
+                    cycle_phase = row['market_phase']
+                elif 'halving_cycle_phase' in row:
+                    cycle_phase = f"Halving cycle: {row['halving_cycle_phase']:.2f}"
+                else:
+                    cycle_phase = "Unknown"
+
+                # Add to turning points dataframe
+                turning_points = pd.concat([turning_points, pd.DataFrame([{
+                    'date': row.name,
+                    'price': row['close'],
+                    'direction': 'bottom',
+                    'strength': bottom_strength,
+                    'confidence': confidence,
+                    'indicators': ', '.join(bottom_signals),
+                    'days_since_last_tp': days_since_last_tp,
+                    'cycle_phase': cycle_phase
+                }])], ignore_index=True)
+
+            elif top_signals and top_strength >= 3:
+                # Calculate days since last turning point
+                if len(turning_points) > 0:
+                    days_since_last_tp = (row.name - turning_points['date'].iloc[-1]).days
+                else:
+                    days_since_last_tp = None
+
+                # Calculate confidence based on strength and other factors
+                confidence = min(0.95, top_strength / 6)
+
+                # Determine cycle phase
+                if 'market_phase' in row:
+                    cycle_phase = row['market_phase']
+                elif 'halving_cycle_phase' in row:
+                    cycle_phase = f"Halving cycle: {row['halving_cycle_phase']:.2f}"
+                else:
+                    cycle_phase = "Unknown"
+
+                # Add to turning points dataframe
+                turning_points = pd.concat([turning_points, pd.DataFrame([{
+                    'date': row.name,
+                    'price': row['close'],
+                    'direction': 'top',
+                    'strength': top_strength,
+                    'confidence': confidence,
+                    'indicators': ', '.join(top_signals),
+                    'days_since_last_tp': days_since_last_tp,
+                    'cycle_phase': cycle_phase
+                }])], ignore_index=True)
+
+        # Filter turning points by the confidence interval
+        turning_points = turning_points[turning_points['confidence'] >= confidence_interval]
+
+        # Use historical cycle comparison to predict future turning points
+        if 'potential_continuation' in cycle_comparison:
+            potential_prices = cycle_comparison['potential_continuation']['prices']
+
+            if len(potential_prices) > 10:
+                # Calculate the last known date and project future dates
+                last_date = df.index[-1]
+                future_dates = [last_date + pd.Timedelta(days=i) for i in range(1, len(potential_prices) + 1)]
+
+                # Create a DataFrame with projected prices
+                projected_df = pd.DataFrame({
+                    'close': potential_prices,
+                    'date': future_dates
+                })
+                projected_df.set_index('date', inplace=True)
+
+                # Calculate basic metrics for the projected data
+                projected_df['price_change'] = projected_df['close'].pct_change()
+
+                # Detect potential future turning points
+                lookback = min(10, len(projected_df))
+                for i in range(lookback, len(projected_df)):
+                    curr_price = projected_df['close'].iloc[i]
+                    prev_prices = projected_df['close'].iloc[i - lookback:i]
+
+                    # Simple peak detection
+                    if all(curr_price > prev_prices):
+                        # Possible future top
+                        confidence = min(0.8, cycle_comparison['potential_continuation']['confidence_score'])
+
+                        turning_points = pd.concat([turning_points, pd.DataFrame([{
+                            'date': projected_df.index[i],
+                            'price': curr_price,
+                            'direction': 'projected_top',
+                            'strength': 3,  # Default value
+                            'confidence': confidence,
+                            'indicators': 'Historical pattern projection',
+                            'days_since_last_tp': (projected_df.index[i] - turning_points['date'].iloc[-1]).days if len(
+                                turning_points) > 0 else None,
+                            'cycle_phase': f"Projected ({cycle_comparison['most_similar_cycle']})"
+                        }])], ignore_index=True)
+
+                    # Simple valley detection
+                    elif all(curr_price < prev_prices):
+                        # Possible future bottom
+                        confidence = min(0.8, cycle_comparison['potential_continuation']['confidence_score'])
+
+                        turning_points = pd.concat([turning_points, pd.DataFrame([{
+                            'date': projected_df.index[i],
+                            'price': curr_price,
+                            'direction': 'projected_bottom',
+                            'strength': 3,  # Default value
+                            'confidence': confidence,
+                            'indicators': 'Historical pattern projection',
+                            'days_since_last_tp': (projected_df.index[i] - turning_points['date'].iloc[-1]).days if len(
+                                turning_points) > 0 else None,
+                            'cycle_phase': f"Projected ({cycle_comparison['most_similar_cycle']})"
+                        }])], ignore_index=True)
+
+        # Sort turning points by date
+        turning_points = turning_points.sort_values('date')
+
+        # For BTC halving cycles, add known future halving dates as significant turning points
+        if symbol == 'BTC' and cycle_type == 'halving':
+            current_date = df.index[-1]
+
+            for halving_date_str in self.btc_halving_dates:
+                halving_date = pd.Timestamp(halving_date_str)
+
+                # Only add future halving dates
+                if halving_date > current_date:
+                    turning_points = pd.concat([turning_points, pd.DataFrame([{
+                        'date': halving_date,
+                        'price': None,  # Unknown future price
+                        'direction': 'halving_event',
+                        'strength': 5,  # High significance
+                        'confidence': 0.99,  # Very high confidence for the event (though not for price)
+                        'indicators': 'Bitcoin halving event',
+                        'days_since_last_tp': None,
+                        'cycle_phase': 'Halving event'
+                    }])], ignore_index=True)
+
+        # For ETH and SOL, add upcoming network events if available
+        elif symbol == 'ETH' and cycle_type == 'network_upgrade':
+            current_date = df.index[-1]
+
+            for event in self.eth_significant_events:
+                event_date = pd.Timestamp(event['date'])
+
+                # Only add future events
+                if event_date > current_date:
+                    turning_points = pd.concat([turning_points, pd.DataFrame([{
+                        'date': event_date,
+                        'price': None,  # Unknown future price
+                        'direction': 'network_event',
+                        'strength': 4,  # High significance
+                        'confidence': 0.9,  # High confidence for the event
+                        'indicators': f"Ethereum {event['name']}: {event['description']}",
+                        'days_since_last_tp': None,
+                        'cycle_phase': 'Network upgrade'
+                    }])], ignore_index=True)
+
+        elif symbol == 'SOL' and cycle_type == 'ecosystem_event':
+            current_date = df.index[-1]
+
+            for event in self.sol_significant_events:
+                event_date = pd.Timestamp(event['date'])
+
+                # Only add future events
+                if event_date > current_date:
+                    turning_points = pd.concat([turning_points, pd.DataFrame([{
+                        'date': event_date,
+                        'price': None,  # Unknown future price
+                        'direction': 'ecosystem_event',
+                        'strength': 4,  # High significance
+                        'confidence': 0.9,  # High confidence for the event
+                        'indicators': f"Solana {event['name']}: {event['description']}",
+                        'days_since_last_tp': None,
+                        'cycle_phase': 'Ecosystem event'
+                    }])], ignore_index=True)
+
+        # Sort by date again after adding events
+        turning_points = turning_points.sort_values('date')
+
+        return turning_points
 
     def plot_cycle_comparison(self, processed_data: pd.DataFrame,
                              symbol: str,
