@@ -19,11 +19,32 @@ from typing import Dict, List, Tuple, Union, Optional
 # Import from project modules
 from models.time_series import detect_seasonality
 from data.db import DatabaseManager
-from data_collection.data_storage_manager import load_processed_data
 from utils.crypto_helpers import calculate_drawdown, calculate_roi
 from analysis.trend_detection import detect_trend_change_points
 
-
+""""
+функції для роботи з базою даних
+get_klines_processed
+save_market_cycle
+update_market_cycle
+get_market_cycle_by_id
+get_market_cycles_by_symbol
+get_active_market_cycles
+delete_market_cycle
+save_cycle_feature
+get_cycle_features
+get_latest_cycle_features
+delete_cycle_feature
+save_cycle_similarity
+get_cycle_similarities_by_reference
+get_most_similar_cycles
+save_predicted_turning_point
+update_turning_point_outcome
+get_pending_turning_points
+get_turning_points_by_date_range
+insert_cycle_feature_performance
+get_cycle_feature_performance
+"""
 class CryptoCycles:
     """
     A class for analyzing cryptocurrency market cycles to enhance prediction models.

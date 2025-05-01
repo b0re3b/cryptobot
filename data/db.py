@@ -2690,21 +2690,7 @@ class DatabaseManager:
 
     def get_leading_indicators(self, target_symbol=None, indicator_symbol=None, timeframe=None,
                                min_correlation=0.7, start_time=None, end_time=None, method=None):
-        """
-        Отримує провідні індикатори
 
-        Аргументи:
-            target_symbol: Цільовий символ (опціонально)
-            indicator_symbol: Символ індикатора (опціонально)
-            timeframe: Часовий інтервал (опціонально)
-            min_correlation: Мінімальне значення кореляції (опціонально)
-            start_time: Початковий час періоду (опціонально)
-            end_time: Кінцевий час періоду (опціонально)
-            method: Метод кореляції (опціонально)
-
-        Повертає:
-            Список кортежів (target_symbol, indicator_symbol, lag_period, correlation_value)
-        """
         query = """
                 SELECT target_symbol, indicator_symbol, lag_period, correlation_value
                 FROM leading_indicators
@@ -2739,19 +2725,7 @@ class DatabaseManager:
 
 
     def save_external_asset_correlations(self, correlations, timeframe, start_time, end_time, method):
-        """
-        Зберігає кореляції між криптовалютами та зовнішніми активами
 
-        Аргументи:
-            correlations: Список кортежів (crypto_symbol, external_asset, correlation_value)
-            timeframe: Часовий інтервал
-            start_time: Початковий час періоду
-            end_time: Кінцевий час періоду
-            method: Метод кореляції
-
-        Повертає:
-            Результат виконання запиту
-        """
         start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
         end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
 
@@ -2767,21 +2741,7 @@ class DatabaseManager:
 
     def get_external_asset_correlations(self, crypto_symbol=None, external_asset=None, timeframe=None,
                                         min_correlation=-1.0, start_time=None, end_time=None, method=None):
-        """
-        Отримує кореляції між криптовалютами та зовнішніми активами
 
-        Аргументи:
-            crypto_symbol: Символ криптовалюти (опціонально)
-            external_asset: Зовнішній актив (опціонально)
-            timeframe: Часовий інтервал (опціонально)
-            min_correlation: Мінімальне значення кореляції (опціонально)
-            start_time: Початковий час періоду (опціонально)
-            end_time: Кінцевий час періоду (опціонально)
-            method: Метод кореляції (опціонально)
-
-        Повертає:
-            Список кортежів (crypto_symbol, external_asset, correlation_value)
-        """
         query = """
                 SELECT crypto_symbol, external_asset, correlation_value
                 FROM external_asset_correlations
@@ -2817,21 +2777,7 @@ class DatabaseManager:
 
     def save_market_regime_correlations(self, regime_name, correlation_matrix, symbols_list,
                                         correlation_type, start_time, end_time, method):
-        """
-        Зберігає кореляційні матриці для різних ринкових режимів
 
-        Аргументи:
-            regime_name: Назва ринкового режиму
-            correlation_matrix: Кореляційна матриця
-            symbols_list: Список символів
-            correlation_type: Тип кореляції
-            start_time: Початковий час періоду
-            end_time: Кінцевий час періоду
-            method: Метод кореляції
-
-        Повертає:
-            Результат виконання запиту
-        """
         start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
         end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
 
@@ -2858,19 +2804,7 @@ class DatabaseManager:
 
     def get_market_regime_correlations(self, regime_name=None, correlation_type=None,
                                        start_time=None, end_time=None, method=None):
-        """
-        Отримує кореляційні матриці для ринкових режимів
 
-        Аргументи:
-            regime_name: Назва ринкового режиму (опціонально)
-            correlation_type: Тип кореляції (опціонально)
-            start_time: Початковий час періоду (опціонально)
-            end_time: Кінцевий час періоду (опціонально)
-            method: Метод кореляції (опціонально)
-
-        Повертає:
-            Список кортежів (regime_name, start_time, end_time, matrix, symbols)
-        """
         query = """
                 SELECT regime_name, start_time, end_time, matrix_json, symbols_list
                 FROM market_regime_correlations
@@ -2913,19 +2847,7 @@ class DatabaseManager:
 
     def insert_correlated_pair(self, symbol1, symbol2, correlation_value, correlation_type,
                                timeframe, start_time, end_time, method):
-        """
-        Додає інформацію про кореляцію пари символів
 
-        Args:
-            symbol1: Перший символ пари
-            symbol2: Другий символ пари
-            correlation_value: Значення кореляції
-            correlation_type: Тип кореляції
-            timeframe: Таймфрейм даних
-            start_time: Початковий час періоду аналізу
-            end_time: Кінцевий час періоду аналізу
-            method: Метод обчислення кореляції
-        """
         # Перетворення часу до строкового формату, якщо потрібно
         if isinstance(start_time, datetime):
             start_time = start_time.isoformat()
@@ -2946,20 +2868,7 @@ class DatabaseManager:
 
     def get_correlated_pairs(self, symbol=None, correlation_type=None, timeframe=None,
                              min_correlation=None, max_correlation=None, limit=None):
-        """
-        Отримує інформацію про кореляції за різними фільтрами
 
-        Args:
-            symbol: Символ для фільтрації (опціонально)
-            correlation_type: Тип кореляції (опціонально)
-            timeframe: Таймфрейм даних (опціонально)
-            min_correlation: Мінімальне значення кореляції (опціонально)
-            max_correlation: Максимальне значення кореляції (опціонально)
-            limit: Максимальна кількість результатів (опціонально)
-
-        Returns:
-            Список словників з інформацією про корельовані пари
-        """
         # Складаємо базовий запит
         query = "SELECT * FROM correlated_pairs WHERE 1=1"
         params = []
@@ -2993,19 +2902,7 @@ class DatabaseManager:
 
     def save_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
                                      window_size, timestamp, correlation_value, method):
-        """
-        Зберігає часовий ряд кореляції для пари криптовалют
 
-        Args:
-            symbol1: Перший символ пари
-            symbol2: Другий символ пари
-            correlation_type: Тип кореляції
-            timeframe: Таймфрейм даних
-            window_size: Розмір вікна для обчислення кореляції
-            timestamp: Час, для якого обчислена кореляція
-            correlation_value: Значення кореляції
-            method: Метод обчислення кореляції
-        """
         # Перетворення часу до строкового формату, якщо потрібно
         if isinstance(timestamp, datetime):
             timestamp = timestamp.isoformat()
@@ -3024,9 +2921,7 @@ class DatabaseManager:
 
     def get_correlation_time_series(self, symbol1, symbol2, correlation_type, timeframe,
                                     window_size, start_time=None, end_time=None, method=None, limit=None):
-        """
-        Отримує часовий ряд кореляцій для конкретної пари
-        """
+
         if isinstance(start_time, datetime):
             start_time = start_time.isoformat()
         if isinstance(end_time, datetime):
@@ -3063,9 +2958,7 @@ class DatabaseManager:
 
     def get_most_correlated_pairs(self, symbol=None, correlation_type='pearson', timeframe='1h',
                                   limit=10, min_abs_correlation=0.7):
-        """
-        Отримує найбільш корельовані пари за абсолютним значенням кореляції
-        """
+
         query = """
                 SELECT symbol1,
                        symbol2,
@@ -3091,6 +2984,548 @@ class DatabaseManager:
         params.append(limit)
 
         return self.fetch_dict(query, tuple(params))
+
+    def save_market_cycle(self,
+                          symbol: str,
+                          cycle_type: str,
+                          start_date: datetime,
+                          end_date: Optional[datetime] = None,
+                          peak_date: Optional[datetime] = None,
+                          peak_price: Optional[float] = None,
+                          bottom_date: Optional[datetime] = None,
+                          bottom_price: Optional[float] = None,
+                          max_drawdown: Optional[float] = None,
+                          max_roi: Optional[float] = None,
+                          cycle_duration_days: Optional[int] = None) -> int:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                INSERT INTO market_cycles
+                (symbol, cycle_type, start_date, end_date, peak_date, peak_price,
+                 bottom_date, bottom_price, max_drawdown, max_roi, cycle_duration_days)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id \
+                """
+
+        try:
+            self.cursor.execute(query, (
+                symbol, cycle_type, start_date, end_date, peak_date, peak_price,
+                bottom_date, bottom_price, max_drawdown, max_roi, cycle_duration_days
+            ))
+            cycle_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return cycle_id
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження ринкового циклу: {e}")
+            raise
+
+    def update_market_cycle(self,
+                            cycle_id: int,
+                            end_date: Optional[datetime] = None,
+                            peak_date: Optional[datetime] = None,
+                            peak_price: Optional[float] = None,
+                            bottom_date: Optional[datetime] = None,
+                            bottom_price: Optional[float] = None,
+                            max_drawdown: Optional[float] = None,
+                            max_roi: Optional[float] = None,
+                            cycle_duration_days: Optional[int] = None) -> bool:
+
+        if not self.conn:
+            self.connect()
+
+        # Формуємо динамічно частину запиту з полями, які потрібно оновити
+        update_fields = []
+        params = []
+
+        if end_date is not None:
+            update_fields.append("end_date = %s")
+            params.append(end_date)
+
+        if peak_date is not None:
+            update_fields.append("peak_date = %s")
+            params.append(peak_date)
+
+        if peak_price is not None:
+            update_fields.append("peak_price = %s")
+            params.append(peak_price)
+
+        if bottom_date is not None:
+            update_fields.append("bottom_date = %s")
+            params.append(bottom_date)
+
+        if bottom_price is not None:
+            update_fields.append("bottom_price = %s")
+            params.append(bottom_price)
+
+        if max_drawdown is not None:
+            update_fields.append("max_drawdown = %s")
+            params.append(max_drawdown)
+
+        if max_roi is not None:
+            update_fields.append("max_roi = %s")
+            params.append(max_roi)
+
+        if cycle_duration_days is not None:
+            update_fields.append("cycle_duration_days = %s")
+            params.append(cycle_duration_days)
+
+        # Додаємо updated_at
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+
+        # Якщо немає полів для оновлення, повертаємо True
+        if not update_fields:
+            return True
+
+        query = f"""
+            UPDATE market_cycles
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """
+
+        params.append(cycle_id)
+
+        try:
+            self.cursor.execute(query, params)
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка оновлення ринкового циклу: {e}")
+            raise
+
+    def get_market_cycle_by_id(self, cycle_id: int) -> Optional[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        query = "SELECT * FROM market_cycles WHERE id = %s"
+
+        try:
+            self.cursor.execute(query, (cycle_id,))
+            result = self.cursor.fetchone()
+            return dict(result) if result else None
+        except psycopg2.Error as e:
+            print(f"Помилка отримання ринкового циклу: {e}")
+            raise
+
+    def get_market_cycles_by_symbol(self, symbol: str, cycle_type: Optional[str] = None) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        params = [symbol]
+
+        if cycle_type:
+            query = "SELECT * FROM market_cycles WHERE symbol = %s AND cycle_type = %s ORDER BY start_date"
+            params.append(cycle_type)
+        else:
+            query = "SELECT * FROM market_cycles WHERE symbol = %s ORDER BY start_date"
+
+        try:
+            self.cursor.execute(query, params)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання ринкових циклів: {e}")
+            raise
+
+    def get_active_market_cycles(self, symbol: Optional[str] = None) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        if symbol:
+            query = "SELECT * FROM market_cycles WHERE end_date IS NULL AND symbol = %s ORDER BY start_date"
+            params = (symbol,)
+        else:
+            query = "SELECT * FROM market_cycles WHERE end_date IS NULL ORDER BY symbol, start_date"
+            params = ()
+
+        try:
+            self.cursor.execute(query, params)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання активних ринкових циклів: {e}")
+            raise
+
+    def delete_market_cycle(self, cycle_id: int) -> bool:
+
+        if not self.conn:
+            self.connect()
+
+        query = "DELETE FROM market_cycles WHERE id = %s"
+
+        try:
+            self.cursor.execute(query, (cycle_id,))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка видалення ринкового циклу: {e}")
+            raise
+
+    #
+    # МЕТОДИ ДЛЯ РОБОТИ З ТАБЛИЦЕЮ cycle_features
+    #
+
+    def save_cycle_feature(self,
+                           symbol: str,
+                           timestamp: datetime,
+                           timeframe: str,
+                           days_since_last_halving: int,
+                           days_to_next_halving: int,
+                           halving_cycle_phase: float,
+                           days_since_last_eth_upgrade: int,
+                           days_to_next_eth_upgrade: int,
+                           eth_upgrade_cycle_phase: float,
+                           days_since_last_sol_event: int,
+                           sol_network_stability_score: float,
+                           weekly_cycle_position: float,
+                           monthly_seasonality_factor: float,
+                           market_phase: str,
+                           optimal_cycle_length: int,
+                           btc_correlation: float,
+                           eth_correlation: float,
+                           sol_correlation: float,
+                           volatility_metric: float,
+                           is_anomaly: bool = False) -> int:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                INSERT INTO cycle_features
+                (symbol, timestamp, timeframe, days_since_last_halving, days_to_next_halving,
+                 halving_cycle_phase, days_since_last_eth_upgrade, days_to_next_eth_upgrade,
+                 eth_upgrade_cycle_phase, days_since_last_sol_event, sol_network_stability_score,
+                 weekly_cycle_position, monthly_seasonality_factor, market_phase,
+                 optimal_cycle_length, btc_correlation, eth_correlation, sol_correlation,
+                 volatility_metric, is_anomaly)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id \
+                """
+
+        try:
+            self.cursor.execute(query, (
+                symbol, timestamp, timeframe, days_since_last_halving, days_to_next_halving,
+                halving_cycle_phase, days_since_last_eth_upgrade, days_to_next_eth_upgrade,
+                eth_upgrade_cycle_phase, days_since_last_sol_event, sol_network_stability_score,
+                weekly_cycle_position, monthly_seasonality_factor, market_phase,
+                optimal_cycle_length, btc_correlation, eth_correlation, sol_correlation,
+                volatility_metric, is_anomaly
+            ))
+            feature_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return feature_id
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження функцій циклу: {e}")
+            raise
+
+    def get_cycle_features(self,
+                           symbol: str,
+                           timeframe: str,
+                           start_time: datetime,
+                           end_time: datetime) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM cycle_features
+                WHERE symbol = %s \
+                  AND timeframe = %s \
+                  AND timestamp BETWEEN %s \
+                  AND %s
+                ORDER BY timestamp \
+                """
+
+        try:
+            self.cursor.execute(query, (symbol, timeframe, start_time, end_time))
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання функцій циклу: {e}")
+            raise
+
+    def get_latest_cycle_features(self, symbol: str, timeframe: str) -> Optional[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM cycle_features
+                WHERE symbol = %s \
+                  AND timeframe = %s
+                ORDER BY timestamp DESC
+                    LIMIT 1 \
+                """
+
+        try:
+            self.cursor.execute(query, (symbol, timeframe))
+            result = self.cursor.fetchone()
+            return dict(result) if result else None
+        except psycopg2.Error as e:
+            print(f"Помилка отримання останніх функцій циклу: {e}")
+            raise
+
+    def delete_cycle_feature(self, feature_id: int) -> bool:
+
+        if not self.conn:
+            self.connect()
+
+        query = "DELETE FROM cycle_features WHERE id = %s"
+
+        try:
+            self.cursor.execute(query, (feature_id,))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка видалення функції циклу: {e}")
+            raise
+
+    #
+    # МЕТОДИ ДЛЯ РОБОТИ З ТАБЛИЦЕЮ cycle_similarity
+    #
+
+    def save_cycle_similarity(self,
+                              symbol: str,
+                              reference_cycle_id: int,
+                              compared_cycle_id: int,
+                              similarity_score: float,
+                              normalized: bool) -> int:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                INSERT INTO cycle_similarity
+                (symbol, reference_cycle_id, compared_cycle_id, similarity_score, normalized)
+                VALUES (%s, %s, %s, %s, %s) RETURNING id \
+                """
+
+        try:
+            self.cursor.execute(query, (
+                symbol, reference_cycle_id, compared_cycle_id, similarity_score, normalized
+            ))
+            similarity_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return similarity_id
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження схожості циклів: {e}")
+            raise
+
+    def get_cycle_similarities_by_reference(self,
+                                            reference_cycle_id: int,
+                                            min_similarity: Optional[float] = None) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        query_parts = ["SELECT * FROM cycle_similarity WHERE reference_cycle_id = %s"]
+        params = [reference_cycle_id]
+
+        if min_similarity is not None:
+            query_parts.append("AND similarity_score >= %s")
+            params.append(min_similarity)
+
+        query = " ".join(query_parts) + " ORDER BY similarity_score DESC"
+
+        try:
+            self.cursor.execute(query, params)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання схожості циклів: {e}")
+            raise
+
+    def get_most_similar_cycles(self,
+                                cycle_id: int,
+                                limit: int = 5,
+                                normalized: bool = True) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT cs.*, mc.symbol, mc.cycle_type, mc.start_date, mc.end_date
+                FROM cycle_similarity cs
+                         JOIN market_cycles mc ON cs.compared_cycle_id = mc.id
+                WHERE cs.reference_cycle_id = %s \
+                """
+
+        params = [cycle_id]
+
+        if normalized:
+            query += " AND cs.normalized = TRUE"
+
+        query += " ORDER BY cs.similarity_score DESC LIMIT %s"
+        params.append(limit)
+
+        try:
+            self.cursor.execute(query, params)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання найбільш схожих циклів: {e}")
+            raise
+
+    #
+    # МЕТОДИ ДЛЯ РОБОТИ З ТАБЛИЦЕЮ predicted_turning_points
+    #
+
+    def save_predicted_turning_point(self,
+                                     symbol: str,
+                                     prediction_date: datetime,
+                                     predicted_point_date: datetime,
+                                     point_type: str,
+                                     confidence: float,
+                                     price_prediction: Optional[float] = None) -> int:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                INSERT INTO predicted_turning_points
+                (symbol, prediction_date, predicted_point_date, point_type, confidence, price_prediction)
+                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id \
+                """
+
+        try:
+            self.cursor.execute(query, (
+                symbol, prediction_date, predicted_point_date, point_type, confidence, price_prediction
+            ))
+            point_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return point_id
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження точки повороту: {e}")
+            raise
+
+    def update_turning_point_outcome(self,
+                                     point_id: int,
+                                     actual_outcome: str,
+                                     actual_date: Optional[datetime] = None,
+                                     actual_price: Optional[float] = None) -> bool:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                UPDATE predicted_turning_points
+                SET actual_outcome = %s, \
+                    actual_date    = %s, \
+                    actual_price   = %s, \
+                    updated_at     = CURRENT_TIMESTAMP
+                WHERE id = %s \
+                """
+
+        try:
+            self.cursor.execute(query, (actual_outcome, actual_date, actual_price, point_id))
+            self.conn.commit()
+            return True
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка оновлення результату точки повороту: {e}")
+            raise
+
+    def get_pending_turning_points(self, symbol: Optional[str] = None) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        if symbol:
+            query = """
+                    SELECT * \
+                    FROM predicted_turning_points
+                    WHERE actual_outcome IS NULL \
+                      AND symbol = %s
+                    ORDER BY predicted_point_date \
+                    """
+            params = (symbol,)
+        else:
+            query = """
+                    SELECT * \
+                    FROM predicted_turning_points
+                    WHERE actual_outcome IS NULL
+                    ORDER BY symbol, predicted_point_date \
+                    """
+            params = ()
+
+        try:
+            self.cursor.execute(query, params)
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання очікуваних точок повороту: {e}")
+            raise
+
+    def get_turning_points_by_date_range(self,
+                                         symbol: str,
+                                         start_date: datetime,
+                                         end_date: datetime) -> List[Dict]:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM predicted_turning_points
+                WHERE symbol = %s \
+                  AND predicted_point_date BETWEEN %s AND %s
+                ORDER BY predicted_point_date \
+                """
+
+        try:
+            self.cursor.execute(query, (symbol, start_date, end_date))
+            return [dict(row) for row in self.cursor.fetchall()]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання точок повороту за діапазоном дат: {e}")
+            raise
+
+    def insert_cycle_feature_performance(self, data: dict):
+
+        query = """
+                INSERT INTO cycle_feature_performance (model_id, feature_name, feature_importance, \
+                                                       correlation_to_target, \
+                                                       symbol, timeframe, training_period_start, training_period_end)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id; \
+                """
+        values = (
+            data['model_id'],
+            data['feature_name'],
+            data['feature_importance'],
+            data['correlation_to_target'],
+            data['symbol'],
+            data['timeframe'],
+            data['training_period_start'],
+            data['training_period_end'],
+        )
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, values)
+            inserted_id = cursor.fetchone()[0]
+            return inserted_id
+
+    def get_cycle_feature_performance(self, model_id=None, symbol=None, timeframe=None):
+
+        query = "SELECT * FROM cycle_feature_performance WHERE TRUE"
+        params = []
+
+        if model_id:
+            query += " AND model_id = %s"
+            params.append(model_id)
+        if symbol:
+            query += " AND symbol = %s"
+            params.append(symbol)
+        if timeframe:
+            query += " AND timeframe = %s"
+            params.append(timeframe)
+
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            return results
 
 
 
