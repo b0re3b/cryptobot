@@ -904,140 +904,95 @@ CREATE TABLE IF NOT EXISTS market_regime_correlations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(regime_name, start_time, end_time, correlation_type, method)
 );
-CREATE TABLE halving_events (
-    id SERIAL PRIMARY KEY,
-    date TIMESTAMP NOT NULL,
-    block_height INTEGER NOT NULL,
-    block_reward_before NUMERIC(18,8) NOT NULL,
-    block_reward_after NUMERIC(18,8) NOT NULL,
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_halving_date ON halving_events(date);
-
 CREATE TABLE market_cycles (
     id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    cycle_start_date TIMESTAMP NOT NULL,
-    cycle_end_date TIMESTAMP,
-    peak_date TIMESTAMP,
-    peak_price NUMERIC(18,8),
-    trough_date TIMESTAMP,
-    trough_price NUMERIC(18,8),
-    cycle_type VARCHAR(50) NOT NULL,
-    phase VARCHAR(30),
-    duration_days INTEGER,
+    symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
+    cycle_type VARCHAR(50) NOT NULL,            -- Type of cycle (bull, bear, halving, etc.)
+    start_date TIMESTAMP NOT NULL,              -- Start of the cycle
+    end_date TIMESTAMP,                         -- End of the cycle (NULL if ongoing)
+    peak_date TIMESTAMP,                        -- Date of cycle peak (if applicable)
+    peak_price DECIMAL(24, 8),                  -- Price at peak
+    bottom_date TIMESTAMP,                      -- Date of cycle bottom (if applicable)
+    bottom_price DECIMAL(24, 8),                -- Price at bottom
+    max_drawdown DECIMAL(10, 2),                -- Maximum drawdown percentage
+    max_roi DECIMAL(10, 2),                     -- Maximum ROI percentage
+    cycle_duration_days INTEGER,                -- Duration of the cycle in days
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_market_cycles_symbol ON market_cycles(symbol);
-CREATE INDEX idx_market_cycles_dates ON market_cycles(cycle_start_date, cycle_end_date);
-CREATE INDEX idx_market_cycles_type ON market_cycles(cycle_type);
+-- Index for faster retrieval of cycles by symbol and type
+CREATE INDEX idx_market_cycles_lookup ON market_cycles (symbol, cycle_type, start_date);
 
-CREATE TABLE cycle_patterns (
+-- Table for storing cycle features for deep learning
+CREATE TABLE cycle_features (
     id SERIAL PRIMARY KEY,
-    pattern_name VARCHAR(100) NOT NULL,
-    symbol VARCHAR(20) NOT NULL,
-    window_size INTEGER NOT NULL,
-    pattern_data JSONB NOT NULL,
-    cluster_id INTEGER NOT NULL,
-    occurrence_count INTEGER DEFAULT 0,
-    average_duration NUMERIC(10,2),
-    last_detected_at TIMESTAMP,
+    symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
+    timestamp TIMESTAMP NOT NULL,               -- Time of the features
+    timeframe VARCHAR(5) NOT NULL,              -- Timeframe of the data
+    days_since_last_halving INTEGER,            -- Days since last BTC halving
+    days_to_next_halving INTEGER,               -- Days to next BTC halving
+    halving_cycle_phase DECIMAL(10, 4),         -- Position in halving cycle (0-1)
+    days_since_last_eth_upgrade INTEGER,        -- Days since last ETH upgrade
+    days_to_next_eth_upgrade INTEGER,           -- Days to next ETH upgrade (if known)
+    eth_upgrade_cycle_phase DECIMAL(10, 4),     -- Position in ETH upgrade cycle
+    days_since_last_sol_event INTEGER,          -- Days since last SOL event
+    sol_network_stability_score DECIMAL(10, 4), -- Derived from outage history
+    weekly_cycle_position DECIMAL(10, 4),       -- Position in weekly cycle
+    monthly_seasonality_factor DECIMAL(10, 4),  -- Monthly seasonality factor
+    market_phase VARCHAR(20),                   -- Current market phase label
+    optimal_cycle_length INTEGER,               -- Detected optimal cycle length
+    btc_correlation DECIMAL(10, 4),             -- Correlation with BTC
+    eth_correlation DECIMAL(10, 4),             -- Correlation with ETH
+    sol_correlation DECIMAL(10, 4),             -- Correlation with SOL
+    volatility_metric DECIMAL(10, 4),           -- Current volatility metric
+    is_anomaly BOOLEAN DEFAULT FALSE,           -- Whether current pattern is anomalous
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    UNIQUE (symbol, timeframe, timestamp)       -- Ensure no duplicate entries
 );
 
-CREATE INDEX idx_cycle_patterns_symbol ON cycle_patterns(symbol);
-CREATE INDEX idx_cycle_patterns_cluster ON cycle_patterns(cluster_id);
+-- Index for faster retrieval of features
+CREATE INDEX idx_cycle_features_lookup ON cycle_features (symbol, timeframe, timestamp);
 
-CREATE TABLE cycle_analysis_results (
+-- Table for storing similarity scores between current and historical cycles
+CREATE TABLE cycle_similarity (
     id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    analysis_date TIMESTAMP NOT NULL,
-    analysis_type VARCHAR(50) NOT NULL,
-    results_json JSONB NOT NULL,
-    summary TEXT,
-    confidence_score NUMERIC(5,2),
+    symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
+    reference_cycle_id INTEGER NOT NULL,        -- ID of the reference cycle
+    compared_cycle_id INTEGER NOT NULL,         -- ID of the compared cycle
+    similarity_score DECIMAL(10, 4) NOT NULL,   -- Similarity score (0-1)
+    normalized BOOLEAN NOT NULL,                -- Whether comparison was normalized
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    FOREIGN KEY (reference_cycle_id) REFERENCES market_cycles(id),
+    FOREIGN KEY (compared_cycle_id) REFERENCES market_cycles(id)
 );
 
-CREATE INDEX idx_analysis_results_symbol ON cycle_analysis_results(symbol);
-CREATE INDEX idx_analysis_results_date ON cycle_analysis_results(analysis_date);
-CREATE INDEX idx_analysis_results_type ON cycle_analysis_results(analysis_type);
-
-CREATE TABLE seasonality_patterns (
+-- Table for storing predicted turning points
+CREATE TABLE predicted_turning_points (
     id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    period_days INTEGER NOT NULL,
-    strength NUMERIC(5,2) NOT NULL,
-    detection_date TIMESTAMP NOT NULL,
-    description TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
+    symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
+    prediction_date TIMESTAMP NOT NULL,         -- Date of prediction
+    predicted_point_date TIMESTAMP NOT NULL,    -- Predicted turning point date
+    point_type VARCHAR(20) NOT NULL,            -- Type of turning point (top, bottom)
+    confidence DECIMAL(10, 4) NOT NULL,         -- Confidence level (0-1)
+    price_prediction DECIMAL(24, 8),            -- Predicted price at turning point
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    actual_outcome VARCHAR(20),                 -- Actual outcome once known (confirmed, missed)
+    actual_date TIMESTAMP,                      -- Actual date if confirmed
+    actual_price DECIMAL(24, 8),                -- Actual price if confirmed
+    updated_at TIMESTAMP                        -- When outcome was updated
 );
 
-CREATE INDEX idx_seasonality_symbol ON seasonality_patterns(symbol);
-CREATE INDEX idx_seasonality_period ON seasonality_patterns(period_days);
-
-CREATE TABLE regime_changes (
+-- Table for storing model performance metrics related to cycle features
+CREATE TABLE cycle_feature_performance (
     id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    change_date TIMESTAMP NOT NULL,
-    previous_regime VARCHAR(50),
-    new_regime VARCHAR(50) NOT NULL,
-    confidence_score NUMERIC(5,2),
-    indicators_json JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    model_id VARCHAR(100) NOT NULL,             -- ID of the deep learning model
+    feature_name VARCHAR(100) NOT NULL,         -- Name of the cycle feature
+    feature_importance DECIMAL(10, 4),          -- Importance score of the feature
+    correlation_to_target DECIMAL(10, 4),       -- Correlation to prediction target
+    symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
+    timeframe VARCHAR(5) NOT NULL,              -- Timeframe used
+    training_period_start TIMESTAMP,            -- Start of training period
+    training_period_end TIMESTAMP,              -- End of training period
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_regime_changes_symbol ON regime_changes(symbol);
-CREATE INDEX idx_regime_changes_date ON regime_changes(change_date);
-
-CREATE TABLE cycle_predictions (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    prediction_date TIMESTAMP NOT NULL,
-    target_date TIMESTAMP NOT NULL,
-    predicted_price NUMERIC(18,8),
-    prediction_type VARCHAR(50) NOT NULL,
-    confidence NUMERIC(5,2),
-    methodology VARCHAR(100) NOT NULL,
-    actual_price NUMERIC(18,8),
-    accuracy_pct NUMERIC(10,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_predictions_symbol ON cycle_predictions(symbol);
-CREATE INDEX idx_predictions_dates ON cycle_predictions(prediction_date, target_date);
-CREATE INDEX idx_predictions_type ON cycle_predictions(prediction_type);
-
-CREATE TABLE feature_data (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    date TIMESTAMP NOT NULL,
-    feature_name VARCHAR(100) NOT NULL,
-    feature_value NUMERIC(18,8) NOT NULL,
-    feature_category VARCHAR(50) NOT NULL, -- 'cycle', 'technical', 'fundamental', 'sentiment'
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_feature_data_symbol ON feature_data(symbol);
-CREATE INDEX idx_feature_data_date ON feature_data(date);
-CREATE INDEX idx_feature_data_name ON feature_data(feature_name);
-CREATE INDEX idx_feature_data_category ON feature_data(feature_category);
-
-INSERT INTO halving_events (date, block_height, block_reward_before, block_reward_after, notes)
-VALUES
-    ('2012-11-28', 210000, 50, 25, 'First Bitcoin halving'),
-    ('2016-07-09', 420000, 25, 12.5, 'Second Bitcoin halving'),
-    ('2020-05-11', 630000, 12.5, 6.25, 'Third Bitcoin halving'),
-    ('2024-04-20', 840000, 6.25, 3.125, 'Fourth Bitcoin halving (estimated date)');
