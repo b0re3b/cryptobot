@@ -2,11 +2,8 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
-from typing import Dict, List, Tuple, Union, Optional
-
+from typing import Dict, List, Tuple, Optional
 from data.db import DatabaseManager
-
-
 
 class CryptoCycles:
 
@@ -2583,148 +2580,314 @@ class CryptoCycles:
         return turning_points
 
     def plot_cycle_comparison(self, processed_data: pd.DataFrame,
-                             symbol: str,
-                             cycle_type: str = 'auto',
-                             normalize: bool = True,
-                             save_path: Optional[str] = None) -> None:
-        """
-        Plot comparison of current cycle against historical cycles.
+                              symbol: str,
+                              cycle_type: str = 'auto',
+                              normalize: bool = True,
+                              save_path: Optional[str] = None) -> None:
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            Pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol to analyze.
-        cycle_type : str, default='auto'
-            Type of cycle to compare (auto-selected based on symbol).
-        normalize : bool, default=True
-            Whether to normalize prices for comparison.
-        save_path : str, optional
-            If provided, save the plot to this path.
-        """
-        # Implementation with symbol-specific logic would go here
-        pass
+        # Determine which type of cycle to use
+        if cycle_type == 'auto':
+            symbol_clean = symbol.upper().replace('USDT', '').replace('USD', '')
+            if symbol_clean == 'BTC':
+                cycle_type = 'halving'
+            elif symbol_clean == 'ETH':
+                cycle_type = 'network_upgrade'
+            elif symbol_clean == 'SOL':
+                cycle_type = 'ecosystem_event'
+            else:
+                cycle_type = 'bull_bear'
+
+        # Extract cycles based on cycle_type
+        if cycle_type == 'halving' and symbol.upper().startswith('BTC'):
+            # Add halving cycle features
+            df_with_cycles = self.calculate_btc_halving_cycle_features(processed_data)
+            cycle_column = 'cycle_number'
+            title = f"Bitcoin Halving Cycles Comparison for {symbol}"
+        elif cycle_type == 'bull_bear':
+            # Add bull/bear cycle features
+            df_with_cycles = self.identify_bull_bear_cycles(processed_data)
+            cycle_column = 'cycle_id'
+            title = f"Bull/Bear Market Cycles Comparison for {symbol}"
+        elif cycle_type == 'network_upgrade' and symbol.upper().startswith('ETH'):
+            # Add ETH network upgrade cycle features
+            df_with_cycles = self.calculate_eth_event_cycle_features(processed_data)
+            cycle_column = 'upgrade_cycle'
+            title = f"Ethereum Network Upgrade Cycles Comparison for {symbol}"
+        elif cycle_type == 'ecosystem_event' and symbol.upper().startswith('SOL'):
+            # Add SOL ecosystem event cycle features
+            df_with_cycles = self.calculate_sol_event_cycle_features(processed_data)
+            cycle_column = 'event_cycle'
+            title = f"Solana Ecosystem Event Cycles Comparison for {symbol}"
+        else:
+            # Fallback to bull/bear cycles
+            df_with_cycles = self.identify_bull_bear_cycles(processed_data)
+            cycle_column = 'cycle_id'
+            title = f"Market Cycles Comparison for {symbol}"
+
+        # Get unique cycles
+        cycles = df_with_cycles[cycle_column].unique()
+
+        if len(cycles) <= 1:
+            print(f"Not enough cycle data available for {symbol} with cycle type '{cycle_type}'.")
+            return
+
+        # Prepare the plot
+        plt.figure(figsize=(14, 8))
+
+        # Get the current cycle (last cycle)
+        current_cycle = cycles[-1]
+
+        # Plot each historical cycle
+        for cycle in cycles:
+            cycle_data = df_with_cycles[df_with_cycles[cycle_column] == cycle].copy()
+
+            if len(cycle_data) < 5:  # Skip cycles with insufficient data
+                continue
+
+            # Reset index for each cycle to start at 0
+            cycle_data = cycle_data.reset_index()
+            x_values = range(len(cycle_data))
+
+            # Normalize prices if requested
+            if normalize:
+                # Normalize close prices to start at 100 for each cycle
+                first_price = cycle_data['close'].iloc[0]
+                y_values = cycle_data['close'] / first_price * 100
+                ylabel = 'Normalized Price (First day = 100)'
+            else:
+                y_values = cycle_data['close']
+                ylabel = 'Price'
+
+            # Plot with different styling for current vs. historical cycles
+            if cycle == current_cycle:
+                plt.plot(x_values, y_values, linewidth=3, color='red',
+                         label=f'Current Cycle (#{cycle})')
+            else:
+                plt.plot(x_values, y_values, linewidth=1, alpha=0.7,
+                         label=f'Cycle #{cycle}')
+
+        # Add chart details
+        plt.title(title)
+        plt.xlabel('Days since cycle start')
+        plt.ylabel(ylabel)
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.legend()
+
+        # Save the plot if a path is provided
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Plot saved to {save_path}")
+
+        # Show the plot
+        plt.tight_layout()
+        plt.show()
 
     def analyze_token_correlations(self, symbols: List[str],
-                                  timeframe: str = '1d',
-                                  lookback_period: str = '1 year') -> pd.DataFrame:
-        """
-        Analyze correlations between different tokens across their respective cycles.
+                                   timeframe: str = '1d',
+                                   lookback_period: str = '1 year') -> pd.DataFrame:
 
-        Parameters:
-        -----------
-        symbols : List[str]
-            List of cryptocurrency symbols to analyze (e.g., ['BTC', 'ETH', 'SOL']).
-        timeframe : str, default='1d'
-            Timeframe for the analysis.
-        lookback_period : str, default='1 year'
-            Period to look back for correlation analysis.
-
-        Returns:
-        --------
-        pd.DataFrame
-            Correlation matrix between different tokens' price movements.
-        """
-        # Implementation would go here
-        pass
-
-    def extract_cycle_features_for_deep_learning(self, symbol: str,
-                                              timeframe: str = '1d',
-                                              lookback_period: Optional[str] = '5 years',
-                                              include_all_symbols: bool = False) -> pd.DataFrame:
-        """
-        Extract comprehensive cycle-related features for deep learning models.
-
-        This is the main interface method for integration with deep_learning.py.
-
-        Parameters:
-        -----------
-        symbol : str
-            Primary cryptocurrency symbol to analyze.
-        timeframe : str, default='1d'
-            Timeframe for the analysis ('1d', '4h', etc.).
-        lookback_period : str, optional
-            Period to look back for data, e.g., '5 years', '2 years'.
-            If None, will use all available data.
-        include_all_symbols : bool, default=False
-            Whether to include cycle features for all available symbols.
-
-        Returns:
-        --------
-        pd.DataFrame
-            DataFrame with extracted cycle features ready for deep learning models.
-        """
         # Calculate end date (current date) and start date based on lookback period
         end_date = datetime.now().strftime('%Y-%m-%d')
 
-        if lookback_period:
-            # Parse the lookback period
-            value, unit = lookback_period.split()
-            value = int(value)
+        # Parse the lookback period
+        value, unit = lookback_period.split()
+        value = int(value)
 
-            if 'year' in unit:
-                start_date = (datetime.now() - timedelta(days=365*value)).strftime('%Y-%m-%d')
-            elif 'month' in unit:
-                start_date = (datetime.now() - timedelta(days=30*value)).strftime('%Y-%m-%d')
-            elif 'week' in unit:
-                start_date = (datetime.now() - timedelta(weeks=value)).strftime('%Y-%m-%d')
-            elif 'day' in unit:
-                start_date = (datetime.now() - timedelta(days=value)).strftime('%Y-%m-%d')
-            else:
-                start_date = None
+        if 'year' in unit:
+            start_date = (datetime.now() - timedelta(days=365 * value)).strftime('%Y-%m-%d')
+        elif 'month' in unit:
+            start_date = (datetime.now() - timedelta(days=30 * value)).strftime('%Y-%m-%d')
+        elif 'week' in unit:
+            start_date = (datetime.now() - timedelta(weeks=value)).strftime('%Y-%m-%d')
+        elif 'day' in unit:
+            start_date = (datetime.now() - timedelta(days=value)).strftime('%Y-%m-%d')
         else:
-            start_date = None
+            raise ValueError(f"Invalid lookback period format: {lookback_period}")
 
-        # Load processed data
-        processed_data = self.load_processed_data(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date
-        )
+        # Dictionary to store price data for each symbol
+        price_data = {}
+        returns_data = {}
 
-        # Create general and symbol-specific cyclical features
-        result_df = self.create_cyclical_features(processed_data, symbol)
+        # Load data for each symbol
+        for symbol in symbols:
+            # Load processed data
+            data = self.load_processed_data(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-        # If requested, include features from other symbols
-        if include_all_symbols:
-            # Get correlation features with other major cryptocurrencies
-            for additional_symbol in ['BTC', 'ETH', 'SOL']:
-                if additional_symbol != symbol:
-                    # Load data for additional symbol
-                    additional_data = self.load_processed_data(
-                        symbol=additional_symbol,
-                        timeframe=timeframe,
-                        start_date=start_date,
-                        end_date=end_date
-                    )
+            if len(data) == 0:
+                print(f"No data available for {symbol}. Skipping.")
+                continue
 
-                    # Calculate correlation features and join to main dataframe
-                    # Implementation would go here
-                    pass
+            # Store close prices
+            price_data[symbol] = data['close']
 
-        return result_df
+            # Calculate daily returns
+            returns_data[symbol] = data['close'].pct_change().fillna(0)
+
+        # Create DataFrames
+        prices_df = pd.DataFrame(price_data)
+        returns_df = pd.DataFrame(returns_data)
+
+        # Calculate correlation matrices
+        price_correlation = prices_df.corr()
+        returns_correlation = returns_df.corr()
+
+        # Create a more detailed correlation analysis
+        result = {
+            'price_correlation': price_correlation,
+            'returns_correlation': returns_correlation
+        }
+
+        # Analyze correlations during different market phases
+        # We'll use BTC as a reference for market phases if available
+        if 'BTC' in symbols or 'BTCUSDT' in symbols:
+            btc_symbol = 'BTC' if 'BTC' in symbols else 'BTCUSDT'
+            btc_data = self.load_processed_data(
+                symbol=btc_symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+            # Detect market phases
+            btc_phases = self.detect_market_phase(btc_data)
+
+            # Create phase-specific correlation matrices
+            for phase in ['accumulation', 'uptrend', 'distribution', 'downtrend']:
+                phase_dates = btc_phases[btc_phases['market_phase'] == phase].index
+
+                if len(phase_dates) > 0:
+                    # Filter returns for this phase
+                    phase_returns = returns_df.loc[phase_dates].dropna(how='all')
+
+                    if len(phase_returns) > 1:  # Need at least 2 data points for correlation
+                        phase_corr = phase_returns.corr()
+                        result[f'{phase}_correlation'] = phase_corr
+
+        # Convert to DataFrame with multi-level columns for better output
+        correlation_types = list(result.keys())
+        symbols_list = list(price_data.keys())
+
+        # Create empty DataFrame with multi-level columns
+        multi_idx = pd.MultiIndex.from_product([correlation_types, symbols_list],
+                                               names=['correlation_type', 'symbol'])
+        final_df = pd.DataFrame(index=symbols_list, columns=multi_idx)
+
+        # Fill the DataFrame
+        for corr_type in correlation_types:
+            if corr_type in result:
+                for sym1 in symbols_list:
+                    for sym2 in symbols_list:
+                        if sym1 in result[corr_type].index and sym2 in result[corr_type].columns:
+                            final_df.loc[sym1, (corr_type, sym2)] = result[corr_type].loc[sym1, sym2]
+
+        # Save to database
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        correlation_data = {
+            'timestamp': timestamp,
+            'lookback_period': lookback_period,
+            'timeframe': timeframe,
+            'symbols': symbols,
+            'correlation_matrices': result
+        }
+
+        # Save correlation data to the database
+        # This is just a placeholder - actual implementation would depend on your DB schema
+        # self.db_connection.save_correlation_analysis(correlation_data)
+
+        return final_df
 
     def update_features_with_new_data(self, processed_data: pd.DataFrame,
-                                    symbol: str) -> pd.DataFrame:
-        """
-        Update cycle features with newly processed data.
+                                      symbol: str) -> pd.DataFrame:
 
-        This method is designed to be called when new processed data becomes available,
-        to efficiently update the cycle features without reprocessing all historical data.
+        if len(processed_data) == 0:
+            raise ValueError("No data provided for update.")
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            New pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol to analyze.
+        # Ensure we have a datetime index
+        if not isinstance(processed_data.index, pd.DatetimeIndex):
+            raise ValueError("DataFrame index must be a DatetimeIndex")
 
-        Returns:
-        --------
-        pd.DataFrame
-            DataFrame with updated cycle features.
-        """
-        # Implementation with symbol-specific logic would go here
-        pass
+        # Clean symbol
+        symbol_clean = symbol.upper().replace('USDT', '').replace('USD', '')
+
+        # Get the last date in the processed data
+        last_date = processed_data.index[-1]
+
+        # Retrieve the existing cycle features from the database
+        # This is a placeholder - actual implementation would depend on your DB schema
+        existing_features = self.db_connection.get_latest_cycle_features(symbol=symbol)
+
+        # If no existing features, process all data
+        if existing_features is None or len(existing_features) == 0:
+            return self.create_cyclical_features(processed_data, symbol)
+
+        # Determine which specific updates are needed based on the symbol
+        updated_features = processed_data.copy()
+
+        # Update general market phase detection
+        updated_features = self.detect_market_phase(updated_features)
+
+        # Update bull/bear cycle identification
+        updated_features = self.identify_bull_bear_cycles(updated_features)
+
+        # Update token-specific cycle features
+        if symbol_clean == 'BTC':
+            updated_features = self.calculate_btc_halving_cycle_features(updated_features)
+        elif symbol_clean == 'ETH':
+            updated_features = self.calculate_eth_event_cycle_features(updated_features)
+        elif symbol_clean == 'SOL':
+            updated_features = self.calculate_sol_event_cycle_features(updated_features)
+
+        # Check for new cycle turning points
+        turning_points = self.predict_cycle_turning_points(updated_features, symbol)
+
+        # Save any new turning points to the database
+        if turning_points is not None and len(turning_points) > 0:
+            # This is a placeholder - actual implementation depends on your DB schema
+            for _, point in turning_points.iterrows():
+                self.db_connection.save_predicted_turning_point(
+                    symbol=symbol,
+                    date=point['date'],
+                    point_type=point['type'],
+                    confidence=point['confidence'],
+                    description=point['description']
+                )
+
+        # Check for cycle anomalies
+        anomalies = self.detect_cycle_anomalies(updated_features, symbol)
+
+        # Add anomaly information to features
+        if anomalies is not None and len(anomalies) > 0:
+            for col in anomalies.columns:
+                if col not in updated_features.columns:
+                    updated_features[col] = anomalies[col]
+
+        # Compare to historical cycles
+        historical_comparison = self.compare_current_to_historical_cycles(updated_features, symbol)
+
+        # Save the comparison results
+        if historical_comparison:
+            # This is a placeholder - actual implementation depends on your DB schema
+            for ref_cycle, similarity in historical_comparison.get('similarities', {}).items():
+                self.db_connection.save_cycle_similarity(
+                    symbol=symbol,
+                    reference_cycle=ref_cycle,
+                    current_cycle=historical_comparison.get('current_cycle'),
+                    similarity_score=similarity,
+                    date=last_date
+                )
+
+        # Save the updated features to the database
+        # This is a placeholder - actual implementation depends on your DB schema
+        self.db_connection.save_cycle_feature(
+            symbol=symbol,
+            timeframe=processed_data.attrs.get('timeframe', '1d'),
+            features=updated_features,
+            date=last_date
+        )
+
+        return updated_features
