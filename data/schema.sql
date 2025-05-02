@@ -15,11 +15,11 @@ CREATE TABLE IF NOT EXISTS btc_klines (
     taker_buy_quote_volume NUMERIC NOT NULL,
     is_closed BOOLEAN NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, open_time)
+    UNIQUE (timeframe, open_time)
 );
 
 -- Індекс для швидкого пошуку свічок BTC за часом
-CREATE INDEX IF NOT EXISTS idx_btc_klines_time ON btc_klines(interval, open_time);
+CREATE INDEX IF NOT EXISTS idx_btc_klines_time ON btc_klines(timeframe, open_time);
 
 -- Таблиці для зберігання свічок (курсів) ETH
 CREATE TABLE IF NOT EXISTS eth_klines (
@@ -38,11 +38,11 @@ CREATE TABLE IF NOT EXISTS eth_klines (
     taker_buy_quote_volume NUMERIC NOT NULL,
     is_closed BOOLEAN NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, open_time)
+    UNIQUE (timeframe, open_time)
 );
 
 -- Індекс для швидкого пошуку свічок ETH за часом
-CREATE INDEX IF NOT EXISTS idx_eth_klines_time ON eth_klines(interval, open_time);
+CREATE INDEX IF NOT EXISTS idx_eth_klines_time ON eth_klines(timeframe, open_time);
 
 -- Таблиці для зберігання свічок (курсів) SOL
 CREATE TABLE IF NOT EXISTS sol_klines (
@@ -61,11 +61,11 @@ CREATE TABLE IF NOT EXISTS sol_klines (
     taker_buy_quote_volume NUMERIC NOT NULL,
     is_closed BOOLEAN NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, open_time)
+    UNIQUE (timeframe, open_time)
 );
 
 -- Індекс для швидкого пошуку свічок SOL за часом
-CREATE INDEX IF NOT EXISTS idx_sol_klines_time ON sol_klines(interval, open_time);
+CREATE INDEX IF NOT EXISTS idx_sol_klines_time ON sol_klines(timeframe, open_time);
 
 
 -- Таблиця для логування подій
@@ -107,10 +107,10 @@ CREATE TABLE IF NOT EXISTS btc_klines_processed (
     has_missing BOOLEAN DEFAULT FALSE,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, open_time)
+    UNIQUE (timeframe, open_time)
 );
 
-CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed(interval, open_time);
+CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed(timeframe, open_time);
 
 -- Таблиця для профілю об'єму BTC
 CREATE TABLE IF NOT EXISTS btc_volume_profile (
@@ -122,10 +122,10 @@ CREATE TABLE IF NOT EXISTS btc_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, time_bucket, price_bin_start)
+    UNIQUE (timeframe, time_bucket, price_bin_start)
 );
 
-CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(interval, time_bucket);
+CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket);
 
 -- Таблиця для логування обробки даних
 CREATE TABLE IF NOT EXISTS data_processing_log (
@@ -153,10 +153,10 @@ CREATE TABLE IF NOT EXISTS eth_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, time_bucket, price_bin_start)
+    UNIQUE (timeframe, time_bucket, price_bin_start)
 );
 
-CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(interval, time_bucket);
+CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timeframe, time_bucket);
 
 -- Таблиця для профілю об'єму SOL
 CREATE TABLE IF NOT EXISTS sol_volume_profile (
@@ -168,10 +168,10 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, time_bucket, price_bin_start)
+    UNIQUE (timeframe, time_bucket, price_bin_start)
 );
 
-CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(interval, time_bucket);
+CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
 
 -- Таблиця для оброблених свічок ETH
 CREATE TABLE IF NOT EXISTS eth_klines_processed (
@@ -203,10 +203,10 @@ CREATE TABLE IF NOT EXISTS eth_klines_processed (
     has_missing BOOLEAN DEFAULT FALSE,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, open_time)
+    UNIQUE (timeframe, open_time)
 );
 
-CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed(interval, open_time);
+CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed(timeframe, open_time);
 
 -- Таблиця для оброблених свічок SOL
 CREATE TABLE IF NOT EXISTS sol_klines_processed (
@@ -238,10 +238,10 @@ CREATE TABLE IF NOT EXISTS sol_klines_processed (
     has_missing BOOLEAN DEFAULT FALSE,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (interval, open_time)
+    UNIQUE (timeframe, open_time)
 );
 
-CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(interval, open_time);
+CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(timeframe, open_time);
 -- Таблиця для зберігання сирих твітів
 CREATE TABLE IF NOT EXISTS tweets_raw (
     id SERIAL PRIMARY KEY,
@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS crypto_events (
 );
 
 -- Індекс для швидкого пошуку подій за криптовалютою
-CREATE INDEX IF NOT EXISTS idx_crypto_events_symbol ON crypto_events(crypto_symbol);
+CREATE INDEX IF NOT EXISTS idx_crypto_events_symbol ON crypto_events(symbol);
 -- Індекс для швидкого пошуку подій за часом
 CREATE INDEX IF NOT EXISTS idx_crypto_events_time ON crypto_events(start_time);
 
@@ -365,7 +365,7 @@ CREATE TABLE IF NOT EXISTS sentiment_time_series (
 );
 
 -- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
-CREATE INDEX IF NOT EXISTS idx_sentiment_time_series ON sentiment_time_series(crypto_symbol, time_bucket);
+CREATE INDEX IF NOT EXISTS idx_sentiment_time_series ON sentiment_time_series(symbol, time_bucket);
 
 -- Таблиця для статистики помилок скрапінгу
 CREATE TABLE IF NOT EXISTS scraping_errors (
@@ -437,11 +437,11 @@ CREATE TABLE IF NOT EXISTS article_mentioned_coins (
     symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
     mention_count INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(article_id, crypto_symbol)
+    UNIQUE(article_id, symbol)
 );
 
 -- Індекс для швидкого пошуку згадок криптовалют
-CREATE INDEX IF NOT EXISTS idx_article_mentioned_coins ON article_mentioned_coins(crypto_symbol);
+CREATE INDEX IF NOT EXISTS idx_article_mentioned_coins ON article_mentioned_coins(symbol);
 
 -- Таблиця для популярних тем у новинах
 CREATE TABLE IF NOT EXISTS trending_news_topics (
@@ -491,7 +491,7 @@ CREATE TABLE IF NOT EXISTS news_detected_events (
 );
 
 -- Індекс для пошуку подій за криптовалютами
-CREATE INDEX IF NOT EXISTS idx_news_detected_events_symbols ON news_detected_events USING GIN(crypto_symbols);
+CREATE INDEX IF NOT EXISTS idx_news_detected_events_symbols ON news_detected_events USING GIN(symbols);
 
 -- Таблиця для часових рядів настроїв у новинах
 CREATE TABLE IF NOT EXISTS news_sentiment_time_series (
@@ -505,11 +505,11 @@ CREATE TABLE IF NOT EXISTS news_sentiment_time_series (
     average_sentiment NUMERIC NOT NULL,
     news_volume INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (crypto_symbol, time_bucket, interval)
+    UNIQUE (symbol, time_bucket, timeframe)
 );
 
 -- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
-CREATE INDEX IF NOT EXISTS idx_news_sentiment_time_series ON news_sentiment_time_series(crypto_symbol, time_bucket);
+CREATE INDEX IF NOT EXISTS idx_news_sentiment_time_series ON news_sentiment_time_series(symbol, time_bucket);
 
 -- Таблиця для логування роботи CryptoNewsScraper
 CREATE TABLE IF NOT EXISTS news_scraping_log (
@@ -547,60 +547,7 @@ CREATE TRIGGER update_trending_news_topics_timestamp
 BEFORE UPDATE ON trending_news_topics
 FOR EACH ROW EXECUTE FUNCTION update_news_timestamp();
 
--- Представлення для новин з настроями та згаданими криптовалютами
-CREATE OR REPLACE VIEW news_analysis_view AS
-SELECT
-    na.article_id,
-    na.title,
-    na.summary,
-    na.link,
-    ns.source_name,
-    nc.category_name,
-    na.published_at,
-    nsa.sentiment_score,
-    nsa.sentiment_label,
-    array_agg(DISTINCT amc.crypto_symbol) as mentioned_coins
-FROM news_articles na
-JOIN news_sources ns ON na.source_id = ns.source_id
-JOIN news_categories nc ON na.category_id = nc.category_id
-LEFT JOIN news_sentiment_analysis nsa ON na.article_id = nsa.article_id
-LEFT JOIN article_mentioned_coins amc ON na.article_id = amc.article_id
-GROUP BY
-    na.article_id,
-    na.title,
-    na.summary,
-    na.link,
-    ns.source_name,
-    nc.category_name,
-    na.published_at,
-    nsa.sentiment_score,
-    nsa.sentiment_label;
 
--- Представлення для інтегрованого аналізу настроїв новин і твітів
-CREATE OR REPLACE VIEW integrated_sentiment_view AS
-SELECT
-    symbol,
-    time_bucket,
-    timeframe,
-    'news' as source_type,
-    positive_count,
-    negative_count,
-    neutral_count,
-    average_sentiment,
-    news_volume as content_volume
-FROM news_sentiment_time_series
-UNION ALL
-SELECT
-    symbol,
-    time_bucket,
-    interval,
-    'twitter' as source_type,
-    positive_count,
-    negative_count,
-    neutral_count,
-    average_sentiment,
-    tweet_volume as content_volume
-FROM sentiment_time_series;
 
 -- Початкове заповнення таблиці news_sources
 INSERT INTO news_sources (source_name, base_url) VALUES
@@ -888,7 +835,7 @@ CREATE TABLE IF NOT EXISTS external_asset_correlations (
     end_time TIMESTAMP NOT NULL,
     method VARCHAR(10) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(crypto_symbol, external_asset, timeframe, start_time, end_time, method)
+    UNIQUE(symbol, external_asset, timeframe, start_time, end_time, method)
 );
 
 -- Таблиця для збереження аналізу кореляцій у різних ринкових режимах

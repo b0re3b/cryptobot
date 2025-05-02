@@ -846,7 +846,7 @@ def main():
             print(f"\nЗбираємо історичні дані для {symbol}...")
 
             # Отримати початкову дату для конкретного символу або дефолт
-            start_date = symbol_start_dates.get(symbol, '2025-04-29')
+            start_date = (symbol, '2025-04-29')
 
             # Збір даних для всіх інтервалів: 1 хв, 1 год, 1 день
             results = client.save_historical_data_to_db(
