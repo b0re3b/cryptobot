@@ -737,7 +737,7 @@ EXECUTE FUNCTION update_modified_column();
 
 -- Таблиця для збереження кореляційних матриць між криптовалютами
 CREATE TABLE IF NOT EXISTS correlation_matrices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     correlation_type VARCHAR(20) NOT NULL, -- 'price', 'volume', 'returns', 'volatility'
     timeframe VARCHAR(10) NOT NULL, -- '1m', '5m', '15m', '1h', '4h', '1d', etc.
     start_time TIMESTAMP NOT NULL,
@@ -755,7 +755,7 @@ ON correlation_matrices(correlation_type, timeframe, start_time, end_time, metho
 
 -- Таблиця для збереження пар криптовалют з високою кореляцією
 CREATE TABLE IF NOT EXISTS correlated_pairs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     symbol1 VARCHAR(20) NOT NULL,
     symbol2 VARCHAR(20) NOT NULL,
     correlation_value FLOAT NOT NULL,
@@ -774,7 +774,7 @@ CREATE INDEX IF NOT EXISTS idx_correlated_pairs_symbol2 ON correlated_pairs(symb
 
 -- Таблиця для збереження часових рядів кореляцій між парами криптовалют
 CREATE TABLE IF NOT EXISTS correlation_time_series (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     symbol1 VARCHAR(20) NOT NULL,
     symbol2 VARCHAR(20) NOT NULL,
     correlation_type VARCHAR(20) NOT NULL,
@@ -793,7 +793,7 @@ ON correlation_time_series(symbol1, symbol2, correlation_type, timeframe, window
 
 -- Таблиця для збереження кластерів криптовалют, які рухаються разом
 CREATE TABLE IF NOT EXISTS market_clusters (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     cluster_id INTEGER NOT NULL,
     feature_type VARCHAR(20) NOT NULL, -- 'price', 'returns', 'volatility'
     timeframe VARCHAR(10) NOT NULL,
@@ -807,7 +807,7 @@ CREATE TABLE IF NOT EXISTS market_clusters (
 
 -- Таблиця для збереження моментів зламу кореляцій між парами криптовалют
 CREATE TABLE IF NOT EXISTS correlation_breakdowns (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     symbol1 VARCHAR(20) NOT NULL,
     symbol2 VARCHAR(20) NOT NULL,
     breakdown_time TIMESTAMP NOT NULL,
@@ -823,7 +823,7 @@ CREATE TABLE IF NOT EXISTS correlation_breakdowns (
 
 -- Таблиця для збереження бета-коефіцієнтів криптовалют відносно ринку
 CREATE TABLE IF NOT EXISTS market_betas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
     market_symbol VARCHAR(20) NOT NULL, -- звичайно 'BTCUSDT'
     beta_value FLOAT NOT NULL,
@@ -836,7 +836,7 @@ CREATE TABLE IF NOT EXISTS market_betas (
 
 -- Таблиця для збереження часових рядів бета-коефіцієнтів
 CREATE TABLE IF NOT EXISTS beta_time_series (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
     market_symbol VARCHAR(20) NOT NULL,
     timestamp TIMESTAMP NOT NULL,
@@ -849,7 +849,7 @@ CREATE TABLE IF NOT EXISTS beta_time_series (
 
 -- Таблиця для збереження кореляцій між секторами криптовалют
 CREATE TABLE IF NOT EXISTS sector_correlations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     sector1 VARCHAR(50) NOT NULL,
     sector2 VARCHAR(50) NOT NULL,
     correlation_value FLOAT NOT NULL,
@@ -864,7 +864,7 @@ CREATE TABLE IF NOT EXISTS sector_correlations (
 
 -- Таблиця для збереження провідних індикаторів
 CREATE TABLE IF NOT EXISTS leading_indicators (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     target_symbol VARCHAR(20) NOT NULL,
     indicator_symbol VARCHAR(20) NOT NULL,
     lag_period INTEGER NOT NULL,
@@ -879,7 +879,7 @@ CREATE TABLE IF NOT EXISTS leading_indicators (
 
 -- Таблиця для збереження кореляцій з зовнішніми активами
 CREATE TABLE IF NOT EXISTS external_asset_correlations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
     external_asset VARCHAR(50) NOT NULL,
     correlation_value FLOAT NOT NULL,
@@ -893,7 +893,7 @@ CREATE TABLE IF NOT EXISTS external_asset_correlations (
 
 -- Таблиця для збереження аналізу кореляцій у різних ринкових режимах
 CREATE TABLE IF NOT EXISTS market_regime_correlations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     regime_name VARCHAR(50) NOT NULL,
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NOT NULL,
@@ -904,7 +904,7 @@ CREATE TABLE IF NOT EXISTS market_regime_correlations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(regime_name, start_time, end_time, correlation_type, method)
 );
-CREATE TABLE market_cycles (
+CREATE TABLE IF NOT EXISTS market_cycles (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
     cycle_type VARCHAR(50) NOT NULL,            -- Type of cycle (bull, bear, halving, etc.)
@@ -922,10 +922,10 @@ CREATE TABLE market_cycles (
 );
 
 -- Index for faster retrieval of cycles by symbol and type
-CREATE INDEX idx_market_cycles_lookup ON market_cycles (symbol, cycle_type, start_date);
+CREATE INDEX IF NOT EXISTS idx_market_cycles_lookup ON market_cycles (symbol, cycle_type, start_date);
 
 -- Table for storing cycle features for deep learning
-CREATE TABLE cycle_features (
+CREATE TABLE IF NOT EXISTS cycle_features (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
     timestamp TIMESTAMP NOT NULL,               -- Time of the features
@@ -952,10 +952,10 @@ CREATE TABLE cycle_features (
 );
 
 -- Index for faster retrieval of features
-CREATE INDEX idx_cycle_features_lookup ON cycle_features (symbol, timeframe, timestamp);
+CREATE INDEX IF NOT EXISTS idx_cycle_features_lookup ON cycle_features (symbol, timeframe, timestamp);
 
 -- Table for storing similarity scores between current and historical cycles
-CREATE TABLE cycle_similarity (
+CREATE TABLE IF NOT EXISTS cycle_similarity (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
     reference_cycle_id INTEGER NOT NULL,        -- ID of the reference cycle
@@ -968,7 +968,7 @@ CREATE TABLE cycle_similarity (
 );
 
 -- Table for storing predicted turning points
-CREATE TABLE predicted_turning_points (
+CREATE TABLE IF NOT EXISTS predicted_turning_points (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                -- Cryptocurrency symbol
     prediction_date TIMESTAMP NOT NULL,         -- Date of prediction
@@ -984,7 +984,7 @@ CREATE TABLE predicted_turning_points (
 );
 
 -- Table for storing model performance metrics related to cycle features
-CREATE TABLE cycle_feature_performance (
+CREATE TABLE IF NOT EXISTS cycle_feature_performance (
     id SERIAL PRIMARY KEY,
     model_id VARCHAR(100) NOT NULL,             -- ID of the deep learning model
     feature_name VARCHAR(100) NOT NULL,         -- Name of the cycle feature
