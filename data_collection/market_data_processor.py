@@ -1,7 +1,6 @@
 import traceback
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
 import logging
 from typing import List, Dict, Optional, Tuple
 from data_collection.AnomalyDetector import AnomalyDetector
@@ -15,6 +14,10 @@ from data.db import DatabaseManager
 class MarketDataProcessor:
 
     def __init__(self, log_level=logging.INFO):
+        self.DataCleaner = DataCleaner()
+        self.DataResampler = DataResampler()
+        self.DataStorageManager = DataStorageManager()
+        self.AnomalyDetector = AnomalyDetector()
         self.log_level = log_level
         self.db_connection = db_connection
         self.db_manager = DatabaseManager()
@@ -23,10 +26,7 @@ class MarketDataProcessor:
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація класу...")
         self.ready = True
-        self.storage_manager = DataStorageManager(self.db_manager, self.logger)
-        self.data_resampler = DataResampler(self.db_manager)
-        self.data_cleaner = DataCleaner(self.db_manager, self.logger)
-        self.anomaly_detector = AnomalyDetector(self.db_manager)
+
         self.filtered_data = None
         self.orderbook_statistics = None
 
@@ -351,11 +351,11 @@ class MarketDataProcessor:
 
         # Видалення викидів
         if remove_outliers:
-            result = self.data_cleaner.remove_outliers(result)
+            result = self.DataCleaner.remove_outliers(result)
 
         # Заповнення пропусків
         if fill_missing:
-            result = self.data_cleaner.fill_missing_values(result)
+            result = self.DataCleaner.fill_missing_values(result)
 
         return result
 
@@ -400,7 +400,7 @@ class MarketDataProcessor:
         if data.empty:
             return data, {}
 
-        return self.anomaly_detector.detect_outliers(
+        return self.AnomalyDetector.detect_outliers(
             data,
             method=method,
             threshold=threshold
@@ -469,18 +469,18 @@ class MarketDataProcessor:
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['BTC', 'ETH', 'SOL']
-    INTERVALS = ['5m', '1h']
+    TIMEFRAME = ['5m', '1h']
     processor = MarketDataProcessor()
 
     for symbol in SYMBOLS:
-        for interval in INTERVALS:
+        for interval in TIMEFRAME:
             print(f"\n Обробка {symbol} ({interval})...")
 
             # 1. Завантаження даних з БД
             raw_data = DataStorageManager.load_data(
                 data_source='database',
                 symbol=symbol,
-                interval=interval,
+                timeframe=timeframe,
                 data_type='candles'
             )
 
@@ -492,13 +492,13 @@ def main():
             filled_data = DataCleaner.handle_missing_values(
                 raw_data,
                 symbol=symbol,
-                interval=interval,
+                timeframe=interval,
                 fetch_missing=True
             )
 
             # 3. Збереження сирих даних
-            DataStorageManager.save_klines_to_db(filled_data, symbol, interval)
-            print(f" Сирі свічки ({interval}) збережено")
+            DataStorageManager.save_klines_to_db(filled_data, symbol, timefarme)
+            print(f" Сирі свічки ({timeframe}) збережено")
 
             # 4. Попередня обробка (пайплайн)
             processed = processor.preprocess_pipeline(filled_data, symbol=symbol, interval=interval)

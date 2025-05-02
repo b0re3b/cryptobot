@@ -15,9 +15,9 @@ class DataCleaner:
 
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
-                   fill_missing: bool = True, normalize: bool = False,
-                   norm_method: str = 'z-score', resample: bool = False,
-                   target_interval: str = None, add_time_features: bool = False,
+                   fill_missing: bool = True, normalize: bool = True,
+                   norm_method: str = 'z-score', resample: bool = True,
+                   target_interval: str = None, add_time_features: bool = True,
                    cyclical: bool = True, add_sessions: bool = False) -> pd.DataFrame:
 
         if data.empty:
@@ -176,7 +176,7 @@ class DataCleaner:
         return result
 
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
-                              symbol: str = None, interval: str = None,
+                              symbol: str = None, timeframe: str = None,
                               fetch_missing: bool = True) -> pd.DataFrame:
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
@@ -204,16 +204,16 @@ class DataCleaner:
         self.logger.info(
             f"Знайдено {total_missing} відсутніх значень у {len(missing_values[missing_values > 0])} колонках")
 
-        # 🔄 Підтягування з Binance
+        #  Підтягування з Binance
         if isinstance(result.index, pd.DatetimeIndex) and fetch_missing:
             time_diff = result.index.to_series().diff()
             expected_diff = time_diff.dropna().median() if len(time_diff) > 5 else None
 
-            if expected_diff and symbol and interval:
+            if expected_diff and symbol and timeframe:
                 missing_periods = self._detect_missing_periods(result, expected_diff)
                 if missing_periods:
                     self.logger.info(f"Знайдено {len(missing_periods)} прогалин. Підтягуємо з Binance...")
-                    filled = self._fetch_missing_data_from_binance(result, missing_periods, symbol, interval)
+                    filled = self._fetch_missing_data_from_binance(result, missing_periods, symbol, timeframe)
                     result = pd.concat([result, filled])
                     result = result[~result.index.duplicated(keep='last')].sort_index()
 
@@ -425,7 +425,7 @@ class DataCleaner:
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
-            return data, None
+            return data
 
         result = data.copy()
 
@@ -435,7 +435,7 @@ class DataCleaner:
             normalize_cols = [col for col in columns if col in numeric_cols]
             if not normalize_cols:
                 self.logger.warning("Жодна з указаних колонок не є числовою")
-                return result, None
+                return result
         else:
             normalize_cols = numeric_cols
 
@@ -444,7 +444,7 @@ class DataCleaner:
 
         if not normalize_cols:
             self.logger.warning("Немає числових колонок для нормалізації")
-            return result, None
+            return result
 
         self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
 

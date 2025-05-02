@@ -64,8 +64,8 @@ class MarketCorrelation:
                                     method: str = None) -> pd.DataFrame:
 
         # Використання значень за замовчуванням з конфігурації, якщо не вказані
-        timeframe = timeframe or self.config['default_timeframe']
-        method = method or self.config['default_correlation_method']
+        timeframe = self.config['default_timeframe']
+        method = self.config['default_correlation_method']
 
         logger.info(f"Розрахунок кореляції цін для {len(symbols)} символів з таймфреймом {timeframe}")
 
@@ -86,7 +86,7 @@ class MarketCorrelation:
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 price_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
-                    timeframe=timeframe,
+                    interval=timeframe,
                     start_time=start_time,
                     end_time=end_time
                 )
@@ -152,7 +152,7 @@ class MarketCorrelation:
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 volume_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
-                    timeframe=timeframe,
+                    interval=timeframe,
                     start_time=start_time,
                     end_time=end_time
                 )

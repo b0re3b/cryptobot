@@ -75,8 +75,8 @@ class BinanceClient:
         return True, base_symbol
 
     # Отримання даних про ціну у вигляді свічок
-    def get_klines(self, symbol, interval, limit=100, start_time=None, end_time=None, use_cache=True):
-        cache_key = f"{symbol}_{interval}_{start_time}_{end_time}_{limit}"
+    def get_klines(self, symbol, timeframe, limit=100, start_time=None, end_time=None, use_cache=True):
+        cache_key = f"{symbol}_{timeframe}_{start_time}_{end_time}_{limit}"
 
         if use_cache and cache_key in self.cache['klines']:
             cache_time = self.last_cache_update['klines'].get(cache_key, 0)
@@ -86,7 +86,7 @@ class BinanceClient:
         endpoint = f"{self.base_url_v3}/klines"
         params = {
             'symbol': symbol,
-            'interval': interval,
+            'timeframe': timeframe,
             'limit': limit
         }
 
@@ -229,12 +229,12 @@ class BinanceClient:
 
     # ===== Async methods for high performance =====
 
-    async def get_klines_async(self, symbols, interval, limit=999, start_time=None, end_time=None):
+    async def get_klines_async(self, symbols, timeframe, limit=999, start_time=None, end_time=None):
         async def fetch_klines(session, symbol):
             endpoint = f"{self.base_url_v3}/klines"
             params = {
                 'symbol': symbol,
-                'interval': interval,
+                'timeframe': timeframe,
                 'limit': limit
             }
 
@@ -295,7 +295,7 @@ class BinanceClient:
 
             # Перетворюємо дані у формат, який очікує DatabaseManager
             kline_db_data = {
-                'interval': kline_data['interval'],
+                'timeframe': kline_data['timeframe'],
                 'open_time': kline_data['open_time'],
                 'open': float(kline_data['open']),
                 'high': float(kline_data['high']),
@@ -318,7 +318,7 @@ class BinanceClient:
             return False
 
 
-    def start_kline_socket(self, symbol, interval, callback, save_to_db=True):
+    def start_kline_socket(self, symbol, timeframe, callback, save_to_db=True):
         """Запуск WebSocket для отримання даних свічок"""
         # Перевіряємо, чи є базовий символ допустимим
         is_valid, _ = self._validate_symbol(symbol)
@@ -327,11 +327,11 @@ class BinanceClient:
                                       'BinanceClient')
             return None
 
-        socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@kline_{interval}"
+        socket_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@kline_{timeframe}"
 
         # Додаємо запис про WebSocket-з'єднання в базу даних
         if save_to_db:
-            self.db_manager.update_websocket_status(symbol, 'kline', interval, True)
+            self.db_manager.update_websocket_status(symbol, 'kline', timeframe, True)
 
         def on_message(ws, message):
             try:
@@ -344,7 +344,7 @@ class BinanceClient:
 
                         kline_data = {
                             'symbol': candle['s'],  # symbol
-                            'interval': candle['i'],  # interval
+                            'timeframe': candle['i'],  # interval
                             'open_time': datetime.fromtimestamp(candle['t'] / 1000),  # open_time
                             'open': candle['o'],  # open
                             'high': candle['h'],  # high
@@ -369,7 +369,7 @@ class BinanceClient:
             self.db_manager.log_event('ERROR', f"WebSocket Error: {error}", 'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = True
             if save_to_db:
-                self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
+                self.db_manager.update_websocket_status(symbol, 'kline', timeframe, False)
 
         def on_close(ws, close_status_code, close_msg):
             self.db_manager.log_event('INFO',
@@ -377,16 +377,16 @@ class BinanceClient:
                                       'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = True
             if save_to_db:
-                self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
+                self.db_manager.update_websocket_status(symbol, 'kline', timeframe, False)
             # Запускаємо пізніше перепідключення
             self.reconnect_required = True
 
         def on_open(ws):
-            self.db_manager.log_event('INFO', f"WebSocket Connection Opened for {symbol} {interval} klines",
+            self.db_manager.log_event('INFO', f"WebSocket Connection Opened for {symbol} {timeframe} klines",
                                       'BinanceClient')
             ws.custom_reconnect_info['needs_reconnect'] = False
             if save_to_db:
-                self.db_manager.update_websocket_status(symbol, 'kline', interval, True)
+                self.db_manager.update_websocket_status(symbol, 'kline', timeframe, True)
 
         ws = websocket.WebSocketApp(
             socket_url,
@@ -403,7 +403,7 @@ class BinanceClient:
         ws.custom_reconnect_info = {
             'needs_reconnect': False,
             'symbol': symbol,
-            'interval': interval,
+            'interval': timeframe,
             'callback': callback,
             'save_to_db': save_to_db,
             'socket_type': 'kline',
@@ -416,7 +416,7 @@ class BinanceClient:
         ws_thread.start()
 
         # Зберігаємо веб-сокет в активних з'єднаннях
-        ws_key = f"kline_{symbol}_{interval}"
+        ws_key = f"kline_{symbol}_{timeframe}"
         self.active_websockets[ws_key] = {
             'ws': ws
         }
@@ -475,7 +475,7 @@ class BinanceClient:
                                       'BinanceClient')
             self.start_kline_socket(
                 reconnect_info['symbol'],
-                reconnect_info['interval'],
+                reconnect_info['timeframe'],
                 reconnect_info['callback'],
                 reconnect_info['save_to_db']
             )
@@ -495,11 +495,9 @@ class BinanceClient:
                 socket_parts = ws_or_key.split('_')
                 if socket_parts[0] == 'kline':
                     symbol = socket_parts[1]
-                    interval = socket_parts[2]
-                    self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
-                elif socket_parts[0] == 'orderbook':
-                    symbol = socket_parts[1]
-                    self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
+                    timeframe = socket_parts[2]
+                    self.db_manager.update_websocket_status(symbol, 'kline', timeframe, False)
+
 
                 try:
                     ws.close()
@@ -527,9 +525,6 @@ class BinanceClient:
                         symbol = socket_parts[1]
                         interval = socket_parts[2]
                         self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
-                    elif socket_parts[0] == 'orderbook':
-                        symbol = socket_parts[1]
-                        self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
 
                     return True
             return False
@@ -545,11 +540,8 @@ class BinanceClient:
                 socket_parts = key.split('_')
                 if socket_parts[0] == 'kline':
                     symbol = socket_parts[1]
-                    interval = socket_parts[2]
-                    self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
-                elif socket_parts[0] == 'orderbook':
-                    symbol = socket_parts[1]
-                    self.db_manager.update_websocket_status(symbol, 'orderbook', None, False)
+                    timeframe = socket_parts[2]
+                    self.db_manager.update_websocket_status(symbol, 'kline', timeframe, False)
             except Exception as e:
                 print(f"Error closing WebSocket {key}: {e}")
                 self.db_manager.log_event('ERROR', f"Error closing WebSocket {key}: {e}", 'BinanceClient')
@@ -574,7 +566,7 @@ class BinanceClient:
 
     # ===== Збереження історичних даних в базу даних =====
 
-    def _prepare_historical_params(self, symbol, start_date=None, end_date=None, intervals=None):
+    def _prepare_historical_params(self, symbol, start_date=None, end_date=None, timeframe=None):
         """
         Підготовка параметрів для збору історичних даних
         """
@@ -586,8 +578,8 @@ class BinanceClient:
         }
 
         # Встановлення значень за замовчуванням
-        if not intervals:
-            intervals = ['1m', '1h', '1d']
+        if not timeframe:
+            timeframe = ['1m', '1h', '1d']
 
         if not start_date:
             # Використовуємо дату з словника, якщо вона існує, інакше використовуємо 30 днів тому
@@ -618,33 +610,33 @@ class BinanceClient:
 
         # Повідомлення про початок збору даних
         self.db_manager.log_event('INFO',
-                                  f"Починаємо зберігання історичних даних для {symbol} з інтервалами {intervals}",
+                                  f"Починаємо зберігання історичних даних для {symbol} з інтервалами {timeframe}",
                                   'BinanceClient')
-        print(f"Починаємо зберігання історичних даних для {symbol} з інтервалами {intervals}")
+        print(f"Починаємо зберігання історичних даних для {symbol} з інтервалами {timeframe}")
 
         return {
-            'intervals': intervals,
+            'timeframe': timeframe,
             'start_ts': start_ts,
             'end_ts': end_ts,
             'start_date': start_date,
             'end_date': end_date if end_date else 'сьогодні'
         }
 
-    def _calculate_window_size(self, interval):
+    def _calculate_window_size(self, timeframe):
         """
         Розрахунок оптимального розміру вікна для запиту в залежності від інтервалу
         """
-        if interval == '1m':
+        if timeframe == '1m':
             # Для хвилинних даних обмежуємо запит до 12 годин (720 хвилин)
             return 1000 * 60 * 60 * 12  # 12 годин в мілісекундах
-        elif interval == '1h':
+        elif timeframe == '1h':
             # Для годинних даних обмежуємо запит до 10 днів (240 годин)
             return 1000 * 60 * 60 * 24 * 10  # 10 днів в мілісекундах
         else:
             # Для інших інтервалів використовуємо 100 днів
             return 1000 * 60 * 60 * 24 * 100  # 100 днів в мілісекундах
 
-    def _process_and_save_klines_batch(self, symbol, interval, df):
+    def _process_and_save_klines_batch(self, symbol, timeframe, df):
         """
         Обробка та збереження пакету свічок в базу даних
         """
@@ -658,7 +650,7 @@ class BinanceClient:
                 # Підготовка даних свічки
                 kline_data = {
                     'symbol': symbol,
-                    'interval': interval,
+                    'timeframe': timeframe,
                     'open_time': row['open_time'],
                     'open': float(row['open']),
                     'high': float(row['high']),
@@ -687,22 +679,22 @@ class BinanceClient:
                     saved_count += 1
 
             except Exception as e:
-                error_msg = f"Помилка збереження свічки {symbol} ({interval}) в БД: {e}"
+                error_msg = f"Помилка збереження свічки {symbol} ({timeframe}) в БД: {e}"
                 self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
                 print(error_msg)
 
         return saved_count
 
-    def _fetch_and_save_historical_interval(self, symbol, interval, start_ts, end_ts):
+    def _fetch_and_save_historical_interval(self, symbol, timeframe, start_ts, end_ts):
         """
         Отримання та збереження історичних даних для одного інтервалу
         """
         saved_candles_count = 0
         current_start = start_ts
-        window_size = self._calculate_window_size(interval)
+        window_size = self._calculate_window_size(timeframe)
 
         self.db_manager.log_event('INFO',
-                                  f"Збір даних для {symbol} з інтервалом {interval} (часове вікно: {datetime.fromtimestamp(start_ts / 1000)} - {datetime.fromtimestamp(end_ts / 1000)})",
+                                  f"Збір даних для {symbol} з інтервалом {timeframe} (часове вікно: {datetime.fromtimestamp(start_ts / 1000)} - {datetime.fromtimestamp(end_ts / 1000)})",
                                   'BinanceClient')
 
         # Проходимо через весь часовий діапазон
@@ -714,12 +706,12 @@ class BinanceClient:
                 # Виводимо діапазон дат, з якого збираємо дані
                 start_date_str = datetime.fromtimestamp(current_start / 1000).strftime('%Y-%m-%d %H:%M:%S')
                 end_date_str = datetime.fromtimestamp(current_end / 1000).strftime('%Y-%m-%d %H:%M:%S')
-                print(f"Отримання даних {symbol} ({interval}) від {start_date_str} до {end_date_str}")
+                print(f"Отримання даних {symbol} ({timeframe}) від {start_date_str} до {end_date_str}")
 
                 # Отримуємо дані свічок
                 df = self.get_klines(
                     symbol=symbol,
-                    interval=interval,
+                    timeframe=timeframe,
                     start_time=current_start,
                     end_time=current_end,
                     limit=1000,  # Максимальна кількість свічок за один запит
@@ -727,7 +719,7 @@ class BinanceClient:
                 )
 
                 if df.empty:
-                    log_msg = f"Дані відсутні для {symbol} ({interval}) від {start_date_str} до {end_date_str}"
+                    log_msg = f"Дані відсутні для {symbol} ({timeframe}) від {start_date_str} до {end_date_str}"
                     self.db_manager.log_event('WARNING', log_msg, 'BinanceClient')
                     print(log_msg)
 
@@ -736,12 +728,12 @@ class BinanceClient:
                     continue
 
                 # Обробка та збереження отриманих даних
-                batch_saved = self._process_and_save_klines_batch(symbol, interval, df)
+                batch_saved = self._process_and_save_klines_batch(symbol, timeframe, df)
                 saved_candles_count += batch_saved
 
                 # Виводимо прогрес
                 if batch_saved > 0:
-                    print(f"Збережено {batch_saved} свічок (всього: {saved_candles_count}) для {symbol} ({interval})")
+                    print(f"Збережено {batch_saved} свічок (всього: {saved_candles_count}) для {symbol} ({timeframe})")
 
                 # Оновлюємо початок вікна на основі останньої отриманої свічки
                 if len(df) > 0:
@@ -755,7 +747,7 @@ class BinanceClient:
                 time.sleep(1)
 
             except requests.exceptions.RequestException as e:
-                error_msg = f"Помилка API запиту для {symbol} ({interval}): {e}"
+                error_msg = f"Помилка API запиту для {symbol} ({timeframe}): {e}"
                 self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
                 print(error_msg)
                 time.sleep(5)  # Довша затримка у випадку помилки API
@@ -763,14 +755,14 @@ class BinanceClient:
                 continue
 
             except Exception as e:
-                error_msg = f"Неочікувана помилка при обробці даних {symbol} ({interval}): {e}"
+                error_msg = f"Неочікувана помилка при обробці даних {symbol} ({timeframe}): {e}"
                 self.db_manager.log_event('ERROR', error_msg, 'BinanceClient')
                 print(error_msg)
                 current_start = current_end + 1  # Пропускаємо поточне вікно
                 continue
 
         # Виводимо підсумок для інтервалу
-        summary_msg = f"Завершено збір даних для {symbol} ({interval}). Збережено {saved_candles_count} свічок."
+        summary_msg = f"Завершено збір даних для {symbol} ({timeframe}). Збережено {saved_candles_count} свічок."
         self.db_manager.log_event('INFO', summary_msg, 'BinanceClient')
         print(summary_msg)
 
@@ -791,19 +783,19 @@ class BinanceClient:
         self.db_manager.log_event('INFO', summary_msg, 'BinanceClient')
         print(summary_msg)
 
-    def save_historical_data_to_db(self, symbol, start_date=None, end_date=None, intervals=None):
+    def save_historical_data_to_db(self, symbol, start_date=None, end_date=None, timeframe=None):
 
         try:
             # Підготовка параметрів
-            params = self._prepare_historical_params(symbol, start_date, end_date, intervals)
+            params = self._prepare_historical_params(symbol, start_date, end_date, timeframe)
 
             # Словник для збереження результатів
             results = {}
 
             # Збираємо дані для кожного інтервалу
-            for interval in params['intervals']:
-                results[interval] = self._fetch_and_save_historical_interval(
-                    symbol, interval, params['start_ts'], params['end_ts']
+            for timeframe in params['timeframe']:
+                results[timeframe] = self._fetch_and_save_historical_interval(
+                    symbol, timeframe, params['start_ts'], params['end_ts']
                 )
 
             # Підведення підсумків
@@ -854,14 +846,14 @@ def main():
             print(f"\nЗбираємо історичні дані для {symbol}...")
 
             # Отримати початкову дату для конкретного символу або дефолт
-            start_date = symbol_start_dates.get(symbol, '2020-01-01')
+            start_date = symbol_start_dates.get(symbol, '2025-04-29')
 
             # Збір даних для всіх інтервалів: 1 хв, 1 год, 1 день
             results = client.save_historical_data_to_db(
                 symbol=symbol,
                 start_date=start_date,
                 end_date=end_date,
-                intervals=['1m', '1h', '1d']
+                timeframe=['1m', '1h', '1d']
             )
 
             print(f"Результат для {symbol}: {results}")

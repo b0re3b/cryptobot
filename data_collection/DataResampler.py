@@ -70,7 +70,7 @@ class DataResampler:
             self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
             raise
 
-    def convert_interval_to_pandas_format(self, interval: str) -> str:
+    def convert_interval_to_pandas_format(self, timeframe: str) -> str:
 
         interval_map = {
             's': 'S',
@@ -81,13 +81,13 @@ class DataResampler:
             'M': 'M',
         }
 
-        if not interval or not isinstance(interval, str):
-            raise ValueError(f"Неправильний формат інтервалу: {interval}")
+        if not timeframe or not isinstance(timeframe, str):
+            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
 
         import re
-        match = re.match(r'(\d+)([smhdwM])', interval)
+        match = re.match(r'(\d+)([smhdwM])', timeframe)
         if not match:
-            raise ValueError(f"Неправильний формат інтервалу: {interval}")
+            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
 
         number, unit = match.groups()
 
@@ -96,7 +96,7 @@ class DataResampler:
         else:
             raise ValueError(f"Непідтримувана одиниця часу: {unit}")
 
-    def parse_interval(self, interval: str) -> pd.Timedelta:
+    def parse_interval(self, timeframe: str) -> pd.Timedelta:
 
         interval_map = {
             's': 'seconds',
@@ -107,9 +107,9 @@ class DataResampler:
         }
 
         import re
-        match = re.match(r'(\d+)([smhdwM])', interval)
+        match = re.match(r'(\d+)([smhdwM])', timeframe)
         if not match:
-            raise ValueError(f"Неправильний формат інтервалу: {interval}")
+            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
 
         number, unit = match.groups()
 

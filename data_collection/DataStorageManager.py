@@ -10,7 +10,7 @@ class DataStorageManager:
         self.db_manager = db_manager
         self.logger = logger
 
-    def save_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
+    def save_klines_to_db(self, df: pd.DataFrame, symbol: str, timeframe: str):
         """Зберігає дані свічок у базу даних"""
         if df.empty:
             self.logger.warning("Спроба зберегти порожні свічки")
@@ -52,7 +52,7 @@ class DataStorageManager:
                     close_time = open_time
 
                 kline_data = {
-                    'interval': interval,
+                    'timeframe': timeframe,
                     'open_time': open_time,
                     'open': float(row['open']),  # Явне перетворення на float для безпеки
                     'high': float(row['high']),
@@ -73,13 +73,13 @@ class DataStorageManager:
             except Exception as e:
                 self.logger.error(f"❌ Помилка при збереженні свічки для {symbol}: {e}")
 
-    def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
+    def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, timeframe: str):
         """Зберігає оброблені дані свічок у базу даних"""
         if df.empty:
             self.logger.warning("Спроба зберегти порожні оброблені свічки")
             return
 
-        MIN_VALID_DATE = datetime(2000, 1, 1)
+        MIN_VALID_DATE = datetime(2016, 1, 1)
 
         for _, row in df.iterrows():
             try:
@@ -94,7 +94,7 @@ class DataStorageManager:
                     continue
 
                 processed_data = {
-                    'interval': interval,
+                    'timeframe': timeframe,
                     'open_time': open_time,
                     'open': float(row['open']),  # Явне перетворення типів
                     'high': float(row['high']),
@@ -146,19 +146,19 @@ class DataStorageManager:
             except Exception as e:
                 self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
 
-    def _load_from_database(self, symbol: str, interval: str,
+    def _load_from_database(self, symbol: str, timeframe: str,
                             start_date: Optional[datetime] = None,
                             end_date: Optional[datetime] = None,
                             data_type: str = 'candles') -> pd.DataFrame:
         """Завантажує дані з бази даних"""
-        self.logger.info(f"Завантаження {data_type} даних з бази даних для {symbol} {interval}")
+        self.logger.info(f"Завантаження {data_type} даних з бази даних для {symbol} {timeframe}")
 
         try:
             data = None
             if data_type == 'candles':
                 data = self.db_manager.get_klines(
                     symbol=symbol,
-                    interval=interval,
+                    timeframe=timeframe,
                     start_time=start_date,
                     end_time=end_date
                 )
@@ -171,14 +171,14 @@ class DataStorageManager:
             elif data_type == 'processed_candles':
                 data = self.db_manager.get_processed_klines(
                     symbol=symbol,
-                    interval=interval,
+                    timeframe=timeframe,
                     start_time=start_date,
                     end_time=end_date
                 )
             elif data_type == 'volume_profile':
                 data = self.db_manager.get_volume_profile(
                     symbol=symbol,
-                    interval=interval,
+                    timeframe=timeframe,
                     start_time=start_date,
                     end_time=end_date
                 )
@@ -193,7 +193,7 @@ class DataStorageManager:
                 data = pd.DataFrame(data)
 
             if data.empty:
-                self.logger.warning(f"Отримано порожній набір даних для {symbol} {interval}")
+                self.logger.warning(f"Отримано порожній набір даних для {symbol} {timeframe}")
                 return pd.DataFrame()
 
             # Стандартизація часового індексу
@@ -213,7 +213,7 @@ class DataStorageManager:
             self.logger.error(f"Помилка при завантаженні з бази даних: {str(e)}")
             raise
 
-    def load_data(self, data_source: str, symbol: str, interval: str,
+    def load_data(self, data_source: str, symbol: str, timeframe: str,
                   start_date: Optional[Union[str, datetime]] = None,
                   end_date: Optional[Union[str, datetime]] = None,
                   data_type: str = 'candles') -> pd.DataFrame:
@@ -221,13 +221,13 @@ class DataStorageManager:
         start_date_dt = pd.to_datetime(start_date) if start_date else None
         end_date_dt = pd.to_datetime(end_date) if end_date else None
 
-        self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {interval}, {data_type}")
+        self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {timeframe}, {data_type}")
 
         try:
             if data_source == 'database':
                 data = self._load_from_database(
                     symbol,
-                    interval,
+                    timeframe,
                     start_date_dt,
                     end_date_dt,
                     data_type
@@ -273,16 +273,7 @@ class DataStorageManager:
         return result
 
     def save_processed_data(self, data: pd.DataFrame, table_name: str, db_connection=None) -> str:
-        """Зберігає оброблені дані в базу даних
 
-        Args:
-            data: Дані для збереження
-            table_name: Назва таблиці (або шлях до файлу, з якого буде взято назву таблиці)
-            db_connection: З'єднання з базою даних
-
-        Returns:
-            str: Назва таблиці при успішному збереженні, порожній рядок в інакшому випадку
-        """
         if data.empty:
             self.logger.warning("Спроба зберегти порожній DataFrame")
             return ""
@@ -333,16 +324,8 @@ class DataStorageManager:
                 self.logger.error(f"Помилка при збереженні в базу даних через DB Manager: {str(e)}")
                 return ""
 
-    def load_processed_data(self, table_name: str, db_connection=None) -> pd.DataFrame:
-        """Завантажує оброблені дані з бази даних
+    def load_processed_data(self, table_name: str, db_manager) -> pd.DataFrame:
 
-        Args:
-            table_name: Назва таблиці у базі даних
-            db_connection: З'єднання з базою даних (опціонально)
-
-        Returns:
-            pd.DataFrame: Завантажені дані
-        """
         # Очищуємо назву таблиці від шляху або розширення файлу, якщо вони є
         if os.path.basename(table_name):
             actual_table_name = os.path.basename(table_name).split('.')[0]
@@ -351,10 +334,10 @@ class DataStorageManager:
 
         try:
             # Якщо передано пряме з'єднання з БД, використовуємо його
-            if db_connection:
+            if db_manager:
                 self.logger.info(f"Завантаження даних з таблиці {actual_table_name}")
                 try:
-                    data = pd.read_sql_table(actual_table_name, db_connection)
+                    data = pd.read_sql_table(actual_table_name, db_manager)
 
                     # Встановлюємо часовий індекс, якщо є підходящі колонки
                     time_cols = [col for col in data.columns if

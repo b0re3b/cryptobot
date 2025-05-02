@@ -1,7 +1,7 @@
 -- Таблиці для зберігання свічок (курсів) BTC
 CREATE TABLE IF NOT EXISTS btc_klines (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     open_time TIMESTAMP NOT NULL,
     open NUMERIC NOT NULL,
     high NUMERIC NOT NULL,
@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_btc_klines_time ON btc_klines(interval, open_time
 -- Таблиці для зберігання свічок (курсів) ETH
 CREATE TABLE IF NOT EXISTS eth_klines (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     open_time TIMESTAMP NOT NULL,
     open NUMERIC NOT NULL,
     high NUMERIC NOT NULL,
@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_eth_klines_time ON eth_klines(interval, open_time
 -- Таблиці для зберігання свічок (курсів) SOL
 CREATE TABLE IF NOT EXISTS sol_klines (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     open_time TIMESTAMP NOT NULL,
     open NUMERIC NOT NULL,
     high NUMERIC NOT NULL,
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS logs (
 -- Таблиця для оброблених свічок BTC
 CREATE TABLE IF NOT EXISTS btc_klines_processed (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     open_time TIMESTAMP NOT NULL,
 
     -- cleaned and normalized prices
@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed
 -- Таблиця для профілю об'єму BTC
 CREATE TABLE IF NOT EXISTS btc_volume_profile (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     time_bucket TIMESTAMP NOT NULL, -- наприклад, кожна година або день
     price_bin_start NUMERIC NOT NULL,
     price_bin_end NUMERIC NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS data_processing_log (
     id SERIAL PRIMARY KEY,
     symbol TEXT NOT NULL,
     data_type TEXT NOT NULL, -- 'klines', 'orderbook', 'volume_profile'
-    interval TEXT,
+    timeframe TEXT,
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NOT NULL,
     status TEXT NOT NULL, -- 'success', 'failed'
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS data_processing_log (
 -- Таблиця для профілю об'єму ETH
 CREATE TABLE IF NOT EXISTS eth_volume_profile (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     time_bucket TIMESTAMP NOT NULL, -- наприклад, кожна година або день
     price_bin_start NUMERIC NOT NULL,
     price_bin_end NUMERIC NOT NULL,
@@ -161,7 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(interval
 -- Таблиця для профілю об'єму SOL
 CREATE TABLE IF NOT EXISTS sol_volume_profile (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     time_bucket TIMESTAMP NOT NULL, -- наприклад, кожна година або день
     price_bin_start NUMERIC NOT NULL,
     price_bin_end NUMERIC NOT NULL,
@@ -176,7 +176,7 @@ CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(interval
 -- Таблиця для оброблених свічок ETH
 CREATE TABLE IF NOT EXISTS eth_klines_processed (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     open_time TIMESTAMP NOT NULL,
 
     -- cleaned and normalized prices
@@ -211,7 +211,7 @@ CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed
 -- Таблиця для оброблених свічок SOL
 CREATE TABLE IF NOT EXISTS sol_klines_processed (
     id SERIAL PRIMARY KEY,
-    interval TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
     open_time TIMESTAMP NOT NULL,
 
     -- cleaned and normalized prices
@@ -334,7 +334,7 @@ CREATE INDEX IF NOT EXISTS idx_influencer_activity_influencer ON influencer_acti
 CREATE TABLE IF NOT EXISTS crypto_events (
     id SERIAL PRIMARY KEY,
     event_type TEXT NOT NULL, -- 'pump', 'dump', 'announcement', 'regulation', etc.
-    crypto_symbol TEXT NOT NULL, -- 'BTC', 'ETH', etc.
+    symbol TEXT NOT NULL, -- 'BTC', 'ETH', etc.
     description TEXT NOT NULL,
     confidence_score NUMERIC NOT NULL,
     start_time TIMESTAMP NOT NULL,
@@ -351,9 +351,9 @@ CREATE INDEX IF NOT EXISTS idx_crypto_events_time ON crypto_events(start_time);
 -- Таблиця для агрегованого аналізу настроїв за часовими інтервалами та криптовалютами
 CREATE TABLE IF NOT EXISTS sentiment_time_series (
     id SERIAL PRIMARY KEY,
-    crypto_symbol TEXT NOT NULL,
+    symbol TEXT NOT NULL,
     time_bucket TIMESTAMP NOT NULL,
-    interval TEXT NOT NULL, -- 'hour', 'day', 'week'
+    timeframe TEXT NOT NULL, -- 'hour', 'day', 'week'
     positive_count INTEGER NOT NULL,
     negative_count INTEGER NOT NULL,
     neutral_count INTEGER NOT NULL,
@@ -434,7 +434,7 @@ CREATE TABLE IF NOT EXISTS news_sentiment_analysis (
 CREATE TABLE IF NOT EXISTS article_mentioned_coins (
     mention_id SERIAL PRIMARY KEY,
     article_id INTEGER REFERENCES news_articles(article_id),
-    crypto_symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
+    symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
     mention_count INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(article_id, crypto_symbol)
@@ -467,8 +467,8 @@ CREATE TABLE IF NOT EXISTS article_topics (
 CREATE TABLE IF NOT EXISTS news_market_correlations (
     correlation_id SERIAL PRIMARY KEY,
     topic_id INTEGER REFERENCES trending_news_topics(topic_id),
-    crypto_symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
-    time_period VARCHAR(50),  -- '1h', '4h', '1d'
+    symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
+    timeframe VARCHAR(50),  -- '1h', '4h', '1d'
     correlation_coefficient NUMERIC(5,4),  -- Від -1 до 1
     p_value NUMERIC(10,9),
     start_date TIMESTAMP WITH TIME ZONE,
@@ -481,7 +481,7 @@ CREATE TABLE IF NOT EXISTS news_detected_events (
     event_id SERIAL PRIMARY KEY,
     event_title TEXT NOT NULL,
     event_description TEXT,
-    crypto_symbols TEXT[],  -- Масив пов'язаних криптовалют
+    symbols TEXT[],  -- Масив пов'язаних криптовалют
     source_articles INTEGER[],  -- Масив ID статей-джерел події
     confidence_score NUMERIC(3,1),  -- 0-10 шкала
     detected_at TIMESTAMP WITH TIME ZONE,
@@ -496,9 +496,9 @@ CREATE INDEX IF NOT EXISTS idx_news_detected_events_symbols ON news_detected_eve
 -- Таблиця для часових рядів настроїв у новинах
 CREATE TABLE IF NOT EXISTS news_sentiment_time_series (
     id SERIAL PRIMARY KEY,
-    crypto_symbol TEXT NOT NULL,
+    symbol TEXT NOT NULL,
     time_bucket TIMESTAMP WITH TIME ZONE NOT NULL,
-    interval TEXT NOT NULL,  -- 'hour', 'day', 'week'
+    timeframe TEXT NOT NULL,  -- 'hour', 'day', 'week'
     positive_count INTEGER NOT NULL,
     negative_count INTEGER NOT NULL,
     neutral_count INTEGER NOT NULL,
@@ -579,9 +579,9 @@ GROUP BY
 -- Представлення для інтегрованого аналізу настроїв новин і твітів
 CREATE OR REPLACE VIEW integrated_sentiment_view AS
 SELECT
-    crypto_symbol,
+    symbol,
     time_bucket,
-    interval,
+    timeframe,
     'news' as source_type,
     positive_count,
     negative_count,
@@ -591,7 +591,7 @@ SELECT
 FROM news_sentiment_time_series
 UNION ALL
 SELECT
-    crypto_symbol,
+    symbol,
     time_bucket,
     interval,
     'twitter' as source_type,
@@ -652,7 +652,7 @@ CREATE TABLE IF NOT EXISTS time_series_models (
     model_key VARCHAR(100) NOT NULL UNIQUE,
     symbol VARCHAR(20) NOT NULL,
     model_type VARCHAR(50) NOT NULL, -- 'arima', 'sarima', etc.
-    interval VARCHAR(10) NOT NULL, -- '1m', '5m', '15m', '1h', '4h', '1d'
+    timeframe VARCHAR(10) NOT NULL, -- '1m', '5m', '15m', '1h', '4h', '1d'
     start_date TIMESTAMP NOT NULL,
     end_date TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -880,7 +880,7 @@ CREATE TABLE IF NOT EXISTS leading_indicators (
 -- Таблиця для збереження кореляцій з зовнішніми активами
 CREATE TABLE IF NOT EXISTS external_asset_correlations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    crypto_symbol VARCHAR(20) NOT NULL,
+    symbol VARCHAR(20) NOT NULL,
     external_asset VARCHAR(50) NOT NULL,
     correlation_value FLOAT NOT NULL,
     timeframe VARCHAR(10) NOT NULL,

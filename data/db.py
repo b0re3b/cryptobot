@@ -123,7 +123,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS btc_klines (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             open_time TIMESTAMP NOT NULL,
             open NUMERIC NOT NULL,
             high NUMERIC NOT NULL,
@@ -143,25 +143,14 @@ class DatabaseManager:
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_klines_time ON btc_klines(interval, open_time)')
 
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS btc_orderbook (
-            id SERIAL PRIMARY KEY,
-            timestamp TIMESTAMP NOT NULL,
-            last_update_id BIGINT NOT NULL,
-            type TEXT NOT NULL,
-            price NUMERIC NOT NULL,
-            quantity NUMERIC NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_orderbook_time ON btc_orderbook(timestamp)')
+
 
         # Таблиці для ETH
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS eth_klines (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             open_time TIMESTAMP NOT NULL,
             open NUMERIC NOT NULL,
             high NUMERIC NOT NULL,
@@ -181,25 +170,12 @@ class DatabaseManager:
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_klines_time ON eth_klines(interval, open_time)')
 
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS eth_orderbook (
-            id SERIAL PRIMARY KEY,
-            timestamp TIMESTAMP NOT NULL,
-            last_update_id BIGINT NOT NULL,
-            type TEXT NOT NULL,
-            price NUMERIC NOT NULL,
-            quantity NUMERIC NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_orderbook_time ON eth_orderbook(timestamp)')
 
         # Таблиці для SOL
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS sol_klines (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             open_time TIMESTAMP NOT NULL,
             open NUMERIC NOT NULL,
             high NUMERIC NOT NULL,
@@ -219,19 +195,7 @@ class DatabaseManager:
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_time ON sol_klines(interval, open_time)')
 
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sol_orderbook (
-            id SERIAL PRIMARY KEY,
-            timestamp TIMESTAMP NOT NULL,
-            last_update_id BIGINT NOT NULL,
-            type TEXT NOT NULL,
-            price NUMERIC NOT NULL,
-            quantity NUMERIC NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_orderbook_time ON sol_orderbook(timestamp)')
 
         # Таблиця для логів
         self.cursor.execute('''
@@ -249,7 +213,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS btc_klines_processed (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             open_time TIMESTAMP NOT NULL,
             open NUMERIC NOT NULL,
             high NUMERIC NOT NULL,
@@ -280,7 +244,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS eth_klines_processed (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             open_time TIMESTAMP NOT NULL,
             open NUMERIC NOT NULL,
             high NUMERIC NOT NULL,
@@ -310,7 +274,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS sol_klines_processed (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             open_time TIMESTAMP NOT NULL,
             open NUMERIC NOT NULL,
             high NUMERIC NOT NULL,
@@ -339,7 +303,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS btc_volume_profile (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             time_bucket TIMESTAMP NOT NULL,
             price_bin_start NUMERIC NOT NULL,
             price_bin_end NUMERIC NOT NULL,
@@ -355,7 +319,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS eth_volume_profile (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             time_bucket TIMESTAMP NOT NULL,
             price_bin_start NUMERIC NOT NULL,
             price_bin_end NUMERIC NOT NULL,
@@ -371,7 +335,7 @@ class DatabaseManager:
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS sol_volume_profile (
             id SERIAL PRIMARY KEY,
-            interval TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
             time_bucket TIMESTAMP NOT NULL,
             price_bin_start NUMERIC NOT NULL,
             price_bin_end NUMERIC NOT NULL,
@@ -390,7 +354,7 @@ class DatabaseManager:
             id SERIAL PRIMARY KEY,
             symbol TEXT NOT NULL,
             data_type TEXT NOT NULL,
-            interval TEXT,
+            timeframe TEXT,
             start_time TIMESTAMP NOT NULL,
             end_time TIMESTAMP NOT NULL, 
             status TEXT NOT NULL,
@@ -411,7 +375,7 @@ class DatabaseManager:
         try:
             self.cursor.execute(f'''
             INSERT INTO {table_name} 
-            (interval, open_time, open, high, low, close, volume, close_time, 
+            (timeframe, open_time, open, high, low, close, volume, close_time, 
             quote_asset_volume, number_of_trades, taker_buy_base_volume, taker_buy_quote_volume, is_closed)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (interval, open_time) DO UPDATE SET
@@ -427,7 +391,7 @@ class DatabaseManager:
             taker_buy_quote_volume = EXCLUDED.taker_buy_quote_volume,
             is_closed = EXCLUDED.is_closed
             ''', (
-                kline_data['interval'],
+                kline_data['timeframe'],
                 kline_data['open_time'],
                 kline_data['open'],
                 kline_data['high'],
@@ -482,7 +446,7 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_klines(self, symbol, interval, start_time=None, end_time=None, limit=None):
+    def get_klines(self, symbol, timeframe, start_time=None, end_time=None, limit=None):
         """Отримує свічки для валюти"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")
@@ -494,7 +458,7 @@ class DatabaseManager:
         SELECT * FROM {table_name} 
         WHERE interval = %s
         '''
-        params = [interval]
+        params = [timeframe, start_time, end_time, limit]
 
         if start_time:
             query += ' AND open_time >= %s'
@@ -597,7 +561,7 @@ class DatabaseManager:
         try:
             self.cursor.execute(f'''
             INSERT INTO {table_name} 
-            (interval, open_time, open, high, low, close, volume, 
+            (timeframe, open_time, open, high, low, close, volume, 
             price_zscore, volume_zscore, volatility, trend, 
             hour, day_of_week, is_weekend, session, is_anomaly, has_missing)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -618,7 +582,7 @@ class DatabaseManager:
             is_anomaly = EXCLUDED.is_anomaly,
             has_missing = EXCLUDED.has_missing
             ''', (
-                processed_data['interval'],
+                processed_data['timeframe'],
                 processed_data['open_time'],
                 processed_data['open'],
                 processed_data['high'],
@@ -656,13 +620,13 @@ class DatabaseManager:
         try:
             self.cursor.execute(f'''
             INSERT INTO {table_name} 
-            (interval, time_bucket, price_bin_start, price_bin_end, volume)
+            (timeframe, time_bucket, price_bin_start, price_bin_end, volume)
             VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (interval, time_bucket, price_bin_start) DO UPDATE SET
+            ON CONFLICT (timeframe, time_bucket, price_bin_start) DO UPDATE SET
             price_bin_end = EXCLUDED.price_bin_end,
             volume = EXCLUDED.volume
             ''', (
-                profile_data['interval'],
+                profile_data['timeframe'],
                 profile_data['time_bucket'],
                 profile_data['price_bin_start'],
                 profile_data['price_bin_end'],
@@ -675,15 +639,15 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def log_data_processing(self, symbol, data_type, interval, start_time, end_time, status, steps=None,
+    def log_data_processing(self, symbol, data_type, timeframe, start_time, end_time, status, steps=None,
                             error_message=None):
         """Додає запис про обробку даних до логу"""
         try:
             self.cursor.execute('''
                                 INSERT INTO data_processing_log
-                                (symbol, data_type, interval, start_time, end_time, status, steps, error_message)
+                                (symbol, data_type, timeframe, start_time, end_time, status, steps, error_message)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                ''', (symbol, data_type, interval, start_time, end_time, status, steps, error_message))
+                                ''', (symbol, data_type, timeframe, start_time, end_time, status, steps, error_message))
             self.conn.commit()
             return True
         except psycopg2.Error as e:
@@ -691,7 +655,7 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_klines_processed(self, symbol, interval, start_time=None, end_time=None, limit=100):
+    def get_klines_processed(self, symbol, timeframe, start_time=None, end_time=None, limit=100):
         """Отримує оброблені свічки для валюти"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")
@@ -703,7 +667,7 @@ class DatabaseManager:
         SELECT * FROM {table_name} 
         WHERE interval = %s
         '''
-        params = [interval]
+        params = [timeframe]
 
         if start_time:
             query += ' AND open_time >= %s'
@@ -728,7 +692,7 @@ class DatabaseManager:
 
 
 
-    def get_volume_profile(self, symbol, interval, time_bucket=None, limit=100):
+    def get_volume_profile(self, symbol, timeframe, time_bucket=None, limit=100):
         """Отримує профіль об'єму для валюти"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")
@@ -740,7 +704,7 @@ class DatabaseManager:
         SELECT * FROM {table_name}
         WHERE interval = %s
         '''
-        params = [interval]
+        params = [timeframe]
 
         if time_bucket:
             query += ' AND time_bucket = %s'
@@ -800,7 +764,7 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_anomalies(self, symbol, data_type, start_time=None, end_time=None, limit=100):
+    def get_anomalies(self, symbol, data_type, start_time=None, end_time=None, limit=None):
         """Отримує аномалії з оброблених даних"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")
@@ -1187,12 +1151,12 @@ class DatabaseManager:
         try:
             self.cursor.execute('''
                                 INSERT INTO crypto_events
-                                (event_type, crypto_symbol, description, confidence_score, start_time, end_time,
+                                (event_type, symbol, description, confidence_score, start_time, end_time,
                                  related_tweets)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
                                 ''', (
                                     event_data['event_type'],
-                                    event_data['crypto_symbol'],
+                                    event_data['symbol'],
                                     event_data['description'],
                                     event_data['confidence_score'],
                                     event_data['start_time'],
@@ -1214,7 +1178,7 @@ class DatabaseManager:
             params = []
 
             for key, value in event_data.items():
-                if key in ['event_type', 'crypto_symbol', 'description', 'confidence_score', 'start_time', 'end_time',
+                if key in ['event_type', 'symbol', 'description', 'confidence_score', 'start_time', 'end_time',
                            'related_tweets']:
                     update_parts.append(f"{key} = %s")
                     params.append(value)
@@ -1238,14 +1202,14 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_crypto_events(self, crypto_symbol=None, event_type=None, start_time=None, end_time=None, limit=100):
+    def get_crypto_events(self, symbol=None, event_type=None, start_time=None, end_time=None, limit=100):
         """Отримує записи про криптовалютні події за заданими фільтрами"""
         query = 'SELECT * FROM crypto_events WHERE TRUE'
         params = []
 
-        if crypto_symbol:
+        if symbol:
             query += ' AND crypto_symbol = %s'
-            params.append(crypto_symbol)
+            params.append(symbol)
 
         if event_type:
             query += ' AND event_type = %s'
@@ -1279,7 +1243,7 @@ class DatabaseManager:
         try:
             self.cursor.execute('''
                                 INSERT INTO sentiment_time_series
-                                (crypto_symbol, time_bucket, interval, positive_count, negative_count,
+                                (symbol, time_bucket, timeframe, positive_count, negative_count,
                                  neutral_count, average_sentiment, sentiment_volatility, tweet_volume)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                                         %s) ON CONFLICT (crypto_symbol, time_bucket, interval) DO
@@ -1291,9 +1255,9 @@ class DatabaseManager:
                                     sentiment_volatility = EXCLUDED.sentiment_volatility,
                                     tweet_volume = EXCLUDED.tweet_volume
                                 ''', (
-                                    sentiment_data['crypto_symbol'],
+                                    sentiment_data['symbol'],
                                     sentiment_data['time_bucket'],
-                                    sentiment_data['interval'],
+                                    sentiment_data['timeframe'],
                                     sentiment_data['positive_count'],
                                     sentiment_data['negative_count'],
                                     sentiment_data['neutral_count'],
@@ -1308,15 +1272,15 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_sentiment_time_series(self, crypto_symbol, interval, start_time=None, end_time=None, limit=100):
+    def get_sentiment_time_series(self, symbol, timeframe, start_time=None, end_time=None, limit=100):
         """Отримує часовий ряд настроїв для криптовалюти"""
         query = '''
                 SELECT * \
                 FROM sentiment_time_series
-                WHERE crypto_symbol = %s
+                WHERE symbol = %s
                   AND interval = %s \
                 '''
-        params = [crypto_symbol, interval]
+        params = [symbol, timeframe]
 
         if start_time:
             query += ' AND time_bucket >= %s'
@@ -1539,12 +1503,12 @@ class DatabaseManager:
         try:
             self.cursor.execute('''
                 INSERT INTO news_market_correlations 
-                (topic_id, crypto_symbol, time_period, correlation_coefficient, p_value, start_date, end_date)
+                (topic_id, symbol, timeframe, correlation_coefficient, p_value, start_date, end_date)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             ''', (
                 correlation_data['topic_id'],
-                correlation_data['crypto_symbol'],
-                correlation_data['time_period'],
+                correlation_data['symbol'],
+                correlation_data['timeframe'],
                 correlation_data['correlation_coefficient'],
                 correlation_data['p_value'],
                 correlation_data['start_date'],
@@ -1560,12 +1524,12 @@ class DatabaseManager:
         try:
             self.cursor.execute('''
                 INSERT INTO news_detected_events
-                (event_title, event_description, crypto_symbols, source_articles, confidence_score, detected_at, expected_impact, event_category)
+                (event_title, event_description, symbols, source_articles, confidence_score, detected_at, expected_impact, event_category)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 event_data['event_title'],
                 event_data.get('event_description'),
-                event_data['crypto_symbols'],
+                event_data['symbols'],
                 event_data['source_articles'],
                 event_data['confidence_score'],
                 event_data['detected_at'],
@@ -1582,7 +1546,7 @@ class DatabaseManager:
         try:
             self.cursor.execute('''
                 INSERT INTO news_sentiment_time_series 
-                (crypto_symbol, time_bucket, interval, positive_count, negative_count, neutral_count, average_sentiment, news_volume)
+                (symbol, time_bucket, timeframe, positive_count, negative_count, neutral_count, average_sentiment, news_volume)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (crypto_symbol, time_bucket, interval) DO UPDATE SET
                 positive_count = EXCLUDED.positive_count,
@@ -1591,9 +1555,9 @@ class DatabaseManager:
                 average_sentiment = EXCLUDED.average_sentiment,
                 news_volume = EXCLUDED.news_volume
             ''', (
-                data['crypto_symbol'],
+                data['symbol'],
                 data['time_bucket'],
-                data['interval'],
+                data['timeframe'],
                 data['positive_count'],
                 data['negative_count'],
                 data['neutral_count'],
@@ -1630,7 +1594,7 @@ class DatabaseManager:
             return False
 
     def save_model_metadata(self, model_key: str, symbol: str, model_type: str,
-                            interval: str, start_date: datetime, end_date: datetime,
+                            timeframe: str, start_date: datetime, end_date: datetime,
                             description: str = None) -> int:
         """
         Збереження метаданих моделі в базу даних.
@@ -1652,7 +1616,7 @@ class DatabaseManager:
             with conn.cursor() as cursor:
                 query = """
                         INSERT INTO time_series_models
-                        (model_key, symbol, model_type, interval, start_date, end_date, description)
+                        (model_key, symbol, model_type, timeframe, start_date, end_date, description)
                         VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (model_key) 
                 DO \
                         UPDATE SET
@@ -1665,7 +1629,7 @@ class DatabaseManager:
                             updated_at = CURRENT_TIMESTAMP \
                             RETURNING model_id \
                         """
-                cursor.execute(query, (model_key, symbol, model_type, interval,
+                cursor.execute(query, (model_key, symbol, model_type, timeframe,
                                        start_date, end_date, description))
                 model_id = cursor.fetchone()[0]
                 conn.commit()
@@ -2011,19 +1975,10 @@ class DatabaseManager:
             return []
 
     def delete_model(self, model_id: int) -> bool:
-        """
-        Видалення моделі та всіх пов'язаних даних.
 
-        Args:
-            model_id: ID моделі
-
-        Returns:
-            Успішність операції
-        """
         try:
             conn = self.conn()
             with conn.cursor() as cursor:
-                # Використовуємо каскадне видалення, визначене в схемі БД
                 query = "DELETE FROM time_series_models WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
                 conn.commit()
@@ -2032,27 +1987,17 @@ class DatabaseManager:
 
             return False
 
-    def get_models_by_symbol(self, symbol: str, interval: str = None, active_only: bool = True) -> List[Dict]:
-        """
-        Отримання всіх моделей для певного символу.
+    def get_models_by_symbol(self, symbol: str, timeframe: str = None, active_only: bool = True) -> List[Dict]:
 
-        Args:
-            symbol: Символ криптовалюти
-            interval: Інтервал даних (якщо None, всі інтервали)
-            active_only: Фільтрувати тільки активні моделі
-
-        Returns:
-            Список словників з інформацією про моделі
-        """
         try:
             conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s"
                 params = [symbol]
 
-                if interval:
-                    query += " AND interval = %s"
-                    params.append(interval)
+                if timeframe:
+                    query += " AND timeframe = %s"
+                    params.append(timeframe)
 
                 if active_only:
                     query += " AND is_active = TRUE"
@@ -2069,18 +2014,8 @@ class DatabaseManager:
             return []
 
     def get_latest_model_by_symbol(self, symbol: str, model_type: str = None,
-                                   interval: str = None) -> Optional[Dict]:
-        """
-        Отримання останньої моделі для певного символу.
+                                   timeframe: str = None) -> Optional[Dict]:
 
-        Args:
-            symbol: Символ криптовалюти
-            model_type: Тип моделі (якщо None, будь-який тип)
-            interval: Інтервал даних (якщо None, будь-який інтервал)
-
-        Returns:
-            Словник з інформацією про модель або None
-        """
         try:
             conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
@@ -2091,9 +2026,9 @@ class DatabaseManager:
                     query += " AND model_type = %s"
                     params.append(model_type)
 
-                if interval:
-                    query += " AND interval = %s"
-                    params.append(interval)
+                if timeframe:
+                    query += " AND timeframe = %s"
+                    params.append(timeframe)
 
                 query += " ORDER BY updated_at DESC LIMIT 1"
                 cursor.execute(query, params)
@@ -2106,15 +2041,7 @@ class DatabaseManager:
             return None
 
     def get_model_performance_history(self, model_id: int) -> pd.DataFrame:
-        """
-        Отримання історії продуктивності моделі по датах тестування.
 
-        Args:
-            model_id: ID моделі
-
-        Returns:
-            DataFrame з історією метрик моделі
-        """
         try:
             conn = self.conn()
             query = """SELECT metric_name, metric_value, test_date
@@ -2136,16 +2063,7 @@ class DatabaseManager:
 
 
     def update_model_status(self, model_id: int, is_active: bool) -> bool:
-        """
-        Оновлення статусу активності моделі.
 
-        Args:
-            model_id: ID моделі
-            is_active: Новий статус активності
-
-        Returns:
-            Успішність операції
-        """
         try:
             conn = self.conn()
             with conn.cursor() as cursor:
@@ -2160,17 +2078,7 @@ class DatabaseManager:
 
     def compare_model_forecasts(self, model_ids: List[int], start_date: datetime = None,
                                 end_date: datetime = None) -> pd.DataFrame:
-        """
-        Порівняння прогнозів декількох моделей.
 
-        Args:
-            model_ids: Список ID моделей для порівняння
-            start_date: Початкова дата прогнозів
-            end_date: Кінцева дата прогнозів
-
-        Returns:
-            DataFrame з прогнозами різних моделей
-        """
         try:
             results = {}
 
@@ -2201,16 +2109,7 @@ class DatabaseManager:
 
 
     def get_model_forecast_accuracy(self, model_id: int, actual_data: pd.Series) -> Dict:
-        """
-        Розрахунок точності прогнозу на основі фактичних даних.
 
-        Args:
-            model_id: ID моделі
-            actual_data: Серія з фактичними даними (з датою як індексом)
-
-        Returns:
-            Словник з метриками точності
-        """
         try:
             # Отримуємо прогнози моделі
             forecast_df = self.get_model_forecasts(model_id)
@@ -2252,12 +2151,7 @@ class DatabaseManager:
 
 
     def get_available_symbols(self) -> List[str]:
-        """
-        Отримання списку унікальних символів криптовалют з бази даних моделей.
 
-        Returns:
-            Список унікальних символів
-        """
         try:
             conn = self.conn()
             with conn.cursor() as cursor:
@@ -2270,15 +2164,7 @@ class DatabaseManager:
 
 
     def get_model_transformation_pipeline(self, model_id: int) -> List[Dict]:
-        """
-        Отримання повного ланцюжка перетворень для моделі.
 
-        Args:
-            model_id: ID моделі
-
-        Returns:
-            Список словників з інформацією про перетворення, впорядкований за порядком виконання
-        """
         try:
             transformations = self.get_data_transformations(model_id)
             return transformations
@@ -2287,36 +2173,15 @@ class DatabaseManager:
 
 
     def save_complete_model(self, model_key: str, symbol: str, model_type: str,
-                            interval: str, start_date: datetime, end_date: datetime,
+                            timeframe: str, start_date: datetime, end_date: datetime,
                             model_obj: Any, parameters: Dict, metrics: Dict = None,
                             forecasts: pd.Series = None, transformations: List[Dict] = None,
                             lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
                             description: str = None) -> int:
-        """
-        Комплексне збереження моделі та всіх пов'язаних даних.
 
-        Args:
-            model_key: Унікальний ключ моделі
-            symbol: Символ криптовалюти
-            model_type: Тип моделі ('arima', 'sarima', etc.)
-            interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
-            start_date: Початкова дата даних, на яких навчалася модель
-            end_date: Кінцева дата даних, на яких навчалася модель
-            model_obj: Об'єкт моделі для серіалізації
-            parameters: Словник з параметрами моделі
-            metrics: Словник з метриками ефективності моделі
-            forecasts: Серія з прогнозами
-            transformations: Список словників з інформацією про перетворення
-            lower_bounds: Нижні межі довірчого інтервалу
-            upper_bounds: Верхні межі довірчого інтервалу
-            description: Опис моделі
-
-        Returns:
-            ID моделі
-        """
         try:
             # Зберігаємо метадані моделі
-            model_id = self.save_model_metadata(model_key, symbol, model_type, interval,
+            model_id = self.save_model_metadata(model_key, symbol, model_type, timeframe,
                                                 start_date, end_date, description)
 
             # Зберігаємо параметри моделі
@@ -2345,15 +2210,7 @@ class DatabaseManager:
 
 
     def load_complete_model(self, model_key: str) -> Dict:
-        """
-        Комплексне завантаження моделі та всіх пов'язаних даних.
 
-        Args:
-            model_key: Ключ моделі
-
-        Returns:
-            Словник з даними моделі
-        """
         try:
             # Отримуємо метадані моделі
             model_info = self.get_model_by_key(model_key)
@@ -2389,21 +2246,7 @@ class DatabaseManager:
 
     def save_correlation_matrix(self, correlation_matrix, symbols_list, correlation_type, timeframe,
                                 start_time, end_time, method):
-        """
-        Зберігає кореляційну матрицю в базу даних
 
-        Аргументи:
-            correlation_matrix: Кореляційна матриця (numpy array або pandas DataFrame)
-            symbols_list: Список символів (токенів) у тому ж порядку, що й у матриці
-            correlation_type: Тип кореляції ('price', 'volume', 'returns', 'volatility')
-            timeframe: Часовий інтервал ('1m', '5m', '15m', '1h', '4h', '1d', etc.)
-            start_time: Початковий час періоду аналізу
-            end_time: Кінцевий час періоду аналізу
-            method: Метод кореляції ('pearson', 'kendall', 'spearman')
-
-        Повертає:
-            Результат виконання запиту
-        """
         start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
         end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
 
@@ -2429,19 +2272,7 @@ class DatabaseManager:
 
 
     def get_correlation_matrix(self, correlation_type, timeframe, start_time=None, end_time=None, method=None):
-        """
-        Завантажує кореляційну матрицю з бази даних
 
-        Аргументи:
-            correlation_type: Тип кореляції ('price', 'volume', 'returns', 'volatility')
-            timeframe: Часовий інтервал ('1m', '5m', '15m', '1h', '4h', '1d', etc.)
-            start_time: Початковий час періоду аналізу (опціонально)
-            end_time: Кінцевий час періоду аналізу (опціонально)
-            method: Метод кореляції ('pearson', 'kendall', 'spearman') (опціонально)
-
-        Повертає:
-            Кортеж (matrix, symbols_list) або None, якщо даних немає
-        """
         query = """
                 SELECT matrix_json, symbols_list
                 FROM correlation_matrices
