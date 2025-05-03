@@ -497,7 +497,7 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def update_websocket_status(self, symbol, socket_type, interval, is_active):
+    def update_websocket_status(self, symbol, socket_type, timeframe, is_active):
         """Оновлює статус веб-сокета"""
         try:
             # Перевіряємо чи існує таблиця websocket_status, якщо ні - створюємо
@@ -506,7 +506,7 @@ class DatabaseManager:
                 id SERIAL PRIMARY KEY,
                 symbol TEXT NOT NULL,
                 socket_type TEXT NOT NULL,
-                interval TEXT,
+                timeframe TEXT,
                 is_active BOOLEAN NOT NULL,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -519,11 +519,11 @@ class DatabaseManager:
             '''
             params = [symbol, socket_type]
 
-            if interval:
-                query += ' AND interval = %s'
-                params.append(interval)
+            if timeframe:
+                query += ' AND timeframe = %s'
+                params.append(timeframe)
             else:
-                query += ' AND interval IS NULL'
+                query += ' AND timeframe IS NULL'
 
             self.cursor.execute(query, params)
             result = self.cursor.fetchone()
@@ -537,10 +537,10 @@ class DatabaseManager:
                 self.cursor.execute(update_query, (is_active, result['id']))
             else:
                 insert_query = '''
-                INSERT INTO websocket_status (symbol, socket_type, interval, is_active)
+                INSERT INTO websocket_status (symbol, socket_type, timeframe, is_active)
                 VALUES (%s, %s, %s, %s)
                 '''
-                self.cursor.execute(insert_query, (symbol, socket_type, interval, is_active))
+                self.cursor.execute(insert_query, (symbol, socket_type, timeframe, is_active))
 
             self.conn.commit()
             return True
@@ -565,7 +565,7 @@ class DatabaseManager:
             price_zscore, volume_zscore, volatility, trend, 
             hour, day_of_week, is_weekend, session, is_anomaly, has_missing)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (interval, open_time) DO UPDATE SET
+            ON CONFLICT (timeframe, open_time) DO UPDATE SET
             open = EXCLUDED.open,
             high = EXCLUDED.high,
             low = EXCLUDED.low,

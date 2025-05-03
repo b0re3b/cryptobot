@@ -403,7 +403,7 @@ class BinanceClient:
         ws.custom_reconnect_info = {
             'needs_reconnect': False,
             'symbol': symbol,
-            'interval': timeframe,
+            'timeframe': timeframe,
             'callback': callback,
             'save_to_db': save_to_db,
             'socket_type': 'kline',
@@ -469,9 +469,9 @@ class BinanceClient:
 
         # Перепідключення в залежності від типу сокета
         if reconnect_info['socket_type'] == 'kline':
-            print(f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['interval']}...")
+            print(f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['timeframe']}...")
             self.db_manager.log_event('INFO',
-                                      f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['interval']}...",
+                                      f"Reconnecting kline WebSocket for {reconnect_info['symbol']} {reconnect_info['timeframe']}...",
                                       'BinanceClient')
             self.start_kline_socket(
                 reconnect_info['symbol'],
@@ -479,7 +479,6 @@ class BinanceClient:
                 reconnect_info['callback'],
                 reconnect_info['save_to_db']
             )
-
 
         print(f"Successfully reconnected WebSocket: {ws_key}")
         self.db_manager.log_event('INFO', f"Successfully reconnected WebSocket: {ws_key}", 'BinanceClient')
@@ -497,7 +496,6 @@ class BinanceClient:
                     symbol = socket_parts[1]
                     timeframe = socket_parts[2]
                     self.db_manager.update_websocket_status(symbol, 'kline', timeframe, False)
-
 
                 try:
                     ws.close()
@@ -523,8 +521,8 @@ class BinanceClient:
                     socket_parts = key.split('_')
                     if socket_parts[0] == 'kline':
                         symbol = socket_parts[1]
-                        interval = socket_parts[2]
-                        self.db_manager.update_websocket_status(symbol, 'kline', interval, False)
+                        timeframe = socket_parts[2]
+                        self.db_manager.update_websocket_status(symbol, 'kline', timeframe, False)
 
                     return True
             return False
@@ -775,8 +773,8 @@ class BinanceClient:
         total_candles = sum(results.values())
 
         # Для кожного інтервалу виводимо кількість збережених свічок
-        for interval, count in results.items():
-            print(f"{symbol} ({interval}): збережено {count} свічок")
+        for timeframe, count in results.items():
+            print(f"{symbol} ({timeframe}): збережено {count} свічок")
 
         # Загальний підсумок
         summary_msg = f"Загалом для {symbol} збережено {total_candles} свічок по всіх інтервалах."
