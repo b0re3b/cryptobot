@@ -4045,177 +4045,74 @@ class DatabaseManager:
             return inserted_ids
 
     def get_btc_lstm_sequence(self, timeframe: str, sequence_id: int) -> List[Dict[str, Any]]:
-
-         with self.conn.cursor() as cursor:
+        with self.conn.cursor() as cursor:
             query = """
-                        SELECT id, \
-                               timeframe, \
-                               sequence_id, \
-                               sequence_position, \
-                               open_time, \
-                               open_scaled, \
-                               high_scaled, \
-                               low_scaled, \
-                               close_scaled, \
-                               volume_scaled, \
-                               hour_sin, \
-                               hour_cos, \
-                               day_of_week_sin, \
-                               day_of_week_cos, \
-                               month_sin, \
-                               month_cos, \
-                               day_of_month_sin, \
-                               day_of_month_cos, \
-                               target_close_1, \
-                               target_close_5, \
-                               target_close_10, \
-                               sequence_length, \
-                               scaling_metadata, \
-                               created_at, \
-                               updated_at
-                        FROM btc_lstm_data
-                        WHERE timeframe = %s \
-                          AND sequence_id = %s
-                        ORDER BY sequence_position \
-                        """
-                cursor.execute(query, (timeframe, sequence_id))
-                results = cursor.fetchall()
+                    SELECT id, \
+                           timeframe, \
+                           sequence_id, \
+                           sequence_position, \
+                           open_time, \
+                           open_scaled, \
+                           high_scaled, \
+                           low_scaled, \
+                           close_scaled, \
+                           volume_scaled, \
+                           hour_sin, \
+                           hour_cos, \
+                           day_of_week_sin, \
+                           day_of_week_cos, \
+                           month_sin, \
+                           month_cos, \
+                           day_of_month_sin, \
+                           day_of_month_cos, \
+                           target_close_1, \
+                           target_close_5, \
+                           target_close_10, \
+                           sequence_length, \
+                           scaling_metadata, \
+                           created_at, \
+                           updated_at
+                    FROM btc_lstm_data
+                    WHERE timeframe = %s \
+                      AND sequence_id = %s
+                    ORDER BY sequence_position \
+                    """
+            cursor.execute(query, (timeframe, sequence_id))
+            results = cursor.fetchall()
 
-                sequence_data = []
-                for row in results:
-                    sequence_data.append({
-                        'id': row[0],
-                        'timeframe': row[1],
-                        'sequence_id': row[2],
-                        'sequence_position': row[3],
-                        'open_time': row[4],
-                        'open_scaled': float(row[5]),
-                        'high_scaled': float(row[6]),
-                        'low_scaled': float(row[7]),
-                        'close_scaled': float(row[8]),
-                        'volume_scaled': float(row[9]),
-                        'hour_sin': float(row[10]) if row[10] is not None else None,
-                        'hour_cos': float(row[11]) if row[11] is not None else None,
-                        'day_of_week_sin': float(row[12]) if row[12] is not None else None,
-                        'day_of_week_cos': float(row[13]) if row[13] is not None else None,
-                        'month_sin': float(row[14]) if row[14] is not None else None,
-                        'month_cos': float(row[15]) if row[15] is not None else None,
-                        'day_of_month_sin': float(row[16]) if row[16] is not None else None,
-                        'day_of_month_cos': float(row[17]) if row[17] is not None else None,
-                        'target_close_1': float(row[18]) if row[18] is not None else None,
-                        'target_close_5': float(row[19]) if row[19] is not None else None,
-                        'target_close_10': float(row[20]) if row[20] is not None else None,
-                        'sequence_length': row[21],
-                        'scaling_metadata': json.loads(row[22]) if row[22] else None,
-                        'created_at': row[23],
-                        'updated_at': row[24]
-                    })
+            sequence_data = []
+            for row in results:
+                sequence_data.append({
+                    'id': row[0],
+                    'timeframe': row[1],
+                    'sequence_id': row[2],
+                    'sequence_position': row[3],
+                    'open_time': row[4],
+                    'open_scaled': float(row[5]),
+                    'high_scaled': float(row[6]),
+                    'low_scaled': float(row[7]),
+                    'close_scaled': float(row[8]),
+                    'volume_scaled': float(row[9]),
+                    'hour_sin': float(row[10]) if row[10] is not None else None,
+                    'hour_cos': float(row[11]) if row[11] is not None else None,
+                    'day_of_week_sin': float(row[12]) if row[12] is not None else None,
+                    'day_of_week_cos': float(row[13]) if row[13] is not None else None,
+                    'month_sin': float(row[14]) if row[14] is not None else None,
+                    'month_cos': float(row[15]) if row[15] is not None else None,
+                    'day_of_month_sin': float(row[16]) if row[16] is not None else None,
+                    'day_of_month_cos': float(row[17]) if row[17] is not None else None,
+                    'target_close_1': float(row[18]) if row[18] is not None else None,
+                    'target_close_5': float(row[19]) if row[19] is not None else None,
+                    'target_close_10': float(row[20]) if row[20] is not None else None,
+                    'sequence_length': row[21],
+                    'scaling_metadata': json.loads(row[22]) if row[22] else None,
+                    'created_at': row[23],
+                    'updated_at': row[24]
+                })
 
             return sequence_data
 
-        def get_btc_lstm_batch(
-                self,
-                timeframe: str,
-                sequence_length: int,
-                batch_size: int,
-                offset: int = 0,
-                include_targets: bool = True
-        ) -> Tuple[List[List[Dict[str, Any]]], List[List[float]]]:
-
-            with self.conn.cursor() as cursor:
-                sequence_query = """
-                                 SELECT DISTINCT sequence_id
-                                 FROM btc_lstm_data
-                                 WHERE timeframe = %s \
-                                   AND sequence_length = %s
-                                     LIMIT %s \
-                                 OFFSET %s \
-                                 """
-                cursor.execute(sequence_query, (timeframe, sequence_length, batch_size, offset))
-                sequence_ids = [row[0] for row in cursor.fetchall()]
-
-                if not sequence_ids:
-                    return [], []
-
-                sequences = []
-                targets = []
-
-                for seq_id in sequence_ids:
-                    sequence_data_query = """
-                                          SELECT id, \
-                                                 timeframe, \
-                                                 sequence_id, \
-                                                 sequence_position, \
-                                                 open_time, \
-                                                 open_scaled, \
-                                                 high_scaled, \
-                                                 low_scaled, \
-                                                 close_scaled, \
-                                                 volume_scaled, \
-                                                 hour_sin, \
-                                                 hour_cos, \
-                                                 day_of_week_sin, \
-                                                 day_of_week_cos, \
-                                                 month_sin, \
-                                                 month_cos, \
-                                                 day_of_month_sin, \
-                                                 day_of_month_cos, \
-                                                 target_close_1, \
-                                                 target_close_5, \
-                                                 target_close_10, \
-                                                 sequence_length, \
-                                                 scaling_metadata
-                                          FROM btc_lstm_data
-                                          WHERE timeframe = %s \
-                                            AND sequence_id = %s
-                                          ORDER BY sequence_position \
-                                          """
-                    cursor.execute(sequence_data_query, (timeframe, seq_id))
-                    rows = cursor.fetchall()
-
-                    seq = []
-                    seq_targets = []
-
-                    for row in rows:
-                        data_point = {
-                            'id': row[0],
-                            'timeframe': row[1],
-                            'sequence_id': row[2],
-                            'sequence_position': row[3],
-                            'open_time': row[4],
-                            'open_scaled': float(row[5]),
-                            'high_scaled': float(row[6]),
-                            'low_scaled': float(row[7]),
-                            'close_scaled': float(row[8]),
-                            'volume_scaled': float(row[9]),
-                            'hour_sin': float(row[10]) if row[10] is not None else None,
-                            'hour_cos': float(row[11]) if row[11] is not None else None,
-                            'day_of_week_sin': float(row[12]) if row[12] is not None else None,
-                            'day_of_week_cos': float(row[13]) if row[13] is not None else None,
-                            'month_sin': float(row[14]) if row[14] is not None else None,
-                            'month_cos': float(row[15]) if row[15] is not None else None,
-                            'day_of_month_sin': float(row[16]) if row[16] is not None else None,
-                            'day_of_month_cos': float(row[17]) if row[17] is not None else None,
-                            'scaling_metadata': json.loads(row[21]) if row[21] else None,
-                        }
-
-                        seq.append(data_point)
-
-                        if include_targets:
-                            target = [
-                                float(row[18]) if row[18] is not None else None,  # target_close_1
-                                float(row[19]) if row[19] is not None else None,  # target_close_5
-                                float(row[20]) if row[20] is not None else None  # target_close_10
-                            ]
-                            seq_targets.append(target)
-
-                    sequences.append(seq)
-                    if include_targets:
-                        targets.append(seq_targets)
-
-            return (sequences, targets) if include_targets else (sequences, [])
-
-        def delete_btc_lstm_sequence(self, timeframe: str, sequence_id: int) -> int:
+    def delete_btc_lstm_sequence(self, timeframe: str, sequence_id: int) -> int:
 
             with self.conn.cursor() as cursor:
                 query = """
@@ -4230,7 +4127,7 @@ class DatabaseManager:
             self.conn.commit()
             return deleted_count
 
-        def get_btc_latest_sequences(
+    def get_btc_latest_sequences(
                 self,
                 timeframe: str,
                 num_sequences: int = 10,
@@ -4277,24 +4174,25 @@ class DatabaseManager:
 
             return sequences
 
-        def get_btc_scaling_metadata(self, timeframe: str) -> Dict[str, Any]:
 
-            with self.conn.cursor() as cursor:
-                query = """
-                        SELECT scaling_metadata
-                        FROM btc_lstm_data
-                        WHERE timeframe = %s \
-                          AND scaling_metadata IS NOT NULL LIMIT 1 \
-                        """
-                cursor.execute(query, (timeframe,))
-                result = cursor.fetchone()
+    def get_btc_scaling_metadata(self, timeframe: str) -> Dict[str, Any]:
+        with self.conn.cursor() as cursor:
+            query = """
+                    SELECT scaling_metadata
+                    FROM btc_lstm_data
+                    WHERE timeframe = %s \
+                      AND scaling_metadata IS NOT NULL LIMIT 1 \
+                    """
+            cursor.execute(query, (timeframe,))
+            result = cursor.fetchone()
 
-                if result and result[0]:
-                    return json.loads(result[0])
+            if result and result[0]:
+                return json.loads(result[0])
 
-            return {}
+        return {}
 
-        def count_btc_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
+
+    def count_btc_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
 
             with self.conn.cursor() as cursor:
                 conditions = ["timeframe = %s"]
@@ -4637,8 +4535,8 @@ class DatabaseManager:
 
         return {}
 
-    def count_sol_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
 
+    def count_sol_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
         with self.conn.cursor() as cursor:
             conditions = ["timeframe = %s"]
             params = [timeframe]
@@ -4650,15 +4548,16 @@ class DatabaseManager:
             condition_str = " AND ".join(conditions)
 
             query = f"""
-            SELECT COUNT(DISTINCT sequence_id)
-            FROM sol_lstm_data
-            WHERE {condition_str}
-            """
+                SELECT COUNT(DISTINCT sequence_id)
+                FROM sol_lstm_data
+                WHERE {condition_str}
+                """
 
             cursor.execute(query, tuple(params))
             result = cursor.fetchone()
 
             return result[0] if result else 0
+
 
 
 
