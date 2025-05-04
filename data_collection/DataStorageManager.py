@@ -25,7 +25,7 @@ class DataStorageManager:
                 return obj
 
         # Додано перевірку на мінімальну дату
-        MIN_VALID_DATE = datetime(2000, 1, 1)
+        MIN_VALID_DATE = datetime(2017, 1, 1)
 
         for _, row in df.iterrows():
             try:
@@ -79,7 +79,7 @@ class DataStorageManager:
             self.logger.warning("Спроба зберегти порожні оброблені свічки")
             return
 
-        MIN_VALID_DATE = datetime(2016, 1, 1)
+        MIN_VALID_DATE = datetime(2017, 1, 1)
 
         for _, row in df.iterrows():
             try:
@@ -162,12 +162,7 @@ class DataStorageManager:
                     start_time=start_date,
                     end_time=end_date
                 )
-            elif data_type == 'orderbook':
-                data = self.db_manager.get_orderbook(
-                    symbol=symbol,
-                    start_time=start_date,
-                    end_time=end_date
-                )
+
             elif data_type == 'processed_candles':
                 data = self.db_manager.get_processed_klines(
                     symbol=symbol,

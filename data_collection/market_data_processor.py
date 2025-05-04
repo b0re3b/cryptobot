@@ -508,11 +508,11 @@ def main():
                 continue
 
             processed = DataCleaner.add_time_features(processed, tz=EU_TIMEZONE)
-            DataStorageManager.save_processed_klines_to_db(processed, symbol, interval)
-            print(f" Оброблені свічки ({interval}) збережено")
+            DataStorageManager.save_processed_klines_to_db(processed, symbol, timeframe)
+            print(f" Оброблені свічки ({timeframe}) збережено")
 
             # 5. Ресемплінг
-            if interval == '5m':
+            if interval == '1m':
                 resampled_30m = DataResampler.resample_data(processed, target_interval='30m')
                 resampled_30m = DataCleaner.add_time_features(resampled_30m, tz=EU_TIMEZONE)
                 DataStorageManager.save_processed_klines_to_db(resampled_30m, symbol, '30m')

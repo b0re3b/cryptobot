@@ -137,11 +137,11 @@ class DatabaseManager:
             taker_buy_quote_volume NUMERIC NOT NULL,
             is_closed BOOLEAN NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, open_time)
+            UNIQUE (timeframe, open_time)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_klines_time ON btc_klines(interval, open_time)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_klines_time ON btc_klines(timeframe, open_time)')
 
 
 
@@ -164,11 +164,11 @@ class DatabaseManager:
             taker_buy_quote_volume NUMERIC NOT NULL,
             is_closed BOOLEAN NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, open_time)
+            UNIQUE (timeframe, open_time)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_klines_time ON eth_klines(interval, open_time)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_klines_time ON eth_klines(timeframe, open_time)')
 
 
         # Таблиці для SOL
@@ -189,11 +189,11 @@ class DatabaseManager:
             taker_buy_quote_volume NUMERIC NOT NULL,
             is_closed BOOLEAN NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, open_time)
+            UNIQUE (timeframe, open_time)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_time ON sol_klines(interval, open_time)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_time ON sol_klines(timeframe, open_time)')
 
 
 
@@ -231,11 +231,11 @@ class DatabaseManager:
             is_anomaly BOOLEAN DEFAULT FALSE,
             has_missing BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, open_time)
+            UNIQUE (timeframe, open_time)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed(interval, open_time)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed(timeframe, open_time)')
 
 
 
@@ -262,11 +262,11 @@ class DatabaseManager:
             is_anomaly BOOLEAN DEFAULT FALSE,
             has_missing BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, open_time)
+            UNIQUE (timeframe, open_time)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed(interval, open_time)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed(timefarme, open_time)')
 
 
 
@@ -292,11 +292,11 @@ class DatabaseManager:
             is_anomaly BOOLEAN DEFAULT FALSE,
             has_missing BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, open_time)
+            UNIQUE (timeframe, open_time)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(interval, open_time)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(timeframe, open_time)')
 
     def _create_volume_profile_tables(self):
         # Таблиці для профілів об'єму BTC
@@ -309,11 +309,11 @@ class DatabaseManager:
             price_bin_end NUMERIC NOT NULL,
             volume NUMERIC NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, time_bucket, price_bin_start)
+            UNIQUE (timeframe, time_bucket, price_bin_start)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(interval, time_bucket)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket)')
 
         # Таблиці для профілів об'єму ETH
         self.cursor.execute('''
@@ -325,11 +325,11 @@ class DatabaseManager:
             price_bin_end NUMERIC NOT NULL,
             volume NUMERIC NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, time_bucket, price_bin_start)
+            UNIQUE (timeframe, time_bucket, price_bin_start)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(interval, time_bucket)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timeframe, time_bucket)')
 
         # Таблиці для профілів об'єму SOL
         self.cursor.execute('''
@@ -341,11 +341,11 @@ class DatabaseManager:
             price_bin_end NUMERIC NOT NULL,
             volume NUMERIC NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (interval, time_bucket, price_bin_start)
+            UNIQUE (timeframe, time_bucket, price_bin_start)
         )
         ''')
 
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(interval, time_bucket)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket)')
 
     def _create_data_processing_log_table(self):
         # Таблиця для логування обробки даних
@@ -378,7 +378,7 @@ class DatabaseManager:
             (timeframe, open_time, open, high, low, close, volume, close_time, 
             quote_asset_volume, number_of_trades, taker_buy_base_volume, taker_buy_quote_volume, is_closed)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (interval, open_time) DO UPDATE SET
+            ON CONFLICT (timeframe, open_time) DO UPDATE SET
             open = EXCLUDED.open,
             high = EXCLUDED.high,
             low = EXCLUDED.low,
@@ -456,7 +456,7 @@ class DatabaseManager:
 
         query = f'''
         SELECT * FROM {table_name} 
-        WHERE interval = %s
+        WHERE timeframe = %s
         '''
         params = [timeframe, start_time, end_time, limit]
 
@@ -665,7 +665,7 @@ class DatabaseManager:
 
         query = f'''
         SELECT * FROM {table_name} 
-        WHERE interval = %s
+        WHERE timeframe = %s
         '''
         params = [timeframe]
 
@@ -702,7 +702,7 @@ class DatabaseManager:
 
         query = f'''
         SELECT * FROM {table_name}
-        WHERE interval = %s
+        WHERE timeframe = %s
         '''
         params = [timeframe]
 
@@ -1246,7 +1246,7 @@ class DatabaseManager:
                                 (symbol, time_bucket, timeframe, positive_count, negative_count,
                                  neutral_count, average_sentiment, sentiment_volatility, tweet_volume)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
-                                        %s) ON CONFLICT (crypto_symbol, time_bucket, interval) DO
+                                        %s) ON CONFLICT (symbol, time_bucket, timeframe) DO
                                 UPDATE SET
                                     positive_count = EXCLUDED.positive_count,
                                     negative_count = EXCLUDED.negative_count,

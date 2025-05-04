@@ -361,7 +361,7 @@ CREATE TABLE IF NOT EXISTS sentiment_time_series (
     sentiment_volatility NUMERIC, -- волатильність настрою
     tweet_volume INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (crypto_symbol, time_bucket, interval)
+    UNIQUE (crypto_symbol, time_bucket, timeframe)
 );
 
 -- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом

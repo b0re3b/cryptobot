@@ -4,7 +4,7 @@ import hmac
 import json
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 import aiohttp
 import pandas as pd
@@ -86,7 +86,7 @@ class BinanceClient:
         endpoint = f"{self.base_url_v3}/klines"
         params = {
             'symbol': symbol,
-            'timeframe': timeframe,
+            'interval': timeframe,  # FIXED: changed 'timeframe' to 'interval' for Binance API
             'limit': limit
         }
 
@@ -234,7 +234,7 @@ class BinanceClient:
             endpoint = f"{self.base_url_v3}/klines"
             params = {
                 'symbol': symbol,
-                'timeframe': timeframe,
+                'interval': timeframe,  # FIXED: changed 'timeframe' to 'interval' for Binance API
                 'limit': limit
             }
 
@@ -295,7 +295,7 @@ class BinanceClient:
 
             # Перетворюємо дані у формат, який очікує DatabaseManager
             kline_db_data = {
-                'timeframe': kline_data['timeframe'],
+                'timeframe': kline_data['timeframe'],  # 'timeframe' used correctly for DB
                 'open_time': kline_data['open_time'],
                 'open': float(kline_data['open']),
                 'high': float(kline_data['high']),
@@ -311,7 +311,7 @@ class BinanceClient:
             }
 
             # Вставка даних у відповідну таблицю
-            result = self.db_manager.insert_kline(crypto_symbol, kline_db_data)
+            result = self.db_manager.insert_kline(symbol, kline_db_data)
             return result
         except Exception as e:
             self.db_manager.log_event('ERROR', f"Error saving kline to database: {e}", 'BinanceClient')
@@ -344,7 +344,7 @@ class BinanceClient:
 
                         kline_data = {
                             'symbol': candle['s'],  # symbol
-                            'timeframe': candle['i'],  # interval
+                            'timeframe': candle['i'],  # interval from websocket becomes timeframe in DB
                             'open_time': datetime.fromtimestamp(candle['t'] / 1000),  # open_time
                             'open': candle['o'],  # open
                             'high': candle['h'],  # high
@@ -579,9 +579,15 @@ class BinanceClient:
         if not timeframe:
             timeframe = ['1m', '1h', '1d']
 
-        if not start_date:
+        # Обробка start_date
+        if isinstance(start_date, tuple) and len(start_date) == 2:
+            # Якщо start_date є кортежем (symbol, date)
+            symbol_specific_date = start_date[1]
+            start_date = symbol_specific_date
+        elif not start_date:
             # Використовуємо дату з словника, якщо вона існує, інакше використовуємо 30 днів тому
-            start_date = symbol_start_dates
+            start_date = symbol_start_dates.get(symbol,
+                        (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
 
         # Конвертуємо дати в timestamp
         try:
@@ -619,7 +625,6 @@ class BinanceClient:
             'start_date': start_date,
             'end_date': end_date if end_date else 'сьогодні'
         }
-
     def _calculate_window_size(self, timeframe):
         """
         Розрахунок оптимального розміру вікна для запиту в залежності від інтервалу
