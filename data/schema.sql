@@ -831,3 +831,276 @@ CREATE TABLE IF NOT EXISTS cycle_feature_performance (
     training_period_end TIMESTAMP,              -- End of training period
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS btc_lstm_data (
+    id SERIAL PRIMARY KEY,
+    timeframe TEXT NOT NULL,
+    sequence_id INTEGER NOT NULL, -- To group related sequences
+    sequence_position INTEGER NOT NULL, -- Position within sequence
+    open_time TIMESTAMP NOT NULL,
+
+    -- Features (scaled data ready for neural networks)
+    open_scaled NUMERIC NOT NULL,
+    high_scaled NUMERIC NOT NULL,
+    low_scaled NUMERIC NOT NULL,
+    close_scaled NUMERIC NOT NULL,
+    volume_scaled NUMERIC NOT NULL,
+
+    -- Time features (cyclic encoding)
+    hour_sin NUMERIC,
+    hour_cos NUMERIC,
+    day_of_week_sin NUMERIC,
+    day_of_week_cos NUMERIC,
+    month_sin NUMERIC,
+    month_cos NUMERIC,
+    day_of_month_sin NUMERIC,
+    day_of_month_cos NUMERIC,
+
+    -- Technical indicators (scaled)
+    ma_5_scaled NUMERIC,
+    ma_20_scaled NUMERIC,
+    rsi_14_scaled NUMERIC,
+    macd_scaled NUMERIC,
+    bollinger_upper_scaled NUMERIC,
+    bollinger_lower_scaled NUMERIC,
+
+    -- Target values (future prices for different horizons)
+    target_close_1 NUMERIC, -- Next timeframe close
+    target_close_5 NUMERIC, -- 5 timeframes ahead
+    target_close_10 NUMERIC, -- 10 timeframes ahead
+
+    -- Metadata
+    sequence_length INTEGER, -- Length of the sequence this row belongs to
+    scaling_metadata TEXT, -- JSON with scaling parameters for reconstruction
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (timeframe, sequence_id, sequence_position)
+);
+
+-- Similar tables for ETH and SOL
+CREATE TABLE IF NOT EXISTS eth_lstm_data (
+    id SERIAL PRIMARY KEY,
+    timeframe TEXT NOT NULL,
+    sequence_id INTEGER NOT NULL, -- To group related sequences
+    sequence_position INTEGER NOT NULL, -- Position within sequence
+    open_time TIMESTAMP NOT NULL,
+
+    -- Features (scaled data ready for neural networks)
+    open_scaled NUMERIC NOT NULL,
+    high_scaled NUMERIC NOT NULL,
+    low_scaled NUMERIC NOT NULL,
+    close_scaled NUMERIC NOT NULL,
+    volume_scaled NUMERIC NOT NULL,
+
+    -- Time features (cyclic encoding)
+    hour_sin NUMERIC,
+    hour_cos NUMERIC,
+    day_of_week_sin NUMERIC,
+    day_of_week_cos NUMERIC,
+    month_sin NUMERIC,
+    month_cos NUMERIC,
+    day_of_month_sin NUMERIC,
+    day_of_month_cos NUMERIC,
+
+    -- Technical indicators (scaled)
+    ma_5_scaled NUMERIC,
+    ma_20_scaled NUMERIC,
+    rsi_14_scaled NUMERIC,
+    macd_scaled NUMERIC,
+    bollinger_upper_scaled NUMERIC,
+    bollinger_lower_scaled NUMERIC,
+
+
+    -- Target values (future prices for different horizons)
+    target_close_1 NUMERIC, -- Next timeframe close
+    target_close_5 NUMERIC, -- 5 timeframes ahead
+    target_close_10 NUMERIC, -- 10 timeframes ahead
+
+    -- Metadata
+    sequence_length INTEGER, -- Length of the sequence this row belongs to
+    scaling_metadata TEXT, -- JSON with scaling parameters for reconstruction
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (timeframe, sequence_id, sequence_position)
+);
+CREATE TABLE IF NOT EXISTS sol_lstm_data (
+    id SERIAL PRIMARY KEY,
+    timeframe TEXT NOT NULL,
+    sequence_id INTEGER NOT NULL, -- To group related sequences
+    sequence_position INTEGER NOT NULL, -- Position within sequence
+    open_time TIMESTAMP NOT NULL,
+
+    -- Features (scaled data ready for neural networks)
+    open_scaled NUMERIC NOT NULL,
+    high_scaled NUMERIC NOT NULL,
+    low_scaled NUMERIC NOT NULL,
+    close_scaled NUMERIC NOT NULL,
+    volume_scaled NUMERIC NOT NULL,
+
+    -- Time features (cyclic encoding)
+    hour_sin NUMERIC,
+    hour_cos NUMERIC,
+    day_of_week_sin NUMERIC,
+    day_of_week_cos NUMERIC,
+    month_sin NUMERIC,
+    month_cos NUMERIC,
+    day_of_month_sin NUMERIC,
+    day_of_month_cos NUMERIC,
+
+    -- Technical indicators (scaled)
+    ma_5_scaled NUMERIC,
+    ma_20_scaled NUMERIC,
+    rsi_14_scaled NUMERIC,
+    macd_scaled NUMERIC,
+    bollinger_upper_scaled NUMERIC,
+    bollinger_lower_scaled NUMERIC,
+
+    -- Target values (future prices for different horizons)
+    target_close_1 NUMERIC, -- Next timeframe close
+    target_close_5 NUMERIC, -- 5 timeframes ahead
+    target_close_10 NUMERIC, -- 10 timeframes ahead
+
+    -- Metadata
+    sequence_length INTEGER, -- Length of the sequence this row belongs to
+    scaling_metadata TEXT, -- JSON with scaling parameters for reconstruction
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (timeframe, sequence_id, sequence_position)
+);
+CREATE TABLE IF NOT EXISTS btc_arima_data (
+    id SERIAL PRIMARY KEY,
+    timeframe TEXT NOT NULL,
+    open_time TIMESTAMP NOT NULL,
+
+    -- Original data (for reference)
+    original_close NUMERIC NOT NULL,
+
+    -- Stationary transformations
+    close_diff NUMERIC,
+    close_diff2 NUMERIC,
+    close_log NUMERIC,
+    close_log_diff NUMERIC,
+    close_pct_change NUMERIC,
+
+    -- Seasonal differencing
+    close_seasonal_diff NUMERIC,
+    close_combo_diff NUMERIC,
+
+
+    -- Stationarity test results
+    adf_pvalue NUMERIC,
+    kpss_pvalue NUMERIC,
+    is_stationary BOOLEAN,
+
+    -- ACF/PACF info (useful for model configuration)
+    significant_lags TEXT, -- Stored as JSON array of significant lags
+
+    -- Additional ARIMA-specific metrics
+    residual_variance NUMERIC,
+    aic_score NUMERIC,
+    bic_score NUMERIC,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (timeframe, open_time)
+);
+
+-- Similar tables for ETH and SOL
+CREATE TABLE IF NOT EXISTS eth_arima_data (
+    id SERIAL PRIMARY KEY,
+    timeframe TEXT NOT NULL,
+    open_time TIMESTAMP NOT NULL,
+
+    -- Original data (for reference)
+    original_close NUMERIC NOT NULL,
+
+    -- Stationary transformations
+    close_diff NUMERIC,
+    close_diff2 NUMERIC,
+    close_log NUMERIC,
+    close_log_diff NUMERIC,
+    close_pct_change NUMERIC,
+
+    -- Seasonal differencing
+    close_seasonal_diff NUMERIC,
+    close_combo_diff NUMERIC,
+
+
+    -- Stationarity test results
+    adf_pvalue NUMERIC,
+    kpss_pvalue NUMERIC,
+    is_stationary BOOLEAN,
+
+    -- ACF/PACF info (useful for model configuration)
+    significant_lags TEXT, -- Stored as JSON array of significant lags
+
+    -- Additional ARIMA-specific metrics
+    residual_variance NUMERIC,
+    aic_score NUMERIC,
+    bic_score NUMERIC,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (timeframe, open_time)
+);
+CREATE TABLE IF NOT EXISTS sol_arima_data (
+    id SERIAL PRIMARY KEY,
+    timeframe TEXT NOT NULL,
+    open_time TIMESTAMP NOT NULL,
+
+    -- Original data (for reference)
+    original_close NUMERIC NOT NULL,
+
+    -- Stationary transformations
+    close_diff NUMERIC,
+    close_diff2 NUMERIC,
+    close_log NUMERIC,
+    close_log_diff NUMERIC,
+    close_pct_change NUMERIC,
+
+    -- Seasonal differencing
+    close_seasonal_diff NUMERIC,
+    close_combo_diff NUMERIC,
+
+    -- Stationarity test results
+    adf_pvalue NUMERIC,
+    kpss_pvalue NUMERIC,
+    is_stationary BOOLEAN,
+
+    -- ACF/PACF info (useful for model configuration)
+    significant_lags TEXT, -- Stored as JSON array of significant lags
+
+    -- Additional ARIMA-specific metrics
+    residual_variance NUMERIC,
+    aic_score NUMERIC,
+    bic_score NUMERIC,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (timeframe, open_time)
+);
+CREATE INDEX IF NOT EXISTS idx_btc_arima_timeframe ON btc_arima_data(timeframe);
+CREATE INDEX IF NOT EXISTS idx_btc_arima_open_time ON btc_arima_data(open_time);
+CREATE INDEX IF NOT EXISTS idx_btc_arima_is_stationary ON btc_arima_data(is_stationary);
+
+CREATE INDEX IF NOT EXISTS idx_eth_arima_timeframe ON eth_arima_data(timeframe);
+CREATE INDEX IF NOT EXISTS idx_eth_arima_open_time ON eth_arima_data(open_time);
+CREATE INDEX IF NOT EXISTS idx_eth_arima_is_stationary ON eth_arima_data(is_stationary);
+
+CREATE INDEX IF NOT EXISTS idx_sol_arima_timeframe ON sol_arima_data(timeframe);
+CREATE INDEX IF NOT EXISTS idx_sol_arima_open_time ON sol_arima_data(open_time);
+CREATE INDEX IF NOT EXISTS idx_sol_arima_is_stationary ON sol_arima_data(is_stationary);
+
+CREATE INDEX IF NOT EXISTS idx_btc_lstm_timeframe ON btc_lstm_data(timeframe);
+CREATE INDEX IF NOT EXISTS idx_btc_lstm_sequence_id ON btc_lstm_data(sequence_id);
+CREATE INDEX IF NOT EXISTS idx_btc_lstm_open_time ON btc_lstm_data(open_time);
+
+CREATE INDEX IF NOT EXISTS idx_eth_lstm_timeframe ON eth_lstm_data(timeframe);
+CREATE INDEX IF NOT EXISTS idx_eth_lstm_sequence_id ON eth_lstm_data(sequence_id);
+CREATE INDEX IF NOT EXISTS idx_eth_lstm_open_time ON eth_lstm_data(open_time);
+
+CREATE INDEX IF NOT EXISTS idx_sol_lstm_timeframe ON sol_lstm_data(timeframe);
+CREATE INDEX IF NOT EXISTS idx_sol_lstm_sequence_id ON sol_lstm_data(sequence_id);
+CREATE INDEX IF NOT EXISTS idx_sol_lstm_open_time ON sol_lstm_data(open_time);
