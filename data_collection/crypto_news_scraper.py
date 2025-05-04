@@ -1,4 +1,4 @@
-"""""
+
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -1143,4 +1143,3 @@ class CryptoNewsScraper:
         except Exception as e:
             self.logger.error(f"Помилка при аналізі кореляції: {e}")
             return {'correlation': 0, 'significance': 0, 'valid': False, 'error': str(e)}
-"""

@@ -1,3 +1,4 @@
+"""""
 import os
 import re
 import ssl
@@ -67,7 +68,7 @@ class TwitterScraper:
         self.last_api_error_time = None
 
     async def initialize(self):
-        """Ініціалізує об'єкти, які потребують асинхронного контексту"""
+       
         if self.session is None:
             self.session = aiohttp.ClientSession()
         if not self.db_manager.is_connected:
@@ -75,7 +76,6 @@ class TwitterScraper:
         return self
 
     async def close(self):
-        """Закриває всі відкриті з'єднання та ресурси"""
         if self.session:
             await self.session.close()
         if self.db_manager.is_connected:
@@ -435,16 +435,16 @@ class TwitterScraper:
 
             # Отримання даних за останні 24 години
             since_date = datetime.now() - timedelta(days=1)
-
+'''
             # SQL запит для пошуку твітів із криптовалютними хештегами
             query = """
-                SELECT content FROM tweets_raw 
+                '''SELECT content FROM tweets_raw 
                 WHERE created_at >= :since_date
                 AND (
                     """ + " OR ".join([f"content ILIKE '%{tag}%'" for tag in crypto_base_tags]) + """
-                )
+                )'''
             """
-
+'''
             rows = self.db_manager.fetch_all(query=query, values={'since_date': since_date})
 
             if not rows:
@@ -488,7 +488,6 @@ class TwitterScraper:
             return []
 
     def get_user_influence(self, username: str) -> Dict:
-        """Асинхронний аналіз впливовості користувача"""
 
         if not username:
             self.logger.error("Не вказано ім'я користувача")
@@ -682,7 +681,6 @@ class TwitterScraper:
             return {}
 
     def _process_influencer(self, username: str, days_back: int) -> Tuple[str, List[Dict]]:
-        """Допоміжний метод для асинхронної обробки даних інфлюенсера"""
         self.logger.info(f"Аналіз активності інфлюенсера @{username}")
 
         # Отримання твітів інфлюенсера
@@ -1546,3 +1544,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+"""
