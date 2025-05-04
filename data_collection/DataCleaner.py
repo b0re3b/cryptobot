@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
+import importlib.util
 
 
 class DataCleaner:
@@ -13,6 +14,52 @@ class DataCleaner:
         self.logger = logger
         self.db_manager = db_manager
 
+        # Перевірка доступності AnomalyDetector
+        self.anomaly_detector_available = self._check_module_available('data_collection.AnomalyDetector')
+        if not self.anomaly_detector_available:
+            self.logger.warning("Модуль AnomalyDetector недоступний. Перевірка цілісності даних буде пропущена.")
+
+    def _check_module_available(self, module_name):
+        """Перевіряє доступність модуля"""
+        try:
+            spec = importlib.util.find_spec(module_name)
+            return spec is not None
+        except (ImportError, AttributeError):
+            return False
+
+    def _ensure_datetime_index(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Забезпечує, що індекс DataFrame є DatetimeIndex"""
+        if data.empty:
+            return data
+
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс не є DatetimeIndex. Спроба конвертувати.")
+            try:
+                time_cols = [col for col in data.columns if
+                             any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
+                if time_cols:
+                    time_col = time_cols[0]
+                    data_copy = data.copy()
+                    data_copy[time_col] = pd.to_datetime(data_copy[time_col])
+                    data_copy.set_index(time_col, inplace=True)
+                    return data_copy
+                else:
+                    self.logger.error("Не знайдено колонку з часом, індекс залишається незмінним")
+                    return data
+            except Exception as e:
+                self.logger.error(f"Помилка при конвертуванні індексу: {str(e)}")
+                return data
+        return data
+
+    def _validate_data_integrity(self, data: pd.DataFrame) -> Dict:
+        """Виконує перевірку цілісності даних, якщо доступний модуль AnomalyDetector"""
+        if self.anomaly_detector_available:
+            try:
+                return AnomalyDetector.validate_data_integrity(data)
+            except Exception as e:
+                self.logger.error(f"Помилка при перевірці цілісності даних: {str(e)}")
+                return {}
+        return {}
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True, normalize: bool = True,
@@ -27,27 +74,18 @@ class DataCleaner:
         self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
 
         # Виконуємо перевірку цілісності даних перед очищенням
-        integrity_issues = AnomalyDetector.validate_data_integrity(data)  # Викликаємо метод з db_manager
+        integrity_issues = self._validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
             self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю даних")
 
-        result = data.copy()
-
-        if not isinstance(result.index, pd.DatetimeIndex):
-            try:
-                time_cols = [col for col in result.columns if
-                             any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
-                if time_cols:
-                    time_col = time_cols[0]
-                    self.logger.info(f"Конвертування колонки {time_col} в індекс часу")
-                    result[time_col] = pd.to_datetime(result[time_col])
-                    result.set_index(time_col, inplace=True)
-                else:
-                    self.logger.warning("Не знайдено колонку з часом, індекс залишається незмінним")
-            except Exception as e:
-                self.logger.error(f"Помилка при конвертуванні індексу: {str(e)}")
+        # Забезпечуємо правильний індекс часу
+        result = self._ensure_datetime_index(data)
+        if result is not data:  # Якщо _ensure_datetime_index повернув копію
+            data = result
+        else:
+            result = data.copy()
 
         if result.index.duplicated().any():
             dup_count = result.index.duplicated().sum()
@@ -166,7 +204,7 @@ class DataCleaner:
                     self.logger.warning("Не вдалося нормалізувати колонку об'єму")
 
         # Перевіряємо цілісність даних після очищення
-        clean_integrity_issues = AnomalyDetector.validate_data_integrity(result)
+        clean_integrity_issues = self._validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -182,8 +220,10 @@ class DataCleaner:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data
 
+        # Забезпечуємо правильний індекс часу
+        data = self._ensure_datetime_index(data)
 
-        integrity_issues = AnomalyDetector.validate_data_integrity(data)
+        integrity_issues = self._validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
@@ -276,8 +316,7 @@ class DataCleaner:
 
         self.logger.info(f"Заповнено {filled_values} відсутніх значень методом '{method}'")
 
-
-        clean_integrity_issues = AnomalyDetector.validate_data_integrity(result)
+        clean_integrity_issues = self._validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -390,13 +429,13 @@ class DataCleaner:
                     # Вибираємо лише ті колонки, які є в обох DataFrame
                     common_cols = data.columns.intersection(binance_df.columns)
                     if common_cols.empty:
-                        self.logger.warning("⚠️ Немає спільних колонок для об'єднання")
+                        self.logger.warning(" Немає спільних колонок для об'єднання")
                         continue
 
                     new_data = binance_df[common_cols]
                     new_data_frames.append(new_data)
 
-                    self.logger.info(f"✅ Отримано {len(new_data)} нових записів")
+                    self.logger.info(f" Отримано {len(new_data)} нових записів")
 
                 except Exception as e:
                     self.logger.error(f" Помилка при запиті Binance: {e}")
@@ -425,7 +464,7 @@ class DataCleaner:
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
-            return data
+            return data, None
 
         result = data.copy()
 
@@ -435,7 +474,7 @@ class DataCleaner:
             normalize_cols = [col for col in columns if col in numeric_cols]
             if not normalize_cols:
                 self.logger.warning("Жодна з указаних колонок не є числовою")
-                return result
+                return result, None
         else:
             normalize_cols = numeric_cols
 
@@ -444,10 +483,11 @@ class DataCleaner:
 
         if not normalize_cols:
             self.logger.warning("Немає числових колонок для нормалізації")
-            return result
+            return result, None
 
         self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
 
+        # Напряму обираємо дані без додаткової копії
         X = result[normalize_cols].values
 
         scaler = None
