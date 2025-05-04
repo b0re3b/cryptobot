@@ -100,14 +100,11 @@ class AnomalyDetector:
                 self.logger.info(f"Знайдено {outlier_count} аномалій у колонці {col} (zscore)")
                 all_outlier_indices.update(data.index[outliers])
 
+    # Приклад покращення для _detect_iqr_outliers
     def _detect_iqr_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
                              threshold: float, outliers_df: pd.DataFrame,
                              all_outlier_indices: set) -> None:
-        """
-        Допоміжний метод для виявлення аномалій за допомогою IQR.
-        """
         for col in numeric_cols:
-            # Пропускаємо колонки з NaN значеннями
             valid_data = data[col].dropna()
             if len(valid_data) < 4:
                 self.logger.warning(f"Недостатньо даних у колонці {col} для IQR методу")
@@ -118,9 +115,15 @@ class AnomalyDetector:
                 Q3 = valid_data.quantile(0.75)
                 IQR = Q3 - Q1
 
+                # Покращено перевірку крайнього випадку
+                if Q1 == Q3:
+                    self.logger.warning(f"Колонка {col} має однакові значення Q1 та Q3 (всі значення однакові)")
+                    continue
+
                 if IQR <= 0 or pd.isna(IQR):
                     self.logger.warning(f"Колонка {col} має нульовий або від'ємний IQR або NaN")
                     continue
+
 
                 lower_bound = Q1 - threshold * IQR
                 upper_bound = Q3 + threshold * IQR

@@ -39,7 +39,6 @@ class TwitterScraper:
         self.session = None
 
         # Підключення до бази даних
-        self.db_config = db_connection
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
 
@@ -135,13 +134,13 @@ class TwitterScraper:
                             "id": tweet.id,
                             "date": tweet.date,
                             "content": tweet.rawContent,
-                            "username": tweet.user.username,
+                            "author_username": tweet.user.username,
                             "displayname": tweet.user.displayname,
                             "followers": tweet.user.followersCount,
                             "retweets": tweet.retweetCount,
                             "likes": tweet.likeCount,
                             "query": query,
-                            "lang": tweet.lang,
+                            "language": tweet.lang,
                             "collected_at": datetime.now()
                         }
 
@@ -190,8 +189,8 @@ class TwitterScraper:
             # SQL запит для отримання кешованих твітів
             query_sql = """
                         SELECT * \
-                        FROM tweets
-                        WHERE date >= :start_date
+                        FROM twitter_query_cache
+                        WHERE created_at >= :start_date
                           AND (content LIKE :content \
                            OR query = :query) \
                         """
@@ -233,13 +232,16 @@ class TwitterScraper:
             for tweet in tweets:
                 # SQL запит для вставки твіту
                 insert_query = """
-                               INSERT INTO tweets_raw (id, date, content, username, displayname, followers, \
-                                                   retweets, likes, query, lang, collected_at) \
+                               INSERT INTO tweets_raw (id, author_id, content, author_username, created_at, \
+                                                       replies_count, hashtags, \
+                                                       retweets_count, likes_count, quotes_count, language, \
+                                                       mentioned_cryptos, tweet_url, collected_at) \
                                VALUES (:id, :date, :content, :username, :displayname, :followers, \
-                                       :retweets, :likes, :query, :lang, :collected_at) ON CONFLICT (id) DO NOTHING \
+                                       :retweets, :likes, :query, :lang, :collected_at) \
+                               ON CONFLICT (id) DO NOTHING \
                                """
 
-                tasks.append(self.db_manager.execute(insert_query, tweet))
+                tasks.append(self.db_manager.execute_query(insert_query, tweet))
 
             # Виконання всіх запитів одночасно
             await asyncio.gather(*tasks)
@@ -341,12 +343,12 @@ class TwitterScraper:
             # SQL запит для вставки результату аналізу
             query = """
                     INSERT INTO tweet_sentiments (tweet_id, sentiment, sentiment_score, confidence, \
-                                                  model_used, analysis_date) \
+                                                  model_used, analyzed_at) \
                     VALUES (:tweet_id, :sentiment, :sentiment_score, :confidence, \
                             :model_used, :analysis_date) ON CONFLICT (tweet_id) DO \
                     UPDATE \
                         SET
-                            sentiment = EXCLUDED.sentiment, sentiment_score = EXCLUDED.sentiment_score, confidence = EXCLUDED.confidence, model_used = EXCLUDED.model_used, analysis_date = EXCLUDED.analysis_date \
+                            sentiment = EXCLUDED.sentiment, sentiment_score = EXCLUDED.sentiment_score, confidence = EXCLUDED.confidence, model_used = EXCLUDED.model_used, analyzed_at = EXCLUDED.analyzed_at \
                     """
 
             values = {
@@ -355,10 +357,10 @@ class TwitterScraper:
                 'sentiment_score': sentiment_score,
                 'confidence': confidence,
                 'model_used': self.sentiment_model_name,
-                'analysis_date': tweet['sentiment_analysis_date']
+                'analyzed_at': tweet['sentiment_analysis_date']
             }
 
-            await self.db_manager.execute(query, values)
+            await self.db_manager.execute_query(query, values)
             return True
 
         except Exception as e:
@@ -438,8 +440,8 @@ class TwitterScraper:
 
             # SQL запит для пошуку твітів із криптовалютними хештегами
             query = """
-                SELECT content FROM tweets 
-                WHERE date >= :since_date
+                SELECT content FROM tweets_raw 
+                WHERE created_at >= :since_date
                 AND (
                     """ + " OR ".join([f"content ILIKE '%{tag}%'" for tag in crypto_base_tags]) + """
                 )
@@ -722,7 +724,7 @@ class TwitterScraper:
                     "sentiment": tweet.get("sentiment", "neutral"),
                     "sentiment_score": tweet.get("sentiment_score", 0.0)
                 }
-                tasks.append(self.db_manager.insert_influencer_tweet(tweet_data))
+                tasks.append(self.db_manager.insert_influencer_activity(tweet_data))
 
             # Очікуємо завершення всіх завдань зі збереження
             if tasks:
@@ -1413,7 +1415,7 @@ class TwitterScraper:
             self.logger.info("Отримання статистики помилок збору даних")
 
             # Отримання даних про помилки з бази даних (асинхронно)
-            error_data = await self.db_manager.get_scraping_errors_async()
+            error_data = await self.db_manager.get_scraping_errors()
 
             if error_data.empty:
                 self.logger.info("Помилок не знайдено")

@@ -966,7 +966,7 @@ class DatabaseManager:
         try:
             self.cursor.execute('''
                                 INSERT INTO twitter_query_cache
-                                    (query, search_params, cache_expires_at, results_count)
+                                    (query, search_params,content,cache_expires_at, results_count)
                                 VALUES (%s, %s, %s, %s) ON CONFLICT (query, search_params) DO
                                 UPDATE SET
                                     cache_expires_at = EXCLUDED.cache_expires_at,
@@ -975,6 +975,7 @@ class DatabaseManager:
                                 ''', (
                                     cache_data['query'],
                                     json.dumps(cache_data['search_params']),
+                                    json.dumps(cache_data['content']),
                                     cache_data['cache_expires_at'],
                                     cache_data['results_count']
                                 ))

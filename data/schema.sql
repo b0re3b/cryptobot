@@ -290,6 +290,7 @@ CREATE TABLE IF NOT EXISTS twitter_query_cache (
     search_params JSONB NOT NULL, -- параметри пошуку в форматі JSON
     cache_expires_at TIMESTAMP NOT NULL,
     results_count INTEGER NOT NULL,
+    content JSONB NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (query, search_params)
 );
