@@ -10,69 +10,6 @@ class DataStorageManager:
         self.db_manager = db_manager
         self.logger = logger
 
-    def save_klines_to_db(self, df: pd.DataFrame, symbol: str, timeframe: str):
-        """Зберігає дані свічок у базу даних"""
-        if df.empty:
-            self.logger.warning("Спроба зберегти порожні свічки")
-            return
-
-        def convert_numpy_types(obj):
-            if isinstance(obj, dict):
-                return {k: convert_numpy_types(v) for k, v in obj.items()}
-            elif isinstance(obj, (np.generic, np.bool_)):
-                return obj.item()
-            else:
-                return obj
-
-        # Додано перевірку на мінімальну дату
-        MIN_VALID_DATE = datetime(2017, 1, 1)
-
-        for _, row in df.iterrows():
-            try:
-                open_time = row.name
-                if isinstance(open_time, (int, float)):
-                    # Додано перевірку на валідність timestamp перед конвертацією
-                    if open_time > 0:
-                        open_time = pd.to_datetime(open_time, unit='ms')
-                    else:
-                        continue  # Пропускаємо невалідні timestamp
-
-                # Пропускаємо дати до 2000 року
-                if open_time < MIN_VALID_DATE:
-                    continue
-
-                close_time = row.get('close_time', open_time)
-                if isinstance(close_time, (int, float)):
-                    if close_time > 0:
-                        close_time = pd.to_datetime(close_time, unit='ms')
-                    else:
-                        close_time = open_time
-
-                if close_time < MIN_VALID_DATE:
-                    close_time = open_time
-
-                kline_data = {
-                    'timeframe': timeframe,
-                    'open_time': open_time,
-                    'open': float(row['open']),  # Явне перетворення на float для безпеки
-                    'high': float(row['high']),
-                    'low': float(row['low']),
-                    'close': float(row['close']),
-                    'volume': float(row.get('volume', 0)),
-                    'close_time': close_time,
-                    'quote_asset_volume': float(row.get('quote_asset_volume', 0)),
-                    'number_of_trades': int(row.get('number_of_trades', 0)),
-                    'taker_buy_base_volume': float(row.get('taker_buy_base_volume', 0)),
-                    'taker_buy_quote_volume': float(row.get('taker_buy_quote_volume', 0)),
-                    'is_closed': bool(row.get('is_closed', True)),
-                }
-
-                kline_data = convert_numpy_types(kline_data)
-                self.db_manager.insert_kline(symbol, kline_data)
-
-            except Exception as e:
-                self.logger.error(f"❌ Помилка при збереженні свічки для {symbol}: {e}")
-
     def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, timeframe: str):
         """Зберігає оброблені дані свічок у базу даних"""
         if df.empty:
@@ -119,7 +56,7 @@ class DataStorageManager:
                 self.db_manager.insert_kline_processed(symbol, processed_data)
 
             except Exception as e:
-                self.logger.error(f"❌ Помилка при збереженні обробленої свічки для {symbol}: {e}")
+                self.logger.error(f" Помилка при збереженні обробленої свічки для {symbol}: {e}")
 
     def save_volume_profile_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
         """Зберігає профіль об'єму в базу даних"""
@@ -240,32 +177,7 @@ class DataStorageManager:
             self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
             raise
 
-    def prepare_data_for_db(self, processed_data: pd.DataFrame) -> List[Dict]:
-        """Перетворює оброблені дані ордербука у формат для збереження в БД"""
-        result = []
 
-        for timestamp, row in processed_data.iterrows():
-            try:
-                db_entry = {
-                    'timestamp': timestamp,
-                    'spread': float(row.get('spread')) if pd.notna(row.get('spread')) else None,
-                    'imbalance': float(row.get('volume_imbalance')) if pd.notna(row.get('volume_imbalance')) else None,
-                    'bid_volume': float(row.get('bid_qty')) if pd.notna(row.get('bid_qty')) else None,
-                    'ask_volume': float(row.get('ask_qty')) if pd.notna(row.get('ask_qty')) else None,
-                    'average_bid_price': float(row.get('bid_price')) if pd.notna(row.get('bid_price')) else None,
-                    'average_ask_price': float(row.get('ask_price')) if pd.notna(row.get('ask_price')) else None,
-                    'volatility_estimate': float(row.get('volatility')) if pd.notna(row.get('volatility')) else None,
-                    'is_anomaly': bool(row.get('is_anomaly', False))
-                }
-
-                # Конвертуємо numpy типи
-                db_entry = {k: v.item() if isinstance(v, np.generic) else v for k, v in db_entry.items()}
-
-                result.append(db_entry)
-            except Exception as e:
-                self.logger.error(f"Помилка при підготовці даних ордербука: {e}")
-
-        return result
 
     def save_processed_data(self, data: pd.DataFrame, table_name: str, db_connection=None) -> str:
 

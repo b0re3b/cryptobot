@@ -855,13 +855,7 @@ CREATE TABLE IF NOT EXISTS btc_lstm_data (
     day_of_month_sin NUMERIC,
     day_of_month_cos NUMERIC,
 
-    -- Technical indicators (scaled)
-    ma_5_scaled NUMERIC,
-    ma_20_scaled NUMERIC,
-    rsi_14_scaled NUMERIC,
-    macd_scaled NUMERIC,
-    bollinger_upper_scaled NUMERIC,
-    bollinger_lower_scaled NUMERIC,
+
 
     -- Target values (future prices for different horizons)
     target_close_1 NUMERIC, -- Next timeframe close
@@ -902,13 +896,6 @@ CREATE TABLE IF NOT EXISTS eth_lstm_data (
     day_of_month_sin NUMERIC,
     day_of_month_cos NUMERIC,
 
-    -- Technical indicators (scaled)
-    ma_5_scaled NUMERIC,
-    ma_20_scaled NUMERIC,
-    rsi_14_scaled NUMERIC,
-    macd_scaled NUMERIC,
-    bollinger_upper_scaled NUMERIC,
-    bollinger_lower_scaled NUMERIC,
 
 
     -- Target values (future prices for different horizons)
@@ -948,13 +935,7 @@ CREATE TABLE IF NOT EXISTS sol_lstm_data (
     day_of_month_sin NUMERIC,
     day_of_month_cos NUMERIC,
 
-    -- Technical indicators (scaled)
-    ma_5_scaled NUMERIC,
-    ma_20_scaled NUMERIC,
-    rsi_14_scaled NUMERIC,
-    macd_scaled NUMERIC,
-    bollinger_upper_scaled NUMERIC,
-    bollinger_lower_scaled NUMERIC,
+
 
     -- Target values (future prices for different horizons)
     target_close_1 NUMERIC, -- Next timeframe close

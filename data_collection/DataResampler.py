@@ -6,7 +6,7 @@ from typing import Dict, Tuple, List, Optional, Union
 import statsmodels.api as sm
 
 
-class EnhancedDataResampler:
+class DataResampler:
     def __init__(self, logger, db_manager):
         self.logger = logger
         self.db_manager = db_manager
@@ -159,55 +159,6 @@ class EnhancedDataResampler:
 
         return df
 
-    def calculate_technical_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Розрахунок технічних індикаторів для аналізу ринку."""
-        df = data.copy()
-
-        # Moving Averages
-        df['ma_5'] = df['close'].rolling(window=5).mean()
-        df['ma_20'] = df['close'].rolling(window=20).mean()
-        df['ma_50'] = df['close'].rolling(window=50).mean()
-
-        # Relative Strength Index (RSI)
-        delta = df['close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-
-        avg_gain = gain.rolling(window=14).mean()
-        avg_loss = loss.rolling(window=14).mean()
-
-        rs = avg_gain / avg_loss
-        df['rsi_14'] = 100 - (100 / (1 + rs))
-
-        # MACD
-        ema_12 = df['close'].ewm(span=12, adjust=False).mean()
-        ema_26 = df['close'].ewm(span=26, adjust=False).mean()
-        df['macd'] = ema_12 - ema_26
-        df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-        df['macd_histogram'] = df['macd'] - df['macd_signal']
-
-        # Bollinger Bands
-        df['bb_middle'] = df['close'].rolling(window=20).mean()
-        std_dev = df['close'].rolling(window=20).std()
-        df['bb_upper'] = df['bb_middle'] + (std_dev * 2)
-        df['bb_lower'] = df['bb_middle'] - (std_dev * 2)
-
-        # Volatility
-        df['volatility'] = df['close'].rolling(window=20).std() / df['close'].rolling(window=20).mean() * 100
-
-        # Trend (positive values for uptrend, negative for downtrend)
-        df['trend'] = df['close'].diff(5).rolling(window=5).mean()
-
-        # Z-scores
-        df['price_zscore'] = (df['close'] - df['close'].rolling(window=50).mean()) / df['close'].rolling(
-            window=50).std()
-        df['volume_zscore'] = (df['volume'] - df['volume'].rolling(window=50).mean()) / df['volume'].rolling(
-            window=50).std()
-
-        # Detect anomalies based on z-scores
-        df['is_anomaly'] = (abs(df['price_zscore']) > 3) | (abs(df['volume_zscore']) > 3)
-
-        return df
 
     def make_stationary(self, data: pd.DataFrame, columns=None, method='diff',
                         order=1, seasonal_order=None) -> pd.DataFrame:
@@ -409,16 +360,7 @@ class EnhancedDataResampler:
 
     def prepare_lstm_data(self, data: pd.DataFrame, asset: str, timeframe: str,
                           sequence_length: int = 60, forecast_horizons: List[int] = [1, 5, 10]) -> pd.DataFrame:
-        """
-        Підготовка даних для LSTM/GRU моделей і запис в базу.
 
-        Параметри:
-        - data: вихідні дані
-        - asset: назва активу (btc, eth, sol)
-        - timeframe: часовий інтервал
-        - sequence_length: довжина послідовності для прогнозування
-        - forecast_horizons: горизонти прогнозування (кількість кроків вперед)
-        """
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для підготовки LSTM даних")
             return pd.DataFrame()
