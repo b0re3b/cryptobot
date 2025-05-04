@@ -132,7 +132,6 @@ class AnomalyDetector:
                 self.logger.info(f"Знайдено {outlier_count} аномалій у колонці {col} (zscore)")
                 all_outlier_indices.update(data.index[outliers])
 
-    # Приклад покращення для _detect_iqr_outliers
     def _detect_iqr_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
                              threshold: float, outliers_df: pd.DataFrame,
                              all_outlier_indices: set) -> None:

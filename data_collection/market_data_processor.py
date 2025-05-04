@@ -3,23 +3,27 @@ import pandas as pd
 import numpy as np
 import logging
 from typing import List, Dict, Optional, Tuple
+
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataCleaner import DataCleaner
 from data_collection.DataResampler import DataResampler
 from data_collection.DataStorageManager import DataStorageManager
-from utils.config import db_connection
 from data.db import DatabaseManager
 
 
 class MarketDataProcessor:
 
+
     def __init__(self, log_level=logging.INFO):
-        self.DataCleaner = DataCleaner()
-        self.DataResampler = DataResampler()
-        self.DataStorageManager = DataStorageManager()
-        self.AnomalyDetector = AnomalyDetector()
+
+
+        self.data_cleaner = DataCleaner()
+        self.data_resampler = DataResampler()
+        self.data_storage = DataStorageManager()
+        self.anomaly_detector = AnomalyDetector()
+        self.db_manager = DatabaseManager()
+
         self.log_level = log_level
-        self.db_connection = db_connection
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
         logging.basicConfig(level=self.log_level)
@@ -29,7 +33,6 @@ class MarketDataProcessor:
 
         self.filtered_data = None
         self.orderbook_statistics = None
-
 
     def align_time_series(self, data_list: List[pd.DataFrame],
                           reference_index: int = 0) -> List[pd.DataFrame]:
@@ -323,27 +326,14 @@ class MarketDataProcessor:
 
         return result
 
+
     def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """Видаляє рядки з однаковими часовими мітками."""
-        if data.empty:
-            return data
 
-        if not isinstance(data.index, pd.DatetimeIndex):
-            self.logger.warning("Індекс не є DatetimeIndex. Неможливо видалити дублікати часових міток.")
-            return data
-
-        size_before = len(data)
-        data = data[~data.index.duplicated(keep='last')]
-        size_after = len(data)
-
-        if size_before > size_after:
-            self.logger.info(f"Видалено {size_before - size_after} дублікатів часових міток")
-
-        return data
+        return self.data_cleaner.remove_duplicate_timestamps(data)
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True, **kwargs) -> pd.DataFrame:
-        """Очищує дані від викидів та заповнює пропуски."""
+
         if data.empty:
             return data
 
@@ -351,42 +341,29 @@ class MarketDataProcessor:
 
         # Видалення викидів
         if remove_outliers:
-            result = self.DataCleaner.remove_outliers(result)
+            # Use the specialized class method
+            result, _ = self.anomaly_detector.detect_outliers(result)
 
         # Заповнення пропусків
         if fill_missing:
-            result = self.DataCleaner.fill_missing_values(result)
+            result = self.data_cleaner.handle_missing_values(result)
 
         return result
 
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               fetch_missing: bool = False, symbol: Optional[str] = None,
                               interval: Optional[str] = None, **kwargs) -> pd.DataFrame:
-        """Обробляє відсутні значення з можливістю підвантаження даних."""
-        if data.empty:
-            return data
 
-        result = data.copy()
-
-        # Якщо потрібно підвантажити дані з зовнішнього джерела
-        if fetch_missing and symbol and interval:
-            result = self.data_cleaner.handle_missing_values(
-                result,
-                symbol=symbol,
-                interval=interval,
-                fetch_missing=True
-            )
-        else:
-            # Інтерполяція або інша обробка
-            result = self.data_cleaner.fill_missing_values(result, method=method)
-
-        return result
+        return self.data_cleaner.handle_missing_values(
+            data,
+            method=method,
+            fetch_missing=fetch_missing,
+            symbol=symbol,
+            interval=interval
+        )
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
                        exclude_columns: List[str] = None, **kwargs) -> Tuple[pd.DataFrame, Dict]:
-        """Нормалізує дані за допомогою вказаного методу."""
-        if data.empty:
-            return data, None
 
         return self.data_cleaner.normalize_data(
             data,
@@ -396,15 +373,76 @@ class MarketDataProcessor:
 
     def detect_outliers(self, data: pd.DataFrame, method: str = 'iqr',
                         threshold: float = 1.5, **kwargs) -> Tuple[pd.DataFrame, Dict]:
-        """Виявляє аномалії у даних."""
-        if data.empty:
-            return data, {}
 
-        return self.AnomalyDetector.detect_outliers(
+        return self.anomaly_detector.detect_outliers(
             data,
             method=method,
             threshold=threshold
         )
+
+    def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
+
+        return self.data_resampler.resample_data(data, target_interval=target_interval)
+
+    def make_stationary(self, data: pd.DataFrame, method: str = 'diff') -> pd.DataFrame:
+
+        return self.data_resampler.make_stationary(data, method=method)
+
+    def prepare_arima_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> pd.DataFrame:
+
+        return self.data_resampler.prepare_arima_data(data, symbol=symbol, **kwargs)
+
+    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> Tuple[np.ndarray, np.ndarray]:
+
+        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, **kwargs)
+
+    def add_time_features(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
+
+        return self.data_cleaner.add_time_features(data, tz=tz)
+
+    def filter_by_time_range(self, data: pd.DataFrame, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+
+        return self.data_cleaner.filter_by_time_range(data, start_date=start_date, end_date=end_date)
+
+    def validate_data_integrity(self, data: pd.DataFrame) -> Tuple[bool, Dict]:
+
+        return self.anomaly_detector.validate_data_integrity(data)
+
+
+
+    def load_data(self, data_source: str, symbol: str, timeframe: str, data_type: str = 'candles',
+                  **kwargs) -> pd.DataFrame:
+
+        return self.data_storage.load_data(
+            data_source=data_source,
+            symbol=symbol,
+            timeframe=timeframe,
+            data_type=data_type,
+            **kwargs
+        )
+
+
+
+
+    def save_volume_profile_to_db(self, data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
+
+        return self.data_storage.save_volume_profile_to_db(data, symbol, timeframe)
+
+    def save_lstm_sequence(self, data: pd.DataFrame, symbol: str, **kwargs) -> bool:
+
+        return self.data_storage.save_lstm_sequence(data, symbol, **kwargs)
+
+    def save_arima_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> bool:
+
+        return self.data_storage.save_arima_data(data, symbol, **kwargs)
+
+    def load_lstm_sequence(self, symbol: str, **kwargs) -> pd.DataFrame:
+
+        return self.data_storage.load_lstm_sequence(symbol, **kwargs)
+
+    def load_arima_data(self, symbol: str, **kwargs) -> pd.DataFrame:
+
+        return self.data_storage.load_arima_data(symbol, **kwargs)
 
     def preprocess_pipeline(self, data: pd.DataFrame,
                             steps: Optional[List[Dict]] = None,
@@ -445,11 +483,8 @@ class MarketDataProcessor:
                     step_params['symbol'] = symbol
                     step_params['interval'] = interval
 
-                if step_name == 'normalize_data':
+                if step_name in ['normalize_data', 'detect_outliers', 'validate_data_integrity']:
                     result, _ = method(result, **step_params)
-                elif step_name == 'detect_outliers':
-                    outliers_df, _ = method(result, **step_params)
-                    self.logger.info(f"Виявлено аномалії, але дані не змінено")
                 else:
                     result = method(result, **step_params)
 
@@ -469,15 +504,15 @@ class MarketDataProcessor:
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['BTC', 'ETH', 'SOL']
-    TIMEFRAME = ['5m', '1h']
+    TIMEFRAMES = ['5m', '1h']
     processor = MarketDataProcessor()
 
     for symbol in SYMBOLS:
-        for interval in TIMEFRAME:
-            print(f"\n Обробка {symbol} ({interval})...")
+        for timeframe in TIMEFRAMES:
+            print(f"\n Обробка {symbol} ({timeframe})...")
 
             # 1. Завантаження даних з БД
-            raw_data = DataStorageManager.load_data(
+            raw_data = processor.load_data(
                 data_source='database',
                 symbol=symbol,
                 timeframe=timeframe,
@@ -485,50 +520,76 @@ def main():
             )
 
             if raw_data.empty:
-                print(f" Дані не знайдено для {symbol} {interval}")
+                print(f" Дані не знайдено для {symbol} {timeframe}")
                 continue
 
             # 2. Обробка відсутніх значень + підтягування з Binance (якщо треба)
-            filled_data = DataCleaner.handle_missing_values(
+            filled_data = processor.handle_missing_values(
                 raw_data,
                 symbol=symbol,
-                timeframe=interval,
+                interval=timeframe,
                 fetch_missing=True
             )
 
-            # 3. Збереження сирих даних
-            DataStorageManager.save_klines_to_db(filled_data, symbol, timefarme)
-            print(f" Сирі свічки ({timeframe}) збережено")
+
 
             # 4. Попередня обробка (пайплайн)
-            processed = processor.preprocess_pipeline(filled_data, symbol=symbol, interval=interval)
+            processed = processor.preprocess_pipeline(filled_data, symbol=symbol, interval=timeframe)
 
             if processed.empty:
-                print(f" Обробка не дала результатів для {symbol} {interval}")
+                print(f" Обробка не дала результатів для {symbol} {timeframe}")
                 continue
 
-            processed = DataCleaner.add_time_features(processed, tz=EU_TIMEZONE)
-            DataStorageManager.save_processed_klines_to_db(processed, symbol, timeframe)
+            processed = processor.add_time_features(processed, tz=EU_TIMEZONE)
             print(f" Оброблені свічки ({timeframe}) збережено")
 
-            # 5. Ресемплінг
-            if interval == '1m':
-                resampled_30m = DataResampler.resample_data(processed, target_interval='30m')
-                resampled_30m = DataCleaner.add_time_features(resampled_30m, tz=EU_TIMEZONE)
-                DataStorageManager.save_processed_klines_to_db(resampled_30m, symbol, '30m')
-                print(f" 30-хвилинні свічки збережено")
+            # 5. Ресемплінг і збереження даних для моделей
+            if timeframe == '1m':
+                resampled_30m = processor.resample_data(processed, target_interval='30m')
+                resampled_30m = processor.add_time_features(resampled_30m, tz=EU_TIMEZONE)
 
-            if interval == '1h':
-                resampled_1d = DataResampler.resample_data(processed, target_interval='1d')
-                resampled_1d = DataCleaner.add_time_features(resampled_1d, tz=EU_TIMEZONE)
-                DataStorageManager.save_processed_klines_to_db(resampled_1d, symbol, '1d')
-                print(f" Денні свічки збережено")
+                # Збереження 30-хвилинних даних
+
+                # Збереження для LSTM та ARIMA
+                processor.save_lstm_sequence(resampled_30m, symbol, timeframe='30m')
+                processor.save_arima_data(resampled_30m, symbol, timeframe='30m')
+                print(f" 30-хвилинні дані збережено для LSTM та ARIMA")
+
+            if timeframe == '1h':
+                # Ресемплінг до 4h
+                resampled_4h = processor.resample_data(processed, target_interval='4h')
+                resampled_4h = processor.add_time_features(resampled_4h, tz=EU_TIMEZONE)
+
+                # Збереження 4-годинних даних
+
+
+                # Збереження для LSTM та ARIMA
+                processor.save_lstm_sequence(resampled_4h, symbol, timeframe='4h')
+                processor.save_arima_data(resampled_4h, symbol, timeframe='4h')
+                print(f" 4-годинні дані збережено для LSTM та ARIMA")
+
+                # Ресемплінг до 1d
+                resampled_1d = processor.resample_data(processed, target_interval='1d')
+                resampled_1d = processor.add_time_features(resampled_1d, tz=EU_TIMEZONE)
+
+                # Збереження денних даних
+
+
+                # Збереження для LSTM та ARIMA
+                processor.save_lstm_sequence(resampled_1d, symbol, timeframe='1d')
+                processor.save_arima_data(resampled_1d, symbol, timeframe='1d')
+                print(f" Денні дані збережено для LSTM та ARIMA")
 
                 # 6. Профіль об'єму
                 volume_profile = processor.aggregate_volume_profile(resampled_1d, bins=12, time_period='1W')
                 if not volume_profile.empty:
-                    DataStorageManager.save_volume_profile_to_db(volume_profile, symbol, '1d')
+                    processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
                     print(f" Профіль об'єму збережено")
+
+            # Збереження оригінального таймфрейму для LSTM та ARIMA
+            processor.save_lstm_sequence(processed, symbol, timeframe=timeframe)
+            processor.save_arima_data(processed, symbol, timeframe=timeframe)
+            print(f" Дані {timeframe} збережено для LSTM та ARIMA")
 
 
 if __name__ == "__main__":

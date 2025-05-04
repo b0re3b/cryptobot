@@ -1,4 +1,3 @@
-import os
 from typing import Optional, Union, Dict, List
 import pandas as pd
 import numpy as np
@@ -10,6 +9,10 @@ class DataStorageManager:
         self.db_manager = db_manager
         self.logger = logger
 
+        # Визначення списку підтримуваних криптовалют та моделей
+        self.supported_cryptos = ['BTC', 'ETH', 'SOL']
+        self.supported_models = ['LSTM', 'ARIMA']
+    ''' 
     def save_processed_klines_to_db(self, df: pd.DataFrame, symbol: str, timeframe: str):
         """Зберігає оброблені дані свічок у базу даних"""
         if df.empty:
@@ -57,7 +60,7 @@ class DataStorageManager:
 
             except Exception as e:
                 self.logger.error(f" Помилка при збереженні обробленої свічки для {symbol}: {e}")
-
+    '''
     def save_volume_profile_to_db(self, df: pd.DataFrame, symbol: str, interval: str):
         """Зберігає профіль об'єму в базу даних"""
         if df.empty:
@@ -83,36 +86,234 @@ class DataStorageManager:
             except Exception as e:
                 self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
 
-    def _load_from_database(self, symbol: str, timeframe: str,
-                            start_date: Optional[datetime] = None,
-                            end_date: Optional[datetime] = None,
-                            data_type: str = 'candles') -> pd.DataFrame:
-        """Завантажує дані з бази даних"""
-        self.logger.info(f"Завантаження {data_type} даних з бази даних для {symbol} {timeframe}")
+    # Нові методи для збереження даних моделей для кожної криптовалюти
+    def save_lstm_sequence(self, df: pd.DataFrame, symbol: str):
+        """Зберігає послідовності LSTM для конкретної криптовалюти"""
+        if df.empty:
+            self.logger.warning(f"Спроба зберегти порожні LSTM послідовності для {symbol}")
+            return False
+
+        # Конвертуємо символ до верхнього регістру для стандартизації
+        symbol = symbol.upper()
+
+        if symbol not in self.supported_cryptos:
+            self.logger.error(f"Непідтримувана криптовалюта: {symbol}")
+            return False
+
+        table_name = f"{symbol.lower()}_lstm_sequence"
 
         try:
-            data = None
+            # Конвертуємо numpy типи перед збереженням
+            for col in df.select_dtypes(include=[np.number]).columns:
+                df[col] = df[col].astype(float)
+
+            # Підготовка даних для збереження
+            processed_data = []
+            for idx, row in df.iterrows():
+                record = {'timestamp': idx if not isinstance(idx, (int, float)) else pd.to_datetime(idx, unit='ms')}
+                for col, val in row.items():
+                    # Перетворюємо numpy типи
+                    if isinstance(val, np.generic):
+                        record[col] = val.item()
+                    else:
+                        record[col] = val
+                processed_data.append(record)
+
+            # Збереження через менеджер БД
+            self.db_manager.insert_model_data(table_name, processed_data)
+            self.logger.info(f"LSTM послідовності для {symbol} збережено в таблицю {table_name}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні LSTM послідовностей для {symbol}: {str(e)}")
+            return False
+
+    def save_arima_data(self, df: pd.DataFrame, symbol: str):
+        """Зберігає дані ARIMA для конкретної криптовалюти"""
+        if df.empty:
+            self.logger.warning(f"Спроба зберегти порожні ARIMA дані для {symbol}")
+            return False
+
+        # Конвертуємо символ до верхнього регістру для стандартизації
+        symbol = symbol.upper()
+
+        if symbol not in self.supported_cryptos:
+            self.logger.error(f"Непідтримувана криптовалюта: {symbol}")
+            return False
+
+        table_name = f"{symbol.lower()}_arima_data"
+
+        try:
+            # Конвертуємо numpy типи перед збереженням
+            for col in df.select_dtypes(include=[np.number]).columns:
+                df[col] = df[col].astype(float)
+
+            # Підготовка даних для збереження
+            processed_data = []
+            for idx, row in df.iterrows():
+                record = {'timestamp': idx if not isinstance(idx, (int, float)) else pd.to_datetime(idx, unit='ms')}
+                for col, val in row.items():
+                    # Перетворюємо numpy типи
+                    if isinstance(val, np.generic):
+                        record[col] = val.item()
+                    else:
+                        record[col] = val
+                processed_data.append(record)
+
+            # Збереження через менеджер БД
+            self.db_manager.insert_model_data(table_name, processed_data)
+            self.logger.info(f"ARIMA дані для {symbol} збережено в таблицю {table_name}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні ARIMA даних для {symbol}: {str(e)}")
+            return False
+
+    def save_btc_lstm_sequence(self, df: pd.DataFrame):
+        """Зберігає послідовності LSTM для Bitcoin"""
+        return self.save_lstm_sequence(df, 'BTC')
+
+    def save_eth_lstm_sequence(self, df: pd.DataFrame):
+        """Зберігає послідовності LSTM для Ethereum"""
+        return self.save_lstm_sequence(df, 'ETH')
+
+    def save_sol_lstm_sequence(self, df: pd.DataFrame):
+        """Зберігає послідовності LSTM для Solana"""
+        return self.save_lstm_sequence(df, 'SOL')
+
+    def save_btc_arima_data(self, df: pd.DataFrame):
+        """Зберігає дані ARIMA для Bitcoin"""
+        return self.save_arima_data(df, 'BTC')
+
+    def save_eth_arima_data(self, df: pd.DataFrame):
+        """Зберігає дані ARIMA для Ethereum"""
+        return self.save_arima_data(df, 'ETH')
+
+    def save_sol_arima_data(self, df: pd.DataFrame):
+        """Зберігає дані ARIMA для Solana"""
+        return self.save_arima_data(df, 'SOL')
+
+    # Аналогічні методи для завантаження даних моделей
+    def load_lstm_sequence(self, symbol: str) -> pd.DataFrame:
+        """Завантажує послідовності LSTM для конкретної криптовалюти"""
+        symbol = symbol.upper()
+
+        if symbol not in self.supported_cryptos:
+            self.logger.error(f"Непідтримувана криптовалюта: {symbol}")
+            return pd.DataFrame()
+
+        table_name = f"{symbol.lower()}_lstm_sequence"
+
+        try:
+            self.logger.info(f"Завантаження LSTM послідовностей для {symbol} з таблиці {table_name}")
+            data = self.db_manager.get_model_data(table_name)
+
+            if data is None:
+                self.logger.warning(f"Не знайдено LSTM послідовності для {symbol}")
+                return pd.DataFrame()
+
+            if not isinstance(data, pd.DataFrame):
+                data = pd.DataFrame(data)
+
+            # Встановлюємо часовий індекс
+            if 'timestamp' in data.columns:
+                data['timestamp'] = pd.to_datetime(data['timestamp'])
+                data.set_index('timestamp', inplace=True)
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні LSTM послідовностей для {symbol}: {str(e)}")
+            return pd.DataFrame()
+
+    def load_arima_data(self, symbol: str) -> pd.DataFrame:
+        """Завантажує дані ARIMA для конкретної криптовалюти"""
+        symbol = symbol.upper()
+
+        if symbol not in self.supported_cryptos:
+            self.logger.error(f"Непідтримувана криптовалюта: {symbol}")
+            return pd.DataFrame()
+
+        table_name = f"{symbol.lower()}_arima_data"
+
+        try:
+            self.logger.info(f"Завантаження ARIMA даних для {symbol} з таблиці {table_name}")
+            data = self.db_manager.get_model_data(table_name)
+
+            if data is None:
+                self.logger.warning(f"Не знайдено ARIMA дані для {symbol}")
+                return pd.DataFrame()
+
+            if not isinstance(data, pd.DataFrame):
+                data = pd.DataFrame(data)
+
+            # Встановлюємо часовий індекс
+            if 'timestamp' in data.columns:
+                data['timestamp'] = pd.to_datetime(data['timestamp'])
+                data.set_index('timestamp', inplace=True)
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні ARIMA даних для {symbol}: {str(e)}")
+            return pd.DataFrame()
+
+    # Спеціалізовані методи для завантаження даних для кожної криптовалюти і моделі
+    def load_btc_lstm_sequence(self) -> pd.DataFrame:
+        """Завантажує послідовності LSTM для Bitcoin"""
+        return self.load_lstm_sequence('BTC')
+
+    def load_eth_lstm_sequence(self) -> pd.DataFrame:
+        """Завантажує послідовності LSTM для Ethereum"""
+        return self.load_lstm_sequence('ETH')
+
+    def load_sol_lstm_sequence(self) -> pd.DataFrame:
+        """Завантажує послідовності LSTM для Solana"""
+        return self.load_lstm_sequence('SOL')
+
+    def load_btc_arima_data(self) -> pd.DataFrame:
+        """Завантажує дані ARIMA для Bitcoin"""
+        return self.load_arima_data('BTC')
+
+    def load_eth_arima_data(self) -> pd.DataFrame:
+        """Завантажує дані ARIMA для Ethereum"""
+        return self.load_arima_data('ETH')
+
+    def load_sol_arima_data(self) -> pd.DataFrame:
+        """Завантажує дані ARIMA для Solana"""
+        return self.load_arima_data('SOL')
+
+    def load_data(self, data_source: str, symbol: str, timeframe: str,
+                  start_date: Optional[Union[str, datetime]] = None,
+                  end_date: Optional[Union[str, datetime]] = None,
+                  data_type: str = 'candles') -> pd.DataFrame:
+        """Завантажує дані з вказаного джерела"""
+        start_date_dt = pd.to_datetime(start_date) if start_date else None
+        end_date_dt = pd.to_datetime(end_date) if end_date else None
+
+        self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {timeframe}, {data_type}")
+
+        try:
+            if data_source != 'database':
+                raise ValueError(f"Непідтримуване джерело даних: {data_source}")
+
+            # Отримання даних з бази даних
             if data_type == 'candles':
                 data = self.db_manager.get_klines(
                     symbol=symbol,
                     timeframe=timeframe,
-                    start_time=start_date,
-                    end_time=end_date
+                    start_time=start_date_dt,
+                    end_time=end_date_dt
                 )
-
             elif data_type == 'processed_candles':
                 data = self.db_manager.get_processed_klines(
                     symbol=symbol,
                     timeframe=timeframe,
-                    start_time=start_date,
-                    end_time=end_date
+                    start_time=start_date_dt,
+                    end_time=end_date_dt
                 )
             elif data_type == 'volume_profile':
                 data = self.db_manager.get_volume_profile(
                     symbol=symbol,
                     timeframe=timeframe,
-                    start_time=start_date,
-                    end_time=end_date
+                    start_time=start_date_dt,
+                    end_time=end_date_dt
                 )
             else:
                 raise ValueError(f"Непідтримуваний тип даних: {data_type}")
@@ -142,141 +343,5 @@ class DataStorageManager:
             return data
 
         except Exception as e:
-            self.logger.error(f"Помилка при завантаженні з бази даних: {str(e)}")
-            raise
-
-    def load_data(self, data_source: str, symbol: str, timeframe: str,
-                  start_date: Optional[Union[str, datetime]] = None,
-                  end_date: Optional[Union[str, datetime]] = None,
-                  data_type: str = 'candles') -> pd.DataFrame:
-        """Завантажує дані з вказаного джерела"""
-        start_date_dt = pd.to_datetime(start_date) if start_date else None
-        end_date_dt = pd.to_datetime(end_date) if end_date else None
-
-        self.logger.info(f"Завантаження даних з {data_source}: {symbol}, {timeframe}, {data_type}")
-
-        try:
-            if data_source == 'database':
-                data = self._load_from_database(
-                    symbol,
-                    timeframe,
-                    start_date_dt,
-                    end_date_dt,
-                    data_type
-                )
-            else:
-                raise ValueError(f"Непідтримуване джерело даних: {data_source}")
-
-            if data is None or data.empty:
-                self.logger.warning(f"Отримано порожній набір даних від {data_source}")
-                return pd.DataFrame()
-
-            return data
-
-        except Exception as e:
             self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
             raise
-
-
-
-    def save_processed_data(self, data: pd.DataFrame, table_name: str, db_connection=None) -> str:
-
-        if data.empty:
-            self.logger.warning("Спроба зберегти порожній DataFrame")
-            return ""
-
-        # Отримуємо назву таблиці з параметра або шляху файлу
-        if os.path.basename(table_name):
-            actual_table_name = os.path.basename(table_name).split('.')[0]
-        else:
-            actual_table_name = table_name
-
-        # Перевіряємо, чи є назва таблиці
-        if not actual_table_name:
-            self.logger.error("Не вказано назву таблиці")
-            return ""
-
-        # Збереження в базу даних
-        if db_connection:
-            try:
-                # Конвертуємо numpy типи перед збереженням
-                for col in data.select_dtypes(include=[np.number]).columns:
-                    data[col] = data[col].astype(float)
-
-                data.to_sql(actual_table_name, db_connection, if_exists='replace', index=True)
-                self.logger.info(f"Дані збережено в базу даних, таблиця: {actual_table_name}")
-                return actual_table_name
-            except Exception as e:
-                self.logger.error(f"Помилка при збереженні в базу даних: {str(e)}")
-                return ""
-        else:
-            try:
-                # Якщо не передано з'єднання, використовуємо наш DB Manager
-                processed_data = []
-                for idx, row in data.iterrows():
-                    record = {'timestamp': idx}
-                    for col, val in row.items():
-                        # Перетворюємо numpy типи
-                        if isinstance(val, np.generic):
-                            record[col] = val.item()
-                        else:
-                            record[col] = val
-                    processed_data.append(record)
-
-                # Викликаємо метод збереження в БД через наш менеджер
-                self.db_manager.insert_processed_data(actual_table_name, processed_data)
-                self.logger.info(f"Дані збережено в базу даних через DB Manager, таблиця: {actual_table_name}")
-                return actual_table_name
-            except Exception as e:
-                self.logger.error(f"Помилка при збереженні в базу даних через DB Manager: {str(e)}")
-                return ""
-
-    def load_processed_data(self, table_name: str, db_manager) -> pd.DataFrame:
-
-        # Очищуємо назву таблиці від шляху або розширення файлу, якщо вони є
-        if os.path.basename(table_name):
-            actual_table_name = os.path.basename(table_name).split('.')[0]
-        else:
-            actual_table_name = table_name
-
-        try:
-            # Якщо передано пряме з'єднання з БД, використовуємо його
-            if db_manager:
-                self.logger.info(f"Завантаження даних з таблиці {actual_table_name}")
-                try:
-                    data = pd.read_sql_table(actual_table_name, db_manager)
-
-                    # Встановлюємо часовий індекс, якщо є підходящі колонки
-                    time_cols = [col for col in data.columns if
-                                 any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
-                    if time_cols:
-                        time_col = time_cols[0]
-                        data[time_col] = pd.to_datetime(data[time_col])
-                        data.set_index(time_col, inplace=True)
-                        self.logger.info(f"Встановлено індекс за колонкою {time_col}")
-
-                    return data
-                except Exception as e:
-                    self.logger.error(f"Помилка при завантаженні з бази даних: {str(e)}")
-                    return pd.DataFrame()
-            else:
-                # В іншому випадку використовуємо наш менеджер БД
-                self.logger.info(f"Завантаження даних з таблиці {actual_table_name} через DB Manager")
-                data = self.db_manager.get_processed_data(actual_table_name)
-
-                if data is None:
-                    self.logger.warning(f"Не знайдено даних у таблиці {actual_table_name}")
-                    return pd.DataFrame()
-
-                if not isinstance(data, pd.DataFrame):
-                    data = pd.DataFrame(data)
-
-                # Встановлюємо часовий індекс
-                if 'timestamp' in data.columns:
-                    data['timestamp'] = pd.to_datetime(data['timestamp'])
-                    data.set_index('timestamp', inplace=True)
-
-                return data
-        except Exception as e:
-            self.logger.error(f"Помилка при завантаженні даних: {str(e)}")
-            return pd.DataFrame()

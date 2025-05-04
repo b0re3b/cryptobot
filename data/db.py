@@ -1187,21 +1187,7 @@ class DatabaseManager:
     def save_model_metadata(self, model_key: str, symbol: str, model_type: str,
                             timeframe: str, start_date: datetime, end_date: datetime,
                             description: str = None) -> int:
-        """
-        Збереження метаданих моделі в базу даних.
 
-        Args:
-            model_key: Унікальний ключ моделі
-            symbol: Символ криптовалюти
-            model_type: Тип моделі ('arima', 'sarima', etc.)
-            interval: Інтервал даних ('1m', '5m', '15m', '1h', '4h', '1d')
-            start_date: Початкова дата даних, на яких навчалася модель
-            end_date: Кінцева дата даних, на яких навчалася модель
-            description: Опис моделі
-
-        Returns:
-            ID створеного запису моделі
-        """
         try:
             conn = self.conn()
             with conn.cursor() as cursor:
@@ -2951,7 +2937,7 @@ class DatabaseManager:
 
     def save_btc_arima_data(self,
                             timeframe: str,
-                            open_time: datetime.datetime,
+                            open_time: datetime,
                             original_close: float,
                             close_diff: Optional[float] = None,
                             close_diff2: Optional[float] = None,
@@ -3112,8 +3098,8 @@ class DatabaseManager:
                 return None
 
     def get_btc_arima_data_by_timeframe(self, timeframe: str,
-                                        start_time: Optional[datetime.datetime] = None,
-                                        end_time: Optional[datetime.datetime] = None,
+                                        start_time: Optional[datetime] = None,
+                                        end_time: Optional[datetime] = None,
                                         limit: int = 1000) -> List[Dict[str, Any]]:
 
         with self.connect() as conn:
@@ -3177,7 +3163,7 @@ class DatabaseManager:
 
     def save_eth_arima_data(self,
                             timeframe: str,
-                            open_time: datetime.datetime,
+                            open_time: datetime,
                             original_close: float,
                             close_diff: Optional[float] = None,
                             close_diff2: Optional[float] = None,
@@ -3338,8 +3324,8 @@ class DatabaseManager:
                 return None
 
     def get_eth_arima_data_by_timeframe(self, timeframe: str,
-                                        start_time: Optional[datetime.datetime] = None,
-                                        end_time: Optional[datetime.datetime] = None,
+                                        start_time: Optional[datetime] = None,
+                                        end_time: Optional[datetime] = None,
                                         limit: int = 1000) -> List[Dict[str, Any]]:
 
         with self.connect() as conn:
@@ -3401,7 +3387,7 @@ class DatabaseManager:
 
     def save_sol_arima_data(self,
                             timeframe: str,
-                            open_time: datetime.datetime,
+                            open_time: datetime,
                             original_close: float,
                             close_diff: Optional[float] = None,
                             close_diff2: Optional[float] = None,
@@ -3562,8 +3548,8 @@ class DatabaseManager:
                 return None
 
     def get_sol_arima_data_by_timeframe(self, timeframe: str,
-                                        start_time: Optional[datetime.datetime] = None,
-                                        end_time: Optional[datetime.datetime] = None,
+                                        start_time: Optional[datetime] = None,
+                                        end_time: Optional[datetime] = None,
                                         limit: int = 1000) -> List[Dict[str, Any]]:
 
         with self.connect() as conn:
