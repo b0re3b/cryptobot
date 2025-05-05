@@ -583,7 +583,7 @@ class MarketDataProcessor:
                 # Додаємо symbol та interval якщо метод підтримує їх
                 if step_name == 'handle_missing_values':
                     step_params['symbol'] = symbol
-                    step_params['interval'] = interval
+                    step_params['timeframe'] = interval  # Виправлено: 'interval' -> 'timeframe'
 
                 if step_name in ['normalize_data', 'detect_outliers', 'validate_data_integrity']:
                     result, _ = method(result, **step_params)
@@ -629,67 +629,61 @@ def main():
             filled_data = processor.handle_missing_values(
                 raw_data,
                 symbol=symbol,
-                interval=timeframe,
+                timeframe=timeframe,
                 fetch_missing=True
             )
 
-
-
-            # 4. Попередня обробка (пайплайн)
+            # 3. Попередня обробка (пайплайн)
             processed = processor.preprocess_pipeline(filled_data, symbol=symbol, interval=timeframe)
 
             if processed.empty:
                 print(f" Обробка не дала результатів для {symbol} {timeframe}")
                 continue
 
-            processed = processor.add_time_features(processed, tz=EU_TIMEZONE)
-            print(f" Оброблені свічки ({timeframe}) збережено")
+            # 4. Додавання часових ознак
+            processed_with_time = processor.add_time_features(processed, tz=EU_TIMEZONE)
 
-            # 5. Ресемплінг і збереження даних для моделей
-            if timeframe == '1m':
-                resampled_30m = processor.resample_data(processed, target_interval='30m')
-                resampled_30m = processor.add_time_features(resampled_30m, tz=EU_TIMEZONE)
+            # 5. Виявлення аномалій
+            cleaned_data, outliers_info = processor.detect_outliers(processed_with_time)
+            if outliers_info['total_outliers'] > 0:
+                print(f" Виявлено {outliers_info['total_outliers']} аномалій у {symbol} {timeframe}")
 
-                # Збереження 30-хвилинних даних
+            # 6. Створення профілю об'єму
+            volume_profile = processor.aggregate_volume_profile(
+                cleaned_data,
+                bins=20,
+                price_col='close',
+                volume_col='volume',
+                time_period='1D'  # Щоденний профіль об'єму
+            )
 
-                # Збереження для LSTM та ARIMA
-                processor.save_lstm_sequence(resampled_30m, symbol, timeframe='30m')
-                processor.save_arima_data(resampled_30m, symbol, timeframe='30m')
-                print(f" 30-хвилинні дані збережено для LSTM та ARIMA")
+            if not volume_profile.empty:
+                # 7. Збереження профілю об'єму в базу даних
+                success = processor.save_volume_profile_to_db(volume_profile, symbol, timeframe)
+                if success:
+                    print(f" Профіль об'єму для {symbol} {timeframe} успішно збережено")
+                else:
+                    print(f" Помилка збереження профілю об'єму для {symbol} {timeframe}")
 
-            if timeframe == '1h':
-                # Ресемплінг до 4h
-                resampled_4h = processor.resample_data(processed, target_interval='4h')
-                resampled_4h = processor.add_time_features(resampled_4h, tz=EU_TIMEZONE)
+            # 8. Додаткова обробка для ARIMA і LSTM моделей
+            if timeframe == '1h':  # Для годинного часового фрейму
+                # Підготовка даних для ARIMA
+                arima_data = processor.prepare_arima_data(cleaned_data, symbol=symbol)
+                if not arima_data.empty:
+                    processor.save_arima_data(arima_data, symbol=symbol)
+                    print(f" Дані ARIMA для {symbol} успішно збережено")
 
-                # Збереження 4-годинних даних
+                # Підготовка даних для LSTM
+                X_lstm, y_lstm = processor.prepare_lstm_data(cleaned_data, symbol=symbol)
+                if X_lstm is not None and y_lstm is not None:
+                    lstm_df = pd.DataFrame(X_lstm.reshape(X_lstm.shape[0], -1))
+                    lstm_df['target'] = y_lstm
+                    processor.save_lstm_sequence(lstm_df, symbol=symbol)
+                    print(f" Послідовності LSTM для {symbol} успішно збережено")
 
+            print(f" Обробка {symbol} ({timeframe}) завершена успішно")
 
-                # Збереження для LSTM та ARIMA
-                processor.save_lstm_sequence(resampled_4h, symbol, timeframe='4h')
-                processor.save_arima_data(resampled_4h, symbol, timeframe='4h')
-                print(f" 4-годинні дані збережено для LSTM та ARIMA")
-
-                # Ресемплінг до 1d
-                resampled_1d = processor.resample_data(processed, target_interval='1d')
-                resampled_1d = processor.add_time_features(resampled_1d, tz=EU_TIMEZONE)
-
-
-                # Збереження для LSTM та ARIMA
-                processor.save_lstm_sequence(resampled_1d, symbol, timeframe='1d')
-                processor.save_arima_data(resampled_1d, symbol, timeframe='1d')
-                print(f" Денні дані збережено для LSTM та ARIMA")
-
-                # 6. Профіль об'єму
-                volume_profile = processor.aggregate_volume_profile(resampled_1d, bins=12, time_period='1W')
-                if not volume_profile.empty:
-                    processor.save_volume_profile_to_db(volume_profile, symbol, '1d')
-                    print(f" Профіль об'єму збережено")
-
-            # Збереження оригінального таймфрейму для LSTM та ARIMA
-            processor.save_lstm_sequence(processed, symbol, timeframe=timeframe)
-            processor.save_arima_data(processed, symbol, timeframe=timeframe)
-            print(f" Дані {timeframe} збережено для LSTM та ARIMA")
+    print("\nВсі операції обробки даних завершено")
 
 
 if __name__ == "__main__":

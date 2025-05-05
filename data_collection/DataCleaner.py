@@ -1,40 +1,174 @@
+import logging
 from datetime import datetime
 from typing import List, Tuple, Dict, Optional, Union
 import numpy as np
 import pandas as pd
 import pytz
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
+
+from data_collection import MarketDataProcessor
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
-
-
 class DataCleaner:
     def __init__(self, logger):
         self.logger = logger
         self.anomaly_detector = AnomalyDetector(logger=self.logger)
         self.data_resampler = DataResampler(logger=self.logger)
-    def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
-                   fill_missing: bool = True, normalize: bool = True,
-                   norm_method: str = 'z-score', resample: bool = True,
-                   target_interval: str = None, add_time_features: bool = True,
-                   cyclical: bool = True, add_sessions: bool = False) -> pd.DataFrame:
+        self.market_data_processor = MarketDataProcessor(logger=self.logger)
+
+    def _setup_default_logger(self) -> logging.Logger:
+
+        logger = logging.getLogger("data_cleaner")
+        logger.setLevel(logging.INFO)
+
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+
+        return logger
+    def clean_data(self,
+                   data: pd.DataFrame,
+                   remove_outliers: bool = True,
+                   fill_missing: bool = True,
+                   normalize: bool = True,
+                   norm_method: str = 'z-score',
+                   resample: bool = True,
+                   target_interval: str = None,
+                   add_time_features: bool = True,
+                   cyclical: bool = True,
+                   add_sessions: bool = False) -> pd.DataFrame:
+
+        self.logger.info(f"Початок комплексного очищення даних")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для очищення")
             return data if data is not None else pd.DataFrame()
 
-        self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
+        # Поетапне очищення для кращої структури та можливості налагодження
+        try:
+            # 1. Підготовка та валідація даних
+            result = self._prepare_dataframe(data)
 
-        # Виконуємо перевірку цілісності даних перед очищенням
-        integrity_issues = self.anomaly_detector.validate_data_integrity(data)
-        if integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in integrity_issues.values())
-            self.logger.warning(f"Знайдено {issue_count} проблем з цілісністю даних")
+            # 2. Валідація цілісності даних
+            self.market_data_processor.validate_data_integrity(result)
+
+            # 3. Видалення дублікатів
+            result = self._remove_duplicates(result)
+
+            # 4. Видалення викидів
+            if remove_outliers:
+                result = self._remove_outliers(result)
+
+            # 5. Додавання часових ознак
+            if add_time_features and isinstance(result.index, pd.DatetimeIndex):
+                result = self.add_time_features(result, cyclical, add_sessions)
+
+            # 6. Заповнення відсутніх значень
+            if fill_missing:
+                result = self.handle_missing_values(result)
+
+            # 7. Виправлення невалідних high/low значень
+            result = self._fix_invalid_high_low(result)
+
+            # 8. Ресемплінг даних
+            if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
+                result = self.data_resampler.resample_data(result, target_interval)
+
+            # 9. Нормалізація даних (як останній крок після заповнення пропусків)
+            if normalize:
+                result = self.normalize_data(result, norm_method)
+
+            # 10. Фінальна перевірка цілісності даних
+            self.market_data_processor.validate_data_integrity(result, is_final=True)
+
+            self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при очищенні даних: {str(e)}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            return data
+
+    def _remove_outliers(self, data: pd.DataFrame, std_dev: float = 3.0) -> pd.DataFrame:
+
+        self.logger.info("Видалення аномальних значень...")
+        result = data.copy()
+
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+
+        for col in price_cols:
+            # Перевірка на порожню колонку
+            if col not in result.columns or result[col].empty or result[col].isna().all():
+                continue
+
+            # Використання IQR для виявлення викидів
+            Q1 = result[col].quantile(0.25)
+            Q3 = result[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - std_dev * IQR
+            upper_bound = Q3 + std_dev * IQR
+
+            outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
+            if outliers.any():
+                outlier_count = outliers.sum()
+                outlier_indexes = result.index[outliers].tolist()
+                self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
+
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(
+                        f"Індекси перших 10 аномалій: {outlier_indexes[:10]}{'...' if len(outlier_indexes) > 10 else ''}")
+
+                # Замінюємо викиди на NaN для подальшого заповнення
+                result.loc[outliers, col] = np.nan
+
+        return result
+    def _fix_invalid_high_low(self, data: pd.DataFrame) -> pd.DataFrame:
 
         result = data.copy()
 
+        # Перевірка на наявність необхідних колонок
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+        if len(price_cols) < 4:
+            return result
+
+        # Перевірка та виправлення випадків high < low
+        invalid_hl = result['high'] < result['low']
+        if invalid_hl.any():
+            invalid_count = invalid_hl.sum()
+            self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
+
+            if self.logger.isEnabledFor(logging.DEBUG):
+                invalid_indexes = result.index[invalid_hl].tolist()
+                self.logger.debug(
+                    f"Індекси проблемних рядків: {invalid_indexes[:10]}{'...' if len(invalid_indexes) > 10 else ''}")
+
+            # Міняємо місцями high та low значення
+            temp = result.loc[invalid_hl, 'high'].copy()
+            result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
+            result.loc[invalid_hl, 'low'] = temp
+
+        return result
+    def _remove_duplicates(self, data: pd.DataFrame) -> pd.DataFrame:
+
+        if not isinstance(data.index, pd.DatetimeIndex):
+            return data
+
+        if data.index.duplicated().any():
+            dup_count = data.index.duplicated().sum()
+            self.logger.info(f"Знайдено {dup_count} дублікатів індексу, видалення...")
+            return data[~data.index.duplicated(keep='first')]
+
+        return data
+    def _prepare_dataframe(self, data: pd.DataFrame) -> pd.DataFrame:
+
+        self.logger.info(f"Підготовка DataFrame: {data.shape[0]} рядків, {data.shape[1]} стовпців")
+        result = data.copy()
+
+        # Конвертація індексу у DatetimeIndex
         if not isinstance(result.index, pd.DatetimeIndex):
             try:
                 time_cols = [col for col in result.columns if
@@ -49,132 +183,18 @@ class DataCleaner:
             except Exception as e:
                 self.logger.error(f"Помилка при конвертуванні індексу: {str(e)}")
 
-        if isinstance(result.index, pd.DatetimeIndex) and result.index.duplicated().any():
-            dup_count = result.index.duplicated().sum()
-            self.logger.info(f"Знайдено {dup_count} дублікатів індексу, видалення...")
-            result = result[~result.index.duplicated(keep='first')]
-
+        # Сортування індексу
         result = result.sort_index()
 
-        # Додаємо часові ознаки, якщо потрібно
-        if add_time_features and isinstance(result.index, pd.DatetimeIndex):
-            self.logger.info("Додавання часових ознак...")
-            result = self.add_time_features(
-                data=result,
-                cyclical=cyclical,
-                add_sessions=add_sessions
-            )
-
+        # Конвертація числових колонок
         numeric_cols = ['open', 'high', 'low', 'close', 'volume']
         for col in numeric_cols:
             if col in result.columns:
-                # Перевіряємо, чи не є колонка вже числового типу
                 if not pd.api.types.is_numeric_dtype(result[col]):
                     self.logger.info(f"Конвертування колонки {col} в числовий тип")
                     result[col] = pd.to_numeric(result[col], errors='coerce')
 
-        if remove_outliers:
-            self.logger.info("Видалення аномальних значень...")
-            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-            for col in price_cols:
-                # Перевірка на порожній DataFrame або серію
-                if col not in result.columns or result[col].empty or result[col].isna().all():
-                    continue
-
-                Q1 = result[col].quantile(0.25)
-                Q3 = result[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 3 * IQR
-                upper_bound = Q3 + 3 * IQR
-
-                outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
-                if outliers.any():
-                    outlier_count = outliers.sum()
-                    outlier_indexes = result.index[outliers].tolist()
-                    self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
-                    self.logger.debug(
-                        f"Індекси перших 10 аномалій: {outlier_indexes[:10]}{'...' if len(outlier_indexes) > 10 else ''}")
-                    result.loc[outliers, col] = np.nan
-
-        if fill_missing and result.isna().any().any():
-            self.logger.info("Заповнення відсутніх значень...")
-            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-            if price_cols and isinstance(result.index, pd.DatetimeIndex):
-                result[price_cols] = result[price_cols].interpolate(method='time')
-
-            if 'volume' in result.columns and result['volume'].isna().any():
-                result['volume'] = result['volume'].fillna(0)
-
-            numeric_cols = result.select_dtypes(include=[np.number]).columns
-            other_numeric = [col for col in numeric_cols if col not in price_cols + ['volume']]
-            if other_numeric:
-                if isinstance(result.index, pd.DatetimeIndex):
-                    result[other_numeric] = result[other_numeric].interpolate(method='time')
-                else:
-                    result[other_numeric] = result[other_numeric].interpolate(method='linear')
-
-            result = result.ffill().bfill()
-
-        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-        if len(price_cols) == 4:
-            invalid_hl = result['high'] < result['low']
-            if invalid_hl.any():
-                invalid_count = invalid_hl.sum()
-                invalid_indexes = result.index[invalid_hl].tolist()
-                self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
-                self.logger.debug(
-                    f"Індекси проблемних рядків: {invalid_indexes[:10]}{'...' if len(invalid_indexes) > 10 else ''}")
-
-                # Swap high and low values
-                temp = result.loc[invalid_hl, 'high'].copy()
-                result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
-                result.loc[invalid_hl, 'low'] = temp
-
-        # Виконуємо ресемплінг даних, якщо потрібно
-        if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
-            try:
-                self.logger.info(f"Виконання ресемплінгу даних до інтервалу {target_interval}...")
-                result = self.data_resampler.resample_data(result, target_interval)
-            except Exception as e:
-                self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
-
-        # Додаємо нормалізацію даних, якщо потрібно
-        if normalize:
-            self.logger.info(f"Виконання нормалізації даних методом {norm_method}...")
-            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-
-            # Нормалізуємо цінові колонки
-            if price_cols:
-                result, price_scaler = self.normalize_data(
-                    data=result,
-                    method=norm_method,
-                    columns=price_cols
-                )
-
-                if price_scaler is None:
-                    self.logger.warning("Не вдалося нормалізувати цінові колонки")
-
-            # Окремо нормалізуємо об'єм, якщо він присутній
-            if 'volume' in result.columns:
-                result, volume_scaler = self.normalize_data(
-                    data=result,
-                    method='min-max',  # Для об'єму краще використовувати min-max нормалізацію
-                    columns=['volume']
-                )
-
-                if volume_scaler is None:
-                    self.logger.warning("Не вдалося нормалізувати колонку об'єму")
-
-        # Перевіряємо цілісність даних після очищення
-        clean_integrity_issues = self.anomaly_detector.validate_data_integrity(result)
-        if clean_integrity_issues:
-            issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
-                              for issues in clean_integrity_issues.values())
-            self.logger.info(f"Після очищення залишилось {issue_count} проблем з цілісністю даних")
-
-        self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result
-
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               symbol: str = None, timeframe: str = None,
                               fetch_missing: bool = True) -> pd.DataFrame:
@@ -420,7 +440,7 @@ class DataCleaner:
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
-            return data if data is not None else pd.DataFrame(), None
+            return (data if data is not None else pd.DataFrame()), None
 
         result = data.copy()
         numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
@@ -443,8 +463,10 @@ class DataCleaner:
         self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
         self.logger.info(f"Колонки для нормалізації: {normalize_cols}")
 
+        # Вибір даних для нормалізації
         X = result[normalize_cols].values
 
+        # Вибір скейлера
         scaler = None
         if method == 'z-score':
             scaler = StandardScaler()
@@ -457,41 +479,43 @@ class DataCleaner:
             return result, None
 
         try:
-            # Оптимізована обробка NaN
-            all_nan_cols = np.all(np.isnan(X), axis=0)
-            if all_nan_cols.any():
-                self.logger.warning(
-                    f"Колонки з повними NaN: {[normalize_cols[i] for i, v in enumerate(all_nan_cols) if v]}")
-                X[:, all_nan_cols] = 0
+            # Використовуємо SimpleImputer для заповнення NaN значень
+            from sklearn.impute import SimpleImputer
+            imputer = SimpleImputer(strategy='mean')
 
-            if np.isnan(X).any():
-                col_means = np.nanmean(X, axis=0)
-                inds = np.where(np.isnan(X))
-                X[inds] = np.take(col_means, inds[1])
-                self.logger.warning("Замінено NaN на середні значення колонок")
+            # Заповнення NaN значень
+            X_imputed = imputer.fit_transform(X)
 
-            X_scaled = scaler.fit_transform(X)
+            # Масштабування даних
+            X_scaled = scaler.fit_transform(X_imputed)
 
+            # Перевірка та обробка нескінченних значень
             if not np.isfinite(X_scaled).all():
                 self.logger.warning("Знайдено нескінченні значення після нормалізації. Заміна на 0.")
                 X_scaled = np.nan_to_num(X_scaled, nan=0, posinf=0, neginf=0)
 
+            # Оновлення DataFrame
             for i, col in enumerate(normalize_cols):
                 result[col] = X_scaled[:, i]
 
             self.logger.info(f"Успішно нормалізовано колонки: {normalize_cols}")
 
+            # Створення метаданих скейлера
             scaler_meta = {
                 'method': method,
                 'columns': normalize_cols,
-                'scaler': scaler
+                'scaler': scaler,
+                'imputer': imputer
             }
 
             return result, scaler_meta
 
         except Exception as e:
             self.logger.error(f"Помилка при нормалізації даних: {str(e)}")
-            return data
+            import traceback
+            self.logger.debug(traceback.format_exc())
+            # Виправлено: повертаємо кортеж з вхідними даними та None замість самих даних
+            return data, None
 
     def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
                           add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
@@ -528,23 +552,55 @@ class DataCleaner:
 
         self.logger.info("Додавання часових ознак")
 
-        # Коректна обробка часових поясів
+        # Покращена обробка часових поясів
         try:
             if result.index.tz is None:
                 self.logger.info(f"Встановлення часового поясу {tz}")
                 try:
+                    # Спроба звичайної локалізації
                     result.index = result.index.tz_localize(tz)
                 except pytz.exceptions.NonExistentTimeError:
-                    # Обробка випадків при переході на літній час
+                    # Перехід на літній час: пропущена година
                     self.logger.warning(
                         "Виявлено час, що не існує при переході на літній час. Використання нестрогої локалізації.")
-                    result.index = result.index.tz_localize(tz, nonexistent='shift_forward')
+
+                    # Спробуємо різні стратегії
+                    try:
+                        # Зсув вперед (найбільш безпечний метод)
+                        result.index = result.index.tz_localize(tz, nonexistent='shift_forward')
+                    except Exception:
+                        try:
+                            # Зсув назад як альтернатива
+                            result.index = result.index.tz_localize(tz, nonexistent='shift_backward')
+                        except Exception:
+                            # Створення нового часу як остання спроба
+                            self.logger.warning("Використання методу 'NaT' для неіснуючих значень часу")
+                            result.index = result.index.tz_localize(tz, nonexistent='NaT')
+                            # Видалення NaT
+                            result = result[~result.index.isna()]
+
                 except pytz.exceptions.AmbiguousTimeError:
-                    # Обробка випадків при переході на зимовий час
+                    # Перехід на зимовий час: дубльована година
                     self.logger.warning(
-                        "Виявлено неоднозначний час при переході на зимовий час. Використання явного вибору.")
-                    # Встановлюємо True для першої появи часу (до переводу) або False для другої появи часу (після переводу)
-                    result.index = result.index.tz_localize(tz, ambiguous=False)
+                        "Виявлено неоднозначний час при переході на зимовий час. Використання стратегії.")
+
+                    try:
+                        # Спочатку пробуємо встановити False для всіх неоднозначних значень
+                        # (вибираємо другу появу часу, тобто після переходу на зимовий час)
+                        result.index = result.index.tz_localize(tz, ambiguous=False)
+                    except Exception:
+                        try:
+                            # Якщо не вдалося, спробуємо True
+                            result.index = result.index.tz_localize(tz, ambiguous=True)
+                        except Exception:
+                            # Якщо і це не працює, створюємо маску і застосовуємо поелементно
+                            temp_index = pd.DatetimeIndex([
+                                timestamp.tz_localize(tz, ambiguous=False
+                                if pd.Timestamp(timestamp).fold == 0 else True)
+                                for timestamp in result.index
+                            ])
+                            result.index = temp_index
+
                 except Exception as e:
                     self.logger.warning(
                         f"Помилка при локалізації часового поясу: {str(e)}. Продовжуємо без часового поясу.")
@@ -592,6 +648,34 @@ class DataCleaner:
         result['is_quarter_end'] = result.index.is_quarter_end.astype(int)
         result['is_year_start'] = result.index.is_year_start.astype(int)
         result['is_year_end'] = result.index.is_year_end.astype(int)
+
+        # Додаємо ознаку переходу на літній/зимовий час
+        if result.index.tz is not None:
+            # Перевіряємо, чи змінюється зсув часового поясу протягом дня
+            result['is_dst_change'] = False
+
+            # Перевіряємо попарно послідовні індекси на зміну зсуву
+            if len(result) > 1:
+                try:
+                    # Отримуємо зсуви часового поясу в секундах
+                    utc_offsets = [ts.utcoffset().total_seconds() for ts in result.index]
+
+                    # Порівнюємо сусідні зсуви
+                    offset_shifts = np.diff(utc_offsets)
+
+                    # Якщо є зміна часового зсуву, відзначаємо
+                    idx_with_shifts = np.where(offset_shifts != 0)[0]
+                    if len(idx_with_shifts) > 0:
+                        for i in idx_with_shifts:
+                            result.iloc[i + 1, result.columns.get_loc('is_dst_change')] = True
+
+                            # Логуємо виявлені переходи DST
+                            shift_amount = offset_shifts[i] / 3600  # в годинах
+                            direction = "вперед" if shift_amount < 0 else "назад"
+                            self.logger.info(
+                                f"Виявлено перехід на {'літній' if shift_amount < 0 else 'зимовий'} час ({abs(shift_amount)} год {direction}) між {result.index[i]} та {result.index[i + 1]}")
+                except Exception as e:
+                    self.logger.warning(f"Помилка при виявленні переходів DST: {str(e)}")
 
         # Циклічні ознаки
         if cyclical:
