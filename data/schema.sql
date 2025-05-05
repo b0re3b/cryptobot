@@ -1085,3 +1085,113 @@ CREATE INDEX IF NOT EXISTS idx_eth_lstm_open_time ON eth_lstm_data(open_time);
 CREATE INDEX IF NOT EXISTS idx_sol_lstm_timeframe ON sol_lstm_data(timeframe);
 CREATE INDEX IF NOT EXISTS idx_sol_lstm_sequence_id ON sol_lstm_data(sequence_id);
 CREATE INDEX IF NOT EXISTS idx_sol_lstm_open_time ON sol_lstm_data(open_time);
+-- Створення таблиці для зберігання розрахованих метрик волатильності
+CREATE TABLE volatility_metrics (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
+    timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
+    timestamp TIMESTAMP NOT NULL,                 -- Час вимірювання
+    hist_vol_7d DECIMAL(10, 6),                   -- Історична волатильність за 7 днів
+    hist_vol_14d DECIMAL(10, 6),                  -- Історична волатильність за 14 днів
+    hist_vol_30d DECIMAL(10, 6),                  -- Історична волатильність за 30 днів
+    hist_vol_60d DECIMAL(10, 6),                  -- Історична волатильність за 60 днів
+    parkinson_vol DECIMAL(10, 6),                 -- Волатильність за методом Паркінсона
+    garman_klass_vol DECIMAL(10, 6),              -- Волатильність за методом Гарман-Класс
+    yang_zhang_vol DECIMAL(10, 6),                -- Волатильність за методом Янг-Чжан
+    vol_of_vol DECIMAL(10, 6),                    -- Волатильність волатильності
+    regime_id INTEGER,                            -- Ідентифікатор режиму волатильності
+    is_breakout BOOLEAN,                          -- Флаг пробою волатильності
+    CONSTRAINT unique_volatility_metrics UNIQUE (symbol, timeframe, timestamp)
+);
+
+-- Створення індексів для таблиці метрик волатильності
+CREATE INDEX idx_vol_metrics_symbol ON volatility_metrics (symbol);
+CREATE INDEX idx_vol_metrics_timestamp ON volatility_metrics (timestamp);
+CREATE INDEX idx_vol_metrics_regime ON volatility_metrics (regime_id);
+
+-- Створення таблиці для збереження GARCH моделей та їх параметрів
+CREATE TABLE volatility_models (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
+    timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
+    model_type VARCHAR(20) NOT NULL,              -- Тип моделі (GARCH, EGARCH, GJR-GARCH)
+    p INTEGER NOT NULL,                           -- Параметр p моделі GARCH
+    q INTEGER NOT NULL,                           -- Параметр q моделі GARCH
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),  -- Час створення моделі
+    updated_at TIMESTAMP,                         -- Час останнього оновлення
+    parameters JSONB,                             -- Параметри моделі у форматі JSON
+    aic DECIMAL(15, 6),                           -- Критерій AIC
+    bic DECIMAL(15, 6),                           -- Критерій BIC
+    log_likelihood DECIMAL(15, 6),                -- Лог-правдоподібність
+    serialized_model BYTEA,                       -- Серіалізована модель
+    CONSTRAINT unique_volatility_model UNIQUE (symbol, timeframe, model_type, p, q)
+);
+
+-- Створення таблиці для зберігання інформації про режими волатильності
+CREATE TABLE volatility_regimes (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
+    timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
+    method VARCHAR(20) NOT NULL,                  -- Метод виявлення режимів (kmeans, hmm, threshold)
+    n_regimes INTEGER NOT NULL,                   -- Кількість режимів
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),  -- Час створення
+    regime_thresholds DECIMAL(10, 6)[],           -- Порогові значення для режимів
+    regime_centroids DECIMAL(10, 6)[],            -- Центроїди кластерів (для kmeans)
+    regime_labels VARCHAR(20)[],                  -- Назви режимів (наприклад, ['low', 'medium', 'high'])
+    regime_parameters JSONB,                      -- Додаткові параметри режимів
+    CONSTRAINT unique_volatility_regime UNIQUE (symbol, timeframe, method, n_regimes)
+);
+
+-- Створення таблиці для зберігання результатів аналізу волатильності для ML
+CREATE TABLE volatility_features (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
+    timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
+    timestamp TIMESTAMP NOT NULL,                 -- Час створення ознак
+    features JSONB NOT NULL,                      -- Ознаки у форматі JSON
+    CONSTRAINT unique_volatility_features UNIQUE (symbol, timeframe, timestamp)
+);
+
+-- Створення таблиці для зберігання аналізу кросс-активної волатильності
+CREATE TABLE cross_asset_volatility (
+    id SERIAL PRIMARY KEY,
+    base_symbol VARCHAR(20) NOT NULL,             -- Базовий символ
+    compared_symbol VARCHAR(20) NOT NULL,         -- Символ порівняння
+    timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
+    timestamp TIMESTAMP NOT NULL,                 -- Час вимірювання
+    correlation DECIMAL(5, 4),                    -- Кореляція волатильності
+    lag INTEGER,                                  -- Лаг кореляції (якщо потрібно)
+    CONSTRAINT unique_cross_vol UNIQUE (base_symbol, compared_symbol, timeframe, timestamp, lag)
+);
+
+-- Представлення для швидкого отримання останніх режимів волатильності
+CREATE VIEW current_volatility_regimes AS
+SELECT vm.symbol,
+       vm.timeframe,
+       vm.timestamp,
+       vm.regime_id,
+       vr.regime_labels[vm.regime_id + 1] AS regime_name
+FROM (
+    SELECT symbol, timeframe, MAX(timestamp) as max_ts
+    FROM volatility_metrics
+    GROUP BY symbol, timeframe
+) latest
+JOIN volatility_metrics vm ON vm.symbol = latest.symbol
+                         AND vm.timeframe = latest.timeframe
+                         AND vm.timestamp = latest.max_ts
+JOIN volatility_regimes vr ON vr.id = vm.regime_id;
+
+-- Представлення для порівняння різних метрик волатильності
+CREATE VIEW volatility_metrics_comparison AS
+SELECT
+    vm.symbol,
+    vm.timeframe,
+    vm.timestamp,
+    vm.hist_vol_14d,
+    vm.parkinson_vol,
+    vm.garman_klass_vol,
+    vm.yang_zhang_vol,
+    (vm.hist_vol_14d - vm.parkinson_vol) AS hist_park_diff,
+    (vm.hist_vol_14d - vm.garman_klass_vol) AS hist_gk_diff,
+    (vm.hist_vol_14d - vm.yang_zhang_vol) AS hist_yz_diff
+FROM volatility_metrics vm;

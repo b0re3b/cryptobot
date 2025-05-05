@@ -4850,6 +4850,554 @@ class DatabaseManager:
 
                 return records
 
+    # --------- VOLATILITY METRICS ---------
+
+    def save_volatility_metrics(self, metrics: Dict[str, Any]) -> int:
+        """
+        Зберігає метрики волатильності в таблицю volatility_metrics.
+
+        Args:
+            metrics: Словник з даними метрик волатильності
+
+        Returns:
+            id: Ідентифікатор збереженого запису
+        """
+        if not self.conn:
+            self.connect()
+
+        try:
+            query = """
+                    INSERT INTO volatility_metrics (symbol, timeframe, timestamp, hist_vol_7d, hist_vol_14d, \
+                                                    hist_vol_30d, hist_vol_60d, parkinson_vol, garman_klass_vol, \
+                                                    yang_zhang_vol, vol_of_vol, regime_id, is_breakout) \
+                    VALUES (%(symbol)s, %(timeframe)s, %(timestamp)s, %(hist_vol_7d)s, %(hist_vol_14d)s, \
+                            %(hist_vol_30d)s, %(hist_vol_60d)s, %(parkinson_vol)s, %(garman_klass_vol)s, \
+                            %(yang_zhang_vol)s, %(vol_of_vol)s, %(regime_id)s, \
+                            %(is_breakout)s) ON CONFLICT (symbol, timeframe, timestamp) DO \
+                    UPDATE \
+                    SET
+                        hist_vol_7d = EXCLUDED.hist_vol_7d, hist_vol_14d = EXCLUDED.hist_vol_14d, hist_vol_30d = EXCLUDED.hist_vol_30d, hist_vol_60d = EXCLUDED.hist_vol_60d, parkinson_vol = EXCLUDED.parkinson_vol, garman_klass_vol = EXCLUDED.garman_klass_vol, yang_zhang_vol = EXCLUDED.yang_zhang_vol, vol_of_vol = EXCLUDED.vol_of_vol, regime_id = EXCLUDED.regime_id, is_breakout = EXCLUDED.is_breakout
+                        RETURNING id; \
+                    """
+
+            self.cursor.execute(query, metrics)
+            record_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return record_id
+
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження метрик волатильності: {e}")
+            return -1
+
+    def get_volatility_metrics(self, symbol: str, timeframe: str,
+                               start_date: Optional[datetime] = None,
+                               end_date: Optional[datetime] = None,
+                               limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Отримує метрики волатильності з таблиці volatility_metrics.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            start_date: Початкова дата вибірки (опціонально)
+            end_date: Кінцева дата вибірки (опціонально)
+            limit: Обмеження кількості результатів (за замовчуванням 100)
+
+        Returns:
+            List[Dict]: Список словників з метриками волатильності
+        """
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM volatility_metrics
+                WHERE symbol = %(symbol)s \
+                  AND timeframe = %(timeframe)s \
+                """
+
+        params = {"symbol": symbol, "timeframe": timeframe}
+
+        if start_date:
+            query += " AND timestamp >= %(start_date)s"
+            params["start_date"] = start_date
+
+        if end_date:
+            query += " AND timestamp <= %(end_date)s"
+            params["end_date"] = end_date
+
+        query += " ORDER BY timestamp DESC LIMIT %(limit)s"
+        params["limit"] = limit
+
+        try:
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+            return [dict(row) for row in results]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання метрик волатильності: {e}")
+            return []
+
+    # --------- VOLATILITY MODELS ---------
+
+    def save_volatility_model(self, model_data: Dict[str, Any]) -> int:
+        """
+        Зберігає модель волатильності в таблицю volatility_models.
+
+        Args:
+            model_data: Словник з даними моделі
+
+        Returns:
+            id: Ідентифікатор збереженого запису
+        """
+        if not self.conn:
+            self.connect()
+
+        try:
+            # Перетворення параметрів у JSON, якщо вони є словником
+            if isinstance(model_data.get("parameters"), dict):
+                model_data["parameters"] = json.dumps(model_data["parameters"])
+
+            query = """
+                    INSERT INTO volatility_models (symbol, timeframe, model_type, p, q, created_at, updated_at, \
+                                                   parameters, aic, bic, log_likelihood, serialized_model) \
+                    VALUES (%(symbol)s, %(timeframe)s, %(model_type)s, %(p)s, %(q)s, \
+                            COALESCE(%(created_at)s, NOW()), %(updated_at)s, \
+                            %(parameters)s, %(aic)s, %(bic)s, %(log_likelihood)s, \
+                            %(serialized_model)s) ON CONFLICT (symbol, timeframe, model_type, p, q) DO \
+                    UPDATE \
+                    SET
+                        updated_at = NOW(), parameters = EXCLUDED.parameters, aic = EXCLUDED.aic, bic = EXCLUDED.bic, log_likelihood = EXCLUDED.log_likelihood, serialized_model = EXCLUDED.serialized_model
+                        RETURNING id; \
+                    """
+
+            self.cursor.execute(query, model_data)
+            record_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return record_id
+
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження моделі волатильності: {e}")
+            return -1
+
+    def get_volatility_model(self, symbol: str, timeframe: str,
+                             model_type: str = None, p: int = None,
+                             q: int = None) -> Optional[Dict[str, Any]]:
+        """
+        Отримує модель волатильності з таблиці volatility_models.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            model_type: Тип моделі (опціонально)
+            p: Параметр p моделі (опціонально)
+            q: Параметр q моделі (опціонально)
+
+        Returns:
+            Dict: Словник з даними моделі або None, якщо модель не знайдено
+        """
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM volatility_models
+                WHERE symbol = %(symbol)s \
+                  AND timeframe = %(timeframe)s \
+                """
+
+        params = {"symbol": symbol, "timeframe": timeframe}
+
+        if model_type:
+            query += " AND model_type = %(model_type)s"
+            params["model_type"] = model_type
+
+        if p is not None:
+            query += " AND p = %(p)s"
+            params["p"] = p
+
+        if q is not None:
+            query += " AND q = %(q)s"
+            params["q"] = q
+
+        query += " ORDER BY updated_at DESC LIMIT 1"
+
+        try:
+            self.cursor.execute(query, params)
+            result = self.cursor.fetchone()
+
+            if result:
+                model_data = dict(result)
+                # Перетворення JSON в словник
+                if model_data.get("parameters"):
+                    model_data["parameters"] = json.loads(model_data["parameters"])
+                return model_data
+            return None
+        except psycopg2.Error as e:
+            print(f"Помилка отримання моделі волатильності: {e}")
+            return None
+
+    # --------- VOLATILITY REGIMES ---------
+
+    def save_volatility_regime(self, regime_data: Dict[str, Any]) -> int:
+        """
+        Зберігає режим волатильності в таблицю volatility_regimes.
+
+        Args:
+            regime_data: Словник з даними режиму волатильності
+
+        Returns:
+            id: Ідентифікатор збереженого запису
+        """
+        if not self.conn:
+            self.connect()
+
+        try:
+            # Перетворення параметрів у JSON, якщо вони є словником
+            if isinstance(regime_data.get("regime_parameters"), dict):
+                regime_data["regime_parameters"] = json.dumps(regime_data["regime_parameters"])
+
+            query = """
+                    INSERT INTO volatility_regimes (symbol, timeframe, method, n_regimes, created_at, \
+                                                    regime_thresholds, regime_centroids, regime_labels, \
+                                                    regime_parameters) \
+                    VALUES (%(symbol)s, %(timeframe)s, %(method)s, %(n_regimes)s, \
+                            COALESCE(%(created_at)s, NOW()), \
+                            %(regime_thresholds)s, %(regime_centroids)s, %(regime_labels)s, \
+                            %(regime_parameters)s) ON CONFLICT (symbol, timeframe, method, n_regimes) DO \
+                    UPDATE \
+                    SET
+                        regime_thresholds = EXCLUDED.regime_thresholds, regime_centroids = EXCLUDED.regime_centroids, regime_labels = EXCLUDED.regime_labels, regime_parameters = EXCLUDED.regime_parameters
+                        RETURNING id; \
+                    """
+
+            self.cursor.execute(query, regime_data)
+            record_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return record_id
+
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження режиму волатильності: {e}")
+            return -1
+
+    def get_volatility_regime(self, symbol: str, timeframe: str,
+                              method: str = None,
+                              n_regimes: int = None) -> Optional[Dict[str, Any]]:
+        """
+        Отримує режим волатильності з таблиці volatility_regimes.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            method: Метод виявлення режимів (опціонально)
+            n_regimes: Кількість режимів (опціонально)
+
+        Returns:
+            Dict: Словник з даними режиму або None, якщо режим не знайдено
+        """
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM volatility_regimes
+                WHERE symbol = %(symbol)s \
+                  AND timeframe = %(timeframe)s \
+                """
+
+        params = {"symbol": symbol, "timeframe": timeframe}
+
+        if method:
+            query += " AND method = %(method)s"
+            params["method"] = method
+
+        if n_regimes is not None:
+            query += " AND n_regimes = %(n_regimes)s"
+            params["n_regimes"] = n_regimes
+
+        query += " ORDER BY created_at DESC LIMIT 1"
+
+        try:
+            self.cursor.execute(query, params)
+            result = self.cursor.fetchone()
+
+            if result:
+                regime_data = dict(result)
+                # Перетворення JSON в словник
+                if regime_data.get("regime_parameters"):
+                    regime_data["regime_parameters"] = json.loads(regime_data["regime_parameters"])
+                return regime_data
+            return None
+        except psycopg2.Error as e:
+            print(f"Помилка отримання режиму волатильності: {e}")
+            return None
+
+    # --------- VOLATILITY FEATURES ---------
+
+    def save_volatility_features(self, features_data: Dict[str, Any]) -> int:
+        """
+        Зберігає ознаки волатильності в таблицю volatility_features.
+
+        Args:
+            features_data: Словник з даними ознак
+
+        Returns:
+            id: Ідентифікатор збереженого запису
+        """
+        if not self.conn:
+            self.connect()
+
+        try:
+            # Перетворення features у JSON, якщо вони є словником
+            if isinstance(features_data.get("features"), dict):
+                features_data["features"] = json.dumps(features_data["features"])
+
+            query = """
+                    INSERT INTO volatility_features (symbol, timeframe, timestamp, features) \
+                    VALUES (%(symbol)s, %(timeframe)s, %(timestamp)s, \
+                            %(features)s) ON CONFLICT (symbol, timeframe, timestamp) DO \
+                    UPDATE \
+                    SET
+                        features = EXCLUDED.features
+                        RETURNING id; \
+                    """
+
+            self.cursor.execute(query, features_data)
+            record_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return record_id
+
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження ознак волатильності: {e}")
+            return -1
+
+    def get_volatility_features(self, symbol: str, timeframe: str,
+                                start_date: Optional[datetime] = None,
+                                end_date: Optional[datetime] = None,
+                                limit: int = 100) -> List[Dict[str, Any]]:
+
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM volatility_features
+                WHERE symbol = %(symbol)s \
+                  AND timeframe = %(timeframe)s \
+                """
+
+        params = {"symbol": symbol, "timeframe": timeframe}
+
+        if start_date:
+            query += " AND timestamp >= %(start_date)s"
+            params["start_date"] = start_date
+
+        if end_date:
+            query += " AND timestamp <= %(end_date)s"
+            params["end_date"] = end_date
+
+        query += " ORDER BY timestamp DESC LIMIT %(limit)s"
+        params["limit"] = limit
+
+        try:
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+
+            feature_list = []
+            for row in results:
+                feature_data = dict(row)
+                # Перетворення JSON в словник
+                if feature_data.get("features"):
+                    feature_data["features"] = json.loads(feature_data["features"])
+                feature_list.append(feature_data)
+
+            return feature_list
+        except psycopg2.Error as e:
+            print(f"Помилка отримання ознак волатильності: {e}")
+            return []
+
+    # --------- CROSS ASSET VOLATILITY ---------
+
+    def save_cross_asset_volatility(self, cross_vol_data: Dict[str, Any]) -> int:
+        """
+        Зберігає дані про кросс-активну волатильність в таблицю cross_asset_volatility.
+
+        Args:
+            cross_vol_data: Словник з даними кросс-активної волатильності
+
+        Returns:
+            id: Ідентифікатор збереженого запису
+        """
+        if not self.conn:
+            self.connect()
+
+        try:
+            query = """
+                    INSERT INTO cross_asset_volatility (base_symbol, compared_symbol, timeframe, timestamp, correlation, \
+                                                        lag) \
+                    VALUES (%(base_symbol)s, %(compared_symbol)s, %(timeframe)s, %(timestamp)s, \
+                            %(correlation)s, \
+                            %(lag)s) ON CONFLICT (base_symbol, compared_symbol, timeframe, timestamp, lag) DO \
+                    UPDATE \
+                    SET
+                        correlation = EXCLUDED.correlation
+                        RETURNING id; \
+                    """
+
+            self.cursor.execute(query, cross_vol_data)
+            record_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            return record_id
+
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка збереження даних кросс-активної волатильності: {e}")
+            return -1
+
+    def get_cross_asset_volatility(self, base_symbol: str, compared_symbol: str,
+                                   timeframe: str, lag: Optional[int] = None,
+                                   start_date: Optional[datetime] = None,
+                                   end_date: Optional[datetime] = None,
+                                   limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Отримує дані про кросс-активну волатильність з таблиці cross_asset_volatility.
+
+        Args:
+            base_symbol: Базовий символ
+            compared_symbol: Символ порівняння
+            timeframe: Часовий інтервал
+            lag: Лаг кореляції (опціонально)
+            start_date: Початкова дата вибірки (опціонально)
+            end_date: Кінцева дата вибірки (опціонально)
+            limit: Обмеження кількості результатів (за замовчуванням 100)
+
+        Returns:
+            List[Dict]: Список словників з даними кросс-активної волатильності
+        """
+        if not self.conn:
+            self.connect()
+
+        query = """
+                SELECT * \
+                FROM cross_asset_volatility
+                WHERE base_symbol = %(base_symbol)s \
+                  AND compared_symbol = %(compared_symbol)s
+                  AND timeframe = %(timeframe)s \
+                """
+
+        params = {"base_symbol": base_symbol, "compared_symbol": compared_symbol, "timeframe": timeframe}
+
+        if lag is not None:
+            query += " AND lag = %(lag)s"
+            params["lag"] = lag
+
+        if start_date:
+            query += " AND timestamp >= %(start_date)s"
+            params["start_date"] = start_date
+
+        if end_date:
+            query += " AND timestamp <= %(end_date)s"
+            params["end_date"] = end_date
+
+        query += " ORDER BY timestamp DESC LIMIT %(limit)s"
+        params["limit"] = limit
+
+        try:
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+            return [dict(row) for row in results]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання даних кросс-активної волатильності: {e}")
+            return []
+
+    # --------- VIEWS ---------
+
+    def get_current_volatility_regimes(self) -> List[Dict[str, Any]]:
+        """
+        Отримує поточні режими волатильності з представлення current_volatility_regimes.
+
+        Returns:
+            List[Dict]: Список словників з поточними режимами волатильності
+        """
+        if not self.conn:
+            self.connect()
+
+        try:
+            query = "SELECT * FROM current_volatility_regimes"
+            self.cursor.execute(query)
+            results = self.cursor.fetchall()
+            return [dict(row) for row in results]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання поточних режимів волатильності: {e}")
+            return []
+
+    def get_volatility_metrics_comparison(self, symbol: str = None,
+                                          timeframe: str = None,
+                                          limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Отримує порівняння метрик волатильності з представлення volatility_metrics_comparison.
+
+        Args:
+            symbol: Символ криптовалюти (опціонально)
+            timeframe: Часовий інтервал (опціонально)
+            limit: Обмеження кількості результатів (за замовчуванням 100)
+
+        Returns:
+            List[Dict]: Список словників з порівнянням метрик волатильності
+        """
+        if not self.conn:
+            self.connect()
+
+        query = "SELECT * FROM volatility_metrics_comparison"
+        params = {}
+
+        conditions = []
+        if symbol:
+            conditions.append("symbol = %(symbol)s")
+            params["symbol"] = symbol
+
+        if timeframe:
+            conditions.append("timeframe = %(timeframe)s")
+            params["timeframe"] = timeframe
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        query += " ORDER BY timestamp DESC LIMIT %(limit)s"
+        params["limit"] = limit
+
+        try:
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+            return [dict(row) for row in results]
+        except psycopg2.Error as e:
+            print(f"Помилка отримання порівняння метрик волатильності: {e}")
+            return []
+
+    # --------- UTILITY METHODS ---------
+
+    def execute_custom_query(self, query: str, params: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+
+        if not self.conn:
+            self.connect()
+
+        try:
+            self.cursor.execute(query, params or {})
+
+            if query.strip().upper().startswith("SELECT"):
+                results = self.cursor.fetchall()
+                return [dict(row) for row in results]
+            else:
+                self.conn.commit()
+                return []
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            print(f"Помилка виконання запиту: {e}")
+            return []
+
 
 
 
