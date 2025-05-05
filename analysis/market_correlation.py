@@ -13,8 +13,7 @@ from data_collection.market_data_processor import MarketDataProcessor
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
-# таблиці які існують correlation_matrices correlated_pairs correlation_time_series market_clusters correlation_breakdowns market_betas
-#beta_time_series sector_correlations leading_indicators external_asset_correlations market_regime_correlations
+
 
 class MarketCorrelation:
 
@@ -86,7 +85,7 @@ class MarketCorrelation:
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 price_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
-                    interval=timeframe,
+                    timeframe=timeframe,
                     start_time=start_time,
                     end_time=end_time
                 )
@@ -152,7 +151,7 @@ class MarketCorrelation:
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 volume_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
-                    interval=timeframe,
+                    timeframe=timeframe,
                     start_time=start_time,
                     end_time=end_time
                 )
@@ -772,7 +771,7 @@ class MarketCorrelation:
                     'analysis_time': datetime.now()
                 }
 
-                self.db_manager.save_market_betas([beta_record])
+                self.db_manager.save_market_beta([beta_record])
                 logger.info(f"Saved beta value {beta} for {symbol} to database")
 
                 return beta

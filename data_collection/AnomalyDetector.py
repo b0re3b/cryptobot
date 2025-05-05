@@ -1,19 +1,80 @@
 from typing import Tuple, List, Dict, Any
 import numpy as np
 import pandas as pd
+import decimal
 
 try:
     from sklearn.ensemble import IsolationForest
+
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
 
+
 class AnomalyDetector:
 
     def __init__(self, logger: Any):
-
         self.logger = logger
 
+    def _ensure_float(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        result = df.copy()
+        for col in result.columns:
+            if result[col].dtype == object:
+                has_decimal = any(isinstance(x, decimal.Decimal) for x in result[col].dropna())
+                if has_decimal:
+                    self.logger.info(f"Converting decimal.Decimal values to float in column {col}")
+                    result[col] = result[col].apply(lambda x: float(x) if isinstance(x, decimal.Decimal) else x)
+        return result
+
+    def _preprocess_data(self, data: pd.DataFrame, numeric_cols: List[str], fill_method: str = 'mean') -> pd.DataFrame:
+        if data.empty or not numeric_cols:
+            self.logger.warning("Порожні вхідні дані або відсутні числові колонки")
+            return data
+
+        processed_data = self._ensure_float(data)
+
+        # 1. Заповнення відсутніх значень
+        for col in numeric_cols:
+            if col not in processed_data.columns:
+                continue
+
+            if processed_data[col].isna().any():
+                if fill_method == 'mean':
+                    fill_value = processed_data[col].mean()
+                elif fill_method == 'median':
+                    fill_value = processed_data[col].median()
+                elif fill_method == 'ffill':
+                    processed_data[col] = processed_data[col].ffill()
+                    continue
+                elif fill_method == 'bfill':
+                    processed_data[col] = processed_data[col].bfill()
+                    continue
+                else:
+                    fill_value = 0  # Запасний варіант
+
+                processed_data[col] = processed_data[col].fillna(fill_value)
+
+        # 2. Логарифмічне перетворення для сильно скошених даних (за потребою)
+        for col in numeric_cols:
+            if (processed_data[col] > 0).all():  # Логарифм визначений лише для додатних значень
+                skewness = processed_data[col].skew()
+                if abs(skewness) > 1.0:  # Сильне скошення
+                    processed_data[f'{col}_log'] = np.log1p(processed_data[col])
+                    self.logger.info(f"Застосовано логарифмічне перетворення для {col} (скошеність={skewness:.2f})")
+
+        # 3. Видалення дублікатів індексу (якщо DataFrame має DatetimeIndex)
+        if isinstance(processed_data.index, pd.DatetimeIndex):
+            duplicates = processed_data.index.duplicated()
+            if duplicates.any():
+                processed_data = processed_data[~duplicates]
+                self.logger.info(f"Видалено {duplicates.sum()} дублікатів індексу")
+
+        # 4. Сортування за індексом (якщо це часовий ряд)
+        if isinstance(processed_data.index, pd.DatetimeIndex):
+            processed_data = processed_data.sort_index()
+
+        return processed_data
 
     def detect_outliers(self, data: pd.DataFrame, method: str = 'zscore',
                         threshold: float = 3.0, preprocess: bool = True,
@@ -38,6 +99,8 @@ class AnomalyDetector:
             contamination = 0.1
 
         self.logger.info(f"Початок виявлення аномалій методом {method} з порогом {threshold}")
+
+        data = self._ensure_float(data)
 
         # Вибір числових колонок
         numeric_cols = data.select_dtypes(include=[np.number]).columns
@@ -100,6 +163,8 @@ class AnomalyDetector:
             if valid_data.empty:
                 continue
 
+            valid_data = pd.to_numeric(valid_data, errors='coerce')
+
             std = valid_data.std()
             if std == 0 or pd.isna(std):
                 self.logger.warning(f"Колонка {col} має нульове стандартне відхилення або NaN")
@@ -114,6 +179,8 @@ class AnomalyDetector:
         # Обчислимо Z-Score для всіх валідних колонок одночасно
         for col in valid_cols:
             valid_data = data[col].dropna()
+            valid_data = pd.to_numeric(valid_data, errors='coerce')
+
             mean = valid_data.mean()
             std = valid_data.std()
 
@@ -141,6 +208,8 @@ class AnomalyDetector:
                 self.logger.warning(f"Недостатньо даних у колонці {col} для IQR методу")
                 continue
 
+            valid_data = pd.to_numeric(valid_data, errors='coerce')
+
             try:
                 Q1 = valid_data.quantile(0.25)
                 Q3 = valid_data.quantile(0.75)
@@ -154,7 +223,6 @@ class AnomalyDetector:
                 if IQR <= 0 or pd.isna(IQR):
                     self.logger.warning(f"Колонка {col} має нульовий або від'ємний IQR або NaN")
                     continue
-
 
                 lower_bound = Q1 - threshold * IQR
                 upper_bound = Q3 + threshold * IQR
@@ -193,9 +261,13 @@ class AnomalyDetector:
             self.logger.warning("Дані однорідні для всіх колонок, Isolation Forest буде неефективним")
             return
 
+        for col in numeric_cols:
+            if col in X.columns:
+                X[col] = pd.to_numeric(X[col], errors='coerce')
+
         # Заповнення пропущених значень
         for col in numeric_cols:
-            if X[col].isna().any():
+            if col in X.columns and X[col].isna().any():
                 col_mean = X[col].mean()
                 if pd.isna(col_mean):  # Якщо середнє також NaN
                     X[col] = X[col].fillna(0)
@@ -231,13 +303,14 @@ class AnomalyDetector:
         except Exception as e:
             self.logger.error(f"Помилка при використанні Isolation Forest: {str(e)}")
 
-
     def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
                                 volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для перевірки цілісності")
             return {"empty_data": True}
+
+        data = self._ensure_float(data)
 
         issues = {}
 
@@ -392,6 +465,10 @@ class AnomalyDetector:
 
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in data.columns]
 
+        for col in price_cols:
+            if data[col].dtype == object:
+                data[col] = pd.to_numeric(data[col], errors='coerce')
+
         if len(price_cols) == 4:
             # Перевірка high < low
             invalid_hl = data['high'] < data['low']
@@ -413,6 +490,9 @@ class AnomalyDetector:
                 try:
                     # Безпечне обчислення відсоткової зміни з обробкою NaN
                     valid_data = data[col].dropna()
+                    # Ensure values are float
+                    valid_data = pd.to_numeric(valid_data, errors='coerce')
+
                     if len(valid_data) > 1:
                         pct_change = valid_data.pct_change().abs()
                         price_jumps = pct_change > price_jump_threshold
@@ -427,6 +507,9 @@ class AnomalyDetector:
                               issues: Dict[str, Any]) -> None:
 
         if 'volume' in data.columns:
+            if data['volume'].dtype == object:
+                data['volume'] = pd.to_numeric(data['volume'], errors='coerce')
+
             # Перевірка від'ємного об'єму
             negative_volume = data['volume'] < 0
             if negative_volume.any():
@@ -437,6 +520,8 @@ class AnomalyDetector:
             # Перевірка аномального об'єму
             try:
                 valid_volume = data['volume'].dropna()
+                valid_volume = pd.to_numeric(valid_volume, errors='coerce')
+
                 if not valid_volume.empty:
                     volume_std = valid_volume.std()
                     volume_mean = valid_volume.mean()

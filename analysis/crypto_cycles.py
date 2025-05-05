@@ -69,7 +69,7 @@ class CryptoCycles:
         # Load pre-processed data from storage manager
         processed_data = self.db_connection.get_klines_processed(
             symbol=symbol,
-            interval=timeframe,
+            timeframe=timeframe,
             start_date=start_date,
             end_date=end_date,
             connection=self.db_connection

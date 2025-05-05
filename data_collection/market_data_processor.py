@@ -42,105 +42,174 @@ class MarketDataProcessor:
             self.logger.error(f"Невірний reference_index: {reference_index}. Має бути від 0 до {len(data_list) - 1}")
             reference_index = 0
 
-        # Перевірка та конвертація індексів до DatetimeIndex
+        # Підготовка DataFrames
+        processed_data_list = []
+
         for i, df in enumerate(data_list):
             if df is None or df.empty:
                 self.logger.warning(f"DataFrame {i} є порожнім або None")
-                data_list[i] = pd.DataFrame()  # Замінюємо на порожній DataFrame
+                processed_data_list.append(pd.DataFrame())
                 continue
 
-            if not isinstance(df.index, pd.DatetimeIndex):
+            df_copy = df.copy()
+
+            # Перевірка та конвертація до DatetimeIndex
+            if not isinstance(df_copy.index, pd.DatetimeIndex):
                 self.logger.warning(f"DataFrame {i} не має часового індексу. Спроба конвертувати.")
                 try:
-                    time_cols = [col for col in df.columns if
+                    time_cols = [col for col in df_copy.columns if
                                  any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
                     if time_cols:
-                        df[time_cols[0]] = pd.to_datetime(df[time_cols[0]])
-                        df.set_index(time_cols[0], inplace=True)
-                        data_list[i] = df
+                        df_copy[time_cols[0]] = pd.to_datetime(df_copy[time_cols[0]], errors='coerce')
+                        df_copy.set_index(time_cols[0], inplace=True)
+                        df_copy = df_copy.loc[df_copy.index.notna()]  # Видалення рядків з невалідними датами
                     else:
                         self.logger.error(f"Неможливо конвертувати DataFrame {i}: не знайдено часову колонку")
-                        return []
+                        processed_data_list.append(pd.DataFrame())
+                        continue
                 except Exception as e:
                     self.logger.error(f"Помилка при конвертації індексу для DataFrame {i}: {str(e)}")
-                    return []
+                    processed_data_list.append(pd.DataFrame())
+                    continue
+
+            # Сортування за часовим індексом, якщо потрібно
+            if not df_copy.index.is_monotonic_increasing:
+                df_copy = df_copy.sort_index()
+
+            processed_data_list.append(df_copy)
 
         # Перевірка еталонного DataFrame
-        reference_df = data_list[reference_index]
+        reference_df = processed_data_list[reference_index]
         if reference_df is None or reference_df.empty:
             self.logger.error("Еталонний DataFrame є порожнім")
-            return data_list
+            return processed_data_list
 
-        # Визначення частоти часового ряду
+        # Знаходження спільного часового діапазону
+        all_start_times = [df.index.min() for df in processed_data_list if not df.empty]
+        all_end_times = [df.index.max() for df in processed_data_list if not df.empty]
+
+        if not all_start_times or not all_end_times:
+            self.logger.error("Неможливо визначити спільний часовий діапазон")
+            return processed_data_list
+
+        common_start = max(all_start_times)
+        common_end = min(all_end_times)
+
+        self.logger.info(f"Визначено спільний часовий діапазон: {common_start} - {common_end}")
+
+        if common_start > common_end:
+            self.logger.error("Немає спільного часового діапазону між DataFrame")
+            return processed_data_list
+
+        # Створення спільної часової сітки
         try:
+            # Спроба визначити частоту еталонного DataFrame
             reference_freq = pd.infer_freq(reference_df.index)
 
             if not reference_freq:
-                self.logger.warning("Не вдалося визначити частоту reference DataFrame. Спроба визначити вручну.")
-                if len(reference_df.index) > 1:
-                    time_diff = reference_df.index.to_series().diff().dropna()
-                    if not time_diff.empty:
-                        reference_freq = time_diff.median()
-                        self.logger.info(f"Визначено медіанний інтервал: {reference_freq}")
+                self.logger.warning("Не вдалося визначити частоту reference DataFrame. Визначення вручну.")
+                # Розрахунок медіанної різниці часових міток
+                time_diffs = reference_df.index.to_series().diff().dropna()
+                if not time_diffs.empty:
+                    median_diff = time_diffs.median()
+                    # Конвертація до рядка частоти pandas
+                    if median_diff.seconds == 60:
+                        reference_freq = '1min'
+                    elif median_diff.seconds == 300:
+                        reference_freq = '5min'
+                    elif median_diff.seconds == 900:
+                        reference_freq = '15min'
+                    elif median_diff.seconds == 1800:
+                        reference_freq = '30min'
+                    elif median_diff.seconds == 3600:
+                        reference_freq = '1H'
+                    elif median_diff.seconds == 14400:
+                        reference_freq = '4H'
+                    elif median_diff.days == 1:
+                        reference_freq = '1D'
                     else:
-                        self.logger.error("Не вдалося визначити інтервал з різниці часових міток")
-                        return data_list
+                        # Використовуємо кількість секунд як частоту
+                        total_seconds = median_diff.total_seconds()
+                        reference_freq = f"{int(total_seconds)}S"
+
+                    self.logger.info(f"Визначено частоту: {reference_freq}")
                 else:
-                    self.logger.error("Недостатньо точок для визначення частоти reference DataFrame")
-                    return data_list
-        except Exception as e:
-            self.logger.error(f"Помилка при визначенні частоти reference DataFrame: {str(e)}")
-            return data_list
+                    self.logger.error("Не вдалося визначити частоту. Повертаємо оригінальні DataFrame")
+                    return processed_data_list
 
-        aligned_data_list = [reference_df]
+            # Створення нового індексу з використанням визначеної частоти
+            reference_subset = reference_df.loc[(reference_df.index >= common_start) &
+                                                (reference_df.index <= common_end)]
+            common_index = reference_subset.index
 
-        for i, df in enumerate(data_list):
-            if i == reference_index:
-                continue
+            # Якщо частота визначена, перестворимо індекс для забезпечення регулярності
+            if reference_freq:
+                try:
+                    common_index = pd.date_range(start=common_start, end=common_end, freq=reference_freq)
+                except pd.errors.OutOfBoundsDatetime:
+                    self.logger.warning("Помилка створення date_range. Використання оригінального індексу.")
 
-            if df is None or df.empty:
-                self.logger.warning(f"Пропускаємо порожній DataFrame {i}")
-                aligned_data_list.append(df)
-                continue
+            aligned_data_list = []
 
-            self.logger.info(f"Вирівнювання DataFrame {i} з reference DataFrame")
+            # Вирівнювання всіх DataFrame до спільного індексу
+            for i, df in enumerate(processed_data_list):
+                if df.empty:
+                    aligned_data_list.append(df)
+                    continue
 
-            if df.index.equals(reference_df.index):
-                aligned_data_list.append(df)
-                continue
+                self.logger.info(f"Вирівнювання DataFrame {i} до спільного індексу")
 
-            try:
-                start_time = max(df.index.min(), reference_df.index.min())
-                end_time = min(df.index.max(), reference_df.index.max())
+                # Якщо це еталонний DataFrame
+                if i == reference_index:
+                    # Використовуємо оригінальний індекс, обмежений спільним діапазоном
+                    df_aligned = df.loc[(df.index >= common_start) & (df.index <= common_end)]
+                    # Перевірка, чи потрібно перестворити індекс з визначеною частотою
+                    if len(df_aligned.index) != len(common_index):
+                        self.logger.info(f"Перестворення індексу для еталонного DataFrame {i}")
+                        df_aligned = df_aligned.reindex(common_index)
+                else:
+                    # Для інших DataFrame - вирівнюємо до спільного індексу
+                    df_aligned = df.reindex(common_index)
 
-                reference_subset = reference_df.loc[(reference_df.index >= start_time) &
-                                                    (reference_df.index <= end_time)]
-
-                # Безпечний спосіб reindex
-                aligned_df = df.reindex(reference_subset.index, method=None)
-
-                numeric_cols = aligned_df.select_dtypes(include=[np.number]).columns
+                # Інтерполяція числових даних
+                numeric_cols = df_aligned.select_dtypes(include=[np.number]).columns
                 if len(numeric_cols) > 0:
-                    aligned_df[numeric_cols] = aligned_df[numeric_cols].interpolate(method='time')
+                    for col in numeric_cols:
+                        # Обробка кожної колонки окремо
+                        if df_aligned[col].isna().sum() > 0:
+                            try:
+                                # Спочатку спроба інтерполяції за часом
+                                df_aligned[col] = df_aligned[col].interpolate(method='time')
+                                # Якщо залишились NA на краях, використовуємо заповнення вперед/назад
+                                if df_aligned[col].isna().sum() > 0:
+                                    df_aligned[col] = df_aligned[col].fillna(method='ffill').fillna(method='bfill')
+                            except Exception as e:
+                                self.logger.warning(f"Помилка інтерполяції колонки {col}: {str(e)}")
+                                # Спробуємо простіший метод
+                                df_aligned[col] = df_aligned[col].interpolate(method='linear').fillna(
+                                    method='ffill').fillna(method='bfill')
 
-                aligned_data_list.append(aligned_df)
-
-                missing_values = aligned_df.isna().sum().sum()
+                # Перевірка та звіт про відсутні значення
+                missing_values = df_aligned.isna().sum().sum()
                 if missing_values > 0:
                     self.logger.warning(
                         f"Після вирівнювання DataFrame {i} залишилося {missing_values} відсутніх значень")
 
-            except Exception as e:
-                self.logger.error(f"Помилка при вирівнюванні DataFrame {i}: {str(e)}")
-                self.logger.error(f"Деталі помилки: {traceback.format_exc()}")
-                aligned_data_list.append(df)  # Додаємо оригінал при помилці
+                aligned_data_list.append(df_aligned)
 
-        return aligned_data_list
+            return aligned_data_list
+
+        except Exception as e:
+            self.logger.error(f"Помилка при вирівнюванні часових рядів: {str(e)}")
+            self.logger.error(traceback.format_exc())
+            return processed_data_list
 
     def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 10,
                                  price_col: str = 'close', volume_col: str = 'volume',
                                  time_period: Optional[str] = None) -> pd.DataFrame:
-
+        """
+        Створює профіль об'єму з коректною обробкою бінів
+        """
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
             return pd.DataFrame()
@@ -163,24 +232,60 @@ class MarketDataProcessor:
                 return self._create_volume_profile(data, bins, price_col, volume_col)
 
             self.logger.info(f"Створення часового профілю об'єму з періодом {time_period}")
-            period_groups = data.groupby(pd.Grouper(freq=time_period))
+            try:
+                # Перевірка та локалізація часового індексу
+                if data.index.tz is None:
+                    self.logger.info("Локалізація часового індексу до UTC для групування")
+                    try:
+                        # Безпечна локалізація
+                        data = data.copy()
+                        data.index = data.index.tz_localize('UTC', ambiguous='NaT')
+                        # Прибираємо рядки з NaT
+                        mask = data.index.isna()
+                        if mask.any():
+                            self.logger.warning(f"Знайдено {mask.sum()} неоднозначних часових міток. Видаляємо.")
+                            data = data[~mask]
+                    except pd.errors.OutOfBoundsDatetime:
+                        self.logger.warning("Помилка локалізації часового індексу. Продовжуємо без локалізації.")
 
-            result_dfs = []
+                # Безпечне групування з перевіркою на порожні групи
+                period_groups = data.groupby(pd.Grouper(freq=time_period, dropna=True))
 
-            for period, group in period_groups:
-                if group.empty:
-                    continue
+                result_dfs = []
 
-                period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
-                if not period_profile.empty:
-                    period_profile['period'] = period
-                    result_dfs.append(period_profile)
+                for period, group in period_groups:
+                    if group.empty:
+                        continue
 
-            if result_dfs:
-                return pd.concat(result_dfs)
-            else:
-                self.logger.warning("Не вдалося створити часовий профіль об'єму")
-                return pd.DataFrame()
+                    # Перевірка наявності даних у групі
+                    if len(group) < 2:
+                        self.logger.info(f"Пропуск періоду {period}: недостатньо даних")
+                        continue
+
+                    period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
+                    if not period_profile.empty:
+                        period_profile['period'] = period
+                        result_dfs.append(period_profile)
+
+                if result_dfs:
+                    # Сортування за періодом перед об'єднанням
+                    result = pd.concat(result_dfs)
+                    # Перетворення колонки period на DatetimeIndex, якщо це можливо
+                    if 'period' in result.columns and not result['period'].isna().any():
+                        result['period'] = pd.to_datetime(result['period'])
+                        # Сортування за періодом
+                        result = result.sort_values('period')
+                    return result
+                else:
+                    self.logger.warning("Не вдалося створити часовий профіль об'єму")
+                    # Спробуємо створити загальний профіль як запасний варіант
+                    return self._create_volume_profile(data, bins, price_col, volume_col)
+
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні часового профілю об'єму: {str(e)}")
+                self.logger.error(traceback.format_exc())
+                # У випадку помилки спробуємо створити звичайний профіль
+                return self._create_volume_profile(data, bins, price_col, volume_col)
         else:
             return self._create_volume_profile(data, bins, price_col, volume_col)
 
@@ -568,8 +673,6 @@ def main():
                 # Ресемплінг до 1d
                 resampled_1d = processor.resample_data(processed, target_interval='1d')
                 resampled_1d = processor.add_time_features(resampled_1d, tz=EU_TIMEZONE)
-
-                # Збереження денних даних
 
 
                 # Збереження для LSTM та ARIMA

@@ -6,18 +6,144 @@ import logging
 import re
 import time
 import praw
-from typing import List, Dict, Optional, Union, Tuple
+from typing import List, Dict, Optional, Union, Tuple, Any
 from random import randint
 from data.db import DatabaseManager
 from utils.logger import CryptoLogger
+from scipy import stats
+
+
 class NewsAnalyzer:
+    """
+    Клас для аналізу новин криптовалютного ринку, включаючи аналіз настроїв,
+    виявлення тенденцій та кореляцію з ринковими даними.
+    """
+
+    # Словник з популярними криптовалютами та їх скороченнями/синонімами
+    CRYPTO_KEYWORDS = {
+        'bitcoin': ['btc', 'xbt', 'bitcoin', 'биткоин', 'біткоїн'],
+        'ethereum': ['eth', 'ethereum', 'эфириум', 'етеріум', 'ether'],
+        'ripple': ['xrp', 'ripple'],
+        'litecoin': ['ltc', 'litecoin'],
+        'cardano': ['ada', 'cardano'],
+        'polkadot': ['dot', 'polkadot'],
+        'binance coin': ['bnb', 'binance coin', 'binance'],
+        'dogecoin': ['doge', 'dogecoin'],
+        'solana': ['sol', 'solana'],
+        'tron': ['trx', 'tron'],
+        'tether': ['usdt', 'tether'],
+        'usd coin': ['usdc', 'usd coin'],
+        'avalanche': ['avax', 'avalanche'],
+        'chainlink': ['link', 'chainlink'],
+        'polygon': ['matic', 'polygon'],
+        'stellar': ['xlm', 'stellar'],
+        'cosmos': ['atom', 'cosmos'],
+        'vechain': ['vet', 'vechain'],
+        'algorand': ['algo', 'algorand'],
+        'uniswap': ['uni', 'uniswap'],
+        'shiba inu': ['shib', 'shiba inu', 'shiba'],
+        'filecoin': ['fil', 'filecoin'],
+        'monero': ['xmr', 'monero'],
+        'aave': ['aave'],
+        'maker': ['mkr', 'maker'],
+        'compound': ['comp', 'compound'],
+        'decentraland': ['mana', 'decentraland']
+    }
+
+    # Ключові слова, що вказують на потенційно важливі події
+    CRITICAL_KEYWORDS = {
+        'regulation': ['regulation', 'регуляція', 'закон', 'заборона', 'легалізація', 'SEC', 'CFTC'],
+        'hack': ['hack', 'хакер', 'зламали', 'атака', 'викрадено', 'вкрадено', 'безпека'],
+        'market_crash': ['crash', 'collapse', 'обвал', 'крах', 'падіння', 'bear market', 'ведмежий'],
+        'market_boom': ['boom', 'rally', 'ріст', 'буйк', 'bull market', 'бичачий', 'ath', 'all-time high'],
+        'merge': ['merge', 'злиття', 'acquisition', 'поглинання', 'buyout', 'викуп'],
+        'fork': ['fork', 'форк', 'hard fork', 'soft fork', 'chain split', 'розділення'],
+        'adoption': ['adoption', 'впровадження', 'integration', 'інтеграція', 'partnership', 'партнерство'],
+        'scandal': ['scandal', 'скандал', 'controversy', 'контроверсія', 'fraud', 'шахрайство'],
+        'lawsuit': ['lawsuit', 'позов', 'court', 'суд', 'legal action', 'legal', 'investigation'],
+        'innovation': ['innovation', 'інновація', 'breakthrough', 'прорив', 'launch', 'запуск']
+    }
+
+    # Слова, які часто зустрічаються і не несуть специфічного значення
+    COMMON_WORDS = {
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
+        'to', 'for', 'with', 'by', 'about', 'as', 'of', 'from',
+        'that', 'this', 'these', 'those', 'is', 'are', 'was', 'were',
+        'has', 'have', 'had', 'been', 'will', 'would', 'could', 'should'
+    }
+
+    # Основні компанії/проекти в криптосфері
+    MAJOR_ENTITIES = [
+        'bitcoin', 'ethereum', 'binance', 'coinbase', 'ripple', 'tether',
+        'ftx', 'metamask', 'opensea', 'uniswap', 'solana', 'avalanche'
+    ]
 
     def __init__(self, sentiment_analyzer=None, logger=None):
-        # Ініціалізація аналізатора настроїв і логера
-        pass
+        """
+        Ініціалізує аналізатор новин.
 
-    def analyze_news_sentiment(self, news_data: List[Dict]) -> List[Dict]:
+        Args:
+            sentiment_analyzer: Аналізатор настроїв текстів
+            logger: Об'єкт логера для запису подій
+        """
+        self.sentiment_analyzer = sentiment_analyzer
+        self.logger = logger or CryptoLogger("news_analyzer").get_logger()
 
+        # Попередня компіляція регулярних виразів для криптовалют
+        self.coin_patterns = self._compile_coin_patterns()
+
+        # Попередня компіляція регулярних виразів для критичних подій
+        self.category_patterns = self._compile_category_patterns()
+
+    def _compile_coin_patterns(self) -> Dict[str, re.Pattern]:
+        """
+        Компілює регулярні вирази для пошуку криптовалют.
+
+        Returns:
+            Dict[str, re.Pattern]: Словник із скомпільованими шаблонами
+        """
+        coin_patterns = {}
+        for coin, aliases in self.CRYPTO_KEYWORDS.items():
+            # Створюємо шаблон регулярного виразу для кожної монети та її аліасів
+            pattern = r'\b(?i)(' + '|'.join(map(re.escape, aliases)) + r')\b'
+            coin_patterns[coin] = re.compile(pattern)
+        return coin_patterns
+
+    def _compile_category_patterns(self) -> Dict[str, List[re.Pattern]]:
+        """
+        Компілює регулярні вирази для категорій важливих подій.
+
+        Returns:
+            Dict[str, List[re.Pattern]]: Словник із скомпільованими шаблонами
+        """
+        category_patterns = {}
+        for category, keywords in self.CRITICAL_KEYWORDS.items():
+            patterns = [re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE) for keyword in keywords]
+            category_patterns[category] = patterns
+        return category_patterns
+
+    def _get_text_to_analyze(self, news: Dict[str, Any]) -> str:
+        """
+        Витягує текст для аналізу з новини.
+
+        Args:
+            news: Словник з даними новини
+
+        Returns:
+            str: Комбінований текст для аналізу
+        """
+        return f"{news.get('title', '')} {news.get('summary', '')}"
+
+    def analyze_news_sentiment(self, news_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Аналізує настрої в текстах новин.
+
+        Args:
+            news_data: Список словників з даними новин
+
+        Returns:
+            List[Dict[str, Any]]: Список новин з доданим аналізом настроїв
+        """
         self.logger.info(f"Початок аналізу настроїв для {len(news_data)} новин")
 
         # Перевірка наявності аналізатора настроїв
@@ -37,8 +163,8 @@ class NewsAnalyzer:
 
         for idx, news in enumerate(news_data):
             try:
-                # Текст для аналізу (комбінуємо заголовок та опис)
-                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+                # Текст для аналізу
+                text_to_analyze = self._get_text_to_analyze(news)
 
                 # Викликаємо аналізатор настроїв
                 sentiment_result = self.sentiment_analyzer.analyze(text_to_analyze)
@@ -79,59 +205,28 @@ class NewsAnalyzer:
         self.logger.info(f"Аналіз настроїв завершено для {len(analyzed_news)} новин")
         return analyzed_news
 
-    def extract_mentioned_coins(self, news_data: List[Dict]) -> List[Dict]:
+    def extract_mentioned_coins(self, news_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Виявляє згадки криптовалют у новинах.
 
+        Args:
+            news_data: Список словників з даними новин
+
+        Returns:
+            List[Dict[str, Any]]: Список новин з доданою інформацією про згадані криптовалюти
+        """
         self.logger.info(f"Початок пошуку згаданих криптовалют у {len(news_data)} новинах")
-
-        # Словник з популярними криптовалютами та їх скороченнями/синонімами
-        crypto_keywords = {
-            'bitcoin': ['btc', 'xbt', 'bitcoin', 'биткоин', 'біткоїн'],
-            'ethereum': ['eth', 'ethereum', 'эфириум', 'етеріум', 'ether'],
-            'ripple': ['xrp', 'ripple'],
-            'litecoin': ['ltc', 'litecoin'],
-            'cardano': ['ada', 'cardano'],
-            'polkadot': ['dot', 'polkadot'],
-            'binance coin': ['bnb', 'binance coin', 'binance'],
-            'dogecoin': ['doge', 'dogecoin'],
-            'solana': ['sol', 'solana'],
-            'tron': ['trx', 'tron'],
-            'tether': ['usdt', 'tether'],
-            'usd coin': ['usdc', 'usd coin'],
-            'avalanche': ['avax', 'avalanche'],
-            'chainlink': ['link', 'chainlink'],
-            'polygon': ['matic', 'polygon'],
-            'stellar': ['xlm', 'stellar'],
-            'cosmos': ['atom', 'cosmos'],
-            'vechain': ['vet', 'vechain'],
-            'algorand': ['algo', 'algorand'],
-            'uniswap': ['uni', 'uniswap'],
-            'shiba inu': ['shib', 'shiba inu', 'shiba'],
-            'filecoin': ['fil', 'filecoin'],
-            'monero': ['xmr', 'monero'],
-            'aave': ['aave'],
-            'maker': ['mkr', 'maker'],
-            'compound': ['comp', 'compound'],
-            'decentraland': ['mana', 'decentraland']
-        }
-
-        # Компілюємо регулярні вирази для ефективного пошуку
-        coin_patterns = {}
-        for coin, aliases in crypto_keywords.items():
-            # Створюємо шаблон регулярного виразу для кожної монети та її аліасів
-            # \b забезпечує пошук цілих слів, а (?i) - нечутливість до регістру
-            pattern = r'\b(?i)(' + '|'.join(aliases) + r')\b'
-            coin_patterns[coin] = re.compile(pattern)
 
         for news in news_data:
             try:
-                # Текст для аналізу (комбінуємо заголовок та опис)
-                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+                # Текст для аналізу
+                text_to_analyze = self._get_text_to_analyze(news)
 
                 # Ініціалізуємо словник для згаданих монет та їх кількості
                 mentioned_coins = {}
 
                 # Пошук кожної монети в тексті
-                for coin, pattern in coin_patterns.items():
+                for coin, pattern in self.coin_patterns.items():
                     matches = pattern.findall(text_to_analyze)
                     if matches:
                         # Записуємо кількість згадок
@@ -165,9 +260,17 @@ class NewsAnalyzer:
         self.logger.info("Пошук згаданих криптовалют завершено")
         return news_data
 
-    def filter_by_keywords(self, news_data: List[Dict],
-                           keywords: List[str]) -> List[Dict]:
+    def filter_by_keywords(self, news_data: List[Dict[str, Any]], keywords: List[str]) -> List[Dict[str, Any]]:
+        """
+        Фільтрує новини за наявністю ключових слів.
 
+        Args:
+            news_data: Список словників з даними новин
+            keywords: Список ключових слів для пошуку
+
+        Returns:
+            List[Dict[str, Any]]: Список відфільтрованих новин
+        """
         self.logger.info(f"Початок фільтрації {len(news_data)} новин за {len(keywords)} ключовими словами")
 
         if not keywords or not news_data:
@@ -175,31 +278,23 @@ class NewsAnalyzer:
             return news_data
 
         # Підготовка регулярних виразів для пошуку (нечутливість до регістру)
-        keyword_patterns = []
-        for keyword in keywords:
-            # Екрануємо спеціальні символи у ключових словах
-            escaped_keyword = re.escape(keyword)
-            # Створюємо шаблон для пошуку цілого слова
-            pattern = re.compile(rf'\b{escaped_keyword}\b', re.IGNORECASE)
-            keyword_patterns.append(pattern)
+        keyword_patterns = [re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE) for keyword in keywords]
 
         filtered_news = []
 
         for news in news_data:
             try:
-                # Текст для аналізу (комбінуємо заголовок та опис)
-                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+                # Текст для аналізу
+                text_to_analyze = self._get_text_to_analyze(news)
 
                 # Перевірка на наявність хоча б одного ключового слова
-                matches_found = False
                 matched_keywords = []
 
                 for i, pattern in enumerate(keyword_patterns):
                     if pattern.search(text_to_analyze):
-                        matches_found = True
                         matched_keywords.append(keywords[i])
 
-                if matches_found:
+                if matched_keywords:
                     # Копіюємо новину та додаємо інформацію про знайдені ключові слова
                     matched_news = news.copy()
                     matched_news['matched_keywords'] = matched_keywords
@@ -211,43 +306,31 @@ class NewsAnalyzer:
         self.logger.info(f"Відфільтровано {len(filtered_news)} новин з {len(news_data)} за ключовими словами")
         return filtered_news
 
-    def detect_major_events(self, news_data: List[Dict]) -> List[Dict]:
+    def detect_major_events(self, news_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Виявляє важливі події на основі аналізу новин.
 
+        Args:
+            news_data: Список словників з даними новин
+
+        Returns:
+            List[Dict[str, Any]]: Список виявлених важливих подій
+        """
         self.logger.info(f"Початок аналізу {len(news_data)} новин для виявлення важливих подій")
-
-        # Ключові слова, що вказують на потенційно важливі події
-        critical_keywords = {
-            'regulation': ['regulation', 'регуляція', 'закон', 'заборона', 'легалізація', 'SEC', 'CFTC'],
-            'hack': ['hack', 'хакер', 'зламали', 'атака', 'викрадено', 'вкрадено', 'безпека'],
-            'market_crash': ['crash', 'collapse', 'обвал', 'крах', 'падіння', 'bear market', 'ведмежий'],
-            'market_boom': ['boom', 'rally', 'ріст', 'буйк', 'bull market', 'бичачий', 'ath', 'all-time high'],
-            'merge': ['merge', 'злиття', 'acquisition', 'поглинання', 'buyout', 'викуп'],
-            'fork': ['fork', 'форк', 'hard fork', 'soft fork', 'chain split', 'розділення'],
-            'adoption': ['adoption', 'впровадження', 'integration', 'інтеграція', 'partnership', 'партнерство'],
-            'scandal': ['scandal', 'скандал', 'controversy', 'контроверсія', 'fraud', 'шахрайство'],
-            'lawsuit': ['lawsuit', 'позов', 'court', 'суд', 'legal action', 'legal', 'investigation'],
-            'innovation': ['innovation', 'інновація', 'breakthrough', 'прорив', 'launch', 'запуск']
-        }
-
-        # Створення шаблонів регулярних виразів для кожної категорії
-        category_patterns = {}
-        for category, keywords in critical_keywords.items():
-            patterns = [re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE) for keyword in keywords]
-            category_patterns[category] = patterns
 
         major_events = []
 
         # Аналіз новин
         for news in news_data:
             try:
-                # Текст для аналізу (комбінуємо заголовок та опис)
-                text_to_analyze = f"{news['title']} {news.get('summary', '')}"
+                # Текст для аналізу
+                text_to_analyze = self._get_text_to_analyze(news)
 
                 # Перевірка по категоріях
                 event_categories = set()
                 matched_keywords = {}
 
-                for category, patterns in category_patterns.items():
+                for category, patterns in self.category_patterns.items():
                     for pattern in patterns:
                         if pattern.search(text_to_analyze):
                             event_categories.add(category)
@@ -263,11 +346,8 @@ class NewsAnalyzer:
 
                 # Додаткові фактори для визначення важливості:
                 # 1. Перевірка наявності назв великих компаній/проектів
-                major_entities = ['bitcoin', 'ethereum', 'binance', 'coinbase', 'ripple', 'tether',
-                                  'ftx', 'metamask', 'opensea', 'uniswap', 'solana', 'avalanche']
-
                 entity_matches = []
-                for entity in major_entities:
+                for entity in self.MAJOR_ENTITIES:
                     if re.search(rf'\b{re.escape(entity)}\b', text_to_analyze, re.IGNORECASE):
                         entity_matches.append(entity)
                         importance_level += 0.5  # Додаємо ваги до важливості
@@ -302,22 +382,25 @@ class NewsAnalyzer:
         self.logger.info(f"Виявлено {len(major_events)} важливих подій")
         return major_events
 
-    def get_trending_topics(self, news_data: List[Dict], top_n: int = 10) -> List[Dict]:
+    def get_trending_topics(self, news_data: List[Dict[str, Any]], top_n: int = 10) -> List[Dict[str, Any]]:
+        """
+        Виявляє трендові теми на основі частоти слів у новинах.
 
+        Args:
+            news_data: Список словників з даними новин
+            top_n: Кількість трендових тем для виведення
+
+        Returns:
+            List[Dict[str, Any]]: Список трендових тем
+        """
         self.logger.info(f"Аналіз трендів серед {len(news_data)} новин")
 
         # Словник для підрахунку частоти ключових слів
         word_frequency = {}
 
-        # Слова, які часто зустрічаються і не несуть специфічного значення
-        common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
-                        'to', 'for', 'with', 'by', 'about', 'as', 'of', 'from',
-                        'that', 'this', 'these', 'those', 'is', 'are', 'was', 'were',
-                        'has', 'have', 'had', 'been', 'will', 'would', 'could', 'should'}
-
         for news in news_data:
-            # Об'єднуємо заголовок і короткий опис
-            text = f"{news.get('title', '')} {news.get('summary', '')}"
+            # Текст для аналізу
+            text = self._get_text_to_analyze(news)
 
             # Нормалізація тексту: нижній регістр і видалення пунктуації
             text = re.sub(r'[^\w\s]', '', text.lower())
@@ -327,7 +410,7 @@ class NewsAnalyzer:
 
             # Підрахунок частоти слів (крім поширених)
             for word in words:
-                if len(word) > 3 and word not in common_words:
+                if len(word) > 3 and word not in self.COMMON_WORDS:
                     word_frequency[word] = word_frequency.get(word, 0) + 1
 
         # Сортування за частотою
@@ -345,8 +428,17 @@ class NewsAnalyzer:
         self.logger.info(f"Знайдено {len(trends)} трендових тем")
         return trends
 
-    def correlate_with_market(self, news_data: List[Dict], market_data: pd.DataFrame) -> Dict:
+    def correlate_with_market(self, news_data: List[Dict[str, Any]], market_data: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Аналізує кореляцію між настроями в новинах та ринковими даними.
 
+        Args:
+            news_data: Список словників з даними новин
+            market_data: DataFrame з ринковими даними
+
+        Returns:
+            Dict[str, Any]: Результати аналізу кореляції
+        """
         self.logger.info("Початок аналізу кореляції новин з ринком")
 
         if not news_data or market_data.empty:
@@ -392,11 +484,10 @@ class NewsAnalyzer:
             correlation = merged_data['sentiment_score'].corr(merged_data[price_column])
 
             # Розрахунок p-value для визначення статистичної значущості
-            from scipy import stats
-            correlation_significance = stats.pearsonr(
+            correlation_coefficient, correlation_significance = stats.pearsonr(
                 merged_data['sentiment_score'],
                 merged_data[price_column]
-            )[1]  # p-value
+            )
 
             result = {
                 'correlation': correlation,

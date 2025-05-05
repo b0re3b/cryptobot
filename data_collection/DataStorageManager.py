@@ -90,7 +90,7 @@ class DataStorageManager:
                 self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
 
     # Нові методи для збереження даних моделей для кожної криптовалюти
-    def save_lstm_sequence(self, df: pd.DataFrame, symbol: str):
+    def save_lstm_sequence(self, df: pd.DataFrame, symbol: str,):
         """Зберігає послідовності LSTM для конкретної криптовалюти"""
         if df.empty:
             self.logger.warning(f"Спроба зберегти порожні LSTM послідовності для {symbol}")

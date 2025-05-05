@@ -13,7 +13,7 @@ class DataCleaner:
     def __init__(self, logger):
         self.logger = logger
         self.anomaly_detector = AnomalyDetector(logger=self.logger)
-
+        self.data_resampler = DataResampler(logger=self.logger)
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True, normalize: bool = True,
                    norm_method: str = 'z-score', resample: bool = True,
@@ -27,7 +27,7 @@ class DataCleaner:
         self.logger.info(f"Початок очищення даних: {data.shape[0]} рядків, {data.shape[1]} стовпців")
 
         # Виконуємо перевірку цілісності даних перед очищенням
-        integrity_issues = AnomalyDetector.validate_data_integrity(data)
+        integrity_issues = self.anomaly_detector.validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
@@ -134,7 +134,7 @@ class DataCleaner:
         if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
             try:
                 self.logger.info(f"Виконання ресемплінгу даних до інтервалу {target_interval}...")
-                result = DataResampler.resample_data(result, target_interval)
+                result = self.data_resampler.resample_data(result, target_interval)
             except Exception as e:
                 self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
 
@@ -166,7 +166,7 @@ class DataCleaner:
                     self.logger.warning("Не вдалося нормалізувати колонку об'єму")
 
         # Перевіряємо цілісність даних після очищення
-        clean_integrity_issues = AnomalyDetector.validate_data_integrity(result)
+        clean_integrity_issues = self.anomaly_detector.validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -279,7 +279,7 @@ class DataCleaner:
 
         self.logger.info(f"Заповнено {filled_values} відсутніх значень методом '{method}'")
 
-        clean_integrity_issues = AnomalyDetector.validate_data_integrity(result)
+        clean_integrity_issues = self.anomaly_detector.validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -415,14 +415,14 @@ class DataCleaner:
             return pd.DataFrame()
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
-                       columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[pd.DataFrame, Optional[Dict]]:
+                       columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[
+        pd.DataFrame, Optional[Dict]]:
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
             return data if data is not None else pd.DataFrame(), None
 
         result = data.copy()
-
         numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
 
         if columns is not None:
@@ -441,39 +441,37 @@ class DataCleaner:
             return result, None
 
         self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
+        self.logger.info(f"Колонки для нормалізації: {normalize_cols}")
 
         X = result[normalize_cols].values
 
         scaler = None
         if method == 'z-score':
             scaler = StandardScaler()
-            self.logger.info("Застосування StandardScaler (z-score нормалізація)")
         elif method == 'min-max':
             scaler = MinMaxScaler()
-            self.logger.info("Застосування MinMaxScaler (min-max нормалізація)")
         elif method == 'robust':
             scaler = RobustScaler()
-            self.logger.info("Застосування RobustScaler (робастна нормалізація)")
         else:
             self.logger.error(f"Непідтримуваний метод нормалізації: {method}")
             return result, None
 
         try:
-            # Обробка NaN значень
+            # Оптимізована обробка NaN
+            all_nan_cols = np.all(np.isnan(X), axis=0)
+            if all_nan_cols.any():
+                self.logger.warning(
+                    f"Колонки з повними NaN: {[normalize_cols[i] for i, v in enumerate(all_nan_cols) if v]}")
+                X[:, all_nan_cols] = 0
+
             if np.isnan(X).any():
-                self.logger.warning("Знайдено NaN значення в даних. Заміна на середні значення колонок")
-                for i, col in enumerate(normalize_cols):
-                    # Перевірка чи вся колонка складається з NaN
-                    if np.all(np.isnan(X[:, i])):
-                        self.logger.warning(f"Колонка {col} містить лише NaN значення. Заміна на 0.")
-                        X[:, i] = 0
-                    else:
-                        col_mean = np.nanmean(X[:, i])
-                        X[:, i] = np.nan_to_num(X[:, i], nan=col_mean)
+                col_means = np.nanmean(X, axis=0)
+                inds = np.where(np.isnan(X))
+                X[inds] = np.take(col_means, inds[1])
+                self.logger.warning("Замінено NaN на середні значення колонок")
 
             X_scaled = scaler.fit_transform(X)
 
-            # Перевірка на нескінченні значення після трансформації
             if not np.isfinite(X_scaled).all():
                 self.logger.warning("Знайдено нескінченні значення після нормалізації. Заміна на 0.")
                 X_scaled = np.nan_to_num(X_scaled, nan=0, posinf=0, neginf=0)
@@ -493,8 +491,7 @@ class DataCleaner:
 
         except Exception as e:
             self.logger.error(f"Помилка при нормалізації даних: {str(e)}")
-            return data, None
-
+            return data
 
     def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
                           add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
@@ -545,8 +542,9 @@ class DataCleaner:
                 except pytz.exceptions.AmbiguousTimeError:
                     # Обробка випадків при переході на зимовий час
                     self.logger.warning(
-                        "Виявлено неоднозначний час при переході на зимовий час. Використання першого варіанту.")
-                    result.index = result.index.tz_localize(tz, ambiguous='infer')
+                        "Виявлено неоднозначний час при переході на зимовий час. Використання явного вибору.")
+                    # Встановлюємо True для першої появи часу (до переводу) або False для другої появи часу (після переводу)
+                    result.index = result.index.tz_localize(tz, ambiguous=False)
                 except Exception as e:
                     self.logger.warning(
                         f"Помилка при локалізації часового поясу: {str(e)}. Продовжуємо без часового поясу.")
@@ -610,7 +608,7 @@ class DataCleaner:
                 days_in_month = pd.Series([30] * len(result), index=result.index)
 
             # Перевірка на нульові значення у знаменнику
-            days_in_month = days_in_month.replace(0, 30)
+            days_in_month = pd.Series(days_in_month).replace(0, 30).values
 
             result['day_sin'] = np.sin(2 * np.pi * result['day'] / days_in_month)
             result['day_cos'] = np.cos(2 * np.pi * result['day'] / days_in_month)

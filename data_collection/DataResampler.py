@@ -366,18 +366,10 @@ class DataResampler:
 
         self.logger.info(f"Підготовка LSTM даних для {asset} на інтервалі {timeframe}")
 
-        # 1. Додаємо технічні індикатори
-        df = self.calculate_technical_indicators(data)
+        df = self.create_time_features(data)
 
-        # 2. Додаємо часові ознаки
-        df = self.create_time_features(df)
-
-        # 3. Вибір колонок для масштабування
-        feature_cols = [
-            'open', 'high', 'low', 'close', 'volume',
-            'ma_5', 'ma_20', 'rsi_14', 'macd',
-            'bb_upper', 'bb_lower', 'volatility'
-        ]
+        # 2. Вибір колонок для масштабування (лише базові ринкові дані)
+        feature_cols = ['open', 'high', 'low', 'close', 'volume']
 
         # Додаємо циклічні часові ознаки
         time_features = [
@@ -390,7 +382,7 @@ class DataResampler:
         available_features = [col for col in feature_cols if col in df.columns]
         available_time_features = [col for col in time_features if col in df.columns]
 
-        # 4. Масштабування даних
+        # 3. Масштабування даних
         scaler = MinMaxScaler(feature_range=(0, 1))
 
         # Масштабування ознак
@@ -410,16 +402,14 @@ class DataResampler:
             'feature_scale_': dict(zip(available_features, scaler.scale_.tolist()))
         }
 
-        # 5. Створення послідовностей для обробки
+        # 4. Створення послідовностей для обробки
         sequences_df = pd.DataFrame()
         sequence_counter = 0
 
-        # Для кожної можливої послідовності
         for i in range(len(df) - sequence_length - max(forecast_horizons) + 1):
             sequence_id = sequence_counter
             sequence_counter += 1
 
-            # Ітеруємо по послідовності
             for pos in range(sequence_length):
                 idx = i + pos
                 row = {
@@ -448,11 +438,11 @@ class DataResampler:
                 # Додаємо метадані масштабування
                 row['scaling_metadata'] = json.dumps(scaling_metadata)
 
-                # Додаємо рядок до результуючого DataFrame
                 sequences_df = pd.concat([sequences_df, pd.DataFrame([row])], ignore_index=True)
 
         self.logger.info(f"Створено {sequence_counter} послідовностей для {asset}")
 
         return sequences_df
+
 
 
