@@ -1195,3 +1195,20 @@ SELECT
     (vm.hist_vol_14d - vm.garman_klass_vol) AS hist_gk_diff,
     (vm.hist_vol_14d - vm.yang_zhang_vol) AS hist_yz_diff
 FROM volatility_metrics vm;
+CREATE TABLE IF NOT EXISTS trend_analysis (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    analysis_date TIMESTAMP NOT NULL,
+    trend_type VARCHAR(20),
+    trend_strength FLOAT,
+    support_levels JSONB,
+    resistance_levels JSONB,
+    fibonacci_levels JSONB,
+    swing_points JSONB,
+    detected_patterns JSONB,
+    market_regime VARCHAR(30),
+    additional_metrics JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (symbol, timeframe, analysis_date)
+);

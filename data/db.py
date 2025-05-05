@@ -1,6 +1,6 @@
 import os
 import pickle
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 import numpy as np
 import psycopg2
 import pandas as pd
@@ -5400,6 +5400,161 @@ class DatabaseManager:
             return []
 
 
+def save_trend_analysis(
+        self,
+        symbol: str,
+        timeframe: str,
+        analysis_date: datetime,
+        trend_data: Dict[str, Any]
+) -> bool:
+    """Зберігає аналіз тренду в базу даних"""
+    try:
+        # Перевірка наявності необхідних полів
+        required_fields = ['trend_type', 'trend_strength']
+        for field in required_fields:
+            if field not in trend_data:
+                trend_data[field] = None
+
+        # Підготовка JSONB полів
+        support_levels = json.dumps(trend_data.get('support_levels', []))
+        resistance_levels = json.dumps(trend_data.get('resistance_levels', []))
+        fibonacci_levels = json.dumps(trend_data.get('fibonacci_levels', {}))
+        swing_points = json.dumps(trend_data.get('swing_points', {'highs': [], 'lows': []}))
+        detected_patterns = json.dumps(trend_data.get('detected_patterns', []))
+        additional_metrics = json.dumps(trend_data.get('additional_metrics', {}))
+
+        # SQL запит для вставки або оновлення даних (upsert)
+        query = """
+                INSERT INTO trend_analysis (symbol, timeframe, analysis_date, trend_type, trend_strength,
+                                            support_levels, resistance_levels, fibonacci_levels, swing_points,
+                                            detected_patterns, market_regime, additional_metrics)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
+                        %s) ON CONFLICT (symbol, timeframe, analysis_date) DO
+                UPDATE
+                    SET
+                        trend_type = EXCLUDED.trend_type,
+                    trend_strength = EXCLUDED.trend_strength,
+                    support_levels = EXCLUDED.support_levels,
+                    resistance_levels = EXCLUDED.resistance_levels,
+                    fibonacci_levels = EXCLUDED.fibonacci_levels,
+                    swing_points = EXCLUDED.swing_points,
+                    detected_patterns = EXCLUDED.detected_patterns,
+                    market_regime = EXCLUDED.market_regime,
+                    additional_metrics = EXCLUDED.additional_metrics
+                    RETURNING id
+                """
+
+        self.cursor.execute(query, (
+            symbol,
+            timeframe,
+            analysis_date,
+            trend_data.get('trend_type'),
+            trend_data.get('trend_strength'),
+            support_levels,
+            resistance_levels,
+            fibonacci_levels,
+            swing_points,
+            detected_patterns,
+            trend_data.get('market_regime'),
+            additional_metrics
+        ))
+
+        result = self.cursor.fetchone()
+        self.conn.commit()
+
+        return True
+
+    except psycopg2.Error as e:
+        if self.conn:
+            self.conn.rollback()
+        print(f"Помилка при збереженні аналізу тренду: {e}")
+        return False
+    except Exception as e:
+        if self.conn:
+            self.conn.rollback()
+        print(f"Загальна помилка при збереженні аналізу тренду: {e}")
+        return False
+
+
+def get_trend_analysis(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        latest_only: bool = False
+) -> Union[Dict[str, Any], List[Dict[str, Any]], None]:
+    """Отримує аналіз тренду з бази даних"""
+    try:
+        if latest_only:
+            # Отримання тільки останнього аналізу
+            query = """
+                    SELECT *
+                    FROM trend_analysis
+                    WHERE symbol = %s
+                      AND timeframe = %s
+                    ORDER BY analysis_date DESC LIMIT 1
+                    """
+            params = (symbol, timeframe)
+        else:
+            # Формування запиту з можливою фільтрацією за датами
+            query = """
+                    SELECT *
+                    FROM trend_analysis
+                    WHERE symbol = %s
+                      AND timeframe = %s
+                    """
+            params = [symbol, timeframe]
+
+            if start_date:
+                query += " AND analysis_date >= %s"
+                params.append(start_date)
+
+            if end_date:
+                query += " AND analysis_date <= %s"
+                params.append(end_date)
+
+            query += " ORDER BY analysis_date DESC"
+
+        self.cursor.execute(query, params)
+        results = self.cursor.fetchall()
+
+        if not results:
+            return None
+
+        # Перетворення результатів в словники з правильними типами даних
+        trend_analyses = []
+        for row in results:
+            row_dict = dict(row)
+
+            # Перетворення JSON рядків у словники/списки Python
+            for json_field in ['support_levels', 'resistance_levels', 'fibonacci_levels',
+                               'swing_points', 'detected_patterns', 'additional_metrics']:
+                if row_dict[json_field]:
+                    row_dict[json_field] = json.loads(row_dict[json_field])
+                else:
+                    # Встановлення значень за замовчуванням для порожніх полів
+                    if json_field in ['support_levels', 'resistance_levels', 'detected_patterns']:
+                        row_dict[json_field] = []
+                    elif json_field == 'swing_points':
+                        row_dict[json_field] = {'highs': [], 'lows': []}
+                    else:
+                        row_dict[json_field] = {}
+
+            trend_analyses.append(row_dict)
+
+        # Повертаємо один елемент або список в залежності від параметра latest_only
+        if latest_only and trend_analyses:
+            return trend_analyses[0]
+
+        return trend_analyses
+
+    except psycopg2.Error as e:
+        print(f"Помилка при отриманні аналізу тренду: {e}")
+        return None
+    except Exception as e:
+        print(f"Загальна помилка при отриманні аналізу тренду: {e}")
+        return None
 
 
 
