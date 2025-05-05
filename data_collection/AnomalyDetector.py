@@ -16,7 +16,7 @@ class AnomalyDetector:
     def __init__(self, logger: Any):
         self.logger = logger
 
-    def _ensure_float(self, df: pd.DataFrame) -> pd.DataFrame:
+    def ensure_float(self, df: pd.DataFrame) -> pd.DataFrame:
 
         result = df.copy()
         for col in result.columns:
@@ -32,7 +32,7 @@ class AnomalyDetector:
             self.logger.warning("Порожні вхідні дані або відсутні числові колонки")
             return data
 
-        processed_data = self._ensure_float(data)
+        processed_data = self.ensure_float(data)
 
         # 1. Заповнення відсутніх значень
         for col in numeric_cols:
@@ -100,7 +100,7 @@ class AnomalyDetector:
 
         self.logger.info(f"Початок виявлення аномалій методом {method} з порогом {threshold}")
 
-        data = self._ensure_float(data)
+        data = self.ensure_float(data)
 
         # Вибір числових колонок
         numeric_cols = data.select_dtypes(include=[np.number]).columns
@@ -303,66 +303,9 @@ class AnomalyDetector:
         except Exception as e:
             self.logger.error(f"Помилка при використанні Isolation Forest: {str(e)}")
 
-    def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
-                                volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
 
-        if data is None or data.empty:
-            self.logger.warning("Отримано порожній DataFrame для перевірки цілісності")
-            return {"empty_data": True}
 
-        data = self._ensure_float(data)
-
-        issues = {}
-
-        # Перевірка параметрів
-        if price_jump_threshold <= 0:
-            self.logger.warning(f"Неприпустимий поріг для стрибків цін: {price_jump_threshold}. "
-                                "Встановлено значення 0.2")
-            price_jump_threshold = 0.2
-
-        if volume_anomaly_threshold <= 0:
-            self.logger.warning(f"Неприпустимий поріг для аномалій об'єму: {volume_anomaly_threshold}. "
-                                "Встановлено значення 5")
-            volume_anomaly_threshold = 5
-
-        # Перевірка наявності очікуваних колонок
-        expected_cols = ['open', 'high', 'low', 'close', 'volume']
-        missing_cols = [col for col in expected_cols if col not in data.columns]
-        if missing_cols:
-            issues["missing_columns"] = missing_cols
-            self.logger.warning(f"Відсутні колонки: {missing_cols}")
-
-        # Перевірка індексу DataFrame
-        try:
-            self._validate_datetime_index(data, issues)
-        except Exception as e:
-            self.logger.error(f"Помилка при перевірці часового індексу: {str(e)}")
-            issues["datetime_index_error"] = str(e)
-
-        # Перевірка цінових даних
-        try:
-            self._validate_price_data(data, price_jump_threshold, issues)
-        except Exception as e:
-            self.logger.error(f"Помилка при перевірці цінових даних: {str(e)}")
-            issues["price_validation_error"] = str(e)
-
-        # Перевірка даних об'єму
-        try:
-            self._validate_volume_data(data, volume_anomaly_threshold, issues)
-        except Exception as e:
-            self.logger.error(f"Помилка при перевірці даних об'єму: {str(e)}")
-            issues["volume_validation_error"] = str(e)
-
-        # Перевірка на NaN і infinite значення
-        try:
-            self._validate_data_values(data, issues)
-        except Exception as e:
-            self.logger.error(f"Помилка при перевірці значень даних: {str(e)}")
-            issues["data_values_error"] = str(e)
-
-        return issues
-
-    def _validate_datetime_index(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
+    def validate_datetime_index(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
 
         if not isinstance(data.index, pd.DatetimeIndex):
             issues["not_datetime_index"] = True
@@ -460,7 +403,7 @@ class AnomalyDetector:
             except Exception as e:
                 self.logger.error(f"Помилка при визначенні частоти часового ряду: {str(e)}")
 
-    def _validate_price_data(self, data: pd.DataFrame, price_jump_threshold: float,
+    def validate_price_data(self, data: pd.DataFrame, price_jump_threshold: float,
                              issues: Dict[str, Any]) -> None:
 
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in data.columns]
@@ -503,7 +446,7 @@ class AnomalyDetector:
                 except Exception as e:
                     self.logger.error(f"Помилка при аналізі стрибків цін у колонці {col}: {str(e)}")
 
-    def _validate_volume_data(self, data: pd.DataFrame, volume_anomaly_threshold: float,
+    def validate_volume_data(self, data: pd.DataFrame, volume_anomaly_threshold: float,
                               issues: Dict[str, Any]) -> None:
 
         if 'volume' in data.columns:
@@ -537,7 +480,7 @@ class AnomalyDetector:
             except Exception as e:
                 self.logger.error(f"Помилка при аналізі аномалій об'єму: {str(e)}")
 
-    def _validate_data_values(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
+    def validate_data_values(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
 
         # Перевірка на NaN значення
         na_counts = data.isna().sum()

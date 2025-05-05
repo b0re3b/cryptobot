@@ -606,7 +606,7 @@ class MarketDataProcessor:
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['BTC', 'ETH', 'SOL']
-    TIMEFRAMES = ['5m', '1h']
+    TIMEFRAMES = ['1m', '1h', '1d', '4h', '1w']
     processor = MarketDataProcessor()
 
     for symbol in SYMBOLS:
@@ -645,8 +645,13 @@ def main():
 
             # 5. Виявлення аномалій
             cleaned_data, outliers_info = processor.detect_outliers(processed_with_time)
-            if outliers_info['total_outliers'] > 0:
-                print(f" Виявлено {outliers_info['total_outliers']} аномалій у {symbol} {timeframe}")
+
+            # Перевірка чи outliers_info - словник, інакше безпечно обробляємо
+            if isinstance(outliers_info, dict) and 'total_outliers' in outliers_info:
+                if outliers_info['total_outliers'] > 0:
+                    print(f" Виявлено {outliers_info['total_outliers']} аномалій у {symbol} {timeframe}")
+            else:
+                print(f" Результат виявлення аномалій для {symbol} {timeframe} має неочікуваний формат")
 
             # 6. Створення профілю об'єму
             volume_profile = processor.aggregate_volume_profile(
@@ -668,7 +673,7 @@ def main():
             # 8. Додаткова обробка для ARIMA і LSTM моделей
             if timeframe == '1h':  # Для годинного часового фрейму
                 # Підготовка даних для ARIMA
-                arima_data = processor.prepare_arima_data(cleaned_data, symbol=symbol)
+                arima_data = processor.prepare_arima_data(cleaned_data, symbol=symbol, timeframe=timeframe)
                 if not arima_data.empty:
                     processor.save_arima_data(arima_data, symbol=symbol)
                     print(f" Дані ARIMA для {symbol} успішно збережено")

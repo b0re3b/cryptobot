@@ -1,12 +1,11 @@
 import logging
 from datetime import datetime
-from typing import List, Tuple, Dict, Optional, Union
+from typing import List, Tuple, Dict, Optional, Union, Any
 import numpy as np
 import pandas as pd
 import pytz
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 
-from data_collection import MarketDataProcessor
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
@@ -15,7 +14,6 @@ class DataCleaner:
         self.logger = logger
         self.anomaly_detector = AnomalyDetector(logger=self.logger)
         self.data_resampler = DataResampler(logger=self.logger)
-        self.market_data_processor = MarketDataProcessor(logger=self.logger)
 
     def _setup_default_logger(self) -> logging.Logger:
 
@@ -53,7 +51,7 @@ class DataCleaner:
             result = self._prepare_dataframe(data)
 
             # 2. Валідація цілісності даних
-            self.market_data_processor.validate_data_integrity(result)
+            self.validate_data_integrity(result)
 
             # 3. Видалення дублікатів
             result = self._remove_duplicates(result)
@@ -82,7 +80,7 @@ class DataCleaner:
                 result = self.normalize_data(result, norm_method)
 
             # 10. Фінальна перевірка цілісності даних
-            self.market_data_processor.validate_data_integrity(result, is_final=True)
+            self.validate_data_integrity(result, is_final=True)
 
             self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
             return result
@@ -92,7 +90,65 @@ class DataCleaner:
             import traceback
             self.logger.debug(traceback.format_exc())
             return data
+        
+    def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
+                                volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
 
+        if data is None or data.empty:
+            self.logger.warning("Отримано порожній DataFrame для перевірки цілісності")
+            return {"empty_data": True}
+
+        data = self.anomaly_detector.ensure_float(data)
+
+        issues = {}
+
+        # Перевірка параметрів
+        if price_jump_threshold <= 0:
+            self.logger.warning(f"Неприпустимий поріг для стрибків цін: {price_jump_threshold}. "
+                                "Встановлено значення 0.2")
+            price_jump_threshold = 0.2
+
+        if volume_anomaly_threshold <= 0:
+            self.logger.warning(f"Неприпустимий поріг для аномалій об'єму: {volume_anomaly_threshold}. "
+                                "Встановлено значення 5")
+            volume_anomaly_threshold = 5
+
+        # Перевірка наявності очікуваних колонок
+        expected_cols = ['open', 'high', 'low', 'close', 'volume']
+        missing_cols = [col for col in expected_cols if col not in data.columns]
+        if missing_cols:
+            issues["missing_columns"] = missing_cols
+            self.logger.warning(f"Відсутні колонки: {missing_cols}")
+
+        # Перевірка індексу DataFrame
+        try:
+            self.anomaly_detector.validate_datetime_index(data, issues)
+        except Exception as e:
+            self.logger.error(f"Помилка при перевірці часового індексу: {str(e)}")
+            issues["datetime_index_error"] = str(e)
+
+        # Перевірка цінових даних
+        try:
+            self.anomaly_detector.validate_price_data(data, price_jump_threshold, issues)
+        except Exception as e:
+            self.logger.error(f"Помилка при перевірці цінових даних: {str(e)}")
+            issues["price_validation_error"] = str(e)
+
+        # Перевірка даних об'єму
+        try:
+            self.anomaly_detector.validate_volume_data(data, volume_anomaly_threshold, issues)
+        except Exception as e:
+            self.logger.error(f"Помилка при перевірці даних об'єму: {str(e)}")
+            issues["volume_validation_error"] = str(e)
+
+        # Перевірка на NaN і infinite значення
+        try:
+            self.anomaly_detector.validate_data_values(data, issues)
+        except Exception as e:
+            self.logger.error(f"Помилка при перевірці значень даних: {str(e)}")
+            issues["data_values_error"] = str(e)
+
+        return issues
     def _remove_outliers(self, data: pd.DataFrame, std_dev: float = 3.0) -> pd.DataFrame:
 
         self.logger.info("Видалення аномальних значень...")
@@ -202,7 +258,7 @@ class DataCleaner:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data if data is not None else pd.DataFrame()
 
-        integrity_issues = self.anomaly_detector.validate_data_integrity(data)
+        integrity_issues = self.validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())
@@ -299,7 +355,7 @@ class DataCleaner:
 
         self.logger.info(f"Заповнено {filled_values} відсутніх значень методом '{method}'")
 
-        clean_integrity_issues = self.anomaly_detector.validate_data_integrity(result)
+        clean_integrity_issues = self.validate_data_integrity(result)
         if clean_integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in clean_integrity_issues.values())
@@ -514,7 +570,6 @@ class DataCleaner:
             self.logger.error(f"Помилка при нормалізації даних: {str(e)}")
             import traceback
             self.logger.debug(traceback.format_exc())
-            # Виправлено: повертаємо кортеж з вхідними даними та None замість самих даних
             return data, None
 
     def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
@@ -872,3 +927,4 @@ class DataCleaner:
 
         self.logger.info(f"Відфільтровано {initial_count - final_count} записів. Залишилось {final_count} записів.")
         return result
+

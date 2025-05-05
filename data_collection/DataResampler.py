@@ -272,15 +272,15 @@ class DataResampler:
 
         return results
 
-    # New methods for database interactions
+    # Modified methods for database interactions
 
-    def prepare_arima_data(self, data: pd.DataFrame, asset: str, timeframe: str) -> pd.DataFrame:
+    def prepare_arima_data(self, data: pd.DataFrame, symbol: str, timeframe: str) -> pd.DataFrame:
         """Підготовка даних для ARIMA/SARIMA моделей і запис в базу."""
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для підготовки ARIMA даних")
             return pd.DataFrame()
 
-        self.logger.info(f"Підготовка ARIMA даних для {asset} на інтервалі {timeframe}")
+        self.logger.info(f"Підготовка ARIMA даних для {symbol} на інтервалі {timeframe}")
 
         # 1. Перевірка стаціонарності вихідних даних
         stationarity_results = self.check_stationarity(data, 'close')
@@ -351,20 +351,20 @@ class DataResampler:
             arima_data['bic_score'] = model_fit.bic
             arima_data['residual_variance'] = model_fit.resid.var()
 
-            self.logger.info(f"ARIMA модель успішно створена для {asset} з параметрами ({p},{d},{q})")
+            self.logger.info(f"ARIMA модель успішно створена для {symbol} з параметрами ({p},{d},{q})")
         except Exception as e:
             self.logger.warning(f"Помилка при підборі ARIMA моделі: {str(e)}")
 
         return arima_data
 
-    def prepare_lstm_data(self, data: pd.DataFrame, asset: str, timeframe: str,
+    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str,
                           sequence_length: int = 60, forecast_horizons: List[int] = [1, 5, 10]) -> pd.DataFrame:
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для підготовки LSTM даних")
             return pd.DataFrame()
 
-        self.logger.info(f"Підготовка LSTM даних для {asset} на інтервалі {timeframe}")
+        self.logger.info(f"Підготовка LSTM даних для {symbol} на інтервалі {timeframe}")
 
         df = self.create_time_features(data)
 
@@ -393,7 +393,7 @@ class DataResampler:
         )
 
         # Зберігаємо скалер для відновлення даних
-        scaler_key = f"{asset}_{timeframe}"
+        scaler_key = f"{symbol}_{timeframe}"
         self.scalers[scaler_key] = scaler
 
         # Зберігаємо параметри скалера
@@ -440,9 +440,6 @@ class DataResampler:
 
                 sequences_df = pd.concat([sequences_df, pd.DataFrame([row])], ignore_index=True)
 
-        self.logger.info(f"Створено {sequence_counter} послідовностей для {asset}")
+        self.logger.info(f"Створено {sequence_counter} послідовностей для {symbol}")
 
         return sequences_df
-
-
-
