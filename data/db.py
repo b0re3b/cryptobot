@@ -458,7 +458,7 @@ class DatabaseManager:
         SELECT * FROM {table_name} 
         WHERE timeframe = %s
         '''
-        params = [timeframe, start_time, end_time, limit]
+        params = [timeframe]  # Start with just the timeframe parameter
 
         if start_time:
             query += ' AND open_time >= %s'
@@ -467,8 +467,11 @@ class DatabaseManager:
             query += ' AND open_time <= %s'
             params.append(end_time)
 
-        query += ' ORDER BY open_time DESC LIMIT %s'
-        params.append(limit)
+        query += ' ORDER BY open_time DESC'
+
+        if limit is not None:  # Only add LIMIT if a limit is specified
+            query += ' LIMIT %s'
+            params.append(limit)
 
         try:
             self.cursor.execute(query, params)
@@ -4543,6 +4546,309 @@ class DatabaseManager:
             result = cursor.fetchone()
 
             return result[0] if result else 0
+
+    def get_btc_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query_parts = ["SELECT * FROM btc_arima_data WHERE 1=1"]
+                params = []
+
+                if id is not None:
+                    query_parts.append("AND id = %s")
+                    params.append(id)
+                if timeframe is not None:
+                    query_parts.append("AND timeframe = %s")
+                    params.append(timeframe)
+                if open_time is not None:
+                    query_parts.append("AND open_time = %s")
+                    params.append(open_time)
+
+                query = " ".join(query_parts)
+                cursor.execute(query, params)
+
+                columns = [desc[0] for desc in cursor.description]
+                result = cursor.fetchone()
+
+                if result:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    return record
+                return None
+
+    def get_all_btc_arima_data(self) -> list:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query = "SELECT * FROM btc_arima_data ORDER BY open_time DESC"
+                cursor.execute(query)
+
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+
+                records = []
+                for result in results:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    records.append(record)
+
+                return records
+
+    def get_sol_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query_parts = ["SELECT * FROM sol_arima_data WHERE 1=1"]
+                params = []
+
+                if id is not None:
+                    query_parts.append("AND id = %s")
+                    params.append(id)
+                if timeframe is not None:
+                    query_parts.append("AND timeframe = %s")
+                    params.append(timeframe)
+                if open_time is not None:
+                    query_parts.append("AND open_time = %s")
+                    params.append(open_time)
+
+                query = " ".join(query_parts)
+                cursor.execute(query, params)
+
+                columns = [desc[0] for desc in cursor.description]
+                result = cursor.fetchone()
+
+                if result:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    return record
+                return None
+
+    def get_all_sol_arima_data(self) -> list:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query = "SELECT * FROM sol_arima_data ORDER BY open_time DESC"
+                cursor.execute(query)
+
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+
+                records = []
+                for result in results:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    records.append(record)
+
+                return records
+
+    def get_eth_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query_parts = ["SELECT * FROM eth_arima_data WHERE 1=1"]
+                params = []
+
+                if id is not None:
+                    query_parts.append("AND id = %s")
+                    params.append(id)
+                if timeframe is not None:
+                    query_parts.append("AND timeframe = %s")
+                    params.append(timeframe)
+                if open_time is not None:
+                    query_parts.append("AND open_time = %s")
+                    params.append(open_time)
+
+                query = " ".join(query_parts)
+                cursor.execute(query, params)
+
+                columns = [desc[0] for desc in cursor.description]
+                result = cursor.fetchone()
+
+                if result:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    return record
+                return None
+
+    def get_all_eth_arima_data(self) -> list:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query = "SELECT * FROM eth_arima_data ORDER BY open_time DESC"
+                cursor.execute(query)
+
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+
+                records = []
+                for result in results:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    records.append(record)
+
+                return records
+
+    def get_multiple_btc_arima_data(self, timeframe: str = None, start_time: datetime = None,
+                                    end_time: datetime = None, limit: int = None,
+                                    is_stationary: bool = None) -> list:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query_parts = ["SELECT * FROM btc_arima_data WHERE 1=1"]
+                params = []
+
+                if timeframe is not None:
+                    query_parts.append("AND timeframe = %s")
+                    params.append(timeframe)
+                if start_time is not None:
+                    query_parts.append("AND open_time >= %s")
+                    params.append(start_time)
+                if end_time is not None:
+                    query_parts.append("AND open_time <= %s")
+                    params.append(end_time)
+                if is_stationary is not None:
+                    query_parts.append("AND is_stationary = %s")
+                    params.append(is_stationary)
+
+                query_parts.append("ORDER BY open_time DESC")
+
+                if limit is not None:
+                    query_parts.append("LIMIT %s")
+                    params.append(limit)
+
+                query = " ".join(query_parts)
+                cursor.execute(query, params)
+
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+
+                records = []
+                for result in results:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    records.append(record)
+
+                return records
+
+    def get_multiple_sol_arima_data(self, timeframe: str = None, start_time: datetime = None,
+                                    end_time: datetime = None, limit: int = None,
+                                    is_stationary: bool = None) -> list:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query_parts = ["SELECT * FROM sol_arima_data WHERE 1=1"]
+                params = []
+
+                if timeframe is not None:
+                    query_parts.append("AND timeframe = %s")
+                    params.append(timeframe)
+                if start_time is not None:
+                    query_parts.append("AND open_time >= %s")
+                    params.append(start_time)
+                if end_time is not None:
+                    query_parts.append("AND open_time <= %s")
+                    params.append(end_time)
+                if is_stationary is not None:
+                    query_parts.append("AND is_stationary = %s")
+                    params.append(is_stationary)
+
+                query_parts.append("ORDER BY open_time DESC")
+
+                if limit is not None:
+                    query_parts.append("LIMIT %s")
+                    params.append(limit)
+
+                query = " ".join(query_parts)
+                cursor.execute(query, params)
+
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+
+                records = []
+                for result in results:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    records.append(record)
+
+                return records
+
+    def get_multiple_eth_arima_data(self, timeframe: str = None, start_time: datetime = None,
+                                    end_time: datetime = None, limit: int = None,
+                                    is_stationary: bool = None) -> list:
+
+        with self.connect() as conn:
+            with conn.cursor() as cursor:
+                query_parts = ["SELECT * FROM eth_arima_data WHERE 1=1"]
+                params = []
+
+                if timeframe is not None:
+                    query_parts.append("AND timeframe = %s")
+                    params.append(timeframe)
+                if start_time is not None:
+                    query_parts.append("AND open_time >= %s")
+                    params.append(start_time)
+                if end_time is not None:
+                    query_parts.append("AND open_time <= %s")
+                    params.append(end_time)
+                if is_stationary is not None:
+                    query_parts.append("AND is_stationary = %s")
+                    params.append(is_stationary)
+
+                query_parts.append("ORDER BY open_time DESC")
+
+                if limit is not None:
+                    query_parts.append("LIMIT %s")
+                    params.append(limit)
+
+                query = " ".join(query_parts)
+                cursor.execute(query, params)
+
+                columns = [desc[0] for desc in cursor.description]
+                results = cursor.fetchall()
+
+                records = []
+                for result in results:
+                    record = dict(zip(columns, result))
+
+                    # Перетворення JSON рядка у список для significant_lags
+                    if record.get('significant_lags'):
+                        record['significant_lags'] = json.loads(record['significant_lags'])
+
+                    records.append(record)
+
+                return records
 
 
 

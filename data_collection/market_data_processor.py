@@ -13,24 +13,21 @@ from data.db import DatabaseManager
 
 class MarketDataProcessor:
 
-
     def __init__(self, log_level=logging.INFO):
 
-
-        self.data_cleaner = DataCleaner()
-        self.data_resampler = DataResampler()
-        self.data_storage = DataStorageManager()
-        self.anomaly_detector = AnomalyDetector()
-        self.db_manager = DatabaseManager()
-
         self.log_level = log_level
-        self.db_manager = DatabaseManager()
-        self.supported_symbols = self.db_manager.supported_symbols
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація класу...")
-        self.ready = True
 
+        self.data_cleaner = DataCleaner(logger=self.logger)
+        self.data_resampler = DataResampler(logger=self.logger)
+        self.data_storage = DataStorageManager(logger=self.logger)
+        self.anomaly_detector = AnomalyDetector(logger=self.logger)
+        self.db_manager = DatabaseManager()
+        self.supported_symbols = self.db_manager.supported_symbols
+
+        self.ready = True
         self.filtered_data = None
         self.orderbook_statistics = None
 
@@ -352,14 +349,14 @@ class MarketDataProcessor:
 
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               fetch_missing: bool = False, symbol: Optional[str] = None,
-                              interval: Optional[str] = None, **kwargs) -> pd.DataFrame:
+                              timeframe: Optional[str] = None, **kwargs) -> pd.DataFrame:
 
         return self.data_cleaner.handle_missing_values(
             data,
             method=method,
             fetch_missing=fetch_missing,
             symbol=symbol,
-            interval=interval
+            timeframe=timeframe
         )
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',

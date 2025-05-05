@@ -231,6 +231,7 @@ class AnomalyDetector:
         except Exception as e:
             self.logger.error(f"Помилка при використанні Isolation Forest: {str(e)}")
 
+
     def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
                                 volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
 

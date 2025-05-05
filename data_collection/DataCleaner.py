@@ -10,9 +10,9 @@ from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
 
 
 class DataCleaner:
-    def __init__(self, logger, db_manager):
+    def __init__(self, logger):
         self.logger = logger
-        self.db_manager = db_manager
+        self.anomaly_detector = AnomalyDetector(logger=self.logger)
 
     def clean_data(self, data: pd.DataFrame, remove_outliers: bool = True,
                    fill_missing: bool = True, normalize: bool = True,
@@ -182,7 +182,7 @@ class DataCleaner:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data if data is not None else pd.DataFrame()
 
-        integrity_issues = AnomalyDetector.validate_data_integrity(data)
+        integrity_issues = self.anomaly_detector.validate_data_integrity(data)
         if integrity_issues:
             issue_count = sum(len(issues) if isinstance(issues, list) or isinstance(issues, dict) else 1
                               for issues in integrity_issues.values())

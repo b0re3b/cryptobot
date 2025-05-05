@@ -7,9 +7,8 @@ import statsmodels.api as sm
 
 
 class DataResampler:
-    def __init__(self, logger, db_manager):
+    def __init__(self, logger):
         self.logger = logger
-        self.db_manager = db_manager
         self.scalers = {}  # Dictionary to store scalers for different assets and timeframes
 
     def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
