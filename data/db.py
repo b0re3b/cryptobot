@@ -5222,6 +5222,7 @@ class DatabaseManager:
     # --------- CROSS ASSET VOLATILITY ---------
 
     def save_cross_asset_volatility(self, cross_vol_data: Dict[str, Any]) -> int:
+
         """
         Зберігає дані про кросс-активну волатильність в таблицю cross_asset_volatility.
 

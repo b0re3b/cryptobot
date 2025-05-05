@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 class VolatilityAnalysis:
     """Class for analyzing cryptocurrency market volatility patterns"""
 
-    def __init__(self, db_connection=None):
+    def __init__(self):
         """Initialize the volatility analysis with optional database connection"""
         self.db_connection = DatabaseManager()
         self.volatility_models = {}
