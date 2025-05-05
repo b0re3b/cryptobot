@@ -1,10 +1,3 @@
-"""
-Volatility Analysis Module
-
-This module provides functionality for analyzing volatility in cryptocurrency markets.
-It supports various volatility metrics, regime detection, and integrates with the prediction models.
-"""
-
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -16,11 +9,11 @@ from arch import arch_model
 
 # Import from other project modules
 from data.db import DatabaseManager
-from models.time_series import extract_volatility, load_crypto_data
-from data_collection.market_data_processor import clean_data, detect_outliers
-from data_collection.feature_engineering import create_volatility_features
+from data_collection import market_data_processor, DataCleaner
+from models import TimeSeriesModels
+from data_collection import AnomalyDetector
+from data_collection import FeatureEngineering
 from utils.logger import get_logger
-from utils.crypto_helpers import get_market_phases
 
 logger = get_logger(__name__)
 
@@ -30,9 +23,13 @@ class VolatilityAnalysis:
 
     def __init__(self):
         """Initialize the volatility analysis with optional database connection"""
-        self.db_connection = DatabaseManager()
+        self.db_manager = DatabaseManager()
         self.volatility_models = {}
         self.regime_models = {}
+        self.data_cleaner = DataCleaner()
+        self.anomaly_detector = AnomalyDetector()
+        self.feature_engineer = FeatureEngineering()
+        self.time_series = TimeSeriesModels()
 
     def calculate_historical_volatility(self, price_data, window=14, trading_periods=365, annualize=True):
         """
@@ -158,7 +155,7 @@ class VolatilityAnalysis:
         """
         try:
             # Clean and prepare data
-            clean_returns = clean_data(returns)
+            clean_returns = self.data_cleaner.clean_data(returns)
 
             # Set up the model
             if model_type == 'EGARCH':
@@ -435,7 +432,7 @@ class VolatilityAnalysis:
 
         for timeframe in timeframes:
             # Load data for this timeframe using project's data loading function
-            data = load_crypto_data(symbol, timeframe=timeframe)
+            data = self.db_manager.get_klines(symbol, timeframe=timeframe)
 
             # Calculate volatility
             vol = self.calculate_historical_volatility(data['close'])
@@ -515,7 +512,7 @@ class VolatilityAnalysis:
         returns = ohlc_data['close'].pct_change()
 
         # Use feature engineering module to create standard volatility features
-        vol_features = create_volatility_features(ohlc_data)
+        vol_features = self.feature_engineer.create_volatility_features(ohlc_data)
         features = pd.concat([features, vol_features], axis=1)
 
         # Calculate additional volatility metrics for different windows
@@ -673,7 +670,7 @@ class VolatilityAnalysis:
 
             # Get volatility for each symbol
             for symbol in symbols:
-                data = load_crypto_data(f"{symbol}USDT", timeframe=timeframe)
+                data = self.db_manager.get_klines(f"{symbol}USDT", timeframe=timeframe)
                 vol = self.calculate_historical_volatility(data['close'], window=window)
                 volatilities[symbol] = vol
 
@@ -717,17 +714,22 @@ class VolatilityAnalysis:
         """
         Run complete volatility analysis for a cryptocurrency
 
+        This method performs a comprehensive volatility analysis including multiple volatility metrics,
+        regime detection, seasonality analysis, volatility clustering, risk metrics, and breakout detection.
+
         Args:
             symbol (str): Cryptocurrency symbol
-            timeframe (str): Timeframe for analysis
+            timeframe (str): Timeframe for analysis ('1h', '4h', '1d', '1w', etc.)
             save_to_db (bool): Whether to save results to database
 
         Returns:
             dict: Dictionary with analysis results
         """
         try:
+            logger.info(f"Running full volatility analysis for {symbol} on {timeframe} timeframe")
+
             # Load data
-            data = load_crypto_data(symbol, timeframe=timeframe)
+            data = self.db_manager.get_klines(symbol, timeframe=timeframe)
 
             # Calculate returns
             data['returns'] = data['close'].pct_change()
@@ -759,4 +761,133 @@ class VolatilityAnalysis:
                 data['returns'], vol_df['hist_vol_14d'])
 
             # Identify volatility breakouts
-            vol_df['breakout'] =
+            vol_df['breakout'] = self.identify_volatility_breakouts(vol_df['hist_vol_14d'])
+
+            # Get seasonality patterns
+            seasonality = {}
+            seasonality['dow'] = self.extract_seasonality_in_volatility(vol_df['hist_vol_14d'], period=7)
+            seasonality['month'] = self.extract_seasonality_in_volatility(vol_df['hist_vol_14d'], period=12)
+
+            # Fit GARCH model
+            garch_model, garch_forecast = self.fit_garch_model(data['returns'])
+
+            # Extract forecast values if model was successfully fit
+            forecast_values = None
+            if garch_model is not None:
+                forecast_values = garch_forecast.variance.iloc[-1].values
+
+            # Calculate volatility impulse response
+            impulse_response = self.volatility_impulse_response(data['returns'])
+
+            # Prepare features for ML models
+            ml_features = self.prepare_volatility_features_for_ml(data)
+
+            # Get market-wide conditions for context
+            market_conditions = self.analyze_crypto_market_conditions(
+                symbols=[symbol, 'BTC', 'ETH'], timeframe=timeframe)
+
+            # Combine all results
+            analysis_results = {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'volatility_data': vol_df,
+                'latest_volatility': {
+                    'hist_vol_14d': vol_df['hist_vol_14d'].iloc[-1] if not vol_df.empty else None,
+                    'parkinson': vol_df['parkinson_vol'].iloc[-1] if not vol_df.empty else None,
+                    'garman_klass': vol_df['gk_vol'].iloc[-1] if not vol_df.empty else None,
+                    'yang_zhang': vol_df['yz_vol'].iloc[-1] if not vol_df.empty else None
+                },
+                'current_regime': vol_df['regime'].iloc[-1] if not vol_df.empty else None,
+                'volatility_clustering': {
+                    'significant_lags': acf_data[acf_data['autocorrelation'] > 0.1]['lag'].tolist(),
+                    'max_autocorrelation': acf_data['autocorrelation'].max()
+                },
+                'risk_metrics': risk_metrics,
+                'seasonality': seasonality,
+                'recent_breakouts': vol_df['breakout'].iloc[-30:].sum() if len(vol_df) >= 30 else 0,
+                'garch_forecast': forecast_values,
+                'impulse_response': impulse_response,
+                'market_conditions': market_conditions
+            }
+
+            # Calculate summary stats
+            analysis_results['summary'] = {
+                'avg_volatility': vol_df['hist_vol_14d'].mean(),
+                'volatility_trend': 'increasing' if vol_df['hist_vol_14d'].iloc[-1] > vol_df['hist_vol_14d'].iloc[
+                    -7] else 'decreasing',
+                'regime_changes': vol_df['regime'].diff().abs().sum(),
+                'volatility_of_volatility': vol_df['hist_vol_14d'].rolling(window=14).std().iloc[-1] if len(
+                    vol_df) >= 14 else None,
+                'current_vs_historical': vol_df['hist_vol_14d'].iloc[-1] / vol_df[
+                    'hist_vol_14d'].mean() if not vol_df.empty else None
+            }
+
+            # Save to database if requested
+            if save_to_db:
+                logger.info(f"Saving volatility analysis for {symbol} to database")
+                save_success = self.save_volatility_analysis_to_db(symbol, timeframe, vol_df)
+                analysis_results['saved_to_db'] = save_success
+
+            # Generate reports and visualizations
+            self._generate_volatility_report(symbol, timeframe, analysis_results)
+
+            return analysis_results
+
+        except Exception as e:
+            logger.error(f"Error in full volatility analysis for {symbol}: {e}")
+            # Return partial results if available
+            return {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'error': str(e),
+                'partial_results': locals().get('vol_df', None)
+            }
+
+    def _generate_volatility_report(self, symbol, timeframe, analysis_results):
+        """
+        Generate volatility report and visualizations
+
+        Args:
+            symbol (str): Cryptocurrency symbol
+            timeframe (str): Timeframe of analysis
+            analysis_results (dict): Analysis results
+
+        Returns:
+            None
+        """
+        try:
+            vol_df = analysis_results['volatility_data']
+
+            # Create plots directory if it doesn't exist
+            import os
+            os.makedirs('reports/volatility', exist_ok=True)
+
+            # Plot volatility metrics
+            plt.figure(figsize=(12, 8))
+            for col in ['hist_vol_14d', 'parkinson_vol', 'gk_vol', 'yz_vol']:
+                if col in vol_df.columns:
+                    plt.plot(vol_df.index, vol_df[col], label=col)
+            plt.title(f"{symbol} Volatility Metrics - {timeframe}")
+            plt.legend()
+            plt.savefig(f"reports/volatility/{symbol}_{timeframe}_volatility_metrics.png")
+
+            # Plot volatility regimes
+            plt.figure(figsize=(12, 6))
+            plt.plot(vol_df.index, vol_df['hist_vol_14d'], label='Historical Vol (14d)')
+            plt.scatter(vol_df.index, vol_df['hist_vol_14d'], c=vol_df['regime'], cmap='viridis', label='Regimes')
+            plt.title(f"{symbol} Volatility Regimes - {timeframe}")
+            plt.colorbar(label='Regime')
+            plt.legend()
+            plt.savefig(f"reports/volatility/{symbol}_{timeframe}_volatility_regimes.png")
+
+            # Plot seasonality
+            if 'seasonality' in analysis_results and 'dow' in analysis_results['seasonality']:
+                plt.figure(figsize=(10, 6))
+                analysis_results['seasonality']['dow'].plot(kind='bar')
+                plt.title(f"{symbol} Day-of-Week Volatility Seasonality")
+                plt.savefig(f"reports/volatility/{symbol}_{timeframe}_dow_seasonality.png")
+
+            logger.info(f"Generated volatility report for {symbol}")
+
+        except Exception as e:
+            logger.error(f"Error generating volatility report: {e}")
