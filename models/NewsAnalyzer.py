@@ -504,3 +504,277 @@ class NewsAnalyzer:
         except Exception as e:
             self.logger.error(f"Помилка при аналізі кореляції: {e}")
             return {'correlation': 0, 'significance': 0, 'valid': False, 'error': str(e)}
+
+    def analyze_sentiment(self, text: str) -> float:
+        """
+        Analyze sentiment of the given text.
+        Returns a float value between -1 (negative) and 1 (positive).
+        """
+        if self.sentiment_analyzer:
+            try:
+                return self.sentiment_analyzer.analyze(text)
+            except Exception as e:
+                self.logger.error(f"Error analyzing sentiment: {e}")
+                return 0.0
+        else:
+            # Return neutral sentiment if no analyzer is provided
+            return 0.0
+
+    def filter_by_keywords(self, news_items: List[NewsItem], keywords: List[str],
+                           threshold: int = 1) -> List[NewsItem]:
+
+        filtered_news = []
+
+        for item in news_items:
+            text = f"{item.title} {item.summary}".lower()
+            matches = sum(1 for keyword in keywords if keyword.lower() in text)
+
+            if matches >= threshold:
+                filtered_news.append(item)
+
+        return filtered_news
+
+    def _preprocess_text(self, text: str) -> str:
+
+        try:
+            # Tokenize text
+            tokens = word_tokenize(text.lower())
+
+            # Remove stopwords and punctuation
+            stop_words = set(stopwords.words('english'))
+            tokens = [token for token in tokens if token.isalpha() and token not in stop_words]
+
+            # Lemmatization
+            lemmatizer = WordNetLemmatizer()
+            tokens = [lemmatizer.lemmatize(token) for token in tokens]
+
+            # Join back to string
+            return ' '.join(tokens)
+        except Exception as e:
+            self.logger.error(f"Error preprocessing text: {e}")
+            return text
+
+    def _load_topic_models(self):
+
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(self.topic_model_dir, exist_ok=True)
+
+            # Try to load vectorizer
+            vectorizer_path = os.path.join(self.topic_model_dir, 'vectorizer.pkl')
+            if os.path.exists(vectorizer_path):
+                self.vectorizer = joblib.load(vectorizer_path)
+                self.logger.info("Loaded TF-IDF vectorizer from disk")
+
+            # Try to load LDA model
+            lda_path = os.path.join(self.topic_model_dir, 'lda_model.pkl')
+            if os.path.exists(lda_path):
+                self.lda_model = joblib.load(lda_path)
+                self.logger.info("Loaded LDA model from disk")
+
+            # Try to load NMF model
+            nmf_path = os.path.join(self.topic_model_dir, 'nmf_model.pkl')
+            if os.path.exists(nmf_path):
+                self.nmf_model = joblib.load(nmf_path)
+                self.logger.info("Loaded NMF model from disk")
+
+            # Try to load KMeans model
+            kmeans_path = os.path.join(self.topic_model_dir, 'kmeans_model.pkl')
+            if os.path.exists(kmeans_path):
+                self.kmeans_model = joblib.load(kmeans_path)
+                self.logger.info("Loaded KMeans model from disk")
+
+            # Try to load topic words
+            topic_words_path = os.path.join(self.topic_model_dir, 'topic_words.pkl')
+            if os.path.exists(topic_words_path):
+                self.topic_words = joblib.load(topic_words_path)
+                self.logger.info("Loaded topic keywords from disk")
+
+        except Exception as e:
+            self.logger.error(f"Error loading topic models: {e}")
+            # Initialize empty models if loading fails
+            self.vectorizer = None
+            self.lda_model = None
+            self.nmf_model = None
+            self.kmeans_model = None
+            self.topic_words = {}
+    def train_topic_models(self, news_items: List[NewsItem], num_topics: int = 10, method: str = 'both'):
+
+        self.logger.info(f"Training topic models with {len(news_items)} news items...")
+
+        try:
+            # Prepare corpus
+            corpus = []
+            for item in news_items:
+                text = f"{item.title} {item.summary}"
+                processed_text = self._preprocess_text(text)
+                corpus.append(processed_text)
+
+            if not corpus:
+                self.logger.warning("Empty corpus for topic modeling")
+                return
+
+            # Create vectorizer
+            self.vectorizer = TfidfVectorizer(
+                max_features=5000,
+                min_df=2,
+                max_df=0.85,
+                stop_words='english'
+            )
+
+            # Transform corpus to TF-IDF matrix
+            tfidf_matrix = self.vectorizer.fit_transform(corpus)
+            feature_names = self.vectorizer.get_feature_names_out()
+
+            # Initialize topic words dictionary
+            self.topic_words = {}
+
+            # Train LDA model
+            if method in ['lda', 'both']:
+                self.logger.info("Training LDA model...")
+                self.lda_model = LatentDirichletAllocation(
+                    n_components=num_topics,
+                    max_iter=10,
+                    learning_method='online',
+                    random_state=42,
+                    n_jobs=-1
+                )
+                self.lda_model.fit(tfidf_matrix)
+
+                # Extract top words for each topic
+                self.topic_words['lda'] = {}
+                for topic_idx, topic in enumerate(self.lda_model.components_):
+                    top_words_idx = topic.argsort()[:-11:-1]  # Get top 10 words
+                    top_words = [feature_names[i] for i in top_words_idx]
+                    self.topic_words['lda'][topic_idx] = top_words
+
+            # Train NMF model
+            if method in ['nmf', 'both']:
+                self.logger.info("Training NMF model...")
+                self.nmf_model = NMF(
+                    n_components=num_topics,
+                    random_state=42,
+                    max_iter=100
+                )
+                self.nmf_model.fit(tfidf_matrix)
+
+                # Extract top words for each topic
+                self.topic_words['nmf'] = {}
+                for topic_idx, topic in enumerate(self.nmf_model.components_):
+                    top_words_idx = topic.argsort()[:-11:-1]  # Get top 10 words
+                    top_words = [feature_names[i] for i in top_words_idx]
+                    self.topic_words['nmf'][topic_idx] = top_words
+
+            # Train KMeans model
+            if method in ['kmeans', 'all']:
+                self.logger.info("Training KMeans model...")
+                self.kmeans_model = KMeans(
+                    n_clusters=num_topics,
+                    random_state=42,
+                    n_init=10
+                )
+                self.kmeans_model.fit(tfidf_matrix)
+
+                # Get cluster centers
+                centers = self.kmeans_model.cluster_centers_
+
+                # Extract top words for each cluster
+                self.topic_words['kmeans'] = {}
+                for topic_idx, center in enumerate(centers):
+                    # Get indices of top words in the cluster center
+                    top_words_idx = center.argsort()[:-11:-1]
+                    top_words = [feature_names[i] for i in top_words_idx]
+                    self.topic_words['kmeans'][topic_idx] = top_words
+
+            # Save models
+            self.save_topic_models()
+            self.logger.info("Topic models trained successfully")
+
+        except Exception as e:
+            self.logger.error(f"Error training topic models: {e}")
+
+    def analyze_news_topics(self, news_items: List[NewsItem], method: str = 'auto') -> Dict[str, int]:
+
+        topic_counts = {}
+
+        for item in news_items:
+            topics = self.extract_topics(f"{item.title} {item.summary}", method=method)
+
+            for topic in topics:
+                if topic in topic_counts:
+                    topic_counts[topic] += 1
+                else:
+                    topic_counts[topic] = 1
+
+        # Sort by frequency
+        sorted_topics = dict(sorted(topic_counts.items(), key=lambda x: x[1], reverse=True))
+
+        return sorted_topics
+
+    def get_most_common_topics(self, news_items: List[NewsItem], limit: int = 10, method: str = 'auto') -> List[
+        Tuple[str, int]]:
+
+        topic_counts = self.analyze_news_topics(news_items, method=method)
+
+        # Get top N topics
+        top_topics = list(topic_counts.items())[:limit]
+
+        return top_topics
+    def extract_topics(self, text: str, method: str = 'auto', top_n: int = 3) -> List[str]:
+
+        if not self.vectorizer:
+            self.logger.warning("Vectorizer not initialized. Cannot extract topics.")
+            return []
+
+        try:
+            # Preprocess text
+            processed_text = self._preprocess_text(text)
+
+            # Transform text to TF-IDF vector
+            text_tfidf = self.vectorizer.transform([processed_text])
+
+            topics = []
+
+            # Select method
+            if method == 'auto':
+                # Use LDA if available, otherwise NMF, then KMeans
+                if self.lda_model:
+                    method = 'lda'
+                elif self.nmf_model:
+                    method = 'nmf'
+                elif self.kmeans_model:
+                    method = 'kmeans'
+                else:
+                    self.logger.warning("No topic model available")
+                    return []
+
+            # Extract topics using LDA
+            if method == 'lda' and self.lda_model:
+                topic_distribution = self.lda_model.transform(text_tfidf)[0]
+                top_topics = topic_distribution.argsort()[:-top_n - 1:-1]
+
+                for topic_idx in top_topics:
+                    if topic_idx in self.topic_words.get('lda', {}):
+                        topics.extend(self.topic_words['lda'][topic_idx][:3])  # Take top 3 words per topic
+
+            # Extract topics using NMF
+            elif method == 'nmf' and self.nmf_model:
+                topic_distribution = self.nmf_model.transform(text_tfidf)[0]
+                top_topics = topic_distribution.argsort()[:-top_n - 1:-1]
+
+                for topic_idx in top_topics:
+                    if topic_idx in self.topic_words.get('nmf', {}):
+                        topics.extend(self.topic_words['nmf'][topic_idx][:3])  # Take top 3 words per topic
+
+            # Extract topics using KMeans
+            elif method == 'kmeans' and self.kmeans_model:
+                cluster = self.kmeans_model.predict(text_tfidf)[0]
+                if cluster in self.topic_words.get('kmeans', {}):
+                    topics.extend(self.topic_words['kmeans'][cluster][:5])  # Take top 5 words from cluster
+
+            # Remove duplicates and return
+            return list(set(topics))
+
+        except Exception as e:
+            self.logger.error(f"Error extracting topics: {e}")
+            return []

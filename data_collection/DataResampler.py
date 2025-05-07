@@ -209,7 +209,7 @@ class DataResampler:
 
         return df
 
-    def check_stationarity(self, data: pd.DataFrame, column='close') -> dict:
+    def check_stationarity(self, data: pd.DataFrame, column='close_diff') -> dict:
         """
         Перевіряє стаціонарність часового ряду за допомогою тестів.
         """
@@ -299,7 +299,7 @@ class DataResampler:
         arima_data['original_close'] = data['close']
 
         # Додаємо трансформовані дані
-        for col in ['close_diff', 'close_diff2', 'close_log', 'close_log_diff', 'close_pct',
+        for col in ['close_diff', 'close_diff2', 'close_log', 'close_log_diff', 'close_pct_change', 'close_log_pct_change',
                     'close_seasonal_diff', 'close_combo_diff']:
             if col in stationary_data.columns:
                 arima_data[col] = stationary_data[col]
