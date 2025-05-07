@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS sentiment_time_series (
     sentiment_volatility NUMERIC, -- волатильність настрою
     tweet_volume INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (crypto_symbol, time_bucket, timeframe)
+    UNIQUE (symbol, time_bucket, timeframe)
 );
 
 -- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
@@ -1086,7 +1086,7 @@ CREATE INDEX IF NOT EXISTS idx_sol_lstm_timeframe ON sol_lstm_data(timeframe);
 CREATE INDEX IF NOT EXISTS idx_sol_lstm_sequence_id ON sol_lstm_data(sequence_id);
 CREATE INDEX IF NOT EXISTS idx_sol_lstm_open_time ON sol_lstm_data(open_time);
 -- Створення таблиці для зберігання розрахованих метрик волатильності
-CREATE TABLE volatility_metrics (
+CREATE TABLE IF NOT EXISTS volatility_metrics (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
     timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
@@ -1105,12 +1105,12 @@ CREATE TABLE volatility_metrics (
 );
 
 -- Створення індексів для таблиці метрик волатильності
-CREATE INDEX idx_vol_metrics_symbol ON volatility_metrics (symbol);
-CREATE INDEX idx_vol_metrics_timestamp ON volatility_metrics (timestamp);
-CREATE INDEX idx_vol_metrics_regime ON volatility_metrics (regime_id);
+CREATE INDEX IF NOT EXISTS idx_vol_metrics_symbol ON volatility_metrics (symbol);
+CREATE INDEX IF NOT EXISTS idx_vol_metrics_timestamp ON volatility_metrics (timestamp);
+CREATE INDEX IF NOT EXISTS idx_vol_metrics_regime ON volatility_metrics (regime_id);
 
 -- Створення таблиці для збереження GARCH моделей та їх параметрів
-CREATE TABLE volatility_models (
+CREATE TABLE IF NOT EXISTS volatility_models (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
     timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
@@ -1128,7 +1128,7 @@ CREATE TABLE volatility_models (
 );
 
 -- Створення таблиці для зберігання інформації про режими волатильності
-CREATE TABLE volatility_regimes (
+CREATE TABLE IF NOT EXISTS volatility_regimes (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
     timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
@@ -1143,7 +1143,7 @@ CREATE TABLE volatility_regimes (
 );
 
 -- Створення таблиці для зберігання результатів аналізу волатильності для ML
-CREATE TABLE volatility_features (
+CREATE TABLE IF NOT EXISTS volatility_features (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,                  -- Символ криптовалюти
     timeframe VARCHAR(10) NOT NULL,               -- Часовий інтервал
@@ -1153,7 +1153,7 @@ CREATE TABLE volatility_features (
 );
 
 -- Створення таблиці для зберігання аналізу кросс-активної волатильності
-CREATE TABLE cross_asset_volatility (
+CREATE TABLE IF NOT EXISTS cross_asset_volatility (
     id SERIAL PRIMARY KEY,
     base_symbol VARCHAR(20) NOT NULL,             -- Базовий символ
     compared_symbol VARCHAR(20) NOT NULL,         -- Символ порівняння
@@ -1164,37 +1164,7 @@ CREATE TABLE cross_asset_volatility (
     CONSTRAINT unique_cross_vol UNIQUE (base_symbol, compared_symbol, timeframe, timestamp, lag)
 );
 
--- Представлення для швидкого отримання останніх режимів волатильності
-CREATE VIEW current_volatility_regimes AS
-SELECT vm.symbol,
-       vm.timeframe,
-       vm.timestamp,
-       vm.regime_id,
-       vr.regime_labels[vm.regime_id + 1] AS regime_name
-FROM (
-    SELECT symbol, timeframe, MAX(timestamp) as max_ts
-    FROM volatility_metrics
-    GROUP BY symbol, timeframe
-) latest
-JOIN volatility_metrics vm ON vm.symbol = latest.symbol
-                         AND vm.timeframe = latest.timeframe
-                         AND vm.timestamp = latest.max_ts
-JOIN volatility_regimes vr ON vr.id = vm.regime_id;
 
--- Представлення для порівняння різних метрик волатильності
-CREATE VIEW volatility_metrics_comparison AS
-SELECT
-    vm.symbol,
-    vm.timeframe,
-    vm.timestamp,
-    vm.hist_vol_14d,
-    vm.parkinson_vol,
-    vm.garman_klass_vol,
-    vm.yang_zhang_vol,
-    (vm.hist_vol_14d - vm.parkinson_vol) AS hist_park_diff,
-    (vm.hist_vol_14d - vm.garman_klass_vol) AS hist_gk_diff,
-    (vm.hist_vol_14d - vm.yang_zhang_vol) AS hist_yz_diff
-FROM volatility_metrics vm;
 CREATE TABLE IF NOT EXISTS trend_analysis (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,

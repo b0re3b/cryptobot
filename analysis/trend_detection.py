@@ -2,29 +2,15 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Optional, Union
 import logging
-
-from models.time_series import detect_seasonality
-from data_collection.market_data_processor import preprocess_pipeline
-from data_collection.feature_engineering import create_technical_features
-from utils.logger import get_logger
+import ta
 from data.db import DatabaseManager
 
 
 class TrendDetection:
-    """
-    Клас для виявлення трендів на криптовалютному ринку.
-    Служить для аналізу цінових паттернів, визначення напрямку руху ринку
-    та виявлення ключових рівнів підтримки/опору.
-    """
+
 
     def __init__(self, config=None, logger=None):
-        """
-        Ініціалізація класу TrendDetection.
 
-        Args:
-            config: Конфігураційні параметри
-            logger: Логер для запису подій
-        """
         self.db_manager = DatabaseManager()
 
         # Ініціалізація конфігурації
@@ -39,12 +25,7 @@ class TrendDetection:
         self.logger = logger or self._setup_default_logger()
 
     def _setup_default_logger(self) -> logging.Logger:
-        """
-        Створення логера за замовчуванням, якщо не передано інший.
 
-        Returns:
-            logging.Logger: Сконфігурований логер
-        """
         logger = logging.getLogger('trend_detection')
         if not logger.handlers:
             handler = logging.StreamHandler()
@@ -55,19 +36,7 @@ class TrendDetection:
         return logger
 
     def detect_trend(self, data: pd.DataFrame, window_size: int = 14) -> str:
-        """
-        Визначення поточного тренду (висхідний, низхідний, боковий).
 
-        Використовує лінійну регресію для визначення нахилу цінового тренду
-        та перевіряє статистичну значущість нахилу.
-
-        Args:
-            data: Дані ціни у форматі DataFrame
-            window_size: Розмір вікна для аналізу тренду
-
-        Returns:
-            str: Тип тренду ('uptrend', 'downtrend', 'sideways')
-        """
         try:
             # Перевірка наявності даних
             if data.empty:
@@ -127,19 +96,7 @@ class TrendDetection:
             return "unknown"
 
     def calculate_adx(self, data: pd.DataFrame, period: int = 14) -> pd.DataFrame:
-        """
-        Розрахунок індикатора ADX (Average Directional Index) для визначення сили тренду.
 
-        ADX показує силу тренду незалежно від його напрямку. Значення вище 25 вказують на
-        сильний тренд, нижче 20 - на відсутність тренду.
-
-        Args:
-            data: Дані OHLCV у форматі DataFrame
-            period: Період для розрахунку ADX
-
-        Returns:
-            pd.DataFrame: Дані з доданими індикаторами ADX, +DI та -DI
-        """
         try:
             # Перевірка наявності необхідних стовпців
             required_columns = ['high', 'low', 'close']
@@ -223,20 +180,7 @@ class TrendDetection:
     def identify_support_resistance(self, data: pd.DataFrame,
                                     window_size: int = 20,
                                     threshold: float = 0.02) -> Dict[str, List[float]]:
-        """
-        Визначення рівнів підтримки та опору.
 
-        Метод визначає локальні мінімуми та максимуми,
-        і групує їх для виявлення важливих цінових рівнів.
-
-        Args:
-            data: Цінові дані у форматі DataFrame
-            window_size: Розмір вікна для аналізу
-            threshold: Поріг для визначення значимих рівнів
-
-        Returns:
-            Dict[str, List[float]]: Словник з рівнями підтримки та опору
-        """
         try:
             # Перевірка наявності даних
             if data.empty:
@@ -291,16 +235,7 @@ class TrendDetection:
             return {"support": [], "resistance": []}
 
     def _group_price_levels(self, price_points: List[float], threshold: float) -> List[float]:
-        """
-        Групування близьких цінових рівнів.
 
-        Args:
-            price_points: Список цінових точок
-            threshold: Відносний поріг для групування (відсоток від ціни)
-
-        Returns:
-            List[float]: Список згрупованих цінових рівнів
-        """
         if not price_points:
             return []
 
@@ -335,17 +270,7 @@ class TrendDetection:
     def detect_breakouts(self, data: pd.DataFrame,
                          support_resistance: Dict[str, List[float]],
                          threshold: float = 0.01) -> List[Dict]:
-        """
-        Виявлення пробоїв рівнів підтримки та опору.
 
-        Args:
-            data: Цінові дані у форматі DataFrame
-            support_resistance: Словник з рівнями підтримки та опору
-            threshold: Поріг для визначення пробою
-
-        Returns:
-            List[Dict]: Список пробоїв з відповідними даними
-        """
         if data.empty or not support_resistance:
             return []
 
@@ -420,16 +345,7 @@ class TrendDetection:
         return breakouts
 
     def find_swing_points(self, data: pd.DataFrame, window_size: int = 5) -> Dict[str, List[Dict]]:
-        """
-        Знаходження точок розвороту (swing high/low).
 
-        Args:
-            data: Цінові дані у форматі DataFrame
-            window_size: Розмір вікна для аналізу
-
-        Returns:
-            Dict[str, List[Dict]]: Словник з точками high/low та їх параметрами
-        """
         if data.empty or len(data) < window_size * 2:
             return {'highs': [], 'lows': []}
 
@@ -1062,55 +978,538 @@ class TrendDetection:
         return patterns
 
     def estimate_trend_duration(self, data: pd.DataFrame) -> Dict[str, int]:
-        """
-        Оцінка тривалості поточного тренду.
 
-        Args:
-            data: Цінові дані у форматі DataFrame
+        # Перевірка наявності необхідних даних
+        if 'close' not in data.columns:
+            raise ValueError("DataFrame повинен містити стовпець 'close'")
 
-        Returns:
-            Dict[str, int]: Інформація про тривалість тренду
-        """
-        pass
+        # Визначаємо поточний тренд
+        current_trend = self.detect_trend(data)
+
+        # Ініціалізуємо змінні
+        trend_start_index = 0
+        trend_periods = 0
+        current_streak = 0
+        longest_streak = 0
+
+        # Використовуємо простий метод ковзної середньої для визначення тренду
+        data['sma20'] = data['close'].rolling(window=20, min_periods=1).mean()
+        data['sma50'] = data['close'].rolling(window=50, min_periods=1).mean()
+
+        # Визначаємо напрямок за ковзними середніми
+        data['trend_direction'] = np.where(data['sma20'] > data['sma50'], 'uptrend',
+                                           np.where(data['sma20'] < data['sma50'], 'downtrend', 'sideways'))
+
+        # Знаходимо початок поточного тренду
+        for i in range(len(data) - 1, 0, -1):
+            if data['trend_direction'].iloc[i] != data['trend_direction'].iloc[i - 1]:
+                trend_start_index = i
+                break
+
+        # Рахуємо тривалість поточного тренду
+        trend_periods = len(data) - trend_start_index
+
+        # Рахуємо найдовшу тривалість тренду того ж напрямку в історичних даних
+        temp_streak = 1
+        for i in range(1, len(data)):
+            if data['trend_direction'].iloc[i] == data['trend_direction'].iloc[i - 1]:
+                temp_streak += 1
+            else:
+                if temp_streak > longest_streak:
+                    longest_streak = temp_streak
+                temp_streak = 1
+
+        if temp_streak > longest_streak:
+            longest_streak = temp_streak
+
+        # Рахуємо середню тривалість тренду
+        trend_changes = (data['trend_direction'] != data['trend_direction'].shift(1)).sum()
+        avg_trend_duration = len(data) // (trend_changes + 1)
+
+        # Формуємо результат
+        result = {
+            'current_trend': current_trend,
+            'current_trend_duration': trend_periods,
+            'longest_trend_duration': longest_streak,
+            'average_trend_duration': avg_trend_duration,
+            'trend_start_date': data.index[trend_start_index].strftime('%Y-%m-%d') if hasattr(data.index,
+                                                                                              'strftime') else str(
+                trend_start_index),
+            'total_periods_analyzed': len(data)
+        }
+
+        return result
 
     def identify_market_regime(self, data: pd.DataFrame) -> str:
-        """
-        Визначення поточного режиму ринку
-        (тренд, консолідація, висока волатильність).
 
-        Args:
-            data: Цінові дані у форматі DataFrame
+        # Перевірка наявності необхідних даних
+        if 'close' not in data.columns:
+            raise ValueError("DataFrame повинен містити стовпець 'close'")
 
-        Returns:
-            str: Режим ринку
-        """
-        pass
+        # Для визначення режиму ринку використовуємо:
+        # 1. ADX для визначення сили тренду
+        # 2. Волатильність (ATR/Ціна) для визначення рівня волатильності
+        # 3. Ширину діапазону Боллінджера для визначення консолідації/розширення
 
-    def detect_divergence(self, price_data: pd.DataFrame,
-                          indicator_data: pd.DataFrame) -> List[Dict]:
-        """
-        Виявлення дивергенцій між ціною та технічними індикаторами.
+        # Розрахунок волатильності (ATR - Average True Range)
+        data['high_low'] = data['high'] - data['low'] if ('high' in data.columns and 'low' in data.columns) else 0
+        data['high_close'] = abs(data['high'] - data['close'].shift(1)) if 'high' in data.columns else 0
+        data['low_close'] = abs(data['low'] - data['close'].shift(1)) if 'low' in data.columns else 0
 
-        Args:
-            price_data: Цінові дані у форматі DataFrame
-            indicator_data: Дані індикатора (RSI, MACD тощо)
+        data['tr'] = data[['high_low', 'high_close', 'low_close']].max(axis=1)
+        data['atr14'] = data['tr'].rolling(window=14, min_periods=1).mean()
 
-        Returns:
-            List[Dict]: Список виявлених дивергенцій
-        """
-        pass
+        # Нормалізована волатильність (ATR / Ціна)
+        data['norm_volatility'] = data['atr14'] / data['close'] * 100
+
+        # Середнє значення нормалізованої волатильності за останні 20 періодів
+        recent_volatility = data['norm_volatility'].tail(20).mean()
+        historical_volatility = data['norm_volatility'].mean()
+
+        # Визначаємо квартилі волатильності
+        low_vol_threshold = data['norm_volatility'].quantile(0.25)
+        high_vol_threshold = data['norm_volatility'].quantile(0.75)
+
+        # Розрахунок смуг Боллінджера для визначення консолідації
+        data['sma20'] = data['close'].rolling(window=20, min_periods=1).mean()
+        data['std20'] = data['close'].rolling(window=20, min_periods=1).std()
+        data['bb_upper'] = data['sma20'] + (data['std20'] * 2)
+        data['bb_lower'] = data['sma20'] - (data['std20'] * 2)
+        data['bb_width'] = (data['bb_upper'] - data['bb_lower']) / data['sma20'] * 100
+
+        # Аналіз ширини смуг Боллінджера за останні 10 періодів
+        recent_bb_width = data['bb_width'].tail(10).mean()
+        historical_bb_width = data['bb_width'].mean()
+
+        # Розрахунок ADX (спрощена версія)
+        if self.calculate_adx is not None and callable(self.calculate_adx):
+            adx_data = self.calculate_adx(data)
+            if 'ADX' in adx_data.columns:
+                adx_value = adx_data['ADX'].iloc[-1]
+            else:
+                # Спрощений розрахунок ADX, якщо метод не реалізовано
+                data['plus_dm'] = data['high'].diff().clip(lower=0) if 'high' in data.columns else 0
+                data['minus_dm'] = (-data['low'].diff()).clip(lower=0) if 'low' in data.columns else 0
+                data['plus_di'] = 100 * data['plus_dm'].rolling(window=14).mean() / data['atr14']
+                data['minus_di'] = 100 * data['minus_dm'].rolling(window=14).mean() / data['atr14']
+                data['dx'] = 100 * abs(data['plus_di'] - data['minus_di']) / (data['plus_di'] + data['minus_di'])
+                data['ADX'] = data['dx'].rolling(window=14).mean()
+                adx_value = data['ADX'].iloc[-1]
+        else:
+            # Якщо метод calculate_adx недоступний, використовуємо спрощений підхід
+            data['plus_dm'] = data['high'].diff().clip(lower=0) if 'high' in data.columns else 0
+            data['minus_dm'] = (-data['low'].diff()).clip(lower=0) if 'low' in data.columns else 0
+            data['plus_di'] = 100 * data['plus_dm'].rolling(window=14).mean() / data['atr14']
+            data['minus_di'] = 100 * data['minus_dm'].rolling(window=14).mean() / data['atr14']
+            data['dx'] = 100 * abs(data['plus_di'] - data['minus_di']) / (data['plus_di'] + data['minus_di'])
+            data['ADX'] = data['dx'].rolling(window=14).mean()
+            adx_value = data['ADX'].iloc[-1]
+
+        # Визначення режиму ринку на основі комбінації показників
+        if adx_value > 25:  # Сильний тренд
+            if recent_volatility > high_vol_threshold:
+                return "strong_trend_high_volatility"
+            else:
+                return "strong_trend_normal_volatility"
+        elif adx_value < 20:  # Слабкий тренд або його відсутність
+            if recent_bb_width < historical_bb_width * 0.8:
+                return "consolidation"  # Смуги Боллінджера звужуються - консолідація
+            elif recent_volatility < low_vol_threshold:
+                return "low_volatility_sideways"  # Низька волатильність - боковий ринок
+            else:
+                return "choppy_market"  # Невизначений ринок без чіткого тренду
+        else:  # Середня сила тренду
+            if recent_volatility > high_vol_threshold:
+                return "emerging_trend_high_volatility"
+            else:
+                return "emerging_trend"
+
+        # Для більш простого виводу можна використовувати:
+        # - "trend" - якщо є виражений тренд (ADX > 25)
+        # - "consolidation" - якщо ринок консолідується (ADX < 20 і низька волатильність)
+        # - "high_volatility" - якщо волатильність висока незалежно від тренду
+
+    def detect_divergence(self, price_data: pd.DataFrame, indicator_data: pd.DataFrame) -> List[Dict]:
+
+        # Перевірка наявності необхідних даних
+        if 'close' not in price_data.columns:
+            raise ValueError("price_data повинен містити стовпець 'close'")
+
+        if indicator_data.empty or len(indicator_data.columns) == 0:
+            raise ValueError("indicator_data не містить даних")
+
+        # Використовуємо перший стовпець indicator_data як індикатор, якщо не вказано інакше
+        indicator_column = indicator_data.columns[0]
+
+        # Переконуємося, що індекси співпадають
+        if not price_data.index.equals(indicator_data.index):
+            # Можливо потрібно переіндексувати або об'єднати дані
+            common_index = price_data.index.intersection(indicator_data.index)
+            price_data = price_data.loc[common_index]
+            indicator_data = indicator_data.loc[common_index]
+
+        # Дивергенції будемо шукати на локальних максимумах і мінімумах
+        # Для цього знайдемо локальні екстремуми
+        window = 5  # Розмір вікна для пошуку екстремумів
+
+        # Функція для знаходження локальних максимумів
+        def find_local_maxima(series, window):
+            max_indices = []
+            for i in range(window, len(series) - window):
+                if all(series.iloc[i] > series.iloc[i - j] for j in range(1, window + 1)) and \
+                        all(series.iloc[i] > series.iloc[i + j] for j in range(1, window + 1)):
+                    max_indices.append(i)
+            return max_indices
+
+        # Функція для знаходження локальних мінімумів
+        def find_local_minima(series, window):
+            min_indices = []
+            for i in range(window, len(series) - window):
+                if all(series.iloc[i] < series.iloc[i - j] for j in range(1, window + 1)) and \
+                        all(series.iloc[i] < series.iloc[i + j] for j in range(1, window + 1)):
+                    min_indices.append(i)
+            return min_indices
+
+        # Знаходимо локальні максимуми і мінімуми для ціни і індикатора
+        price_maxima = find_local_maxima(price_data['close'], window)
+        price_minima = find_local_minima(price_data['close'], window)
+        indicator_maxima = find_local_maxima(indicator_data[indicator_column], window)
+        indicator_minima = find_local_minima(indicator_data[indicator_column], window)
+
+        # Список для зберігання знайдених дивергенцій
+        divergences = []
+
+        # Максимальна відстань між екстремумами для пошуку дивергенцій (у періодах)
+        max_distance = 3
+
+        # Шукаємо регулярні (негативні) дивергенції на максимумах
+        # Ціна росте, але індикатор не підтверджує (робить нижчий максимум)
+        for i in range(1, len(price_maxima)):
+            price_idx1 = price_maxima[i - 1]
+            price_idx2 = price_maxima[i]
+
+            # Шукаємо відповідні максимуми індикатора
+            closest_indicator_idx1 = None
+            closest_indicator_idx2 = None
+            min_distance1 = max_distance
+            min_distance2 = max_distance
+
+            for idx in indicator_maxima:
+                distance1 = abs(idx - price_idx1)
+                distance2 = abs(idx - price_idx2)
+
+                if distance1 < min_distance1:
+                    closest_indicator_idx1 = idx
+                    min_distance1 = distance1
+
+                if distance2 < min_distance2:
+                    closest_indicator_idx2 = idx
+                    min_distance2 = distance2
+
+            if closest_indicator_idx1 is not None and closest_indicator_idx2 is not None:
+                # Перевіряємо наявність дивергенції (ціна росте, індикатор падає)
+                price_higher = price_data['close'].iloc[price_idx2] > price_data['close'].iloc[price_idx1]
+                indicator_lower = indicator_data[indicator_column].iloc[closest_indicator_idx2] < \
+                                  indicator_data[indicator_column].iloc[closest_indicator_idx1]
+
+                if price_higher and indicator_lower:
+                    divergences.append({
+                        'type': 'regular_bearish',
+                        'price_date1': price_data.index[price_idx1],
+                        'price_date2': price_data.index[price_idx2],
+                        'price_value1': price_data['close'].iloc[price_idx1],
+                        'price_value2': price_data['close'].iloc[price_idx2],
+                        'indicator_value1': indicator_data[indicator_column].iloc[closest_indicator_idx1],
+                        'indicator_value2': indicator_data[indicator_column].iloc[closest_indicator_idx2],
+                        'description': 'Негативна дивергенція: ціна росте, але індикатор падає'
+                    })
+
+        # Шукаємо регулярні (позитивні) дивергенції на мінімумах
+        # Ціна падає, але індикатор не підтверджує (робить вищий мінімум)
+        for i in range(1, len(price_minima)):
+            price_idx1 = price_minima[i - 1]
+            price_idx2 = price_minima[i]
+
+            # Шукаємо відповідні мінімуми індикатора
+            closest_indicator_idx1 = None
+            closest_indicator_idx2 = None
+            min_distance1 = max_distance
+            min_distance2 = max_distance
+
+            for idx in indicator_minima:
+                distance1 = abs(idx - price_idx1)
+                distance2 = abs(idx - price_idx2)
+
+                if distance1 < min_distance1:
+                    closest_indicator_idx1 = idx
+                    min_distance1 = distance1
+
+                if distance2 < min_distance2:
+                    closest_indicator_idx2 = idx
+                    min_distance2 = distance2
+
+            if closest_indicator_idx1 is not None and closest_indicator_idx2 is not None:
+                # Перевіряємо наявність дивергенції (ціна падає, індикатор росте)
+                price_lower = price_data['close'].iloc[price_idx2] < price_data['close'].iloc[price_idx1]
+                indicator_higher = indicator_data[indicator_column].iloc[closest_indicator_idx2] > \
+                                   indicator_data[indicator_column].iloc[closest_indicator_idx1]
+
+                if price_lower and indicator_higher:
+                    divergences.append({
+                        'type': 'regular_bullish',
+                        'price_date1': price_data.index[price_idx1],
+                        'price_date2': price_data.index[price_idx2],
+                        'price_value1': price_data['close'].iloc[price_idx1],
+                        'price_value2': price_data['close'].iloc[price_idx2],
+                        'indicator_value1': indicator_data[indicator_column].iloc[closest_indicator_idx1],
+                        'indicator_value2': indicator_data[indicator_column].iloc[closest_indicator_idx2],
+                        'description': 'Позитивна дивергенція: ціна падає, але індикатор росте'
+                    })
+
+        # Шукаємо приховані дивергенції на максимумах
+        # Ціна робить нижчий максимум, але індикатор робить вищий максимум
+        for i in range(1, len(price_maxima)):
+            price_idx1 = price_maxima[i - 1]
+            price_idx2 = price_maxima[i]
+
+            # Шукаємо відповідні максимуми індикатора
+            closest_indicator_idx1 = None
+            closest_indicator_idx2 = None
+            min_distance1 = max_distance
+            min_distance2 = max_distance
+
+            for idx in indicator_maxima:
+                distance1 = abs(idx - price_idx1)
+                distance2 = abs(idx - price_idx2)
+
+                if distance1 < min_distance1:
+                    closest_indicator_idx1 = idx
+                    min_distance1 = distance1
+
+                if distance2 < min_distance2:
+                    closest_indicator_idx2 = idx
+                    min_distance2 = distance2
+
+            if closest_indicator_idx1 is not None and closest_indicator_idx2 is not None:
+                # Перевіряємо наявність прихованої дивергенції (ціна нижче, індикатор вище)
+                price_lower = price_data['close'].iloc[price_idx2] < price_data['close'].iloc[price_idx1]
+                indicator_higher = indicator_data[indicator_column].iloc[closest_indicator_idx2] > \
+                                   indicator_data[indicator_column].iloc[closest_indicator_idx1]
+
+                if price_lower and indicator_higher:
+                    divergences.append({
+                        'type': 'hidden_bullish',
+                        'price_date1': price_data.index[price_idx1],
+                        'price_date2': price_data.index[price_idx2],
+                        'price_value1': price_data['close'].iloc[price_idx1],
+                        'price_value2': price_data['close'].iloc[price_idx2],
+                        'indicator_value1': indicator_data[indicator_column].iloc[closest_indicator_idx1],
+                        'indicator_value2': indicator_data[indicator_column].iloc[closest_indicator_idx2],
+                        'description': 'Прихована бичача дивергенція: ціна робить нижчий максимум, але індикатор вищий максимум'
+                    })
+
+        # Шукаємо приховані дивергенції на мінімумах
+        # Ціна робить вищий мінімум, але індикатор робить нижчий мінімум
+        for i in range(1, len(price_minima)):
+            price_idx1 = price_minima[i - 1]
+            price_idx2 = price_minima[i]
+
+            # Шукаємо відповідні мінімуми індикатора
+            closest_indicator_idx1 = None
+            closest_indicator_idx2 = None
+            min_distance1 = max_distance
+            min_distance2 = max_distance
+
+            for idx in indicator_minima:
+                distance1 = abs(idx - price_idx1)
+                distance2 = abs(idx - price_idx2)
+
+                if distance1 < min_distance1:
+                    closest_indicator_idx1 = idx
+                    min_distance1 = distance1
+
+                if distance2 < min_distance2:
+                    closest_indicator_idx2 = idx
+                    min_distance2 = distance2
+
+            if closest_indicator_idx1 is not None and closest_indicator_idx2 is not None:
+                # Перевіряємо наявність прихованої дивергенції (ціна вище, індикатор нижче)
+                price_higher = price_data['close'].iloc[price_idx2] > price_data['close'].iloc[price_idx1]
+                indicator_lower = indicator_data[indicator_column].iloc[closest_indicator_idx2] < \
+                                  indicator_data[indicator_column].iloc[closest_indicator_idx1]
+
+                if price_higher and indicator_lower:
+                    divergences.append({
+                        'type': 'hidden_bearish',
+                        'price_date1': price_data.index[price_idx1],
+                        'price_date2': price_data.index[price_idx2],
+                        'price_value1': price_data['close'].iloc[price_idx1],
+                        'price_value2': price_data['close'].iloc[price_idx2],
+                        'indicator_value1': indicator_data[indicator_column].iloc[closest_indicator_idx1],
+                        'indicator_value2': indicator_data[indicator_column].iloc[closest_indicator_idx2],
+                        'description': 'Прихована ведмежа дивергенція: ціна робить вищий мінімум, але індикатор нижчий мінімум'
+                    })
+
+        return divergences
 
     def calculate_trend_metrics(self, data: pd.DataFrame) -> Dict[str, float]:
-        """
-        Розрахунок метрик поточного тренду (швидкість, прискорення, волатильність).
 
-        Args:
-            data: Цінові дані у форматі DataFrame
+        # Перевірка наявності необхідних даних
+        if 'close' not in data.columns:
+            raise ValueError("DataFrame повинен містити стовпець 'close'")
 
-        Returns:
-            Dict[str, float]: Словник метрик тренду
-        """
-        pass
+        # Копіюємо дані для запобігання зміни оригінального DataFrame
+        df = data.copy()
+
+        # Переконуємось, що дані відсортовані за датою
+        if hasattr(df.index, 'is_monotonic_increasing') and not df.index.is_monotonic_increasing:
+            df.sort_index(inplace=True)
+
+        # Розрахунок базових метрик
+
+        # 1. Швидкість тренду (середня зміна ціни за період)
+        df['price_change'] = df['close'].diff()
+        df['price_change_pct'] = df['close'].pct_change() * 100
+
+        # Швидкість за різні періоди
+        speed_5 = df['price_change'].tail(5).mean()
+        speed_10 = df['price_change'].tail(10).mean()
+        speed_20 = df['price_change'].tail(20).mean()
+
+        # Відносна швидкість у відсотках
+        speed_pct_5 = df['price_change_pct'].tail(5).mean()
+        speed_pct_10 = df['price_change_pct'].tail(10).mean()
+        speed_pct_20 = df['price_change_pct'].tail(20).mean()
+
+        # 2. Прискорення тренду (зміна швидкості)
+        df['acceleration'] = df['price_change'].diff()
+        df['acceleration_pct'] = df['price_change_pct'].diff()
+
+        # Прискорення за різні періоди
+        acceleration_5 = df['acceleration'].tail(5).mean()
+        acceleration_10 = df['acceleration'].tail(10).mean()
+        acceleration_20 = df['acceleration'].tail(20).mean()
+
+        # 3. Волатильність (стандартне відхилення змін ціни)
+        volatility_5 = df['price_change_pct'].tail(5).std()
+        volatility_10 = df['price_change_pct'].tail(10).std()
+        volatility_20 = df['price_change_pct'].tail(20).std()
+
+        # 4. Відносна сила тренду (RSI-подібний підхід)
+        df['gain'] = df['price_change'].clip(lower=0)
+        df['loss'] = -df['price_change'].clip(upper=0)
+
+        avg_gain_14 = df['gain'].tail(14).mean()
+        avg_loss_14 = df['loss'].tail(14).mean()
+
+        rs = avg_gain_14 / avg_loss_14 if avg_loss_14 != 0 else 100
+        trend_strength = 100 - (100 / (1 + rs))
+
+        # 5. Кореляція з часом (показує лінійність тренду)
+        df['time_index'] = np.arange(len(df))
+        trend_linearity = df['close'].corr(df['time_index'])
+
+        # 6. Тренд лінійної регресії
+        x = np.arange(len(df)).reshape(-1, 1)
+        y = df['close'].values
+
+        # Використовуємо останні 20 періодів для лінійної регресії
+        if len(df) >= 20:
+            x_recent = x[-20:]
+            y_recent = y[-20:]
+
+            # Лінійна регресія для визначення нахилу тренду
+            try:
+                from sklearn.linear_model import LinearRegression
+                model = LinearRegression()
+                model.fit(x_recent, y_recent)
+                trend_slope = model.coef_[0]
+                trend_intercept = model.intercept_
+            except ImportError:
+                # Якщо sklearn не доступний, використовуємо простіший підхід
+                n = len(x_recent)
+                x_mean = np.mean(x_recent)
+                y_mean = np.mean(y_recent)
+                xy_sum = np.sum(x_recent * y_recent) - n * x_mean * y_mean
+                x_squared_sum = np.sum(x_recent ** 2) - n * x_mean ** 2
+                trend_slope = xy_sum / x_squared_sum if x_squared_sum != 0 else 0
+                trend_intercept = y_mean - trend_slope * x_mean
+        else:
+            trend_slope = np.nan
+            trend_intercept = np.nan
+
+        # 7. R-squared (показує якість лінійної моделі)
+        if len(df) >= 20:
+            try:
+                from sklearn.metrics import r2_score
+                y_pred = trend_slope * x_recent + trend_intercept
+                r_squared = r2_score(y_recent, y_pred)
+            except ImportError:
+                # Спрощений розрахунок R-squared
+                y_pred = trend_slope * x_recent + trend_intercept
+                ss_total = np.sum((y_recent - np.mean(y_recent)) ** 2)
+                ss_residual = np.sum((y_recent - y_pred) ** 2)
+                r_squared = 1 - (ss_residual / ss_total) if ss_total != 0 else 0
+        else:
+            r_squared = np.nan
+
+        # 8. Індекс ефективності тренду (Trend Efficiency Index)
+        price_moves = df['price_change'].abs().tail(20).sum()
+        price_net_change = abs(df['close'].iloc[-1] - df['close'].iloc[-21]) if len(df) >= 21 else abs(
+            df['close'].iloc[-1] - df['close'].iloc[0])
+        trend_efficiency = price_net_change / price_moves if price_moves != 0 else 0
+
+        # 9. Відносний об'єм (для підтвердження сили тренду)
+        if 'volume' in df.columns:
+            avg_volume = df['volume'].mean()
+            recent_volume = df['volume'].tail(5).mean()
+            volume_factor = recent_volume / avg_volume if avg_volume != 0 else 1
+        else:
+            volume_factor = None
+
+        # Формуємо словник з метриками
+        metrics = {
+            'speed_5': float(speed_5),
+            'speed_10': float(speed_10),
+            'speed_20': float(speed_20),
+            'speed_pct_5': float(speed_pct_5),
+            'speed_pct_10': float(speed_pct_10),
+            'speed_pct_20': float(speed_pct_20),
+            'acceleration_5': float(acceleration_5),
+            'acceleration_10': float(acceleration_10),
+            'acceleration_20': float(acceleration_20),
+            'volatility_5': float(volatility_5),
+            'volatility_10': float(volatility_10),
+            'volatility_20': float(volatility_20),
+            'trend_strength': float(trend_strength),
+            'trend_linearity': float(trend_linearity),
+            'trend_slope': float(trend_slope) if not np.isnan(trend_slope) else None,
+            'trend_intercept': float(trend_intercept) if not np.isnan(trend_intercept) else None,
+            'r_squared': float(r_squared) if not np.isnan(r_squared) else None,
+            'trend_efficiency': float(trend_efficiency),
+        }
+
+        # Додаємо метрику пов'язану з об'ємом, якщо вона доступна
+        if volume_factor is not None:
+            metrics['volume_factor'] = float(volume_factor)
+
+        # Додаткові метрики для визначення напрямку тренду
+        last_close = df['close'].iloc[-1]
+        price_sma_50 = df['close'].tail(50).mean() if len(df) >= 50 else None
+        price_sma_200 = df['close'].tail(200).mean() if len(df) >= 200 else None
+
+        if price_sma_50 is not None:
+            metrics['above_sma_50'] = float(last_close > price_sma_50)
+
+        if price_sma_200 is not None:
+            metrics['above_sma_200'] = float(last_close > price_sma_200)
+
+        # Додаємо індикатор сили тренду на основі комбінації метрик
+        # Простий композитний індикатор на основі швидкості та лінійності
+        composite_strength = (speed_pct_20 / volatility_20 if volatility_20 != 0 else 0) * trend_linearity
+        metrics['composite_strength'] = float(composite_strength)
+
+        return metrics
 
     def save_trend_analysis_to_db(self, symbol: str, timeframe: str,
                                   analysis_results: Dict) -> bool:
