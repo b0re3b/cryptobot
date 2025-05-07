@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from scipy import stats
 from statsmodels.tsa.stattools import acf, pacf
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
@@ -9,7 +8,7 @@ from arch import arch_model
 
 # Import from other project modules
 from data.db import DatabaseManager
-from data_collection import market_data_processor, DataCleaner
+from data_collection import  DataCleaner
 from models import TimeSeriesModels
 from data_collection import AnomalyDetector
 from data_collection import FeatureEngineering
@@ -623,63 +622,77 @@ class VolatilityAnalysis:
 
         return features
 
-    def save_volatility_analysis_to_db(self, symbol, timeframe, volatility_data):
-        """
-        Save volatility analysis results to database
+    def save_volatility_analysis_to_db(self, symbol, timeframe, volatility_data, model_data=None, regime_data=None,
+                                       features_data=None, cross_asset_data=None):
 
-        Args:
-            symbol (str): Cryptocurrency symbol
-            timeframe (str): Timeframe of the analysis
-            volatility_data (pd.DataFrame): Volatility metrics and analysis
-
-        Returns:
-            bool: Success status
-        """
         try:
-            # Create table name
-            table_name = f"volatility_analysis_{symbol.lower()}_{timeframe}"
+            logger.info(f"Saving volatility analysis for {symbol} on {timeframe} timeframe")
+            success = True
 
-            # Save to database
-            with self.db_connection.cursor() as cursor:
-                # Check if table exists
-                cursor.execute(f"SELECT to_regclass('public.{table_name}')")
-                table_exists = cursor.fetchone()[0] is not None
+            # 1. Save main volatility metrics
+            if volatility_data is not None and not volatility_data.empty:
+                metrics_success = self.db_manager.save_volatility_metrics(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    metrics_data=volatility_data
+                )
+                success = success and metrics_success
+                logger.info(f"Saved volatility metrics: {metrics_success}")
 
-                if not table_exists:
-                    # Create table if it doesn't exist
-                    columns = ', '.join([f"{col} FLOAT" for col in volatility_data.columns])
-                    cursor.execute(f"""
-                        CREATE TABLE {table_name} (
-                            timestamp TIMESTAMP PRIMARY KEY,
-                            {columns}
-                        )
-                    """)
+            # 2. Save volatility models (GARCH, etc.)
+            if model_data is not None:
+                model_success = self.db_manager.save_volatility_model(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_name=model_data.get('name', 'garch'),
+                    model_params=model_data.get('params', {}),
+                    forecast_data=model_data.get('forecast'),
+                    model_stats=model_data.get('stats', {})
+                )
+                success = success and model_success
+                logger.info(f"Saved volatility model: {model_success}")
 
-                # Insert data
-                for timestamp, row in volatility_data.iterrows():
-                    placeholders = ', '.join(['%s'] * (len(row) + 1))
-                    columns = 'timestamp, ' + ', '.join(row.index)
-                    values = [timestamp] + list(row.values)
+            # 3. Save regime data
+            if regime_data is not None:
+                regime_success = self.db_manager.save_volatility_regime(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    regime_data=regime_data.get('regimes'),
+                    regime_method=regime_data.get('method', 'kmeans'),
+                    regime_params=regime_data.get('params', {})
+                )
+                success = success and regime_success
+                logger.info(f"Saved volatility regimes: {regime_success}")
 
-                    cursor.execute(f"""
-                        INSERT INTO {table_name} ({columns})
-                        VALUES ({placeholders})
-                        ON CONFLICT (timestamp) DO UPDATE
-                        SET {', '.join([f"{col} = EXCLUDED.{col}" for col in row.index])}
-                    """, values)
+            # 4. Save ML features
+            if features_data is not None and not features_data.empty:
+                features_success = self.db_manager.save_volatility_features(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    features_data=features_data
+                )
+                success = success and features_success
+                logger.info(f"Saved volatility features: {features_success}")
 
-                self.db_connection.commit()
+            # 5. Save cross-asset volatility data
+            if cross_asset_data is not None and not cross_asset_data.empty:
+                cross_asset_success = self.db_manager.save_cross_asset_volatility(
+                    base_symbol=symbol,
+                    timeframe=timeframe,
+                    correlation_data=cross_asset_data
+                )
+                success = success and cross_asset_success
+                logger.info(f"Saved cross-asset volatility: {cross_asset_success}")
 
-            return True
+            return success
 
         except Exception as e:
             logger.error(f"Error saving volatility analysis to database: {e}")
-            self.db_connection.rollback()
             return False
 
     def load_volatility_analysis_from_db(self, symbol, timeframe, start_date=None, end_date=None):
         """
-        Load volatility analysis from database
+        Load comprehensive volatility analysis from database using specialized DB manager methods
 
         Args:
             symbol (str): Cryptocurrency symbol
@@ -688,40 +701,90 @@ class VolatilityAnalysis:
             end_date (str): End date (YYYY-MM-DD)
 
         Returns:
-            pd.DataFrame: Volatility analysis data
+            dict: Dictionary containing all volatility analysis components
         """
         try:
-            # Create table name
-            table_name = f"volatility_analysis_{symbol.lower()}_{timeframe}"
+            logger.info(f"Loading volatility analysis for {symbol} on {timeframe} timeframe")
 
-            # Build query
-            query = f"SELECT * FROM {table_name}"
-            params = []
+            # 1. Load volatility metrics
+            metrics_data = self.db_manager.get_volatility_metrics(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-            if start_date or end_date:
-                query += " WHERE"
+            # 2. Load volatility model data (default to GARCH)
+            model_data = self.db_manager.get_volatility_model(
+                symbol=symbol,
+                timeframe=timeframe,
+                model_name='garch'
+            )
 
-                if start_date:
-                    query += " timestamp >= %s"
-                    params.append(start_date)
+            # 3. Load regime data
+            regime_data = self.db_manager.get_volatility_regime(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-                    if end_date:
-                        query += " AND"
+            # 4. Load ML features
+            features_data = self.db_manager.get_volatility_features(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-                if end_date:
-                    query += " timestamp <= %s"
-                    params.append(end_date)
+            # 5. Load cross-asset volatility
+            cross_asset_data = self.db_manager.get_cross_asset_volatility(
+                base_symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-            query += " ORDER BY timestamp"
+            # Combine all results into a comprehensive analysis object
+            analysis_results = {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'volatility_metrics': metrics_data,
+                'model_data': model_data,
+                'regime_data': regime_data,
+                'features_data': features_data,
+                'cross_asset_data': cross_asset_data,
+                'period': {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            }
 
-            # Execute query
-            volatility_data = pd.read_sql(query, self.db_connection, params=params, index_col='timestamp')
+            # Add summary info if metrics data is available
+            if metrics_data is not None and not metrics_data.empty:
+                main_vol_col = next((col for col in metrics_data.columns if 'hist_vol_14d' in col), None)
+                if main_vol_col:
+                    analysis_results['summary'] = {
+                        'avg_volatility': metrics_data[main_vol_col].mean(),
+                        'current_volatility': metrics_data[main_vol_col].iloc[-1] if not metrics_data.empty else None,
+                        'volatility_trend': 'increasing' if metrics_data[main_vol_col].iloc[-1] >
+                                                            metrics_data[main_vol_col].iloc[-7]
+                        else 'decreasing' if len(metrics_data) >= 7 else 'unknown',
+                        'max_volatility': metrics_data[main_vol_col].max(),
+                        'min_volatility': metrics_data[main_vol_col].min(),
+                        'volatility_of_volatility': metrics_data[main_vol_col].std() / metrics_data[main_vol_col].mean()
+                        if not metrics_data.empty else None
+                    }
 
-            return volatility_data
+            return analysis_results
 
         except Exception as e:
             logger.error(f"Error loading volatility analysis from database: {e}")
-            return None
+            return {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'error': str(e)
+            }
 
     def analyze_crypto_market_conditions(self, symbols=['BTC', 'ETH', 'BNB'], timeframe='1d', window=14):
         """
@@ -823,6 +886,16 @@ class VolatilityAnalysis:
             # Detect volatility regimes
             vol_df['regime'] = self.detect_volatility_regimes(vol_df['hist_vol_14d'])
 
+            # Create regime data dictionary for database
+            regime_data = {
+                'regimes': vol_df['regime'],
+                'method': 'kmeans',
+                'params': {
+                    'n_regimes': 3,
+                    'feature': 'hist_vol_14d'
+                }
+            }
+
             # Analyze volatility clustering
             acf_data = self.analyze_volatility_clustering(data['returns'])
 
@@ -846,6 +919,22 @@ class VolatilityAnalysis:
             if garch_model is not None:
                 forecast_values = garch_forecast.variance.iloc[-1].values
 
+            # Create model data dictionary for database
+            model_data = {
+                'name': 'garch',
+                'params': {
+                    'p': 1,
+                    'q': 1,
+                    'mean': 'Zero',
+                    'vol': 'GARCH'
+                },
+                'forecast': forecast_values,
+                'stats': {
+                    'aic': garch_model.aic if garch_model is not None else None,
+                    'bic': garch_model.bic if garch_model is not None else None
+                }
+            }
+
             # Calculate volatility impulse response
             impulse_response = self.volatility_impulse_response(data['returns'])
 
@@ -855,6 +944,16 @@ class VolatilityAnalysis:
             # Get market-wide conditions for context
             market_conditions = self.analyze_crypto_market_conditions(
                 symbols=[symbol, 'BTC', 'ETH'], timeframe=timeframe)
+
+            # Get cross-asset correlation data
+            cross_asset_symbols = ['BTC', 'ETH', 'BNB', 'XRP']
+            asset_dict = {}
+            for asset in cross_asset_symbols:
+                asset_data = self.db_manager.get_klines(f"{asset}USDT", timeframe=timeframe)
+                if asset_data is not None and not asset_data.empty:
+                    asset_dict[asset] = asset_data['close']
+
+            cross_asset_vol = self.analyze_cross_asset_volatility(asset_dict) if asset_dict else None
 
             # Combine all results
             analysis_results = {
@@ -895,7 +994,15 @@ class VolatilityAnalysis:
             # Save to database if requested
             if save_to_db:
                 logger.info(f"Saving volatility analysis for {symbol} to database")
-                save_success = self.save_volatility_analysis_to_db(symbol, timeframe, vol_df)
+                save_success = self.save_volatility_analysis_to_db(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    volatility_data=vol_df,
+                    model_data=model_data,
+                    regime_data=regime_data,
+                    features_data=ml_features,
+                    cross_asset_data=cross_asset_vol
+                )
                 analysis_results['saved_to_db'] = save_success
 
             # Generate reports and visualizations
