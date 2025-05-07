@@ -1,13 +1,13 @@
-from .crypto_cycles import CryptoCycleAnalyzer
-from .market_correlation import CorrelationAnalyzer
-from .volatility_analysis import VolatilityAnalyzer
-from .trend_detection import TrendDetector
+from .crypto_cycles import CryptoCycles
+from .market_correlation import MarketCorrelation
+from .volatility_analysis import VolatilityAnalysis
+from .trend_detection import TrendDetection
 from .backtesting import BacktestingEngine
 
 __all__ = [
-    'CryptoCycleAnalyzer',
-    'CorrelationAnalyzer',
-    'VolatilityAnalyzer',
-    'TrendDetector',
+    'CryptoCycles',
+    'MarketCorrelation',
+    'VolatilityAnalysis',
+    'TrendDetection',
     'BacktestingEngine'
 ]

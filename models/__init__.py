@@ -1,17 +1,16 @@
 from .time_series import TimeSeriesModels
-from .deep_learning import DeepLearningModels
+from .deep_learning import DeepLearningModel
 from .realtime_technical_indicators import RealtimeTechnicalIndicators
-from .ensemble import EnsembleModels
-from .sentiment_models import CryptoSentimentModel
-from data_collection.crypto_news_scraper import CryptoNewsScraper
+from .ensemble import EnsembleModel
+from .NewsAnalyzer import NewsAnalyzer
 from tensorflow.keras.models import Sequential, load_model, save_model
 from tensorflow.keras.layers import LSTM, GRU, Dense, Dropout, BatchNormalization
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
 __all__ = [
     'TimeSeriesModels',
-    'DeepLearningModels',
+    'DeepLearningModel',
     'RealtimeTechnicalIndicators',
-    'EnsembleModels',
-    'CryptoSentimentModel'
+    'EnsembleModel',
+    'NewsAnalyzer'
 ]

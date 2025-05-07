@@ -31,6 +31,76 @@ class VolatilityAnalysis:
         self.feature_engineer = FeatureEngineering()
         self.time_series = TimeSeriesModels()
 
+    def get_market_phases(self, volatility_data, lookback_window=90, n_regimes=4):
+
+        try:
+            # Отримати останні дані в межах вікна аналізу
+            recent_data = volatility_data.iloc[-lookback_window:] if len(
+                volatility_data) > lookback_window else volatility_data
+
+            # Розрахувати показники волатильності для всього ринку
+            market_vol = recent_data.mean(axis=1)  # Середня волатильність по всіх активах
+            vol_dispersion = recent_data.std(axis=1)  # Розсіювання (дисперсія) волатильності
+            vol_trend = market_vol.diff(5).rolling(window=10).mean()  # Тренд волатильності (різниця + згладжування)
+
+            # Об'єднати показники у матрицю ознак для кластеризації
+            features = pd.DataFrame({
+                'market_vol': market_vol,
+                'vol_dispersion': vol_dispersion,
+                'vol_trend': vol_trend
+            }).dropna()
+
+            # Якщо даних недостатньо — повертаємо порожню серію
+            if len(features) < 10:
+                return pd.Series(index=volatility_data.index)
+
+            # Нормалізуємо ознаки для кластеризації
+            from sklearn.preprocessing import StandardScaler
+            scaler = StandardScaler()
+            scaled_features = scaler.fit_transform(features)
+
+            # Застосовуємо кластеризацію KMeans для виділення фаз ринку
+            kmeans = KMeans(n_clusters=n_regimes, random_state=42)
+            phases = kmeans.fit_predict(scaled_features)
+
+            # Отримати центроїди кластерів
+            centroids = kmeans.cluster_centers_
+
+            # Визначаємо порядок фаз за рівнем волатильності (перша ознака)
+            vol_level_order = np.argsort(centroids[:, 0])
+
+            # Формуємо список назв для фаз
+            phase_names = ['Low Vol', 'Normal Vol', 'High Vol', 'Extreme Vol']
+            if n_regimes < 4:
+                phase_names = phase_names[:n_regimes]
+            elif n_regimes > 4:
+                phase_names.extend([f'Корист. фаза {i + 1}' for i in range(n_regimes - 4)])
+
+            # Створюємо відповідність між кластерами та назвами фаз
+            phase_mapping = {vol_level_order[i]: phase_names[i] for i in range(n_regimes)}
+
+            # Присвоюємо фази кожному рядку
+            phase_series = pd.Series(phases, index=features.index).map(phase_mapping)
+
+            # Розширюємо серію на повний період вхідних даних, заповнюючи пропуски
+            full_phase_series = pd.Series(index=volatility_data.index)
+            full_phase_series.loc[phase_series.index] = phase_series
+            full_phase_series = full_phase_series.ffill().bfill()  # Заповнення в обидва боки
+
+            # Зберігаємо модель для подальшого використання
+            self.regime_models[f"market_phases_{n_regimes}"] = {
+                'model': kmeans,
+                'scaler': scaler,
+                'features': list(features.columns),
+                'mapping': phase_mapping
+            }
+
+            return full_phase_series
+
+        except Exception as e:
+            logger.error(f"Помилка при визначенні фаз ринку: {e}")
+            return pd.Series(index=volatility_data.index)
+
     def calculate_historical_volatility(self, price_data, window=14, trading_periods=365, annualize=True):
         """
         Calculate historical volatility using rolling standard deviation
@@ -683,7 +753,7 @@ class VolatilityAnalysis:
             vol_correlation = vol_df.corr().mean().mean()  # Average correlation
 
             # Get market phases using helper function
-            market_phases = get_market_phases(vol_df)
+            market_phases = self.get_market_phases(vol_df)
             current_phase = market_phases.iloc[-1] if not market_phases.empty else None
 
             # Determine if in volatility regime shift
