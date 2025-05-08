@@ -243,30 +243,6 @@ CREATE TABLE IF NOT EXISTS sol_klines_processed (
 
 CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(timeframe, open_time);
 
-
-
-
--- Таблиця для агрегованого аналізу настроїв за часовими інтервалами та криптовалютами
-CREATE TABLE IF NOT EXISTS sentiment_time_series (
-    id SERIAL PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    time_bucket TIMESTAMP NOT NULL,
-    timeframe TEXT NOT NULL, -- 'hour', 'day', 'week'
-    positive_count INTEGER NOT NULL,
-    negative_count INTEGER NOT NULL,
-    neutral_count INTEGER NOT NULL,
-    average_sentiment NUMERIC NOT NULL,
-    sentiment_volatility NUMERIC, -- волатильність настрою
-    tweet_volume INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (symbol, time_bucket, timeframe)
-);
-
--- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
-CREATE INDEX IF NOT EXISTS idx_sentiment_time_series ON sentiment_time_series(symbol, time_bucket);
-
-
-
 -- Таблиця для зберігання джерел новин
 CREATE TABLE IF NOT EXISTS news_sources (
     source_id SERIAL PRIMARY KEY,
@@ -333,6 +309,7 @@ CREATE INDEX IF NOT EXISTS idx_article_mentioned_coins ON article_mentioned_coin
 
 -- Таблиця для популярних тем у новинах
 CREATE TABLE IF NOT EXISTS trending_news_topics (
+
     topic_id SERIAL PRIMARY KEY,
     topic_name VARCHAR(255) NOT NULL,
     start_date TIMESTAMP WITH TIME ZONE,
@@ -344,6 +321,7 @@ CREATE TABLE IF NOT EXISTS trending_news_topics (
 
 -- Таблиця для зв'язку статей з темами (багато-до-багатьох)
 CREATE TABLE IF NOT EXISTS article_topics (
+
     article_topic_id SERIAL PRIMARY KEY,
     article_id INTEGER REFERENCES news_articles(article_id),
     topic_id INTEGER REFERENCES trending_news_topics(topic_id),
