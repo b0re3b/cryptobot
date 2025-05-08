@@ -46,92 +46,88 @@ class DataCleaner:
             self.logger.warning("Отримано порожній DataFrame для очищення")
             return data if data is not None else pd.DataFrame()
 
-        # Поетапне очищення для кращої структури та можливості налагодження
-        try:
-            # 1. Підготовка та валідація даних
-            result = self._prepare_dataframe(data)
+        # 1. Підготовка та валідація даних
+        result = self._prepare_dataframe(data)
 
-            # Збережемо список вхідних колонок для контролю
-            original_columns = result.columns.tolist()
-            self.logger.info(f"Початкові колонки: {original_columns}")
+        # Збережемо копію оригінальних даних для відновлення при необхідності
+        original_data = result.copy()
 
-            # 2. Валідація цілісності даних
-            self.validate_data_integrity(result)
+        # Список обов'язкових колонок
+        essential_cols = ['open', 'high', 'low', 'close', 'volume']
 
-            # 3. Видалення дублікатів
-            result = self._remove_duplicates(result)
+        # 2. Перевірка наявності обов'язкових колонок перед початком обробки
+        missing_essential = [col for col in essential_cols if col not in result.columns]
+        if missing_essential:
+            self.logger.error(f"Відсутні обов'язкові колонки на початку: {missing_essential}")
+            raise ValueError(f"Вхідні дані не містять обов'язкових колонок: {missing_essential}")
 
-            # 4. Видалення викидів
-            if remove_outliers:
-                result = self._remove_outliers(result)
+        # 3. Видалення дублікатів
+        result = self._remove_duplicates(result)
+        self._verify_essential_columns(result, essential_cols)
 
-            # 5. Заповнення відсутніх значень (до додавання нових ознак)
-            if fill_missing:
-                result = self.handle_missing_values(result)
+        # 4. Видалення викидів
+        if remove_outliers:
+            result = self._remove_outliers(result)
+            self._verify_essential_columns(result, essential_cols)
 
-            # 6. Виправлення невалідних high/low значень
-            result = self._fix_invalid_high_low(result)
+        # 5. Заповнення відсутніх значень
+        if fill_missing:
+            result = self.handle_missing_values(result)
+            self._verify_essential_columns(result, essential_cols)
 
-            # 7. Ресемплінг даних
-            if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
-                result = self.data_resampler.resample_data(result, target_interval)
+        # 6. Виправлення невалідних high/low значень
+        result = self._fix_invalid_high_low(result)
+        self._verify_essential_columns(result, essential_cols)
 
-            # 8. Додавання часових ознак (після обробки даних)
-            if add_time_features and isinstance(result.index, pd.DatetimeIndex):
-                # Зберігаємо основні колонки перед додаванням фічей
-                price_cols = [col for col in ['open', 'high', 'low', 'close', 'volume'] if col in result.columns]
-                price_data = result[price_cols].copy()
+        # 7. Ресемплінг даних
+        if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
+            result = self.data_resampler.resample_data(result, target_interval)
+            self._verify_essential_columns(result, essential_cols)
 
-                # Додаємо часові ознаки
-                result = self.add_time_features(result, cyclical, add_sessions)
+        # 8. Нормалізація даних (перед додаванням часових ознак)
+        if normalize:
+            # Виконуємо нормалізацію тільки для необхідних колонок
+            normalized_result, scaler_meta = self.normalize_data(
+                result,
+                norm_method,
+                columns=essential_cols
+            )
 
-                # Перевіряємо, чи не втрачено основні колонки
-                for col in price_cols:
-                    if col not in result.columns:
-                        self.logger.warning(f"Колонка {col} втрачена після додавання часових ознак. Відновлення...")
-                        result[col] = price_data[col]
+            if normalized_result is not None:
+                result = normalized_result
+                # Перевіряємо, чи всі колонки на місці
+                self._verify_essential_columns(result, essential_cols)
+            else:
+                self.logger.warning("Нормалізація не вдалася, використовуємо оригінальні дані")
+                result = result.copy()
 
-            # 9. Нормалізація даних (як останній крок)
-            if normalize:
-                # Зберігаємо список колонок цін перед нормалізацією
-                price_cols = [col for col in ['open', 'high', 'low', 'close', 'volume'] if col in result.columns]
+        # 9. Додавання часових ознак (після нормалізації)
+        if add_time_features and isinstance(result.index, pd.DatetimeIndex):
+            # Зберігаємо копію критичних колонок перед додаванням фічей
+            essential_data = {col: result[col].copy() for col in essential_cols if col in result.columns}
 
-                # Виправлено: правильно розпаковуємо результат нормалізації
-                normalized_result, scaler_meta = self.normalize_data(result, norm_method)
+            # Додаємо часові ознаки
+            result = self.add_time_features(result, cyclical, add_sessions)
 
-                if normalized_result is not None:
-                    result = normalized_result
+            # Перевіряємо та відновлюємо критичні колонки
+            for col in essential_cols:
+                if col not in result.columns and col in essential_data:
+                    self.logger.warning(f"Відновлення втраченої колонки {col} після додавання часових ознак")
+                    result[col] = essential_data[col]
 
-                    # Перевіряємо, чи всі цінові колонки збереглись
-                    for col in price_cols:
-                        if col not in result.columns:
-                            self.logger.error(f"Колонка {col} втрачена після нормалізації!")
-                else:
-                    self.logger.warning("Нормалізація не вдалася, використовуємо ненормалізовані дані")
+        # Фінальна перевірка
+        self._verify_essential_columns(result, essential_cols)
+        self.validate_data_integrity(result, is_final=True)
 
-            # 10. Фінальна перевірка цілісності даних
-            self.validate_data_integrity(result, is_final=True)
+        self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
+        return result
 
-            # Перевіряємо, чи не втрачено основні колонки
-            final_columns = result.columns.tolist()
-            missing_original_cols = [col for col in original_columns if col not in final_columns]
-            if missing_original_cols:
-                self.logger.error(f"Втрачено початкові колонки: {missing_original_cols}")
-
-            # Перевіряємо, чи є всі необхідні колонки OHLCV
-            essential_cols = ['open', 'high', 'low', 'close', 'volume']
-            missing_essential = [col for col in essential_cols if col not in final_columns]
-            if missing_essential:
-                self.logger.error(f"Відсутні важливі колонки: {missing_essential}")
-
-            self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Помилка при очищенні даних: {str(e)}")
-            import traceback
-            self.logger.debug(traceback.format_exc())
-            return data
+    # Нова допоміжна функція для перевірки наявності необхідних колонок
+    def _verify_essential_columns(self, data: pd.DataFrame, essential_cols: List[str]):
+        missing_essential = [col for col in essential_cols if col not in data.columns]
+        if missing_essential:
+            self.logger.error(f"КРИТИЧНА ПОМИЛКА: Відсутні важливі колонки: {missing_essential}")
+            raise ValueError(f"Втрачено критичні колонки: {missing_essential}")
         
     def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
                                 volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
@@ -535,90 +531,57 @@ class DataCleaner:
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
                        columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[
         pd.DataFrame, Optional[Dict]]:
-
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
             return (data if data is not None else pd.DataFrame()), None
 
         result = data.copy()
-        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
 
-        # Підхід "включення за замовчуванням, виключення за запитом"
-        if columns is not None:
-            normalize_cols = [col for col in columns if col in numeric_cols]
-            if not normalize_cols:
-                self.logger.warning("Жодна з указаних колонок не є числовою")
-                return result, None
-        else:
-            # Якщо не вказано конкретні колонки, обираємо основні фінансові колонки замість всіх
-            default_cols = ['open', 'high', 'low', 'close', 'volume']
-            normalize_cols = [col for col in default_cols if col in numeric_cols]
-            # Додаємо решту числових колонок, якщо потрібно
-            other_numeric = [col for col in numeric_cols if col not in default_cols]
-            normalize_cols.extend(other_numeric)
+        # Якщо не вказано колонки, беремо лише основні OHLCV
+        if columns is None:
+            columns = ['open', 'high', 'low', 'close', 'volume']
 
-        if exclude_columns is not None:
-            normalize_cols = [col for col in normalize_cols if col not in exclude_columns]
+        # Фільтруємо тільки ті колонки, які існують у DataFrame
+        normalize_cols = [col for col in columns if col in result.columns]
 
         if not normalize_cols:
             self.logger.warning("Немає числових колонок для нормалізації")
             return result, None
 
-        self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
-        self.logger.info(f"Колонки для нормалізації: {normalize_cols}")
-
-        # Збереження копії оригінальних даних перед нормалізацією
-        original_data = result[normalize_cols].copy()
-
-        # Вибір даних для нормалізації
-        X = result[normalize_cols].values
-
-        # Вибір скейлера
-        scaler = None
-        if method == 'z-score':
-            scaler = StandardScaler()
-        elif method == 'min-max':
-            scaler = MinMaxScaler()
-        elif method == 'robust':
-            scaler = RobustScaler()
-        else:
-            self.logger.error(f"Непідтримуваний метод нормалізації: {method}")
-            return result, None
-
         try:
+            # Зберігаємо оригінальні дані для відновлення у разі помилки
+            original_values = result[normalize_cols].copy()
+
             # Використовуємо SimpleImputer для заповнення NaN значень
             from sklearn.impute import SimpleImputer
             imputer = SimpleImputer(strategy='mean')
+            X_imputed = imputer.fit_transform(result[normalize_cols].values)
 
-            # Заповнення NaN значень
-            X_imputed = imputer.fit_transform(X)
+            # Вибір скейлера
+            if method == 'z-score':
+                scaler = StandardScaler()
+            elif method == 'min-max':
+                scaler = MinMaxScaler()
+            elif method == 'robust':
+                scaler = RobustScaler()
+            else:
+                self.logger.error(f"Непідтримуваний метод нормалізації: {method}")
+                return result, None
 
             # Масштабування даних
             X_scaled = scaler.fit_transform(X_imputed)
-
-            # Перевірка та обробка нескінченних значень
-            if not np.isfinite(X_scaled).all():
-                self.logger.warning("Знайдено нескінченні значення після нормалізації. Заміна на 0.")
-                X_scaled = np.nan_to_num(X_scaled, nan=0, posinf=0, neginf=0)
 
             # Оновлення DataFrame
             for i, col in enumerate(normalize_cols):
                 result[col] = X_scaled[:, i]
 
-            # Перевірка, чи дані були успішно оновлені
+            # Перевірка результатів
             for col in normalize_cols:
-                if col not in result.columns:
-                    self.logger.error(f"Колонка {col} відсутня після нормалізації!")
-                    # Повертаємо початкове значення
-                    result[col] = original_data[col]
-                elif result[col].isna().all():
-                    self.logger.error(f"Колонка {col} містить лише NaN після нормалізації!")
-                    # Повертаємо початкове значення
-                    result[col] = original_data[col]
+                if col not in result.columns or result[col].isna().all():
+                    self.logger.error(
+                        f"Проблема з колонкою {col} після нормалізації. Відновлення оригінальних значень.")
+                    result[col] = original_values[col]
 
-            self.logger.info(f"Успішно нормалізовано колонки: {normalize_cols}")
-
-            # Створення метаданих скейлера
             scaler_meta = {
                 'method': method,
                 'columns': normalize_cols,
@@ -630,9 +593,8 @@ class DataCleaner:
 
         except Exception as e:
             self.logger.error(f"Помилка при нормалізації даних: {str(e)}")
-            import traceback
-            self.logger.debug(traceback.format_exc())
-            return data, None
+            # Повертаємо оригінальні дані у разі помилки
+            return data.copy(), None
 
     def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
                           add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:

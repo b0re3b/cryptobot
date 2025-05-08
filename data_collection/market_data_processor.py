@@ -496,9 +496,9 @@ class MarketDataProcessor:
 
         return self.data_resampler.prepare_arima_data(data, symbol=symbol, **kwargs)
 
-    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> DataFrame:
+    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> DataFrame:
 
-        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, **kwargs)
+        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, timeframe = timeframe, **kwargs)
 
     def add_time_features(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
 
@@ -585,7 +585,7 @@ class MarketDataProcessor:
                 # Додаємо symbol та interval якщо метод підтримує їх
                 if step_name == 'handle_missing_values':
                     step_params['symbol'] = symbol
-                    step_params['timeframe'] = interval  # Виправлено: 'interval' -> 'timeframe'
+                    step_params['timeframe'] = interval
 
                 if step_name in ['normalize_data', 'detect_outliers', 'validate_data_integrity']:
                     result, _ = method(result, **step_params)
@@ -681,7 +681,7 @@ def main():
                     print(f" Дані ARIMA для {symbol} успішно збережено")
 
                 # Підготовка даних для LSTM
-                X_lstm, y_lstm = processor.prepare_lstm_data(cleaned_data, symbol=symbol)
+                X_lstm, y_lstm = processor.prepare_lstm_data(cleaned_data, symbol=symbol, timeframe=timeframe)
                 if X_lstm is not None and y_lstm is not None:
                     lstm_df = pd.DataFrame(X_lstm.reshape(X_lstm.shape[0], -1))
                     lstm_df['target'] = y_lstm
