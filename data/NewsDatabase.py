@@ -82,6 +82,95 @@ class NewsDatabase:
             print(f"Помилка створення схеми бази даних: {e}")
             self.conn.rollback()
             raise
+
+    def save_news_source(self, source_data: Dict) -> Dict:
+
+        query = """
+                INSERT INTO news_sources (source_name, base_url, is_active)
+                VALUES (%s, %s, %s)
+                RETURNING source_id, source_name, base_url, is_active, created_at, updated_at \
+                """
+
+        source_name = source_data.get('source_name')
+        base_url = source_data.get('base_url')
+        is_active = source_data.get('is_active', True)
+
+        if not source_name or not base_url:
+            raise ValueError("Назва джерела та URL є обов'язковими полями")
+
+        self.cursor.execute(query, (source_name, base_url, is_active))
+        result = self.cursor.fetchone()
+        self.conn.commit()
+
+        return {
+            'source_id': result[0],
+            'source_name': result[1],
+            'base_url': result[2],
+            'is_active': result[3],
+            'created_at': result[4],
+            'updated_at': result[5]
+        }
+
+    def get_news_source_by_name(self, source_name: str) -> Optional[Dict]:
+        """
+        Отримати джерело новин за назвою
+
+        :param source_name: Назва джерела новин
+        :return: Словник з даними джерела або None, якщо джерело не знайдено
+        """
+        query = """
+                SELECT source_id, source_name, base_url, is_active, created_at, updated_at
+                FROM news_sources
+                WHERE source_name = %s \
+                """
+
+        self.cursor.execute(query, (source_name,))
+        result = self.cursor.fetchone()
+
+        if result:
+            return {
+                'source_id': result[0],
+                'source_name': result[1],
+                'base_url': result[2],
+                'is_active': result[3],
+                'created_at': result[4],
+                'updated_at': result[5]
+            }
+        return None
+
+    def get_all_news_sources(self, active_only: bool = False) -> List[Dict]:
+        """
+        Отримати всі джерела новин
+
+        :param active_only: Якщо True, повертає тільки активні джерела
+        :return: Список словників з даними джерел
+        """
+        query = """
+                SELECT source_id, source_name, base_url, is_active, created_at, updated_at
+                FROM news_sources \
+                """
+
+        if active_only:
+            query += "WHERE is_active = TRUE "
+
+        query += "ORDER BY source_name"
+
+        self.cursor.execute(query)
+        results = self.cursor.fetchall()
+
+        sources = []
+        for row in results:
+            sources.append({
+                'source_id': row[0],
+                'source_name': row[1],
+                'base_url': row[2],
+                'is_active': row[3],
+                'created_at': row[4],
+                'updated_at': row[5]
+            })
+
+        return sources
+
     def save_topic_models(self):
         try:
             # Create directory if it doesn't exist

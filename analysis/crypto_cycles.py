@@ -67,7 +67,7 @@ class CryptoCycles:
             return self.cached_processed_data[cache_key]
 
         # Load pre-processed data from storage manager
-        processed_data = self.db_connection.get_klines_processed(
+        processed_data = self.db_connection.get_btc_arima_data(
             symbol=symbol,
             timeframe=timeframe,
             start_date=start_date,
@@ -740,22 +740,7 @@ class CryptoCycles:
     def calculate_token_specific_cycle_features(self,
                                                 processed_data: pd.DataFrame,
                                                 symbol: str) -> pd.DataFrame:
-        """
-        Calculate token-specific cycle features based on the cryptocurrency symbol.
-        This serves as a router to the appropriate cycle calculation method.
 
-        Parameters:
-        -----------
-        processed_data : pd.DataFrame
-            Pre-processed DataFrame containing price data with datetime index.
-        symbol : str
-            Cryptocurrency symbol ('BTC', 'ETH', 'SOL', etc.)
-
-        Returns:
-        --------
-        pd.DataFrame
-            Original DataFrame with additional token-specific cycle features.
-        """
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
 
         if symbol == 'BTC':

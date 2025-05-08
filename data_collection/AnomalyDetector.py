@@ -123,12 +123,12 @@ class AnomalyDetector:
 
         try:
             if method == 'zscore':
-                self._detect_zscore_outliers(processed_data, numeric_cols, threshold, outliers_df, all_outlier_indices)
+                self.detect_zscore_outliers(processed_data, numeric_cols, threshold, outliers_df, all_outlier_indices)
             elif method == 'iqr':
-                self._detect_iqr_outliers(processed_data, numeric_cols, threshold, outliers_df, all_outlier_indices)
+                self.detect_iqr_outliers(processed_data, numeric_cols, threshold, outliers_df, all_outlier_indices)
             elif method == 'isolation_forest':
                 # Для isolation_forest використовуємо contamination замість threshold
-                self._detect_isolation_forest_outliers(processed_data, numeric_cols, contamination, outliers_df,
+                self.detect_isolation_forest_outliers(processed_data, numeric_cols, contamination, outliers_df,
                                                        all_outlier_indices)
             else:
                 self.logger.error(f"Непідтримуваний метод виявлення аномалій: {method}")
@@ -146,7 +146,7 @@ class AnomalyDetector:
         self.logger.info(f"Виявлення аномалій завершено. Знайдено {len(outlier_indices)} аномалій у всіх колонках")
         return outliers_df, outlier_indices
 
-    def _detect_zscore_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
+    def detect_zscore_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
                                 threshold: float, outliers_df: pd.DataFrame,
                                 all_outlier_indices: set) -> None:
 
@@ -199,7 +199,7 @@ class AnomalyDetector:
                 self.logger.info(f"Знайдено {outlier_count} аномалій у колонці {col} (zscore)")
                 all_outlier_indices.update(data.index[outliers])
 
-    def _detect_iqr_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
+    def detect_iqr_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
                              threshold: float, outliers_df: pd.DataFrame,
                              all_outlier_indices: set) -> None:
         for col in numeric_cols:
@@ -240,7 +240,7 @@ class AnomalyDetector:
             except Exception as e:
                 self.logger.error(f"Помилка при застосуванні IQR методу до колонки {col}: {str(e)}")
 
-    def _detect_isolation_forest_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
+    def detect_isolation_forest_outliers(self, data: pd.DataFrame, numeric_cols: List[str],
                                           contamination: float, outliers_df: pd.DataFrame,
                                           all_outlier_indices: set) -> None:
 

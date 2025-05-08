@@ -15,6 +15,7 @@ from data.db import DatabaseManager
 
 class MarketDataProcessor:
 
+
     def __init__(self, log_level=logging.INFO):
 
         self.log_level = log_level
@@ -22,6 +23,7 @@ class MarketDataProcessor:
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація класу...")
 
+        # Initialize dependency classes
         self.data_cleaner = DataCleaner(logger=self.logger)
         self.data_resampler = DataResampler(logger=self.logger)
         self.data_storage = DataStorageManager(logger=self.logger)
@@ -209,9 +211,7 @@ class MarketDataProcessor:
     def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 10,
                                  price_col: str = 'close', volume_col: str = 'volume',
                                  time_period: Optional[str] = None) -> pd.DataFrame:
-        """
-        Створює профіль об'єму з коректною обробкою бінів
-        """
+
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
             return pd.DataFrame()
@@ -430,6 +430,7 @@ class MarketDataProcessor:
 
         return result
 
+    # --- Methods delegated to DataCleaner ---
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
 
@@ -441,18 +442,12 @@ class MarketDataProcessor:
         if data.empty:
             return data
 
-        result = data.copy()
-
-        # Видалення викидів
-        if remove_outliers:
-            # Use the specialized class method
-            result, _ = self.anomaly_detector.detect_outliers(result)
-
-        # Заповнення пропусків
-        if fill_missing:
-            result = self.data_cleaner.handle_missing_values(result)
-
-        return result
+        return self.data_cleaner.clean_data(
+            data,
+            remove_outliers=remove_outliers,
+            fill_missing=fill_missing,
+            **kwargs
+        )
 
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               fetch_missing: bool = False, symbol: Optional[str] = None,
@@ -463,7 +458,8 @@ class MarketDataProcessor:
             method=method,
             fetch_missing=fetch_missing,
             symbol=symbol,
-            timeframe=timeframe
+            timeframe=timeframe,
+            **kwargs
         )
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
@@ -472,8 +468,23 @@ class MarketDataProcessor:
         return self.data_cleaner.normalize_data(
             data,
             method=method,
-            exclude_columns=exclude_columns
+            exclude_columns=exclude_columns,
+            **kwargs
         )
+
+    def add_time_features(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
+
+        return self.data_cleaner.add_time_features(data, tz=tz)
+
+    def filter_by_time_range(self, data: pd.DataFrame, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+
+        return self.data_cleaner.filter_by_time_range(data, start_date=start_date, end_date=end_date)
+
+    def validate_data_integrity(self, data: pd.DataFrame) -> dict[str, Any]:
+
+        return self.data_cleaner.validate_data_integrity(data)
+
+    # --- Methods delegated to AnomalyDetector ---
 
     def detect_outliers(self, data: pd.DataFrame, method: str = 'iqr',
                         threshold: float = 1.5, **kwargs) -> tuple[DataFrame, list]:
@@ -481,8 +492,12 @@ class MarketDataProcessor:
         return self.anomaly_detector.detect_outliers(
             data,
             method=method,
-            threshold=threshold
+            threshold=threshold,
+            **kwargs
         )
+
+
+    # --- Methods delegated to DataResampler ---
 
     def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
 
@@ -498,20 +513,7 @@ class MarketDataProcessor:
 
     def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> DataFrame:
 
-        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, timeframe = timeframe, **kwargs)
-
-    def add_time_features(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
-
-        return self.data_cleaner.add_time_features(data, tz=tz)
-
-    def filter_by_time_range(self, data: pd.DataFrame, start_date: str = None, end_date: str = None) -> pd.DataFrame:
-
-        return self.data_cleaner.filter_by_time_range(data, start_date=start_date, end_date=end_date)
-
-    def validate_data_integrity(self, data: pd.DataFrame) -> dict[str, Any]:
-
-        return self.data_cleaner.validate_data_integrity(data)
-
+        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, timeframe=timeframe, **kwargs)
 
 
     def load_data(self, data_source: str, symbol: str, timeframe: str, data_type: str = 'candles',
@@ -524,8 +526,6 @@ class MarketDataProcessor:
             data_type=data_type,
             **kwargs
         )
-
-
 
 
     def save_volume_profile_to_db(self, data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
@@ -547,6 +547,8 @@ class MarketDataProcessor:
     def load_arima_data(self, symbol: str, **kwargs) -> pd.DataFrame:
 
         return self.data_storage.load_arima_data(symbol, **kwargs)
+
+
 
     def preprocess_pipeline(self, data: pd.DataFrame,
                             steps: Optional[List[Dict]] = None,
@@ -587,7 +589,9 @@ class MarketDataProcessor:
                     step_params['symbol'] = symbol
                     step_params['timeframe'] = interval
 
-                if step_name in ['normalize_data', 'detect_outliers', 'validate_data_integrity']:
+                if step_name in ['normalize_data', 'detect_outliers', 'detect_zscore_outliers',
+                                 'detect_iqr_outliers', 'detect_isolation_forest_outliers',
+                                 'validate_data_integrity']:
                     result, _ = method(result, **step_params)
                 else:
                     result = method(result, **step_params)
@@ -597,6 +601,7 @@ class MarketDataProcessor:
 
             except Exception as e:
                 self.logger.error(f"Помилка на кроці {step_idx}: '{step_name}': {str(e)}")
+                self.logger.error(traceback.format_exc())
 
         self.logger.info(
             f"Конвеєр обробки даних завершено. Початково: {len(data)} рядків, {len(data.columns)} колонок. "
@@ -604,91 +609,276 @@ class MarketDataProcessor:
 
         return result
 
+    def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
+                            end_date: Optional[str] = None, save_results: bool = True) -> Dict[str, pd.DataFrame]:
 
-def main():
-    EU_TIMEZONE = 'Europe/Kiev'
-    SYMBOLS = ['BTC', 'ETH', 'SOL']
-    TIMEFRAMES = ['1m', '1h', '1d', '4h', '1w']
-    processor = MarketDataProcessor()
+        self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
+        results = {}
 
-    for symbol in SYMBOLS:
-        for timeframe in TIMEFRAMES:
-            print(f"\n Обробка {symbol} ({timeframe})...")
+        if symbol not in self.supported_symbols:
+            self.logger.error(f"Символ {symbol} не підтримується")
+            return results
 
-            # 1. Завантаження даних з БД
-            raw_data = processor.load_data(
-                data_source='database',
-                symbol=symbol,
-                timeframe=timeframe,
-                data_type='candles'
-            )
+        # 1. Завантаження даних
+        raw_data = self.load_data(
+            data_source='database',
+            symbol=symbol,
+            timeframe=timeframe,
+            data_type='candles'
+        )
 
+        if raw_data.empty:
+            self.logger.warning(f"Дані не знайдено для {symbol} {timeframe}")
+            return results
+
+        results['raw_data'] = raw_data
+
+        # 2. Фільтрація за часовим діапазоном
+        if start_date or end_date:
+            raw_data = self.filter_by_time_range(raw_data, start_date=start_date, end_date=end_date)
             if raw_data.empty:
-                print(f" Дані не знайдено для {symbol} {timeframe}")
-                continue
+                self.logger.warning(f"Після фільтрації за часом дані відсутні")
+                return results
 
-            # 2. Обробка відсутніх значень + підтягування з Binance (якщо треба)
-            filled_data = processor.handle_missing_values(
-                raw_data,
-                symbol=symbol,
-                timeframe=timeframe,
-                fetch_missing=True
-            )
+        # 3. Обробка відсутніх значень
+        filled_data = self.handle_missing_values(
+            raw_data,
+            symbol=symbol,
+            timeframe=timeframe,
+            fetch_missing=True
+        )
 
-            # 3. Попередня обробка (пайплайн)
-            processed = processor.preprocess_pipeline(filled_data, symbol=symbol, interval=timeframe)
+        # 4. Повна обробка через конвеєр
+        processed_data = self.preprocess_pipeline(filled_data, symbol=symbol, interval=timeframe)
 
-            if processed.empty:
-                print(f" Обробка не дала результатів для {symbol} {timeframe}")
-                continue
+        if processed_data.empty:
+            self.logger.warning(f"Після обробки даних результат порожній")
+            return results
 
-            # 4. Додавання часових ознак
-            processed_with_time = processor.add_time_features(processed, tz=EU_TIMEZONE)
+        results['processed_data'] = processed_data
 
-            # 5. Виявлення аномалій
-            cleaned_data, outliers_info = processor.detect_outliers(processed_with_time)
+        # 5. Додавання часових ознак
+        processed_data = self.add_time_features(processed_data, tz='UTC')
 
-            # Перевірка чи outliers_info - словник, інакше безпечно обробляємо
-            if isinstance(outliers_info, dict) and 'total_outliers' in outliers_info:
-                if outliers_info['total_outliers'] > 0:
-                    print(f" Виявлено {outliers_info['total_outliers']} аномалій у {symbol} {timeframe}")
-            else:
-                print(f" Результат виявлення аномалій для {symbol} {timeframe} має неочікуваний формат")
+        # 6. Виявлення та обробка аномалій
+        processed_data, outliers_info = self.detect_outliers(processed_data)
 
-            # 6. Створення профілю об'єму
-            volume_profile = processor.aggregate_volume_profile(
-                cleaned_data,
-                bins=20,
-                price_col='close',
-                volume_col='volume',
-                time_period='1D'  # Щоденний профіль об'єму
-            )
+        # 7. Створення профілю об'єму
+        volume_profile = self.aggregate_volume_profile(
+            processed_data,
+            bins=20,
+            price_col='close',
+            volume_col='volume',
+            time_period='1D'
+        )
 
-            if not volume_profile.empty:
-                # 7. Збереження профілю об'єму в базу даних
-                success = processor.save_volume_profile_to_db(volume_profile, symbol, timeframe)
+        if not volume_profile.empty:
+            results['volume_profile'] = volume_profile
+
+            # Збереження профілю об'єму
+            if save_results:
+                success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
                 if success:
-                    print(f" Профіль об'єму для {symbol} {timeframe} успішно збережено")
+                    self.logger.info(f"Профіль об'єму для {symbol} {timeframe} успішно збережено")
                 else:
-                    print(f" Помилка збереження профілю об'єму для {symbol} {timeframe}")
+                    self.logger.error(f"Помилка збереження профілю об'єму для {symbol} {timeframe}")
 
-            # 8. Додаткова обробка для ARIMA і LSTM моделей
-            if timeframe == '1h':  # Для годинного часового фрейму
-                # Підготовка даних для ARIMA
-                arima_data = processor.prepare_arima_data(cleaned_data, symbol=symbol, timeframe=timeframe)
-                if not arima_data.empty:
-                    processor.save_arima_data(arima_data, symbol=symbol)
-                    print(f" Дані ARIMA для {symbol} успішно збережено")
+        # 8. Підготовка даних для моделей ARIMA і LSTM
+        if timeframe in ['1h', '4h', '1d']:
+            # ARIMA дані
+            arima_data = self.prepare_arima_data(processed_data, symbol=symbol, timeframe=timeframe)
+            if not arima_data.empty:
+                results['arima_data'] = arima_data
+                if save_results:
+                    self.save_arima_data(arima_data, symbol=symbol)
+                    self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
 
-                # Підготовка даних для LSTM
-                X_lstm, y_lstm = processor.prepare_lstm_data(cleaned_data, symbol=symbol, timeframe=timeframe)
+            # LSTM дані
+            try:
+                X_lstm, y_lstm = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
                 if X_lstm is not None and y_lstm is not None:
                     lstm_df = pd.DataFrame(X_lstm.reshape(X_lstm.shape[0], -1))
                     lstm_df['target'] = y_lstm
-                    processor.save_lstm_sequence(lstm_df, symbol=symbol)
-                    print(f" Послідовності LSTM для {symbol} успішно збережено")
+                    results['lstm_data'] = lstm_df
 
-            print(f" Обробка {symbol} ({timeframe}) завершена успішно")
+                    if save_results:
+                        self.save_lstm_sequence(lstm_df, symbol=symbol)
+                        self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
+            except Exception as e:
+                self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
+
+        self.logger.info(f"Комплексна обробка даних для {symbol} ({timeframe}) завершена успішно")
+        return results
+
+
+    def validate_market_data(self, data: pd.DataFrame) -> Tuple[bool, Dict]:
+
+        if data.empty:
+            return False, {"error": "Порожній DataFrame"}
+
+        results = {}
+
+        # Перевірка часового індексу
+        if not isinstance(data.index, pd.DatetimeIndex):
+            return False, {"error": "DataFrame не має DatetimeIndex"}
+
+        # Базові перевірки якості
+        results["data_shape"] = {"rows": len(data), "columns": len(data.columns)}
+        results["duplicated_rows"] = int(data.duplicated().sum())
+        results["null_values"] = int(data.isna().sum().sum())
+
+        # Перевірка OHLCV даних
+        required_columns = ['open', 'high', 'low', 'close', 'volume']
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        results["missing_columns"] = missing_columns
+
+        if missing_columns:
+            results["validation_passed"] = False
+            return False, results
+
+        # Перевірка правильності цін
+        price_issues = []
+
+        # High не може бути нижче Low
+        high_lt_low = (data['high'] < data['low']).sum()
+        if high_lt_low > 0:
+            price_issues.append(f"High < Low знайдено в {high_lt_low} рядках")
+
+        # Close має бути між High і Low
+        close_issues = ((data['close'] > data['high']) | (data['close'] < data['low'])).sum()
+        if close_issues > 0:
+            price_issues.append(f"Close не між High і Low в {close_issues} рядках")
+
+        # Open має бути між High і Low
+        open_issues = ((data['open'] > data['high']) | (data['open'] < data['low'])).sum()
+        if open_issues > 0:
+            price_issues.append(f"Open не між High і Low в {open_issues} рядках")
+
+        results["price_issues"] = price_issues
+
+        # Перевірка на нульові або від'ємні ціни/об'єми
+        zero_prices = ((data[['open', 'high', 'low', 'close']] <= 0).sum()).sum()
+        negative_volume = (data['volume'] < 0).sum()
+
+        results["zero_prices"] = int(zero_prices)
+        results["negative_volume"] = int(negative_volume)
+
+        # Перевірка часових проміжків
+        time_diffs = data.index.to_series().diff().dropna()
+        if not time_diffs.empty:
+            regular_diff = time_diffs.value_counts().index[0]
+            irregular_count = len(time_diffs[time_diffs != regular_diff])
+            results["irregular_intervals"] = int(irregular_count)
+            results["missing_intervals"] = int(irregular_count > 0)
+
+        # Загальний результат валідації
+        validation_failed = (
+                len(missing_columns) > 0 or
+                len(price_issues) > 0 or
+                zero_prices > 0 or
+                negative_volume > 0
+        )
+
+        results["validation_passed"] = not validation_failed
+
+        return not validation_failed, results
+
+    def combine_market_datasets(self, datasets: Dict[str, pd.DataFrame],
+                                reference_key: str = None) -> pd.DataFrame:
+
+        if not datasets:
+            self.logger.warning("Порожній словник наборів даних для об'єднання")
+            return pd.DataFrame()
+
+        # Перетворення словника на список для подальшої обробки
+        data_list = list(datasets.values())
+        keys_list = list(datasets.keys())
+
+        # Визначення індексу еталонного набору
+        reference_index = 0
+        if reference_key and reference_key in datasets:
+            reference_index = keys_list.index(reference_key)
+
+        # Вирівнювання часових рядів
+        aligned_data = self.align_time_series(data_list, reference_index=reference_index)
+
+        # Перевірка результатів вирівнювання
+        if not aligned_data or all(df.empty for df in aligned_data):
+            self.logger.error("Не вдалося вирівняти часові ряди")
+            return pd.DataFrame()
+
+        # Підготовка до об'єднання - додавання префіксів до колонок
+        renamed_dfs = []
+
+        for i, (key, df) in enumerate(zip(keys_list, aligned_data)):
+            if df.empty:
+                continue
+
+            df_copy = df.copy()
+
+            # Не додаємо префікс до індексу
+            if df_copy.index.name:
+                index_name = df_copy.index.name
+            else:
+                index_name = 'timestamp'
+                df_copy.index.name = index_name
+
+            # Перейменовуємо колонки з префіксом
+            rename_dict = {col: f"{key}_{col}" for col in df_copy.columns}
+            df_copy = df_copy.rename(columns=rename_dict)
+
+            renamed_dfs.append(df_copy)
+
+        if not renamed_dfs:
+            self.logger.error("Після вирівнювання та перейменування немає даних для об'єднання")
+            return pd.DataFrame()
+
+        # Об'єднання даних
+        result = renamed_dfs[0]
+
+        for df in renamed_dfs[1:]:
+            if df.empty:
+                continue
+            result = result.join(df, how='outer')
+
+        self.logger.info(f"Об'єднання завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
+
+        return result
+
+
+def main():
+
+    EU_TIMEZONE = 'Europe/Kiev'
+    SYMBOLS = ['BTC', 'ETH', 'SOL']
+    TIMEFRAMES = ['1m', '1h', '1d', '4h', '1w']
+
+    processor = MarketDataProcessor(log_level=logging.INFO)
+
+    for symbol in SYMBOLS:
+        for timeframe in TIMEFRAMES:
+            print(f"\nОбробка {symbol} ({timeframe})...")
+
+            try:
+                results = processor.process_market_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    save_results=True
+                )
+
+                if not results:
+                    print(f"Не вдалося обробити дані для {symbol} {timeframe}")
+                    continue
+
+                # Print summary of results
+                for key, data in results.items():
+                    if isinstance(data, pd.DataFrame) and not data.empty:
+                        print(f" - {key}: {len(data)} рядків, {len(data.columns)} колонок")
+
+                print(f"Обробка {symbol} ({timeframe}) завершена успішно")
+
+            except Exception as e:
+                print(f"Помилка при обробці {symbol} ({timeframe}): {str(e)}")
+                traceback.print_exc()
 
     print("\nВсі операції обробки даних завершено")
 
