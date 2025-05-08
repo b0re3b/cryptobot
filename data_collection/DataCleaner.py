@@ -27,6 +27,7 @@ class DataCleaner:
             logger.addHandler(handler)
 
         return logger
+
     def clean_data(self,
                    data: pd.DataFrame,
                    remove_outliers: bool = True,
@@ -50,6 +51,10 @@ class DataCleaner:
             # 1. Підготовка та валідація даних
             result = self._prepare_dataframe(data)
 
+            # Збережемо список вхідних колонок для контролю
+            original_columns = result.columns.tolist()
+            self.logger.info(f"Початкові колонки: {original_columns}")
+
             # 2. Валідація цілісності даних
             self.validate_data_integrity(result)
 
@@ -60,27 +65,64 @@ class DataCleaner:
             if remove_outliers:
                 result = self._remove_outliers(result)
 
-            # 5. Додавання часових ознак
-            if add_time_features and isinstance(result.index, pd.DatetimeIndex):
-                result = self.add_time_features(result, cyclical, add_sessions)
-
-            # 6. Заповнення відсутніх значень
+            # 5. Заповнення відсутніх значень (до додавання нових ознак)
             if fill_missing:
                 result = self.handle_missing_values(result)
 
-            # 7. Виправлення невалідних high/low значень
+            # 6. Виправлення невалідних high/low значень
             result = self._fix_invalid_high_low(result)
 
-            # 8. Ресемплінг даних
+            # 7. Ресемплінг даних
             if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
                 result = self.data_resampler.resample_data(result, target_interval)
 
-            # 9. Нормалізація даних (як останній крок після заповнення пропусків)
+            # 8. Додавання часових ознак (після обробки даних)
+            if add_time_features and isinstance(result.index, pd.DatetimeIndex):
+                # Зберігаємо основні колонки перед додаванням фічей
+                price_cols = [col for col in ['open', 'high', 'low', 'close', 'volume'] if col in result.columns]
+                price_data = result[price_cols].copy()
+
+                # Додаємо часові ознаки
+                result = self.add_time_features(result, cyclical, add_sessions)
+
+                # Перевіряємо, чи не втрачено основні колонки
+                for col in price_cols:
+                    if col not in result.columns:
+                        self.logger.warning(f"Колонка {col} втрачена після додавання часових ознак. Відновлення...")
+                        result[col] = price_data[col]
+
+            # 9. Нормалізація даних (як останній крок)
             if normalize:
-                result = self.normalize_data(result, norm_method)
+                # Зберігаємо список колонок цін перед нормалізацією
+                price_cols = [col for col in ['open', 'high', 'low', 'close', 'volume'] if col in result.columns]
+
+                # Виправлено: правильно розпаковуємо результат нормалізації
+                normalized_result, scaler_meta = self.normalize_data(result, norm_method)
+
+                if normalized_result is not None:
+                    result = normalized_result
+
+                    # Перевіряємо, чи всі цінові колонки збереглись
+                    for col in price_cols:
+                        if col not in result.columns:
+                            self.logger.error(f"Колонка {col} втрачена після нормалізації!")
+                else:
+                    self.logger.warning("Нормалізація не вдалася, використовуємо ненормалізовані дані")
 
             # 10. Фінальна перевірка цілісності даних
             self.validate_data_integrity(result, is_final=True)
+
+            # Перевіряємо, чи не втрачено основні колонки
+            final_columns = result.columns.tolist()
+            missing_original_cols = [col for col in original_columns if col not in final_columns]
+            if missing_original_cols:
+                self.logger.error(f"Втрачено початкові колонки: {missing_original_cols}")
+
+            # Перевіряємо, чи є всі необхідні колонки OHLCV
+            essential_cols = ['open', 'high', 'low', 'close', 'volume']
+            missing_essential = [col for col in essential_cols if col not in final_columns]
+            if missing_essential:
+                self.logger.error(f"Відсутні важливі колонки: {missing_essential}")
 
             self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
             return result
@@ -501,13 +543,19 @@ class DataCleaner:
         result = data.copy()
         numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
 
+        # Підхід "включення за замовчуванням, виключення за запитом"
         if columns is not None:
             normalize_cols = [col for col in columns if col in numeric_cols]
             if not normalize_cols:
                 self.logger.warning("Жодна з указаних колонок не є числовою")
                 return result, None
         else:
-            normalize_cols = numeric_cols
+            # Якщо не вказано конкретні колонки, обираємо основні фінансові колонки замість всіх
+            default_cols = ['open', 'high', 'low', 'close', 'volume']
+            normalize_cols = [col for col in default_cols if col in numeric_cols]
+            # Додаємо решту числових колонок, якщо потрібно
+            other_numeric = [col for col in numeric_cols if col not in default_cols]
+            normalize_cols.extend(other_numeric)
 
         if exclude_columns is not None:
             normalize_cols = [col for col in normalize_cols if col not in exclude_columns]
@@ -518,6 +566,9 @@ class DataCleaner:
 
         self.logger.info(f"Нормалізація {len(normalize_cols)} колонок методом {method}")
         self.logger.info(f"Колонки для нормалізації: {normalize_cols}")
+
+        # Збереження копії оригінальних даних перед нормалізацією
+        original_data = result[normalize_cols].copy()
 
         # Вибір даних для нормалізації
         X = result[normalize_cols].values
@@ -554,6 +605,17 @@ class DataCleaner:
             for i, col in enumerate(normalize_cols):
                 result[col] = X_scaled[:, i]
 
+            # Перевірка, чи дані були успішно оновлені
+            for col in normalize_cols:
+                if col not in result.columns:
+                    self.logger.error(f"Колонка {col} відсутня після нормалізації!")
+                    # Повертаємо початкове значення
+                    result[col] = original_data[col]
+                elif result[col].isna().all():
+                    self.logger.error(f"Колонка {col} містить лише NaN після нормалізації!")
+                    # Повертаємо початкове значення
+                    result[col] = original_data[col]
+
             self.logger.info(f"Успішно нормалізовано колонки: {normalize_cols}")
 
             # Створення метаданих скейлера
@@ -579,7 +641,12 @@ class DataCleaner:
             self.logger.warning("Отримано порожній DataFrame для додавання часових ознак")
             return data if data is not None else pd.DataFrame()
 
+        # Зберігаємо копію вхідних даних
+        original_data = data.copy()
         result = data.copy()
+
+        # Зберігаємо список оригінальних колонок
+        original_columns = result.columns.tolist()
 
         # Перевірка та конвертація індексу в DatetimeIndex
         if not isinstance(result.index, pd.DatetimeIndex):
@@ -668,6 +735,30 @@ class DataCleaner:
                         f"Помилка при конвертації часового поясу: {str(e)}. Продовжуємо з поточним часовим поясом.")
         except Exception as e:
             self.logger.error(f"Загальна помилка при обробці часового поясу: {str(e)}")
+
+        # Перевіряємо, що основні колонки не будуть перезаписані
+        time_feature_names = ['hour', 'day', 'weekday', 'week', 'month', 'quarter', 'year', 'dayofyear',
+                              'is_weekend', 'is_month_start', 'is_month_end', 'is_quarter_start',
+                              'is_quarter_end', 'is_year_start', 'is_year_end']
+
+        # Додаємо імена циклічних ознак
+        if cyclical:
+            time_feature_names.extend([
+                'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'weekday_sin', 'weekday_cos',
+                'week_sin', 'week_cos', 'month_sin', 'month_cos', 'quarter_sin', 'quarter_cos'
+            ])
+
+        # Додаємо імена торгових сесій
+        if add_sessions:
+            time_feature_names.extend([
+                'asian_session', 'european_session', 'american_session',
+                'asia_europe_overlap', 'europe_america_overlap', 'inactive_hours'
+            ])
+
+        # Перевіряємо конфлікти
+        conflicts = [col for col in time_feature_names if col in original_columns]
+        if conflicts:
+            self.logger.warning(f"Виявлено конфлікт імен колонок: {conflicts}. Ці колонки будуть перезаписані.")
 
         # Базові часові ознаки
         result['hour'] = result.index.hour
@@ -784,7 +875,16 @@ class DataCleaner:
             # Виправлено: неактивні години (22:00-00:00)
             result['inactive_hours'] = (result['hour'] >= 22).astype(int)
 
-        self.logger.info(f"Успішно додано {len(result.columns) - len(data.columns)} часових ознак")
+        # Перевіряємо, чи всі основні колонки збереглися
+        for col in original_columns:
+            if col in conflicts:
+                self.logger.warning(f"Колонка {col} була перезаписана як часова ознака")
+            elif col not in result.columns:
+                self.logger.error(f"Колонка {col} зникла після додавання часових ознак. Відновлення...")
+                if col in original_data.columns:
+                    result[col] = original_data[col]
+
+        self.logger.info(f"Успішно додано {len(result.columns) - len(original_columns)} часових ознак")
         return result
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame) -> pd.DataFrame:

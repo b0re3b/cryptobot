@@ -2,7 +2,9 @@ import traceback
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
+
+from pandas import DataFrame
 
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataCleaner import DataCleaner
@@ -474,7 +476,7 @@ class MarketDataProcessor:
         )
 
     def detect_outliers(self, data: pd.DataFrame, method: str = 'iqr',
-                        threshold: float = 1.5, **kwargs) -> Tuple[pd.DataFrame, Dict]:
+                        threshold: float = 1.5, **kwargs) -> tuple[DataFrame, list]:
 
         return self.anomaly_detector.detect_outliers(
             data,
@@ -494,7 +496,7 @@ class MarketDataProcessor:
 
         return self.data_resampler.prepare_arima_data(data, symbol=symbol, **kwargs)
 
-    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> Tuple[np.ndarray, np.ndarray]:
+    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> DataFrame:
 
         return self.data_resampler.prepare_lstm_data(data, symbol=symbol, **kwargs)
 
@@ -506,9 +508,9 @@ class MarketDataProcessor:
 
         return self.data_cleaner.filter_by_time_range(data, start_date=start_date, end_date=end_date)
 
-    def validate_data_integrity(self, data: pd.DataFrame) -> Tuple[bool, Dict]:
+    def validate_data_integrity(self, data: pd.DataFrame) -> dict[str, Any]:
 
-        return self.anomaly_detector.validate_data_integrity(data)
+        return self.data_cleaner.validate_data_integrity(data)
 
 
 

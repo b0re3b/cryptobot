@@ -217,14 +217,38 @@ class DataResampler:
 
         results = {}
 
+        # Перевірка наявності колонки
+        if column not in data.columns:
+            # Спробуємо знайти колонку в іншому регістрі
+            column_lower = column.lower()
+            column_upper = column.upper()
+            column_title = column.title()
+
+            if column_lower in data.columns:
+                column = column_lower
+            elif column_upper in data.columns:
+                column = column_upper
+            elif column_title in data.columns:
+                column = column_title
+            else:
+                self.logger.error(f"Колонка '{column}' відсутня у DataFrame. Доступні колонки: {list(data.columns)}")
+                return {'error': f"Column '{column}' not found", 'is_stationary': False}
+
         # Тест Дікі-Фуллера (нульова гіпотеза: ряд нестаціонарний)
-        adf_result = adfuller(data[column].dropna())
-        results['adf_test'] = {
-            'test_statistic': adf_result[0],
-            'p-value': adf_result[1],
-            'is_stationary': adf_result[1] < 0.05,
-            'critical_values': adf_result[4]
-        }
+        try:
+            adf_result = adfuller(data[column].dropna())
+            results['adf_test'] = {
+                'test_statistic': adf_result[0],
+                'p-value': adf_result[1],
+                'is_stationary': adf_result[1] < 0.05,
+                'critical_values': adf_result[4]
+            }
+        except Exception as e:
+            self.logger.error(f"Помилка при виконанні ADF тесту: {str(e)}")
+            results['adf_test'] = {
+                'error': str(e),
+                'is_stationary': False
+            }
 
         # KPSS тест (нульова гіпотеза: ряд стаціонарний)
         try:
@@ -279,6 +303,15 @@ class DataResampler:
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для підготовки ARIMA даних")
             return pd.DataFrame()
+
+        # Нормалізація імен колонок до нижнього регістру
+        data.columns = [col.lower() for col in data.columns]
+
+        # Перевірка наявності необхідної колонки
+        if 'close' not in data.columns:
+            self.logger.error(f"Колонка 'close' відсутня у DataFrame. Доступні колонки: {list(data.columns)}")
+            return pd.DataFrame()  # Повертаємо порожній DataFrame
+
 
         self.logger.info(f"Підготовка ARIMA даних для {symbol} на інтервалі {timeframe}")
 
