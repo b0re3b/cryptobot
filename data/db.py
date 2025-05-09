@@ -4545,7 +4545,8 @@ class DatabaseManager:
 
             return result[0] if result else 0
 
-    def get_btc_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict:
+    def get_btc_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict[
+                                                                                                           Any, Any] | None:
 
         with self.connect() as conn:
             with conn.cursor() as cursor:
@@ -4600,7 +4601,8 @@ class DatabaseManager:
 
                 return records
 
-    def get_sol_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict:
+    def get_sol_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict[
+                                                                                                           Any, Any] | None:
 
         with self.connect() as conn:
             with conn.cursor() as cursor:
@@ -4655,7 +4657,8 @@ class DatabaseManager:
 
                 return records
 
-    def get_eth_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict:
+    def get_eth_arima_data(self, timeframe: str = None, open_time: datetime = None, id: int = None) -> dict[
+                                                                                                           Any, Any] | None:
 
         with self.connect() as conn:
             with conn.cursor() as cursor:
@@ -5554,6 +5557,369 @@ class DatabaseManager:
             print(f"Загальна помилка при отриманні аналізу тренду: {e}")
             return None
 
+    # ========== Методи для news_sources ==========
+    def save_source(self, source_name: str, base_url: str, is_active: bool = True) -> int:
+        """Зберігає джерело новин і повертає його ID"""
+        query = """
+                INSERT INTO news_sources (source_name, base_url, is_active)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (source_name) DO UPDATE SET
+                    base_url = EXCLUDED.base_url,
+                    is_active = EXCLUDED.is_active,
+                    updated_at = NOW()
+                RETURNING source_id
+                """
+        self.cursor.execute(query, (source_name, base_url, is_active))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
 
+    def get_source(self, source_id: Optional[int] = None, source_name: Optional[str] = None) -> Optional[Dict]:
+        """Отримує джерело новин за ID або назвою"""
+        if source_id:
+            query = "SELECT * FROM news_sources WHERE source_id = %s"
+            params = (source_id,)
+        elif source_name:
+            query = "SELECT * FROM news_sources WHERE source_name = %s"
+            params = (source_name,)
+        else:
+            return None
 
+        self.cursor.execute(query, params)
+        result = self.cursor.fetchone()
+        if result:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, result))
+        return None
 
+    def get_all_active_sources(self) -> List[Dict]:
+        """Отримує всі активні джерела новин"""
+        query = "SELECT * FROM news_sources WHERE is_active = TRUE"
+        self.cursor.execute(query)
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ========== Методи для news_categories ==========
+    def save_category(self, source_id: int, category_name: str, category_url_path: Optional[str] = None,
+                      is_active: bool = True) -> int:
+        """Зберігає категорію новин і повертає її ID"""
+        query = """
+                INSERT INTO news_categories (source_id, category_name, category_url_path, is_active)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (source_id, category_name) DO UPDATE SET
+                    category_url_path = EXCLUDED.category_url_path,
+                    is_active = EXCLUDED.is_active,
+                    updated_at = NOW()
+                RETURNING category_id
+                """
+        self.cursor.execute(query, (source_id, category_name, category_url_path, is_active))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_category(self, category_id: Optional[int] = None, source_id: Optional[int] = None,
+                     category_name: Optional[str] = None) -> Optional[Dict]:
+        """Отримує категорію новин за ID або комбінацією source_id та category_name"""
+        if category_id:
+            query = "SELECT * FROM news_categories WHERE category_id = %s"
+            params = (category_id,)
+        elif source_id and category_name:
+            query = "SELECT * FROM news_categories WHERE source_id = %s AND category_name = %s"
+            params = (source_id, category_name)
+        else:
+            return None
+
+        self.cursor.execute(query, params)
+        result = self.cursor.fetchone()
+        if result:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, result))
+        return None
+
+    def get_categories_by_source(self, source_id: int, only_active: bool = True) -> List[Dict]:
+        """Отримує всі категорії для певного джерела"""
+        query = "SELECT * FROM news_categories WHERE source_id = %s"
+        params = [source_id]
+
+        if only_active:
+            query += " AND is_active = TRUE"
+
+        self.cursor.execute(query, params)
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ========== Методи для news_articles ==========
+    def save_article(self, title: str, link: str, source_id: int,
+                     category_id: Optional[int] = None, summary: Optional[str] = None,
+                     content: Optional[str] = None, published_at: Optional[datetime] = None,
+                     score: Optional[int] = None, upvote_ratio: Optional[float] = None,
+                     num_comments: Optional[int] = None) -> int:
+        """Зберігає новинну статтю і повертає її ID"""
+        query = """
+                INSERT INTO news_articles (title, summary, content, link, source_id, category_id,
+                                           published_at, score, upvote_ratio, num_comments)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (link) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    summary = EXCLUDED.summary,
+                    content = EXCLUDED.content,
+                    category_id = EXCLUDED.category_id,
+                    published_at = EXCLUDED.published_at,
+                    score = EXCLUDED.score,
+                    upvote_ratio = EXCLUDED.upvote_ratio,
+                    num_comments = EXCLUDED.num_comments,
+                    scraped_at = NOW()
+                RETURNING article_id
+                """
+        self.cursor.execute(query, (
+            title, summary, content, link, source_id, category_id,
+            published_at, score, upvote_ratio, num_comments
+        ))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_article(self, article_id: Optional[int] = None, link: Optional[str] = None) -> Optional[Dict]:
+        """Отримує статтю за ID або посиланням"""
+        if article_id:
+            query = "SELECT * FROM news_articles WHERE article_id = %s"
+            params = (article_id,)
+        elif link:
+            query = "SELECT * FROM news_articles WHERE link = %s"
+            params = (link,)
+        else:
+            return None
+
+        self.cursor.execute(query, params)
+        result = self.cursor.fetchone()
+        if result:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, result))
+        return None
+
+    def get_articles_by_source(self, source_id: int, limit: int = 100,
+                               order_by: str = 'published_at', desc: bool = True) -> List[Dict]:
+        """Отримує статті за джерелом з можливістю сортування"""
+        allowed_columns = {'published_at', 'scraped_at', 'score', 'title', 'article_id'}
+        if order_by not in allowed_columns:
+            raise ValueError(f"Недопустиме поле для сортування: {order_by}")
+
+        direction = 'DESC' if desc else 'ASC'
+        query = f"""
+            SELECT * FROM news_articles
+            WHERE source_id = %s
+            ORDER BY {order_by} {direction}
+            LIMIT %s
+        """
+        self.cursor.execute(query, (source_id, limit))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ========== Методи для news_sentiment_analysis ==========
+    def save_sentiment_analysis(self, article_id: int, sentiment_score: float,
+                                positive_score: float, negative_score: float,
+                                neutral_score: float, sentiment_magnitude: float,
+                                sentiment_label: str, confidence: float,
+                                model_version: str) -> int:
+        """Зберігає аналіз настроїв для статті"""
+        query = """
+                INSERT INTO news_sentiment_analysis (article_id, sentiment_score, positive_score,
+                                                     negative_score, neutral_score, sentiment_magnitude, 
+                                                     sentiment_label, confidence, model_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (article_id) DO UPDATE SET
+                    sentiment_score = EXCLUDED.sentiment_score,
+                    positive_score = EXCLUDED.positive_score,
+                    negative_score = EXCLUDED.negative_score,
+                    neutral_score = EXCLUDED.neutral_score,
+                    sentiment_magnitude = EXCLUDED.sentiment_magnitude,
+                    sentiment_label = EXCLUDED.sentiment_label,
+                    confidence = EXCLUDED.confidence,
+                    model_version = EXCLUDED.model_version,
+                    processed_at = NOW()
+                RETURNING sentiment_id
+                """
+        self.cursor.execute(query, (
+            article_id, sentiment_score, positive_score, negative_score,
+            neutral_score, sentiment_magnitude, sentiment_label,
+            confidence, model_version
+        ))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_sentiment_analysis(self, article_id: int) -> Optional[Dict]:
+        """Отримує аналіз настроїв для статті"""
+        query = "SELECT * FROM news_sentiment_analysis WHERE article_id = %s"
+        self.cursor.execute(query, (article_id,))
+        result = self.cursor.fetchone()
+        if result:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, result))
+        return None
+
+    # ========== Методи для article_mentioned_coins ==========
+    def save_mentioned_coin(self, article_id: int, symbol: str, mention_count: int = 1) -> int:
+        """Зберігає згадку криптовалюти в статті"""
+        query = """
+                INSERT INTO article_mentioned_coins (article_id, symbol, mention_count)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (article_id, symbol) DO UPDATE SET
+                    mention_count = article_mentioned_coins.mention_count + EXCLUDED.mention_count,
+                    created_at = NOW()
+                RETURNING mention_id
+                """
+        self.cursor.execute(query, (article_id, symbol, mention_count))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_mentioned_coins_by_article(self, article_id: int) -> List[Dict]:
+        """Отримує всі згадки криптовалют у статті"""
+        query = "SELECT * FROM article_mentioned_coins WHERE article_id = %s"
+        self.cursor.execute(query, (article_id,))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    def get_articles_by_coin(self, symbol: str, limit: int = 100) -> List[Dict]:
+        """Отримує статті, де згадується певна криптовалюта"""
+        query = """
+                SELECT na.*
+                FROM news_articles na
+                JOIN article_mentioned_coins amc ON na.article_id = amc.article_id
+                WHERE amc.symbol = %s
+                ORDER BY na.published_at DESC
+                LIMIT %s
+                """
+        self.cursor.execute(query, (symbol, limit))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ========== Методи для news_topics ==========
+    def save_topic(self, topic_name: str, is_trending: bool = False,
+                   importance_score: Optional[float] = None) -> int:
+        """Зберігає тему новин і повертає її ID"""
+        query = """
+                INSERT INTO news_topics (topic_name, is_trending, importance_score)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (topic_name) DO UPDATE SET
+                    is_trending = EXCLUDED.is_trending,
+                    importance_score = EXCLUDED.importance_score,
+                    last_observed_at = NOW()
+                RETURNING topic_id
+                """
+        self.cursor.execute(query, (topic_name, is_trending, importance_score))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_topic(self, topic_id: Optional[int] = None, topic_name: Optional[str] = None) -> Optional[Dict]:
+        """Отримує тему за ID або назвою"""
+        if topic_id:
+            query = "SELECT * FROM news_topics WHERE topic_id = %s"
+            params = (topic_id,)
+        elif topic_name:
+            query = "SELECT * FROM news_topics WHERE topic_name = %s"
+            params = (topic_name,)
+        else:
+            return None
+
+        self.cursor.execute(query, params)
+        result = self.cursor.fetchone()
+        if result:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, result))
+        return None
+
+    # ========== Методи для article_topics ==========
+    def save_article_topic(self, article_id: int, topic_id: int, weight: float) -> int:
+        """Зберігає зв'язок статті з темою"""
+        query = """
+                INSERT INTO article_topics (article_id, topic_id, weight)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (article_id, topic_id) DO UPDATE SET
+                    weight = EXCLUDED.weight,
+                    created_at = NOW()
+                RETURNING article_topic_id
+                """
+        self.cursor.execute(query, (article_id, topic_id, weight))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_topics_by_article(self, article_id: int, min_weight: float = 0.0) -> List[Dict]:
+        """Отримує всі теми, пов'язані зі статтею"""
+        query = """
+                SELECT nt.*, at.weight
+                FROM news_topics nt
+                JOIN article_topics at ON nt.topic_id = at.topic_id
+                WHERE at.article_id = %s AND at.weight >= %s
+                ORDER BY at.weight DESC
+                """
+        self.cursor.execute(query, (article_id, min_weight))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    def get_articles_by_topic(self, topic_id: int, limit: int = 100) -> List[Dict]:
+        """Отримує статті, пов'язані з темою"""
+        query = """
+                SELECT na.*, at.weight
+                FROM news_articles na
+                JOIN article_topics at ON na.article_id = at.article_id
+                WHERE at.topic_id = %s
+                ORDER BY na.published_at DESC
+                LIMIT %s
+                """
+        self.cursor.execute(query, (topic_id, limit))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ========== Методи для sentiment_time_series ==========
+    def save_news_sentiment_time_series(self, entity_id: int, period_start: datetime,
+                                   period_end: datetime, timeframe: str,
+                                   sentiment_avg: float, news_count: int,
+                                   mentions_count: int) -> int:
+        """Зберігає часовий ряд настроїв для криптовалюти"""
+        query = """
+                INSERT INTO sentiment_time_series (entity_id, period_start, period_end, timeframe,
+                                                   sentiment_avg, news_count, mentions_count)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (entity_id, period_start, timeframe) DO UPDATE SET
+                    period_end = EXCLUDED.period_end,
+                    sentiment_avg = EXCLUDED.sentiment_avg,
+                    news_count = EXCLUDED.news_count,
+                    mentions_count = EXCLUDED.mentions_count,
+                    created_at = NOW()
+                RETURNING id
+                """
+        self.cursor.execute(query, (
+            entity_id, period_start, period_end, timeframe,
+            sentiment_avg, news_count, mentions_count
+        ))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+        return None
+
+    def get_news_sentiment_time_series(self, entity_id: int, timeframe: str,
+                                  start_date: datetime, end_date: datetime) -> List[Dict]:
+        """Отримує часовий ряд настроїв для криптовалюти"""
+        query = """
+                SELECT *
+                FROM sentiment_time_series
+                WHERE entity_id = %s
+                AND timeframe = %s
+                AND period_start >= %s
+                AND period_end <= %s
+                ORDER BY period_start ASC
+                """
+        self.cursor.execute(query, (entity_id, timeframe, start_date, end_date))
+        columns = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
