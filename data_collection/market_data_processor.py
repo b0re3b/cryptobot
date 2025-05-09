@@ -611,7 +611,19 @@ class MarketDataProcessor:
 
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
                             end_date: Optional[str] = None, save_results: bool = True) -> Dict[str, pd.DataFrame]:
+        """
+        Комплексна обробка ринкових даних для заданого символу та таймфрейму
 
+        Args:
+            symbol: Торговий символ
+            timeframe: Таймфрейм даних ('1m', '1h', '1d', '4h', '1w')
+            start_date: Початкова дата для фільтрації даних
+            end_date: Кінцева дата для фільтрації даних
+            save_results: Чи зберігати результати обробки
+
+        Returns:
+            Словник з результатами обробки
+        """
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
 
@@ -619,16 +631,54 @@ class MarketDataProcessor:
             self.logger.error(f"Символ {symbol} не підтримується")
             return results
 
-        # 1. Завантаження даних
-        raw_data = self.load_data(
-            data_source='database',
-            symbol=symbol,
-            timeframe=timeframe,
-            data_type='candles'
-        )
+        # Визначення базових та похідних таймфреймів
+        base_timeframes = ['1m', '1h', '1d']  # Таймфрейми, які зберігаються безпосередньо в БД
+        derived_timeframes = ['4h', '1w']  # Таймфрейми, які потребують ресемплінгу
 
-        if raw_data.empty:
-            self.logger.warning(f"Дані не знайдено для {symbol} {timeframe}")
+        # 1. Завантаження даних
+        if timeframe in base_timeframes:
+            # Для базових таймфреймів - завантаження напряму з БД
+            raw_data = self.load_data(
+                data_source='database',
+                symbol=symbol,
+                timeframe=timeframe,
+                data_type='candles'
+            )
+
+            if raw_data.empty:
+                self.logger.warning(f"Дані не знайдено для {symbol} {timeframe}")
+                return results
+
+        elif timeframe in derived_timeframes:
+            # Для похідних таймфреймів - визначення базового джерела і ресемплінг
+            source_timeframe = None
+            if timeframe == '4h':
+                source_timeframe = '1h'  # Ресемплінг з годинних свічок
+            elif timeframe == '1w':
+                source_timeframe = '1d'  # Ресемплінг з денних свічок
+
+            self.logger.info(f"Створення {timeframe} даних через ресемплінг з {source_timeframe}")
+
+            # Завантаження базових даних
+            source_data = self.load_data(
+                data_source='database',
+                symbol=symbol,
+                timeframe=source_timeframe,
+                data_type='candles'
+            )
+
+            if source_data.empty:
+                self.logger.warning(f"Базові дані не знайдено для {symbol} {source_timeframe}")
+                return results
+
+            # Ресемплінг даних
+            raw_data = self.resample_data(source_data, target_interval=timeframe)
+
+            if raw_data.empty:
+                self.logger.warning(f"Не вдалося створити дані для {symbol} {timeframe} через ресемплінг")
+                return results
+        else:
+            self.logger.error(f"Непідтримуваний таймфрейм: {timeframe}")
             return results
 
         results['raw_data'] = raw_data
@@ -663,7 +713,8 @@ class MarketDataProcessor:
         # 6. Виявлення та обробка аномалій
         processed_data, outliers_info = self.detect_outliers(processed_data)
 
-        # 7. Створення профілю об'єму
+
+        # 8. Створення профілю об'єму
         volume_profile = self.aggregate_volume_profile(
             processed_data,
             bins=20,
@@ -683,15 +734,22 @@ class MarketDataProcessor:
                 else:
                     self.logger.error(f"Помилка збереження профілю об'єму для {symbol} {timeframe}")
 
-        # 8. Підготовка даних для моделей ARIMA і LSTM
-        if timeframe in ['1h', '4h', '1d']:
+        # 9. Підготовка даних для моделей ARIMA і LSTM
+        if timeframe in ['1m','4h', '1d','1w']:
             # ARIMA дані
             arima_data = self.prepare_arima_data(processed_data, symbol=symbol, timeframe=timeframe)
             if not arima_data.empty:
                 results['arima_data'] = arima_data
                 if save_results:
-                    self.save_arima_data(arima_data, symbol=symbol)
-                    self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
+                    # Використання спеціального методу для збереження ARIMA даних з ім'ям символу
+                    method_name = f"save_{symbol}_arima_data"
+                    if hasattr(self.data_storage, method_name):
+                        getattr(self.data_storage, method_name)(arima_data)
+                        self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
+                    else:
+                        # Якщо метод не існує, використовуємо загальний метод
+                        self.save_arima_data(arima_data, symbol=symbol)
+                        self.logger.info(f"Дані ARIMA для {symbol} успішно збережено (загальний метод)")
 
             # LSTM дані
             try:
@@ -702,8 +760,15 @@ class MarketDataProcessor:
                     results['lstm_data'] = lstm_df
 
                     if save_results:
-                        self.save_lstm_sequence(lstm_df, symbol=symbol)
-                        self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
+                        # Використання спеціального методу для збереження LSTM даних з ім'ям символу
+                        method_name = f"save_{symbol}_lstm_sequence"
+                        if hasattr(self.data_storage, method_name):
+                            getattr(self.data_storage, method_name)(lstm_df)
+                            self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
+                        else:
+                            # Якщо метод не існує, використовуємо загальний метод
+                            self.save_lstm_sequence(lstm_df, symbol=symbol)
+                            self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено (загальний метод)")
             except Exception as e:
                 self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
 
@@ -847,15 +912,47 @@ class MarketDataProcessor:
 
 
 def main():
-
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['BTC', 'ETH', 'SOL']
-    TIMEFRAMES = ['1m', '1h', '1d', '4h', '1w']
+
+    # Визначення базових та похідних таймфреймів
+    BASE_TIMEFRAMES = ['1m', '1h', '1d']  # Таймфрейми, які зберігаються безпосередньо в БД
+    DERIVED_TIMEFRAMES = ['4h', '1w']  # Таймфрейми, які потребують ресемплінгу
 
     processor = MarketDataProcessor(log_level=logging.INFO)
 
+    # Спочатку обробляємо базові таймфрейми
+    print("\n=== Обробка базових таймфреймів ===")
     for symbol in SYMBOLS:
-        for timeframe in TIMEFRAMES:
+        for timeframe in BASE_TIMEFRAMES:
+            print(f"\nОбробка {symbol} ({timeframe})...")
+
+            try:
+                results = processor.process_market_data(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    save_results=True
+                )
+
+                if not results:
+                    print(f"Не вдалося обробити дані для {symbol} {timeframe}")
+                    continue
+
+                # Print summary of results
+                for key, data in results.items():
+                    if isinstance(data, pd.DataFrame) and not data.empty:
+                        print(f" - {key}: {len(data)} рядків, {len(data.columns)} колонок")
+
+                print(f"Обробка {symbol} ({timeframe}) завершена успішно")
+
+            except Exception as e:
+                print(f"Помилка при обробці {symbol} ({timeframe}): {str(e)}")
+                traceback.print_exc()
+
+    # Після обробки базових таймфреймів обробляємо похідні
+    print("\n=== Обробка похідних таймфреймів ===")
+    for symbol in SYMBOLS:
+        for timeframe in DERIVED_TIMEFRAMES:
             print(f"\nОбробка {symbol} ({timeframe})...")
 
             try:

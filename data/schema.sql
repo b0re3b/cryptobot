@@ -343,19 +343,19 @@ CREATE INDEX IF NOT EXISTS idx_article_topics_article ON article_topics(article_
 -- Спрощена таблиця для часових рядів настроїв
 CREATE TABLE IF NOT EXISTS sentiment_time_series (
     id SERIAL PRIMARY KEY,
-    entity_id INTEGER REFERENCES crypto_entities(entity_id), -- Замість просто символу
-    period_start TIMESTAMP WITH TIME ZONE NOT NULL,
-    period_end TIMESTAMP WITH TIME ZONE NOT NULL,
+    symbol TEXT NOT NULL,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     timeframe VARCHAR(20) NOT NULL,  -- 'hour', 'day', 'week'
     sentiment_avg NUMERIC(5,2) NOT NULL,
     news_count INTEGER NOT NULL,
     mentions_count INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (entity_id, period_start, timeframe)
+    UNIQUE (symbol, start_time, timeframe)
 );
 
 -- Індекс для часових запитів
-CREATE INDEX IF NOT EXISTS idx_sentiment_time_period ON sentiment_time_series(entity_id, period_start);
+CREATE INDEX IF NOT EXISTS idx_sentiment_time_period ON sentiment_time_series(symbol, start_time);
 
 
 -- Таблиця для логування роботи CryptoNewsScraper

@@ -68,7 +68,13 @@ class DataResampler:
 
         try:
             # Виконання ресемплінгу
+            self.logger.info(f"Починаємо ресемплінг з інтервалом {pandas_interval}")
             resampled = data.resample(pandas_interval).agg(agg_dict)
+
+            # Перевірка результату ресемплінгу
+            if resampled.empty:
+                self.logger.warning(f"Результат ресемплінгу порожній. Можливо, проблема з інтервалом {pandas_interval}")
+                return data
 
             # Заповнення відсутніх значень для всіх колонок після ресемплінгу
             if resampled.isna().any().any():
@@ -91,7 +97,9 @@ class DataResampler:
 
         except Exception as e:
             self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
-            raise
+            self.logger.error(f"Спробуйте інший формат інтервалу або перевірте вхідні дані")
+            # Повертаємо вихідні дані замість помилки
+            return data
 
     def _create_aggregation_dict(self, data: pd.DataFrame) -> Dict:
 
@@ -204,18 +212,20 @@ class DataResampler:
 
         return df
 
+    # Заміна методу convert_interval_to_pandas_format
+
     def convert_interval_to_pandas_format(self, timeframe: str) -> str:
 
         if not timeframe or not isinstance(timeframe, str):
             raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
 
         interval_map = {
-            's': 'S',
-            'm': 'T',
-            'h': 'H',
-            'd': 'D',
-            'w': 'W',
-            'M': 'M',
+            's': 'S',  # секунди
+            'm': 'T',  # хвилини (в pandas використовується 'T' для хвилин)
+            'h': 'H',  # години
+            'd': 'D',  # дні
+            'w': 'W',  # тижні
+            'M': 'M',  # місяці
         }
 
         import re
@@ -229,10 +239,16 @@ class DataResampler:
         if int(number) <= 0:
             raise ValueError(f"Інтервал повинен бути додатнім: {timeframe}")
 
-        if unit in interval_map:
-            return f"{number}{interval_map[unit]}"
-        else:
+        # Перевірка, чи підтримується одиниця часу
+        if unit not in interval_map:
             raise ValueError(f"Непідтримувана одиниця часу: {unit}")
+
+        # Конвертуємо у pandas формат
+        pandas_interval = f"{number}{interval_map[unit]}"
+        self.logger.info(f"Перетворено інтервал '{timeframe}' у pandas формат '{pandas_interval}'")
+
+        return pandas_interval
+
 
     def parse_interval(self, timeframe: str) -> pd.Timedelta:
 

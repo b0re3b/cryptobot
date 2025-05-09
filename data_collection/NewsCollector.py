@@ -119,10 +119,7 @@ class NewsCollector:
                 'base_url': 'https://coinmarketcal.com',
                 'default_categories': ["events", "upcoming", "ongoing", "recent"]
             },
-            'feedly': {
-                'base_url': 'https://feedly.com/i/collection/content/user/411e30a1-1c84-451d-9bb3-d740a96a284a/category/global.all',
-                'default_categories': ["crypto", "blockchain", "bitcoin", "ethereum"]
-            },
+
             'newsnow': {
                 'base_url': 'https://www.newsnow.co.uk',
                 'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum"]
@@ -678,7 +675,6 @@ class NewsCollector:
             'cryptobriefing': self.scrape_cryptobriefing,
             'cryptopanic': self.scrape_cryptopanic,
             'coinmarketcal': self.scrape_coinmarketcal,
-            'feedly': self.scrape_feedly,
             'newsnow': self.scrape_newsnow
         }
 
@@ -942,96 +938,6 @@ class NewsCollector:
             self.logger.error(f"General error while scraping CoinMarketCal: {e}")
 
         self.logger.info(f"Collected {len(news_data)} events from CoinMarketCal")
-        return news_data
-
-    def scrape_feedly(self, days_back: int = 1, categories: List[str] = None) -> List[NewsItem]:
-        """Scrape news from Feedly curated crypto collections
-
-        Note: Feedly is a feed reader, not a news source. This implementation assumes
-        we're scraping a publicly accessible Feedly collection. If authentication is required,
-        a different approach would be needed.
-        """
-        self.logger.info("Scraping news from Feedly collections...")
-        news_data = []
-
-        try:
-            # Determine start date
-            start_date = datetime.now() - timedelta(days=days_back)
-
-            # Get base URL - feedly uses a different approach since it's a feed reader
-            base_url = self.source_config['feedly']['base_url']
-
-            # For Feedly we need to set a cookie and maybe additional headers
-            self._rotate_user_agent()
-            self.headers['Accept'] = 'text/html,application/xhtml+xml,application/xml'
-
-            response = self._make_request(base_url)
-
-            if not response:
-                self.logger.error("Failed to access Feedly collection")
-                return news_data
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-            articles = soup.select('article.entry')
-
-            for article in articles:
-                try:
-                    # Get publication date
-                    date_elem = article.select_one('time.ago')
-                    if not date_elem:
-                        continue
-
-                    date_text = date_elem.text.strip()
-                    pub_date = self._parse_relative_date(date_text)
-
-                    # Check if article is within the time period
-                    if pub_date < start_date:
-                        continue
-
-                    # Get title and link
-                    title_elem = article.select_one('h3.title a')
-                    if not title_elem:
-                        continue
-
-                    title = title_elem.text.strip()
-                    link = title_elem['href']
-
-                    # Get source
-                    source_elem = article.select_one('span.source')
-                    source_name = 'feedly'
-                    if source_elem:
-                        source_name = source_elem.text.strip()
-
-                    # Get summary
-                    summary_elem = article.select_one('div.content')
-                    summary = ""
-                    if summary_elem:
-                        summary = summary_elem.text.strip()
-
-                    # Get category from available tags
-                    category_elem = article.select_one('span.category')
-                    category = 'crypto'  # Default
-                    if category_elem:
-                        category = category_elem.text.strip().lower()
-
-                    # Create news item
-                    news_item = self._create_news_item(
-                        title=title,
-                        summary=summary,
-                        link=link,
-                        source='feedly',
-                        category=category,
-                        published_at=pub_date
-                    )
-
-                    news_data.append(news_item)
-                except Exception as e:
-                    self.logger.error(f"Error processing Feedly article: {e}")
-
-        except Exception as e:
-            self.logger.error(f"General error while scraping Feedly: {e}")
-
-        self.logger.info(f"Collected {len(news_data)} news from Feedly")
         return news_data
 
     def scrape_newsnow(self, days_back: int = 1, categories: List[str] = None) -> List[NewsItem]:

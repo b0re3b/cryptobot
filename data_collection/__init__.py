@@ -11,6 +11,7 @@ from .DataCleaner import DataCleaner
 from .DataStorageManager import DataStorageManager
 from .DataResampler import DataResampler
 from .AnomalyDetector import AnomalyDetector
+from .NewsCollector import NewsCollector
 # Версія пакету
 __version__ = '0.1.0'
 
@@ -23,5 +24,6 @@ __all__ = [
     'DataCleaner',
     'DataStorageManager',
     'DataResampler',
-    'AnomalyDetector'
+    'AnomalyDetector',
+    'NewsCollector'
 ]

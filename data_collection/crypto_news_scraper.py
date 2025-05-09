@@ -4,8 +4,8 @@ from datetime import datetime
 import numpy as np
 
 from data.db import DatabaseManager
-from data_collection import NewsCollector
-from models import BERTNewsAnalyzer
+from data_collection.NewsCollector import NewsCollector
+from models.NewsAnalyzer import BERTNewsAnalyzer
 from data.NewsManager import NewsStorage
 
 
@@ -29,23 +29,16 @@ class CryptoNewsScraper:
             feedly_api_key: API ключ для доступу до Feedly
         """
         # Ініціалізація колектора новин
-        self.collector = NewsCollector(
-            use_proxies=use_proxies,
-            user_agents=user_agents,
-            feedly_api_key=feedly_api_key
-        )
+        self.collector = NewsCollector()
 
         # Ініціалізація бази даних
         self.db_manager = DatabaseManager() if db_connection is None else db_connection
 
         # Ініціалізація аналізатора новин
-        self.analyzer = BERTNewsAnalyzer(
-            bert_model_path=bert_model_path,
-            topic_models_path=topic_models_path
-        )
+        self.analyzer = BERTNewsAnalyzer()
 
         # Ініціалізація сховища новин
-        self.storage = NewsStorage(db_connection=self.db_manager)
+        self.storage = NewsStorage()
 
         # Налаштування та кешування даних
         self._cached_news = []
@@ -398,7 +391,6 @@ def main():
         topic_models_path=args.topic_models,
         use_proxies=args.use_proxies,
         user_agents=user_agents,
-        feedly_api_key=args.feedly_api_key
     )
     print("Скрапер ініціалізовано")
 

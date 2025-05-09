@@ -117,7 +117,7 @@ class DataCleaner:
 
         # Фінальна перевірка
         self._verify_essential_columns(result, essential_cols)
-        self.validate_data_integrity(result, is_final=True)
+        self.validate_data_integrity(result)
 
         self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result

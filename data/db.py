@@ -5882,17 +5882,17 @@ class DatabaseManager:
         return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
 
     # ========== Методи для sentiment_time_series ==========
-    def save_news_sentiment_time_series(self, entity_id: int, period_start: datetime,
-                                   period_end: datetime, timeframe: str,
+    def save_news_sentiment_time_series(self, symbol: str, start_time: datetime,
+                                   end_time: datetime, timeframe: str,
                                    sentiment_avg: float, news_count: int,
                                    mentions_count: int) -> int:
         """Зберігає часовий ряд настроїв для криптовалюти"""
         query = """
-                INSERT INTO sentiment_time_series (entity_id, period_start, period_end, timeframe,
+                INSERT INTO sentiment_time_series (symbol, start_time, end_time, timeframe,
                                                    sentiment_avg, news_count, mentions_count)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (entity_id, period_start, timeframe) DO UPDATE SET
-                    period_end = EXCLUDED.period_end,
+                ON CONFLICT (symbol, start_time, timeframe) DO UPDATE SET
+                    start_time = EXCLUDED.period_end,
                     sentiment_avg = EXCLUDED.sentiment_avg,
                     news_count = EXCLUDED.news_count,
                     mentions_count = EXCLUDED.mentions_count,
@@ -5900,7 +5900,7 @@ class DatabaseManager:
                 RETURNING id
                 """
         self.cursor.execute(query, (
-            entity_id, period_start, period_end, timeframe,
+            symbol, start_time, end_time, timeframe,
             sentiment_avg, news_count, mentions_count
         ))
         result = self.cursor.fetchone()
@@ -5908,18 +5908,18 @@ class DatabaseManager:
             return result[0]
         return None
 
-    def get_news_sentiment_time_series(self, entity_id: int, timeframe: str,
-                                  start_date: datetime, end_date: datetime) -> List[Dict]:
+    def get_news_sentiment_time_series(self, symbol: str, timeframe: str,
+                                  start_time: datetime, end_time: datetime) -> List[Dict]:
         """Отримує часовий ряд настроїв для криптовалюти"""
         query = """
                 SELECT *
                 FROM sentiment_time_series
-                WHERE entity_id = %s
+                WHERE symbol = %s
                 AND timeframe = %s
-                AND period_start >= %s
-                AND period_end <= %s
-                ORDER BY period_start ASC
+                AND start_time >= %s
+                AND end_time <= %s
+                ORDER BY start_time ASC
                 """
-        self.cursor.execute(query, (entity_id, timeframe, start_date, end_date))
+        self.cursor.execute(query, (symbol, timeframe, start_time, end_time))
         columns = [desc[0] for desc in self.cursor.description]
         return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
