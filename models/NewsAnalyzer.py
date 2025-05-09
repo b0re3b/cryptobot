@@ -1,24 +1,19 @@
-import csv
-import io
-import json
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import logging
-import re
-import time
 import os
+import re
+import json
+import logging
 import joblib
-from typing import List, Dict, Optional, Union, Any
-from dataclasses import dataclass
-from utils.config import *
+from datetime import datetime, timedelta
+from typing import Dict, List, Union, Any
+import numpy as np
+from sklearn.cluster import KMeans
+import torch
+from transformers import BertTokenizer, BertModel, BertForSequenceClassification, pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import LatentDirichletAllocation, NMF
-from sklearn.cluster import KMeans
-
+from utils.config import *
 try:
+    import nltk
     from nltk.tokenize import word_tokenize
     from nltk.corpus import stopwords
     from nltk.stem import WordNetLemmatizer
@@ -28,63 +23,50 @@ except ImportError:
     nltk_available = False
 
 
-@dataclass
-class NewsItem:
-    """Структурований клас для зберігання даних новини"""
-    id: str
-    title: str
-    summary: str
-    content: Optional[str] = None
-    source: Optional[str] = None
-    source_url: Optional[str] = None
-    published_at: Optional[datetime] = None
-    author: Optional[str] = None
-    categories: Optional[List[str]] = None
-    tags: Optional[List[str]] = None
-    sentiment_score: Optional[float] = None
-    sentiment_label: Optional[str] = None
-    mentioned_cryptos: Optional[Dict[str, int]] = None
-    importance_score: Optional[float] = None
 
-    def to_dict(self):
-        """Конвертує об'єкт в словник для зберігання в БД"""
-        return {
-            'id': self.id,
-            'title': self.title,
-            'summary': self.summary,
-            'content': self.content,
-            'source': self.source,
-            'source_url': self.source_url,
-            'published_at': self.published_at,
-            'author': self.author,
-            'categories': self.categories,
-            'tags': self.tags,
-            'sentiment_score': self.sentiment_score,
-            'sentiment_label': self.sentiment_label,
-            'mentioned_cryptos': self.mentioned_cryptos,
-            'importance_score': self.importance_score
-        }
+class NewsItem:
+    """Клас для представлення елемента новин з усіма атрибутами для аналізу."""
+
+    def __init__(self, title=None, url=None, source=None, published_at=None, author=None,
+                 content=None, summary=None, categories=None, tags=None, sentiment_score=None,
+                 sentiment_label=None, importance_score=None, mentioned_cryptos=None, topics=None):
+        self.title = title
+        self.url = url
+        self.source = source
+        self.published_at = published_at
+        self.author = author
+        self.content = content
+        self.summary = summary
+        self.categories = categories or []
+        self.tags = tags or []
+        self.sentiment_score = sentiment_score
+        self.sentiment_label = sentiment_label
+        self.importance_score = importance_score
+        self.mentioned_cryptos = mentioned_cryptos or {}
+        self.topics = topics or {}
 
     @classmethod
-    def from_dict(cls, data: Dict):
-        """Створює об'єкт з словника"""
+    def from_dict(cls, data):
         return cls(**data)
 
 
-class NewsAnalyzer:
+class BERTNewsAnalyzer:
 
-    def __init__(self, sentiment_analyzer=None, db_manager=None, logger=None, topic_model_dir='./models/topics'):
+    def __init__(self, bert_model_name='bert-base-uncased',
+                 sentiment_model_name='nlptown/bert-base-multilingual-uncased-sentiment',
+                 db_manager=None, logger=None, topic_model_dir='./models/topics', device=None):
 
-        self.sentiment_analyzer = sentiment_analyzer
-        self.db_manager = db_manager
-        self.logger = logger or logging.getLogger("NewsAnalyzer")
+        self.logger = logger or logging.getLogger("BERTNewsAnalyzer")
         self.logger.setLevel(logging.INFO)
+        self.db_manager = db_manager
         self.CRYPTO_KEYWORDS = CRYPTO_KEYWORDS
         self.SENTIMENT_LEXICON = SENTIMENT_LEXICON
         self.CRITICAL_KEYWORDS = CRITICAL_KEYWORDS
         self.MAJOR_ENTITIES = MAJOR_ENTITIES
         self.COMMON_WORDS = COMMON_WORDS
         self.ML_FEATURE_GROUPS = ML_FEATURE_GROUPS
+        self.topic_model_dir = topic_model_dir
+
         # Налаштування логування, якщо логгер не передано
         if not logger:
             handler = logging.StreamHandler()
@@ -92,8 +74,26 @@ class NewsAnalyzer:
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
 
-        # Директорія для зберігання моделей тематичного моделювання
-        self.topic_model_dir = topic_model_dir
+        # Визначення пристрою (CPU або GPU)
+        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.logger.info(f"Використовується пристрій: {self.device}")
+
+        # Завантаження моделей BERT і токенізаторів
+        try:
+            self.logger.info(f"Завантаження базової моделі BERT: {bert_model_name}")
+            self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+            self.bert_model = BertModel.from_pretrained(bert_model_name).to(self.device)
+
+            self.logger.info(f"Завантаження моделі BERT для аналізу тональності: {sentiment_model_name}")
+            # Використовуємо готовий pipeline для аналізу тональності
+            self.sentiment_analyzer = pipeline("sentiment-analysis", model=sentiment_model_name,
+                                               tokenizer=sentiment_model_name,
+                                               device=0 if self.device == 'cuda' else -1)
+
+            self.logger.info("Моделі BERT успішно завантажено")
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні моделей BERT: {e}")
+            raise
 
         # Моделі для тематичного моделювання
         self.vectorizer = None
@@ -114,7 +114,7 @@ class NewsAnalyzer:
         self.ml_feature_patterns = self._compile_ml_feature_patterns()
 
     def _compile_coin_patterns(self) -> Dict[str, re.Pattern]:
-
+        """Компіляція регулярних виразів для криптовалют."""
         coin_patterns = {}
         for coin, aliases in self.CRYPTO_KEYWORDS.items():
             # Створюємо шаблон регулярного виразу для кожної монети та її аліасів
@@ -123,7 +123,7 @@ class NewsAnalyzer:
         return coin_patterns
 
     def _compile_category_patterns(self) -> Dict[str, List[re.Pattern]]:
-
+        """Компіляція регулярних виразів для категорій новин."""
         category_patterns = {}
         for category, keywords in self.CRITICAL_KEYWORDS.items():
             patterns = [re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE) for keyword in keywords]
@@ -131,7 +131,7 @@ class NewsAnalyzer:
         return category_patterns
 
     def _compile_ml_feature_patterns(self) -> Dict[str, List[re.Pattern]]:
-
+        """Компіляція регулярних виразів для груп функцій машинного навчання."""
         feature_patterns = {}
         for feature_group, keywords in self.ML_FEATURE_GROUPS.items():
             patterns = [re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE) for keyword in keywords]
@@ -139,7 +139,7 @@ class NewsAnalyzer:
         return feature_patterns
 
     def _get_text_to_analyze(self, news_item) -> str:
-
+        """Отримати текст для аналізу з об'єкта новин."""
         if isinstance(news_item, NewsItem):
             title = news_item.title or ""
             summary = news_item.summary or ""
@@ -153,12 +153,25 @@ class NewsAnalyzer:
         else:
             return str(news_item)
 
+    def _get_bert_embeddings(self, text):
+        """Отримати вектори BERT для тексту."""
+        # Токенізація тексту
+        inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512).to(
+            self.device)
+
+        # Отримання векторів BERT
+        with torch.no_grad():  # Відключаємо обчислення градієнтів для прискорення
+            outputs = self.bert_model(**inputs)
+            # Використовуємо [CLS] токен як вектор усього речення
+            embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+
+        return embeddings
+
     def analyze_news_sentiment(self, news_data: List[Union[Dict[str, Any], NewsItem]]) -> List[
         Union[Dict[str, Any], NewsItem]]:
-
+        """Аналіз тональності новин за допомогою BERT."""
         self.logger.info(f"Початок аналізу настроїв для {len(news_data)} новин")
 
-        # Якщо нема зовнішнього аналізатора, використовуємо внутрішній лексичний метод
         analyzed_news = []
 
         for idx, news in enumerate(news_data):
@@ -166,24 +179,49 @@ class NewsAnalyzer:
                 # Текст для аналізу
                 text_to_analyze = self._get_text_to_analyze(news)
 
-                # Визначаємо, чи використовувати зовнішній аналізатор чи внутрішній
-                if self.sentiment_analyzer:
-                    # Зовнішній аналізатор
-                    sentiment_result = self.sentiment_analyzer.analyze(text_to_analyze)
-
-                    # Форматуємо результат аналізу
-                    if isinstance(sentiment_result, dict):
-                        sentiment_data = sentiment_result
+                # Обмеження довжини тексту для BERT
+                max_length = 512
+                if len(text_to_analyze) > max_length * 3:  # Якщо текст дуже довгий
+                    # Аналізуємо заголовок та початок контенту
+                    if isinstance(news, NewsItem):
+                        title = news.title or ""
+                        content_start = (news.content or "")[:max_length] if news.content else ""
+                        text_to_analyze = f"{title} {content_start}"
                     else:
-                        # Якщо результат не у вигляді словника, створюємо базову структуру
-                        sentiment_data = {
-                            'score': getattr(sentiment_result, 'score', 0.0),
-                            'label': getattr(sentiment_result, 'label', 'neutral'),
-                            'confidence': getattr(sentiment_result, 'confidence', 0.0),
-                            'analyzed': True
-                        }
-                else:
-                    # Внутрішній лексичний аналізатор
+                        title = news.get('title', '')
+                        content = news.get('content', '')
+                        content_start = content[:max_length] if content else ""
+                        text_to_analyze = f"{title} {content_start}"
+
+                # Використовуємо BERT для аналізу тональності
+                try:
+                    sentiment_result = self.sentiment_analyzer(text_to_analyze[:512])  # Обмеження по довжині
+
+                    # Перетворення результату у потрібний формат
+                    label = sentiment_result[0]['label']
+                    score = sentiment_result[0]['score']
+
+                    # Мапування міток BERT на наші категорії (1-2: негативний, 3: нейтральний, 4-5: позитивний)
+                    if '1' in label or '2' in label:
+                        sentiment_label = 'negative'
+                        normalized_score = -score
+                    elif '4' in label or '5' in label:
+                        sentiment_label = 'positive'
+                        normalized_score = score
+                    else:
+                        sentiment_label = 'neutral'
+                        normalized_score = 0
+
+                    sentiment_data = {
+                        'score': normalized_score,
+                        'label': sentiment_label,
+                        'confidence': score,
+                        'analyzed': True,
+                        'raw_label': label
+                    }
+                except Exception as bert_error:
+                    self.logger.warning(f"Помилка BERT аналізу, використовуємо лексичний метод: {bert_error}")
+                    # Запасний варіант - лексичний аналіз
                     sentiment_data = self._lexicon_based_sentiment(text_to_analyze)
 
                 # Додаємо результат до об'єкта новини
@@ -224,7 +262,7 @@ class NewsAnalyzer:
         return analyzed_news
 
     def _lexicon_based_sentiment(self, text: str) -> Dict[str, Any]:
-
+        """Лексичний аналіз тональності як запасний варіант."""
         # Переводимо в нижній регістр і видаляємо пунктуацію
         text = re.sub(r'[^\w\s]', '', text.lower())
         words = text.split()
@@ -262,12 +300,13 @@ class NewsAnalyzer:
             'confidence': confidence,
             'positive_words': positive_count,
             'negative_words': negative_count,
-            'analyzed': True
+            'analyzed': True,
+            'method': 'lexicon'
         }
 
     def extract_mentioned_coins(self, news_data: List[Union[Dict[str, Any], NewsItem]]) -> List[
         Union[Dict[str, Any], NewsItem]]:
-
+        """Витягнення згаданих криптовалют з новин."""
         self.logger.info(f"Початок пошуку згаданих криптовалют у {len(news_data)} новинах")
 
         for item in news_data:
@@ -320,7 +359,7 @@ class NewsAnalyzer:
 
     def filter_by_keywords(self, news_data: List[Union[Dict[str, Any], NewsItem]], keywords: List[str],
                            threshold: int = 1) -> List[Union[Dict[str, Any], NewsItem]]:
-
+        """Фільтрація новин за ключовими словами."""
         self.logger.info(f"Початок фільтрації новин за {len(keywords)} ключовими словами")
 
         # Компілюємо регулярні вирази для кожного ключового слова
@@ -371,12 +410,13 @@ class NewsAnalyzer:
 
     def calculate_importance_score(self, news_data: List[Union[Dict[str, Any], NewsItem]]) -> List[
         Union[Dict[str, Any], NewsItem]]:
-
+        """Розрахунок оцінки важливості новин з покращеннями BERT."""
         self.logger.info(f"Початок розрахунку оцінки важливості для {len(news_data)} новин")
 
         for item in news_data:
             try:
                 importance_score = 0.0
+                bert_importance_score = 0.0
                 text_to_analyze = self._get_text_to_analyze(item)
 
                 # 1. Оцінка за наявністю топових криптовалют
@@ -440,6 +480,25 @@ class NewsAnalyzer:
                         importance_score += 0.1
                         break
 
+                # 6. НОВИЙ: BERT-аналіз для визначення важливості
+                try:
+                    # Використовуємо лише перші 512 токенів для аналізу BERT
+                    truncated_text = text_to_analyze[:1000]  # Обмежуємо довжину тексту
+                    embeddings = self._get_bert_embeddings(truncated_text)
+
+                    # Використовуємо інтенсивність BERT-векторів як показник важливості
+                    # Нормалізуємо вектор і використовуємо його норму як міру "сили" тексту
+                    vector_intensity = np.linalg.norm(embeddings) / np.sqrt(embeddings.shape[1])
+
+                    # Масштабуємо до діапазону [0, 0.3] для BERT-компонента
+                    bert_importance_score = min(0.3, vector_intensity * 0.3)
+
+                    # Додаємо BERT-компонент до загальної оцінки важливості
+                    importance_score += bert_importance_score
+
+                except Exception as bert_error:
+                    self.logger.warning(f"Помилка при BERT-аналізі важливості: {bert_error}")
+
                 # Обмежуємо фінальну оцінку від 0 до 1
                 importance_score = min(max(importance_score, 0.0), 1.0)
 
@@ -451,7 +510,8 @@ class NewsAnalyzer:
                     item['importance_factors'] = {
                         'category_mentions': category_mentions,
                         'sentiment_strength': abs(sentiment_score),
-                        'sentiment_label': sentiment_label
+                        'sentiment_label': sentiment_label,
+                        'bert_component': bert_importance_score
                     }
 
             except Exception as e:
@@ -468,13 +528,14 @@ class NewsAnalyzer:
 
     def categorize_news(self, news_data: List[Union[Dict[str, Any], NewsItem]]) -> List[
         Union[Dict[str, Any], NewsItem]]:
-
+        """Категоризація новин з використанням BERT."""
         self.logger.info(f"Початок категоризації {len(news_data)} новин")
 
         for item in news_data:
             try:
                 text_to_analyze = self._get_text_to_analyze(item)
 
+                # Традиційний підхід - пошук ключових слів
                 # Словник для підрахунку збігів по кожній категорії
                 category_scores = {category: 0 for category in self.CRITICAL_KEYWORDS.keys()}
 
@@ -484,777 +545,460 @@ class NewsAnalyzer:
                         matches = pattern.findall(text_to_analyze)
                         category_scores[category] += len(matches)
 
-                # Фільтруємо лише релевантні категорії (з принаймні одним збігом)
-                relevant_categories = {cat: score for cat, score in category_scores.items() if score > 0}
+                # BERT для покращення категоризації
+                try:
+                    # Отримуємо вектор BERT
+                    truncated_text = text_to_analyze[:1000]  # Обмежуємо для BERT
+                    embeddings = self._get_bert_embeddings(truncated_text)
 
-                # Сортуємо категорії за кількістю збігів
-                sorted_categories = sorted(
-                    relevant_categories.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )
+                    # Покращення категоризації на основі BERT-векторів
+                    # Цей підхід може бути розширений для більш точної категоризації
 
-                # Визначаємо основні категорії (не більше 3)
-                main_categories = [cat for cat, _ in sorted_categories[:3]] if sorted_categories else []
+                    # Визначаємо найбільш імовірні категорії
+                    sorted_categories = sorted(
+                        category_scores.items(),
+                        key=lambda x: x[1],
+                        reverse=True
+                    )
 
-                # Зберігаємо результат
-                if isinstance(item, NewsItem):
-                    if item.categories is None:
-                        item.categories = []
-                    item.categories.extend(main_categories)
-                    # Видаляємо дублікати, зберігаючи порядок
-                    item.categories = list(dict.fromkeys(item.categories))
-                else:
-                    item['categories'] = {
-                        'main': main_categories,
-                        'all_matches': dict(sorted_categories),
-                        'top_category': sorted_categories[0][0] if sorted_categories else None
-                    }
+                    # Додаємо дані про категорії до об'єкта новини
+                    if isinstance(item, NewsItem):
+                        item.categories = [cat for cat, score in sorted_categories if score > 0]
+                    else:
+                        item['categories'] = {
+                            'primary': sorted_categories[0][0] if sorted_categories and sorted_categories[0][
+                                1] > 0 else None,
+                            'all': {cat: score for cat, score in sorted_categories if score > 0}
+                        }
+
+                except Exception as bert_error:
+                    self.logger.warning(f"Помилка при BERT-категоризації: {bert_error}")
+                    # Використовуємо тільки традиційний підхід у випадку помилки
+                    if isinstance(item, NewsItem):
+                        item.categories = [cat for cat, score in category_scores.items() if score > 0]
+                    else:
+                        item['categories'] = {
+                            'primary': max(category_scores.items(), key=lambda x: x[1])[0] if any(
+                                category_scores.values()) else None,
+                            'all': {cat: score for cat, score in category_scores.items() if score > 0}
+                        }
 
             except Exception as e:
                 self.logger.error(f"Помилка при категоризації новини: {e}")
-                # Встановлюємо значення за замовчуванням у випадку помилки
+                # Додаємо порожні категорії у випадку помилки
                 if isinstance(item, NewsItem):
                     item.categories = []
                 else:
-                    item['categories'] = {
-                        'main': [],
-                        'all_matches': {},
-                        'top_category': None,
-                        'error': str(e)
-                    }
+                    item['categories'] = {'primary': None, 'all': {}, 'error': str(e)}
 
         self.logger.info("Категоризація новин завершена")
         return news_data
 
     def _load_topic_models(self):
-
+        """Завантажити збережені моделі тематичного моделювання."""
         try:
-            if not os.path.exists(self.topic_model_dir):
-                self.logger.info(f"Директорія моделей {self.topic_model_dir} не існує")
-                return
-
-            # Завантаження векторизатора
+            os.makedirs(self.topic_model_dir, exist_ok=True)
             vectorizer_path = os.path.join(self.topic_model_dir, 'vectorizer.joblib')
-            if os.path.exists(vectorizer_path):
-                self.vectorizer = joblib.load(vectorizer_path)
-                self.logger.info("Векторизатор успішно завантажено")
-
-            # Завантаження LDA моделі
             lda_path = os.path.join(self.topic_model_dir, 'lda_model.joblib')
-            if os.path.exists(lda_path):
-                self.lda_model = joblib.load(lda_path)
-                self.logger.info("LDA модель успішно завантажено")
-
-            # Завантаження NMF моделі
             nmf_path = os.path.join(self.topic_model_dir, 'nmf_model.joblib')
-            if os.path.exists(nmf_path):
-                self.nmf_model = joblib.load(nmf_path)
-                self.logger.info("NMF модель успішно завантажено")
-
-            # Завантаження K-means моделі
             kmeans_path = os.path.join(self.topic_model_dir, 'kmeans_model.joblib')
-            if os.path.exists(kmeans_path):
-                self.kmeans_model = joblib.load(kmeans_path)
-                self.logger.info("K-means модель успішно завантажено")
+            topics_path = os.path.join(self.topic_model_dir, 'topic_words.json')
 
-            # Завантаження словника ключових слів тем
-            topic_words_path = os.path.join(self.topic_model_dir, 'topic_words.joblib')
-            if os.path.exists(topic_words_path):
-                self.topic_words = joblib.load(topic_words_path)
-                self.logger.info("Словник ключових слів тем успішно завантажено")
+            if os.path.exists(vectorizer_path):
+                self.logger.info("Завантаження збережених моделей тематичного моделювання")
+                self.vectorizer = joblib.load(vectorizer_path)
 
+                if os.path.exists(lda_path):
+                    self.lda_model = joblib.load(lda_path)
+
+                if os.path.exists(nmf_path):
+                    self.nmf_model = joblib.load(nmf_path)
+
+                if os.path.exists(kmeans_path):
+                    self.kmeans_model = joblib.load(kmeans_path)
+
+                if os.path.exists(topics_path):
+                    with open(topics_path, 'r', encoding='utf-8') as f:
+                        self.topic_words = json.load(f)
+
+                self.logger.info("Моделі тематичного моделювання успішно завантажено")
+            else:
+                self.logger.info("Збережені моделі не знайдено, моделі будуть створені при першому запуску")
         except Exception as e:
             self.logger.error(f"Помилка при завантаженні моделей тематичного моделювання: {e}")
+            # В разі помилки створюємо нові об'єкти
+            self.vectorizer = TfidfVectorizer(max_df=0.95, min_df=2, max_features=10000, stop_words='english')
+            self.lda_model = None
+            self.nmf_model = None
+            self.kmeans_model = None
+            self.topic_words = {}
 
     def _save_topic_models(self):
-
+        """Зберігти моделі тематичного моделювання на диск."""
         try:
-            # Створюємо директорію, якщо вона не існує
-            if not os.path.exists(self.topic_model_dir):
-                os.makedirs(self.topic_model_dir)
-                self.logger.info(f"Створено директорію для моделей: {self.topic_model_dir}")
+            os.makedirs(self.topic_model_dir, exist_ok=True)
+            vectorizer_path = os.path.join(self.topic_model_dir, 'vectorizer.joblib')
+            lda_path = os.path.join(self.topic_model_dir, 'lda_model.joblib')
+            nmf_path = os.path.join(self.topic_model_dir, 'nmf_model.joblib')
+            kmeans_path = os.path.join(self.topic_model_dir, 'kmeans_model.joblib')
+            topics_path = os.path.join(self.topic_model_dir, 'topic_words.json')
 
-            # Зберігаємо векторизатор
-            if self.vectorizer is not None:
-                joblib.dump(self.vectorizer, os.path.join(self.topic_model_dir, 'vectorizer.joblib'))
-                self.logger.info("Векторизатор успішно збережено")
+            if self.vectorizer:
+                joblib.dump(self.vectorizer, vectorizer_path)
 
-            # Зберігаємо LDA модель
-            if self.lda_model is not None:
-                joblib.dump(self.lda_model, os.path.join(self.topic_model_dir, 'lda_model.joblib'))
-                self.logger.info("LDA модель успішно збережено")
+            if self.lda_model:
+                joblib.dump(self.lda_model, lda_path)
 
-            # Зберігаємо NMF модель
-            if self.nmf_model is not None:
-                joblib.dump(self.nmf_model, os.path.join(self.topic_model_dir, 'nmf_model.joblib'))
-                self.logger.info("NMF модель успішно збережено")
+            if self.nmf_model:
+                joblib.dump(self.nmf_model, nmf_path)
 
-            # Зберігаємо K-means модель
-            if self.kmeans_model is not None:
-                joblib.dump(self.kmeans_model, os.path.join(self.topic_model_dir, 'kmeans_model.joblib'))
-                self.logger.info("K-means модель успішно збережено")
+            if self.kmeans_model:
+                joblib.dump(self.kmeans_model, kmeans_path)
 
-            # Зберігаємо словник ключових слів тем
             if self.topic_words:
-                joblib.dump(self.topic_words, os.path.join(self.topic_model_dir, 'topic_words.joblib'))
-                self.logger.info("Словник ключових слів тем успішно збережено")
+                with open(topics_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.topic_words, f, ensure_ascii=False, indent=2)
+
+            self.logger.info("Моделі тематичного моделювання збережено на диск")
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні моделей: {e}")
+
+    def discover_topics(self, news_data: List[Union[Dict[str, Any], NewsItem]], num_topics=10, force_retrain=False) -> \
+    List[Union[Dict[str, Any], NewsItem]]:
+        """Виявлення тем у наборі новин та призначення тем новинам."""
+        self.logger.info(f"Початок виявлення тем у {len(news_data)} новинах")
+
+        # Отримуємо тексти для аналізу
+        texts = [self._get_text_to_analyze(item) for item in news_data]
+
+        # Перевіряємо, чи потрібно створювати нові моделі
+        if force_retrain or not self.lda_model or not self.nmf_model or not self.topic_words:
+            self.logger.info("Створення нових моделей тематичного моделювання")
+
+            # Створюємо матрицю TF-IDF
+            if not self.vectorizer:
+                self.vectorizer = TfidfVectorizer(max_df=0.95, min_df=2, max_features=10000, stop_words='english')
+
+            try:
+                tfidf_matrix = self.vectorizer.fit_transform(texts)
+
+                # Створюємо LDA модель
+                self.lda_model = LatentDirichletAllocation(
+                    n_components=num_topics,
+                    max_iter=10,
+                    learning_method='online',
+                    random_state=42
+                )
+                self.lda_model.fit(tfidf_matrix)
+
+                # Створюємо NMF модель
+                self.nmf_model = NMF(
+                    n_components=num_topics,
+                    random_state=42,
+                    alpha=.1,
+                    l1_ratio=.5
+                )
+                self.nmf_model.fit(tfidf_matrix)
+
+                # Створюємо K-means модель
+                self.kmeans_model = KMeans(
+                    n_clusters=num_topics,
+                    random_state=42
+                )
+                self.kmeans_model.fit(tfidf_matrix)
+
+                # Отримуємо слова, що характеризують кожну тему
+                feature_names = self.vectorizer.get_feature_names_out()
+
+                # Теми LDA
+                lda_topics = {}
+                for topic_idx, topic in enumerate(self.lda_model.components_):
+                    top_words_idx = topic.argsort()[:-10 - 1:-1]
+                    top_words = [feature_names[i] for i in top_words_idx]
+                    lda_topics[f'topic_{topic_idx + 1}'] = top_words
+
+                # Теми NMF
+                nmf_topics = {}
+                for topic_idx, topic in enumerate(self.nmf_model.components_):
+                    top_words_idx = topic.argsort()[:-10 - 1:-1]
+                    top_words = [feature_names[i] for i in top_words_idx]
+                    nmf_topics[f'topic_{topic_idx + 1}'] = top_words
+
+                # Зберігаємо теми
+                self.topic_words = {
+                    'lda': lda_topics,
+                    'nmf': nmf_topics
+                }
+
+                # Зберігаємо моделі
+                self._save_topic_models()
+
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні моделей тематичного моделювання: {e}")
+                return news_data
+
+        # Призначаємо теми для кожної новини
+        try:
+            for idx, item in enumerate(news_data):
+                text = self._get_text_to_analyze(item)
+
+                # Перетворюємо текст у вектор TF-IDF
+                text_tfidf = self.vectorizer.transform([text])
+
+                # Отримуємо розподіл тем LDA
+                lda_distribution = self.lda_model.transform(text_tfidf)[0]
+                lda_top_topic = lda_distribution.argmax()
+
+                # Отримуємо розподіл тем NMF
+                nmf_distribution = self.nmf_model.transform(text_tfidf)[0]
+                nmf_top_topic = nmf_distribution.argmax()
+
+                # Отримуємо кластер K-means
+                kmeans_cluster = self.kmeans_model.predict(text_tfidf)[0]
+
+                # Формуємо результат
+                topic_data = {
+                    'lda': {
+                        'top_topic': int(lda_top_topic),
+                        'topic_words': self.topic_words['lda'][f'topic_{lda_top_topic + 1}'],
+                        'distribution': {f'topic_{i + 1}': float(score) for i, score in enumerate(lda_distribution)}
+                    },
+                    'nmf': {
+                        'top_topic': int(nmf_top_topic),
+                        'topic_words': self.topic_words['nmf'][f'topic_{nmf_top_topic + 1}'],
+                        'distribution': {f'topic_{i + 1}': float(score) for i, score in enumerate(nmf_distribution)}
+                    },
+                    'kmeans_cluster': int(kmeans_cluster)
+                }
+
+                # Додаємо результат до об'єкта новини
+                if isinstance(item, NewsItem):
+                    item.topics = topic_data
+                else:
+                    item['topics'] = topic_data
+
+                # Логування прогресу
+                if idx > 0 and idx % 50 == 0:
+                    self.logger.info(f"Призначено темам {idx}/{len(news_data)} новин")
 
         except Exception as e:
-            self.logger.error(f"Помилка при збереженні моделей тематичного моделювання: {e}")
+            self.logger.error(f"Помилка при призначенні тем новинам: {e}")
 
-    def _preprocess_text(self, text):
+        self.logger.info("Виявлення тем завершено")
+        return news_data
 
-        # Переводимо в нижній регістр
-        text = text.lower()
-
-        # Видаляємо спеціальні символи та числа
-        text = re.sub(r'[^\w\s]', ' ', text)
-        text = re.sub(r'\d+', ' ', text)
-
-        # Якщо NLTK встановлено, використовуємо додаткову обробку
-        if nltk_available:
+    def preprocess_text(self, text):
+        """Попередня обробка тексту для аналізу."""
+        # Перевірка доступності nltk
+        if not nltk_available:
+            # Базова обробка без nltk
+            text = text.lower()
+            text = re.sub(r'[^\w\s]', '', text)
+            words = text.split()
+            words = [word for word in words if word not in self.COMMON_WORDS]
+            return ' '.join(words)
+        else:
             try:
+                # Розширена обробка з nltk
+                text = text.lower()
+                # Видалення спеціальних символів
+                text = re.sub(r'[^\w\s]', '', text)
                 # Токенізація
                 tokens = word_tokenize(text)
-
                 # Видалення стоп-слів
-                stop_words = set(stopwords.words('english')) | set(self.COMMON_WORDS)
-                tokens = [word for word in tokens if word not in stop_words and len(word) > 2]
-
+                stop_words = set(stopwords.words('english'))
+                tokens = [word for word in tokens if word not in stop_words]
                 # Лематизація
                 lemmatizer = WordNetLemmatizer()
                 tokens = [lemmatizer.lemmatize(word) for word in tokens]
-
                 return ' '.join(tokens)
             except Exception as e:
-                self.logger.warning(f"Помилка при використанні NLTK для обробки тексту: {e}")
-                # Запасний варіант - проста фільтрація загальних слів
+                self.logger.warning(f"Помилка при обробці тексту з nltk: {e}. Використовуємо базову обробку.")
+                # Базова обробка у випадку помилки
+                text = text.lower()
+                text = re.sub(r'[^\w\s]', '', text)
                 words = text.split()
-                words = [word for word in words if word not in self.COMMON_WORDS and len(word) > 2]
+                words = [word for word in words if word not in self.COMMON_WORDS]
                 return ' '.join(words)
-        else:
-            # Проста фільтрація загальних слів
-            words = text.split()
-            words = [word for word in words if word not in self.COMMON_WORDS and len(word) > 2]
-            return ' '.join(words)
 
-    def train_topic_models(self, news_data: List[Union[Dict[str, Any], NewsItem]],
-                           n_topics: int = 10, method: str = 'lda'):
+    def save_analysis_results(self, news_data: List[Union[Dict[str, Any], NewsItem]]):
+        """Зберегти результати аналізу в базу даних."""
+        if not self.db_manager:
+            self.logger.warning("Відсутній менеджер бази даних. Результати не будуть збережені.")
+            return
 
-        self.logger.info(f"Початок навчання моделей тематичного моделювання на {len(news_data)} новинах")
+        self.logger.info(f"Збереження результатів аналізу для {len(news_data)} новин")
 
-        # Підготовка даних
-        texts = []
-        for item in news_data:
-            text = self._get_text_to_analyze(item)
-            processed_text = self._preprocess_text(text)
-            if processed_text.strip():  # Перевіряємо, чи не порожній текст
-                texts.append(processed_text)
-
-        if not texts:
-            self.logger.warning("Немає текстів для тематичного моделювання")
-            return {"status": "error", "message": "Немає даних для тренування"}
-
-        # Векторизація
-        self.logger.info("Векторизація текстів...")
-        self.vectorizer = TfidfVectorizer(max_features=5000, min_df=2, max_df=0.8)
-        X = self.vectorizer.fit_transform(texts)
-        feature_names = self.vectorizer.get_feature_names_out()
-
-        # Тренування моделей відповідно до обраного методу
-        if method in ['lda', 'all']:
-            self.logger.info(f"Тренування LDA моделі з {n_topics} темами...")
-            self.lda_model = LatentDirichletAllocation(
-                n_components=n_topics,
-                max_iter=50,
-                random_state=42,
-                learning_method='online'
-            )
-            self.lda_model.fit(X)
-
-            # Збереження ключових слів для тем LDA
-            lda_topic_words = {}
-            for topic_idx, topic in enumerate(self.lda_model.components_):
-                top_words_idx = topic.argsort()[:-11:-1]  # Топ-10 слів для кожної теми
-                top_words = [feature_names[i] for i in top_words_idx]
-                lda_topic_words[f"lda_topic_{topic_idx}"] = top_words
-
-            self.topic_words.update(lda_topic_words)
-
-        if method in ['nmf', 'all']:
-            self.logger.info(f"Тренування NMF моделі з {n_topics} темами...")
-            self.nmf_model = NMF(
-                n_components=n_topics,
-                random_state=42,
-                max_iter=300
-            )
-            self.nmf_model.fit(X)
-
-            # Збереження ключових слів для тем NMF
-            nmf_topic_words = {}
-            for topic_idx, topic in enumerate(self.nmf_model.components_):
-                top_words_idx = topic.argsort()[:-11:-1]  # Топ-10 слів для кожної теми
-                top_words = [feature_names[i] for i in top_words_idx]
-                nmf_topic_words[f"nmf_topic_{topic_idx}"] = top_words
-
-            self.topic_words.update(nmf_topic_words)
-
-        if method in ['kmeans', 'all']:
-            self.logger.info(f"Тренування K-means моделі з {n_topics} кластерами...")
-            self.kmeans_model = KMeans(
-                n_clusters=n_topics,
-                random_state=42,
-                n_init=10
-            )
-            self.kmeans_model.fit(X)
-
-            # Знаходження центрів кластерів та ключових слів
-            kmeans_topic_words = {}
-            order_centroids = self.kmeans_model.cluster_centers_.argsort()[:, ::-1]
-            for cluster_idx in range(n_topics):
-                top_words_idx = order_centroids[cluster_idx, :10]  # Топ-10 слів для кожного кластера
-                top_words = [feature_names[i] for i in top_words_idx]
-                kmeans_topic_words[f"kmeans_cluster_{cluster_idx}"] = top_words
-
-            self.topic_words.update(kmeans_topic_words)
-
-        # Зберігаємо моделі
-        self._save_topic_models()
-
-        # Повертаємо інформацію про тренування
-        return {
-            "status": "success",
-            "models_trained": [m for m in ['lda', 'nmf', 'kmeans'] if method in [m, 'all']],
-            "n_documents": len(texts),
-            "n_features": len(feature_names),
-            "topics": self.topic_words
-        }
-
-    def assign_topics(self, news_data: List[Union[Dict[str, Any], NewsItem]], method: str = 'lda') -> List[
-        Union[Dict[str, Any], NewsItem]]:
-
-        # Перевіряємо, що моделі натреновані
-        models_available = {
-            'lda': self.lda_model is not None,
-            'nmf': self.nmf_model is not None,
-            'kmeans': self.kmeans_model is not None
-        }
-
-        if not models_available[method]:
-            self.logger.warning(f"Модель {method} не натренована")
-            return news_data
-
-        if self.vectorizer is None:
-            self.logger.warning("Векторизатор не знайдено")
-            return news_data
-
-        self.logger.info(f"Призначення тем для {len(news_data)} новин за допомогою методу {method}")
+        # Словники для зведених даних
+        sentiment_time_series = {}
 
         for item in news_data:
             try:
-                # Підготовка тексту
-                text = self._get_text_to_analyze(item)
-                processed_text = self._preprocess_text(text)
-
-                # Векторизація
-                X = self.vectorizer.transform([processed_text])
-
-                # Визначення тем залежно від методу
-                if method == 'lda':
-                    topic_distribution = self.lda_model.transform(X)[0]
-                    top_topics = topic_distribution.argsort()[::-1]
-
-                    # Витягуємо ключові слова для топових тем
-                    topic_info = []
-                    for topic_idx in top_topics[:3]:  # Беремо топ-3 теми
-                        topic_prob = topic_distribution[topic_idx]
-                        if topic_prob > 0.05:  # Порогове значення для релевантності теми
-                            topic_key = f"lda_topic_{topic_idx}"
-                            topic_words = self.topic_words.get(topic_key, [])
-                            topic_info.append({
-                                'id': topic_idx,
-                                'probability': float(topic_prob),
-                                'keywords': topic_words
-                            })
-
-                elif method == 'nmf':
-                    topic_distribution = self.nmf_model.transform(X)[0]
-                    top_topics = topic_distribution.argsort()[::-1]
-
-                    topic_info = []
-                    for topic_idx in top_topics[:3]:
-                        topic_prob = topic_distribution[topic_idx]
-                        if topic_prob > 0.05:
-                            topic_key = f"nmf_topic_{topic_idx}"
-                            topic_words = self.topic_words.get(topic_key, [])
-                            topic_info.append({
-                                'id': topic_idx,
-                                'weight': float(topic_prob),
-                                'keywords': topic_words
-                            })
-
-                elif method == 'kmeans':
-                    cluster = self.kmeans_model.predict(X)[0]
-
-                    topic_info = [{
-                        'cluster': int(cluster),
-                        'keywords': self.topic_words.get(f"kmeans_cluster_{cluster}", [])
-                    }]
-
-                # Зберігаємо результати
+                # Отримуємо ідентифікатор новини
                 if isinstance(item, NewsItem):
-                    if not hasattr(item, 'topics') or item.topics is None:
-                        item.topics = {}
-                    item.topics[method] = topic_info
+                    news_id = item.url or f"news_{hash(item.title)}"
+                    title = item.title
+                    published_at = item.published_at
+                    sentiment_score = item.sentiment_score
+                    sentiment_label = item.sentiment_label
+                    importance_score = item.importance_score
+                    mentioned_cryptos = item.mentioned_cryptos
+                    categories = item.categories
+                    topics = item.topics
                 else:
-                    if 'topics' not in item:
-                        item['topics'] = {}
-                    item['topics'][method] = topic_info
+                    news_id = item.get('url', f"news_{hash(item.get('title', ''))}")
+                    title = item.get('title', '')
+                    published_at = item.get('published_at', datetime.now())
+                    sentiment_data = item.get('sentiment', {})
+                    sentiment_score = sentiment_data.get('score', 0.0)
+                    sentiment_label = sentiment_data.get('label', 'neutral')
+                    importance_score = item.get('importance_score', 0.3)
+                    mentioned_cryptos = item.get('mentioned_coins', {}).get('coins', {})
+                    categories = item.get('categories', {}).get('all', {})
+                    topics = item.get('topics', {})
+
+                # Формуємо дату для часового ряду
+                date_key = published_at.strftime('%Y-%m-%d') if isinstance(published_at,
+                                                                           datetime) else datetime.now().strftime(
+                    '%Y-%m-%d')
+
+                # Зберігаємо аналіз настроїв для статті
+                try:
+                    article = self.db_manager.get_article(news_id)
+                    if article:
+                        # Формуємо дані для збереження
+                        sentiment_data = {
+                            'sentiment_score': sentiment_score,
+                            'sentiment_label': sentiment_label,
+                            'importance_score': importance_score,
+                            'mentioned_cryptos': mentioned_cryptos,
+                            'categories': categories,
+                            'topics': topics,
+                            'analyzed_at': datetime.now().isoformat()
+                        }
+
+                        # Зберігаємо результати аналізу
+                        self.db_manager.save_sentiment_analysis(news_id, sentiment_data)
+
+                        # Додаємо дані до часового ряду
+                        if date_key not in sentiment_time_series:
+                            sentiment_time_series[date_key] = {
+                                'total': 0,
+                                'positive': 0,
+                                'negative': 0,
+                                'neutral': 0,
+                                'sentiment_sum': 0.0,
+                                'importance_sum': 0.0,
+                                'crypto_mentions': {}
+                            }
+
+                        # Оновлюємо дані часового ряду
+                        sentiment_time_series[date_key]['total'] += 1
+                        sentiment_time_series[date_key][sentiment_label] += 1
+                        sentiment_time_series[date_key]['sentiment_sum'] += sentiment_score
+                        sentiment_time_series[date_key]['importance_sum'] += importance_score
+
+                        # Додаємо згадки криптовалют
+                        for crypto, count in mentioned_cryptos.items():
+                            if crypto not in sentiment_time_series[date_key]['crypto_mentions']:
+                                sentiment_time_series[date_key]['crypto_mentions'][crypto] = 0
+                            sentiment_time_series[date_key]['crypto_mentions'][crypto] += count
+                    else:
+                        self.logger.warning(f"Статтю не знайдено в базі даних: {news_id}")
+                except Exception as db_error:
+                    self.logger.error(f"Помилка при збереженні аналізу настроїв: {db_error}")
 
             except Exception as e:
-                self.logger.error(f"Помилка при призначенні тем для новини: {e}")
-                # Встановлюємо пусті значення
-                if isinstance(item, NewsItem):
-                    if not hasattr(item, 'topics') or item.topics is None:
-                        item.topics = {}
-                    item.topics[method] = []
-                else:
-                    if 'topics' not in item:
-                        item['topics'] = {}
-                    item['topics'][method] = []
-                    item['topics'][f'{method}_error'] = str(e)
+                self.logger.error(f"Помилка при підготовці даних для збереження: {e}")
 
-        self.logger.info(f"Призначення тем завершено для методу {method}")
+        # Зберігаємо зведені дані часового ряду
+        try:
+            for date_key, data in sentiment_time_series.items():
+                # Розрахунок середніх значень
+                total = data['total']
+                if total > 0:
+                    data['avg_sentiment'] = data['sentiment_sum'] / total
+                    data['avg_importance'] = data['importance_sum'] / total
+                else:
+                    data['avg_sentiment'] = 0.0
+                    data['avg_importance'] = 0.0
+
+                # Видаляємо проміжні суми
+                del data['sentiment_sum']
+                del data['importance_sum']
+
+                # Зберігаємо дані часового ряду
+                self.db_manager.save_news_sentiment_time_series(date_key, data)
+        except Exception as ts_error:
+            self.logger.error(f"Помилка при збереженні часового ряду настроїв: {ts_error}")
+
+        self.logger.info("Збереження результатів аналізу завершено")
+
+    def analyze_news_batch(self, news_data: List[Union[Dict[str, Any], NewsItem]], save_results=True) -> List[
+        Union[Dict[str, Any], NewsItem]]:
+        """Виконати комплексний аналіз пакету новин."""
+        self.logger.info(f"Початок комплексного аналізу пакету з {len(news_data)} новин")
+
+        try:
+            # 1. Аналіз тональності
+            news_data = self.analyze_news_sentiment(news_data)
+
+            # 2. Витягнення згаданих криптовалют
+            news_data = self.extract_mentioned_coins(news_data)
+
+            # 3. Розрахунок оцінки важливості
+            news_data = self.calculate_importance_score(news_data)
+
+            # 4. Категоризація новин
+            news_data = self.categorize_news(news_data)
+
+            # 5. Виявлення тем (якщо достатньо новин)
+            if len(news_data) >= 10:
+                news_data = self.discover_topics(news_data)
+
+            # 6. Збереження результатів аналізу (за потреби)
+            if save_results and self.db_manager:
+                self.save_analysis_results(news_data)
+
+            self.logger.info("Комплексний аналіз пакету новин завершено успішно")
+        except Exception as e:
+            self.logger.error(f"Помилка при комплексному аналізі пакету новин: {e}")
+
         return news_data
 
-    def detect_trends(self, news_data: List[Union[Dict[str, Any], NewsItem]],
-                      window_days: int = 7, min_count: int = 3) -> Dict[str, Any]:
-
-        self.logger.info(f"Початок виявлення трендів у {len(news_data)} новинах за {window_days} днів")
-
-        # Визначаємо поточну дату та граничну дату для аналізу
-        current_date = datetime.now()
-        cutoff_date = current_date - timedelta(days=window_days)
-
-        # Фільтруємо новини за періодом
-        recent_news = []
-        for item in news_data:
-            try:
-                if isinstance(item, NewsItem):
-                    item_date = item.published_at if hasattr(item, 'published_at') else current_date
-                else:
-                    item_date = item.get('published_at', current_date)
-
-                # Конвертуємо дату з рядка, якщо потрібно
-                if isinstance(item_date, str):
-                    try:
-                        item_date = datetime.fromisoformat(item_date.replace('Z', '+00:00'))
-                    except (ValueError, TypeError):
-                        try:
-                            # Спроба альтернативного формату
-                            item_date = datetime.strptime(item_date, "%Y-%m-%d %H:%M:%S")
-                        except (ValueError, TypeError):
-                            # Встановлюємо поточну дату, якщо не вдалося розпарсити
-                            item_date = current_date
-
-                # Додаємо до списку, якщо дата у заданому вікні
-                if item_date >= cutoff_date:
-                    recent_news.append(item)
-            except Exception as e:
-                self.logger.error(f"Помилка при фільтрації новини за датою: {e}")
-
-        self.logger.info(f"Знайдено {len(recent_news)} новин за останні {window_days} днів")
-
-        # Підготовка даних для аналізу трендів
-
-        # Аналіз згаданих криптовалют
-        crypto_mentions = {}
-        for item in recent_news:
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'mentioned_cryptos'):
-                    for crypto, count in item.mentioned_cryptos.items():
-                        crypto_mentions[crypto] = crypto_mentions.get(crypto, 0) + count
-            else:
-                if 'mentioned_coins' in item and isinstance(item['mentioned_coins'], dict):
-                    coins = item['mentioned_coins'].get('coins', {})
-                    for crypto, count in coins.items():
-                        crypto_mentions[crypto] = crypto_mentions.get(crypto, 0) + count
-
-        # Аналіз згаданих категорій подій
-        category_mentions = {}
-        for item in recent_news:
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'categories'):
-                    for category in item.categories:
-                        category_mentions[category] = category_mentions.get(category, 0) + 1
-            else:
-                if 'categories' in item and isinstance(item['categories'], dict):
-                    categories = item['categories'].get('main', [])
-                    for category in categories:
-                        category_mentions[category] = category_mentions.get(category, 0) + 1
-
-        # Аналіз настроїв
-        sentiment_distribution = {'positive': 0, 'neutral': 0, 'negative': 0}
-        for item in recent_news:
-            if isinstance(item, NewsItem):
-                sentiment = item.sentiment_label if hasattr(item, 'sentiment_label') else 'neutral'
-            else:
-                if 'sentiment' in item and isinstance(item['sentiment'], dict):
-                    sentiment = item['sentiment'].get('label', 'neutral')
-                else:
-                    sentiment = 'neutral'
-
-            sentiment_distribution[sentiment] = sentiment_distribution.get(sentiment, 0) + 1
-
-        # Аналіз частоти слів (для виявлення нових трендових слів)
-        all_text = " ".join([self._get_text_to_analyze(item) for item in recent_news])
-        processed_text = self._preprocess_text(all_text)
-        word_frequencies = {}
-
-        for word in processed_text.split():
-            if len(word) > 3 and word.lower() not in self.COMMON_WORDS:
-                word_frequencies[word.lower()] = word_frequencies.get(word.lower(), 0) + 1
-
-        # Фільтруємо тренди за мінімальною кількістю згадок
-        trending_cryptos = {k: v for k, v in crypto_mentions.items() if v >= min_count}
-        trending_categories = {k: v for k, v in category_mentions.items() if v >= min_count}
-        trending_words = {k: v for k, v in word_frequencies.items() if v >= min_count * 2}  # Вищий поріг для слів
-
-        # Сортуємо тренди за спаданням популярності
-        sorted_cryptos = sorted(trending_cryptos.items(), key=lambda x: x[1], reverse=True)
-        sorted_categories = sorted(trending_categories.items(), key=lambda x: x[1], reverse=True)
-        sorted_words = sorted(trending_words.items(), key=lambda x: x[1], reverse=True)[:30]  # Обмежуємо до топ-30 слів
-
-        # Формуємо результат
-        trends_result = {
-            'period': {
-                'days': window_days,
-                'start_date': cutoff_date.isoformat(),
-                'end_date': current_date.isoformat()
-            },
-            'news_count': len(recent_news),
-            'trending_cryptos': [{'name': name, 'mentions': count} for name, count in sorted_cryptos],
-            'trending_categories': [{'name': name, 'mentions': count} for name, count in sorted_categories],
-            'trending_words': [{'word': word, 'frequency': freq} for word, freq in sorted_words],
-            'sentiment_distribution': sentiment_distribution
-        }
-
-        self.logger.info(
-            f"Виявлено {len(trending_cryptos)} трендових криптовалют та {len(trending_categories)} категорій")
-        return trends_result
-
-    def export_analysis_results(self, news_data: List[Union[Dict[str, Any], NewsItem]],
-                                output_format: str = 'json', filename: str = None) -> str:
-
-        self.logger.info(f"Експорт результатів аналізу для {len(news_data)} новин у форматі {output_format}")
-
-        # Генеруємо ім'я файлу, якщо не вказано
-        if filename is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"news_analysis_{timestamp}.{output_format}"
-
-        # Конвертуємо об'єкти NewsItem у словники, якщо потрібно
-        normalized_data = []
-        for item in news_data:
-            if isinstance(item, NewsItem):
-                # Перетворення NewsItem у словник
-                item_dict = item.__dict__.copy()
-                # Видаляємо службові атрибути
-                if '_sa_instance_state' in item_dict:
-                    del item_dict['_sa_instance_state']
-                normalized_data.append(item_dict)
-            else:
-                normalized_data.append(item)
-
-        # Експорт у відповідному форматі
-        try:
-            if output_format == 'json':
-                # Конвертуємо дати у рядки для JSON-серіалізації
-                for item in normalized_data:
-                    for key, value in item.items():
-                        if isinstance(value, datetime):
-                            item[key] = value.isoformat()
-
-                result = json.dumps(normalized_data, ensure_ascii=False, indent=2)
-                if filename:
-                    with open(filename, 'w', encoding='utf-8') as f:
-                        f.write(result)
-                    return filename
-                return result
-
-            elif output_format == 'csv':
-                # Створюємо плоский набір даних
-                flat_data = []
-                for item in normalized_data:
-                    flat_item = {}
-                    for key, value in item.items():
-                        if isinstance(value, dict):
-                            # Для вкладених словників
-                            for sub_key, sub_value in value.items():
-                                flat_item[f"{key}_{sub_key}"] = str(sub_value)
-                        elif isinstance(value, list):
-                            # Для списків
-                            flat_item[key] = ",".join(str(x) for x in value)
-                        else:
-                            flat_item[key] = value
-                    flat_data.append(flat_item)
-
-                # Визначаємо всі унікальні ключі
-                all_keys = set()
-                for item in flat_data:
-                    all_keys.update(item.keys())
-
-                # Створюємо CSV
-                if filename:
-                    with open(filename, 'w', newline='', encoding='utf-8') as f:
-                        writer = csv.DictWriter(f, fieldnames=sorted(all_keys))
-                        writer.writeheader()
-                        writer.writerows(flat_data)
-                    return filename
-                else:
-                    # Повертаємо CSV як рядок
-                    output = io.StringIO()
-                    writer = csv.DictWriter(output, fieldnames=sorted(all_keys))
-                    writer.writeheader()
-                    writer.writerows(flat_data)
-                    return output.getvalue()
-
-            else:
-                raise ValueError(f"Непідтримуваний формат експорту: {output_format}")
-
-        except Exception as e:
-            self.logger.error(f"Помилка при експорті результатів: {e}")
-            raise
-
-    def import_analysis_results(self, file_path: str) -> List[Dict[str, Any]]:
-
-        self.logger.info(f"Імпорт результатів аналізу з файлу: {file_path}")
-
-        # Визначаємо формат за розширенням файлу
-        _, extension = os.path.splitext(file_path)
-        extension = extension.lower()
+    def analyze_single_news(self, news_item: Union[Dict[str, Any], NewsItem], save_result=True) -> Union[
+        Dict[str, Any], NewsItem]:
+        """Виконати комплексний аналіз однієї новини."""
+        self.logger.info("Аналіз однієї новини")
 
         try:
-            if extension == '.json':
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+            # Створюємо список з одного елемента для використання існуючих методів
+            news_data = [news_item]
 
-                # Конвертуємо рядки дат назад у об'єкти datetime
-                for item in data:
-                    for key, value in item.items():
-                        if isinstance(value, str) and re.match(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', value):
-                            try:
-                                item[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
-                            except ValueError:
-                                # Залишаємо як є, якщо не вдалося розпарсити
-                                pass
+            # Аналіз тональності
+            news_data = self.analyze_news_sentiment(news_data)
 
-                return data
+            # Витягнення згаданих криптовалют
+            news_data = self.extract_mentioned_coins(news_data)
 
-            elif extension == '.csv':
-                # Зчитуємо CSV
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    data = list(reader)
+            # Розрахунок оцінки важливості
+            news_data = self.calculate_importance_score(news_data)
 
-                # Перетворення вкладених структур, які були розділені
-                result = []
-                for item in data:
-                    # Групування за префіксом
-                    nested_data = {}
-                    flat_data = {}
+            # Категоризація новини
+            news_data = self.categorize_news(news_data)
 
-                    for key, value in item.items():
-                        if '_' in key:
-                            prefix, suffix = key.split('_', 1)
-                            if prefix not in nested_data:
-                                nested_data[prefix] = {}
-                            nested_data[prefix][suffix] = value
-                        else:
-                            flat_data[key] = value
+            # Для одинарної новини не можемо виявити теми, але можемо спробувати
+            # використати існуючу модель тематичного моделювання, якщо вона є
+            if self.lda_model and self.nmf_model:
+                news_data = self.discover_topics(news_data, force_retrain=False)
 
-                    # Об'єднання даних
-                    for prefix, nested in nested_data.items():
-                        flat_data[prefix] = nested
+            # Збереження результату аналізу (за потреби)
+            if save_result and self.db_manager:
+                self.save_analysis_results(news_data)
 
-                    result.append(flat_data)
-
-                return result
-
-            elif extension in ['.xlsx', '.xls']:
-                try:
-                    import pandas as pd
-
-                    # Зчитуємо Excel
-                    df = pd.read_excel(file_path)
-                    data = df.to_dict('records')
-
-                    # Обробка рядкових значень для вкладених структур
-                    for item in data:
-                        for key, value in item.items():
-                            if isinstance(value, str) and (value.startswith('{') or value.startswith('[')):
-                                try:
-                                    item[key] = json.loads(value)
-                                except json.JSONDecodeError:
-                                    # Залишаємо як є, якщо не вдалося розпарсити
-                                    pass
-
-                    return data
-                except ImportError:
-                    self.logger.error("Для імпорту з Excel потрібен pandas")
-                    raise ImportError("Для імпорту з Excel потрібен pandas")
-            else:
-                raise ValueError(f"Непідтримуваний формат файлу: {extension}")
-
+            self.logger.info("Аналіз новини завершено успішно")
+            return news_data[0]
         except Exception as e:
-            self.logger.error(f"Помилка при імпорті результатів: {e}")
-            raise
-
-    def generate_summary_report(self, news_data: List[Union[Dict[str, Any], NewsItem]]) -> Dict[str, Any]:
-
-        self.logger.info(f"Генерація підсумкового звіту для {len(news_data)} новин")
-
-        # Загальна статистика
-        total_news = len(news_data)
-        if total_news == 0:
-            return {"error": "Немає даних для аналізу"}
-
-        # Часові рамки
-        dates = []
-        for item in news_data:
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'published_at'):
-                    dates.append(item.published_at)
-            else:
-                if 'published_at' in item:
-                    date_value = item['published_at']
-                    if isinstance(date_value, str):
-                        try:
-                            dates.append(datetime.fromisoformat(date_value.replace('Z', '+00:00')))
-                        except ValueError:
-                            pass
-                    elif isinstance(date_value, datetime):
-                        dates.append(date_value)
-
-        # Визначаємо діапазон дат
-        date_range = {}
-        if dates:
-            min_date = min(dates)
-            max_date = max(dates)
-            date_range = {
-                'start': min_date.isoformat(),
-                'end': max_date.isoformat(),
-                'days': (max_date - min_date).days + 1
-            }
-
-        # Аналіз настроїв
-        sentiment_distribution = {'positive': 0, 'neutral': 0, 'negative': 0}
-        sentiment_scores = []
-
-        for item in news_data:
-            sentiment_label = 'neutral'
-            sentiment_score = 0.0
-
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'sentiment_label'):
-                    sentiment_label = item.sentiment_label
-                if hasattr(item, 'sentiment_score'):
-                    sentiment_score = item.sentiment_score
-            else:
-                if 'sentiment' in item and isinstance(item['sentiment'], dict):
-                    sentiment_label = item['sentiment'].get('label', 'neutral')
-                    sentiment_score = item['sentiment'].get('score', 0.0)
-
-            sentiment_distribution[sentiment_label] = sentiment_distribution.get(sentiment_label, 0) + 1
-            sentiment_scores.append(sentiment_score)
-
-        # Розрахунок середнього настрою
-        avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0
-
-        # Топ криптовалюти
-        coin_mentions = {}
-
-        for item in news_data:
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'mentioned_cryptos'):
-                    for crypto, count in item.mentioned_cryptos.items():
-                        coin_mentions[crypto] = coin_mentions.get(crypto, 0) + count
-            else:
-                if 'mentioned_coins' in item and isinstance(item['mentioned_coins'], dict):
-                    coins = item['mentioned_coins'].get('coins', {})
-                    for crypto, count in coins.items():
-                        coin_mentions[crypto] = coin_mentions.get(crypto, 0) + count
-
-        # Топ-10 криптовалют
-        top_coins = sorted(coin_mentions.items(), key=lambda x: x[1], reverse=True)[:10]
-
-        # Популярні категорії
-        category_counts = {}
-
-        for item in news_data:
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'categories'):
-                    for category in item.categories:
-                        category_counts[category] = category_counts.get(category, 0) + 1
-            else:
-                if 'categories' in item and isinstance(item['categories'], dict):
-                    categories = item['categories'].get('main', [])
-                    for category in categories:
-                        category_counts[category] = category_counts.get(category, 0) + 1
-
-        # Топ-5 категорій
-        top_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-
-        # Найважливіші новини
-        important_news = []
-
-        for item in news_data:
-            importance_score = 0.0
-
-            if isinstance(item, NewsItem):
-                if hasattr(item, 'importance_score'):
-                    importance_score = item.importance_score
-
-                if importance_score >= 0.7:  # Високий поріг важливості
-                    important_news.append({
-                        'title': item.title if hasattr(item, 'title') else "Без назви",
-                        'importance_score': importance_score,
-                        'categories': item.categories if hasattr(item, 'categories') else [],
-                        'published_at': item.published_at.isoformat() if hasattr(item, 'published_at') else None
-                    })
-            else:
-                if 'importance_score' in item:
-                    importance_score = item['importance_score']
-
-                if importance_score >= 0.7:
-                    important_news.append({
-                        'title': item.get('title', "Без назви"),
-                        'importance_score': importance_score,
-                        'categories': item.get('categories', {}).get('main', []) if isinstance(item.get('categories'),
-                                                                                               dict) else [],
-                        'published_at': item.get('published_at')
-                    })
-
-        # Обмежуємо список найважливіших новин
-        important_news = sorted(important_news, key=lambda x: x['importance_score'], reverse=True)[:10]
-
-        # Формуємо підсумковий звіт
-        report = {
-            'summary': {
-                'total_news': total_news,
-                'date_range': date_range,
-                'overall_sentiment': {
-                    'average_score': avg_sentiment,
-                    'distribution': sentiment_distribution
-                }
-            },
-            'top_cryptocurrencies': [{'name': name, 'mentions': count} for name, count in top_coins],
-            'top_categories': [{'name': name, 'count': count} for name, count in top_categories],
-            'important_news': important_news,
-            'generated_at': datetime.now().isoformat()
-        }
-
-        self.logger.info("Підсумковий звіт успішно згенеровано")
-        return report
+            self.logger.error(f"Помилка при аналізі новини: {e}")
+            return news_item
 
