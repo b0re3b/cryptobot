@@ -379,7 +379,7 @@ def main():
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Запуск скрапера криптовалютних новин")
 
     # Встановлення з'єднання з базою даних
-    db_connection = DatabaseManager(db_path=args.db_path)
+    db_connection = DatabaseManager()
     print(f"З'єднання з базою даних встановлено: {args.db_path}")
 
     # Базовий набір user-agents для ротації
