@@ -276,21 +276,30 @@ CREATE TABLE IF NOT EXISTS news_articles (
     category_id INTEGER REFERENCES news_categories(category_id),
     published_at TIMESTAMP WITH TIME ZONE,
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    score INTEGER,                -- Додано для Reddit та інших соціальних джерел
+    upvote_ratio NUMERIC(3,2),    -- Додано для Reddit
+    num_comments INTEGER,         -- Додано для Reddit
     UNIQUE(link)
 );
 
--- Індекси для новинних статей
-CREATE INDEX IF NOT EXISTS idx_articles_published_at ON news_articles(published_at);
-CREATE INDEX IF NOT EXISTS idx_articles_source_id ON news_articles(source_id);
+-- Додатковий індекс для пошуку за часом публікації та джерелом
+CREATE INDEX IF NOT EXISTS idx_articles_pub_source ON news_articles(published_at, source_id);
+
 
 -- Таблиця для аналізу настроїв новин
+-- Розширена таблиця для аналізу настроїв новин
 CREATE TABLE IF NOT EXISTS news_sentiment_analysis (
     sentiment_id SERIAL PRIMARY KEY,
     article_id INTEGER REFERENCES news_articles(article_id),
     sentiment_score NUMERIC(5,2),  -- Від -1.0 до 1.0
+    positive_score NUMERIC(5,2),   -- Додано деталізацію компонентів
+    negative_score NUMERIC(5,2),   -- Додано деталізацію компонентів
+    neutral_score NUMERIC(5,2),    -- Додано деталізацію компонентів
     sentiment_magnitude NUMERIC(5,2),
     sentiment_label VARCHAR(20),  -- 'positive', 'negative', 'neutral'
+    confidence NUMERIC(5,2),      -- Додано впевненість аналізу
     processed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    model_version VARCHAR(50),    -- Додано версію моделі аналізу
     UNIQUE(article_id)
 );
 
@@ -307,75 +316,47 @@ CREATE TABLE IF NOT EXISTS article_mentioned_coins (
 -- Індекс для швидкого пошуку згадок криптовалют
 CREATE INDEX IF NOT EXISTS idx_article_mentioned_coins ON article_mentioned_coins(symbol);
 
--- Таблиця для популярних тем у новинах
-CREATE TABLE IF NOT EXISTS trending_news_topics (
-
+-- Об'єднана таблиця для тем новин
+CREATE TABLE IF NOT EXISTS news_topics (
     topic_id SERIAL PRIMARY KEY,
     topic_name VARCHAR(255) NOT NULL,
-    start_date TIMESTAMP WITH TIME ZONE,
-    end_date TIMESTAMP WITH TIME ZONE,
+    is_trending BOOLEAN DEFAULT FALSE,
     importance_score NUMERIC(5,2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    first_observed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_observed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Таблиця для зв'язку статей з темами (багато-до-багатьох)
+-- Оптимізована таблиця зв'язку статей з темами
 CREATE TABLE IF NOT EXISTS article_topics (
-
     article_topic_id SERIAL PRIMARY KEY,
     article_id INTEGER REFERENCES news_articles(article_id),
-    topic_id INTEGER REFERENCES trending_news_topics(topic_id),
+    topic_id INTEGER REFERENCES news_topics(topic_id),
+    weight NUMERIC(5,4) NOT NULL,  -- Додано вагу теми в статті
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(article_id, topic_id)
 );
 
--- Таблиця для кореляцій між новинами та ринковими даними
-CREATE TABLE IF NOT EXISTS news_market_correlations (
-    correlation_id SERIAL PRIMARY KEY,
-    topic_id INTEGER REFERENCES trending_news_topics(topic_id),
-    symbol TEXT NOT NULL,  -- Використовуємо існуючу символіку криптовалют
-    timeframe VARCHAR(50),  -- '1h', '4h', '1d'
-    correlation_coefficient NUMERIC(5,4),  -- Від -1 до 1
-    p_value NUMERIC(10,9),
-    start_date TIMESTAMP WITH TIME ZONE,
-    end_date TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- Індекс для швидкого пошуку тем
+CREATE INDEX IF NOT EXISTS idx_article_topics_topic ON article_topics(topic_id);
+CREATE INDEX IF NOT EXISTS idx_article_topics_article ON article_topics(article_id);
 
--- Таблиця для відстеження важливих подій, виявлених із новин
-CREATE TABLE IF NOT EXISTS news_detected_events (
-    event_id SERIAL PRIMARY KEY,
-    event_title TEXT NOT NULL,
-    event_description TEXT,
-    symbols TEXT[],  -- Масив пов'язаних криптовалют
-    source_articles INTEGER[],  -- Масив ID статей-джерел події
-    confidence_score NUMERIC(3,1),  -- 0-10 шкала
-    detected_at TIMESTAMP WITH TIME ZONE,
-    expected_impact TEXT,  -- 'positive', 'negative', 'neutral'
-    event_category TEXT,  -- 'regulatory', 'technical', 'adoption', тощо
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Індекс для пошуку подій за криптовалютами
-CREATE INDEX IF NOT EXISTS idx_news_detected_events_symbols ON news_detected_events USING GIN(symbols);
-
--- Таблиця для часових рядів настроїв у новинах
-CREATE TABLE IF NOT EXISTS news_sentiment_time_series (
+-- Спрощена таблиця для часових рядів настроїв
+CREATE TABLE IF NOT EXISTS sentiment_time_series (
     id SERIAL PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    time_bucket TIMESTAMP WITH TIME ZONE NOT NULL,
-    timeframe TEXT NOT NULL,  -- 'hour', 'day', 'week'
-    positive_count INTEGER NOT NULL,
-    negative_count INTEGER NOT NULL,
-    neutral_count INTEGER NOT NULL,
-    average_sentiment NUMERIC NOT NULL,
-    news_volume INTEGER NOT NULL,
+    entity_id INTEGER REFERENCES crypto_entities(entity_id), -- Замість просто символу
+    period_start TIMESTAMP WITH TIME ZONE NOT NULL,
+    period_end TIMESTAMP WITH TIME ZONE NOT NULL,
+    timeframe VARCHAR(20) NOT NULL,  -- 'hour', 'day', 'week'
+    sentiment_avg NUMERIC(5,2) NOT NULL,
+    news_count INTEGER NOT NULL,
+    mentions_count INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE (symbol, time_bucket, timeframe)
+    UNIQUE (entity_id, period_start, timeframe)
 );
 
--- Індекс для швидкого пошуку часових рядів настроїв за криптовалютою та часом
-CREATE INDEX IF NOT EXISTS idx_news_sentiment_time_series ON news_sentiment_time_series(symbol, time_bucket);
+-- Індекс для часових запитів
+CREATE INDEX IF NOT EXISTS idx_sentiment_time_period ON sentiment_time_series(entity_id, period_start);
+
 
 -- Таблиця для логування роботи CryptoNewsScraper
 CREATE TABLE IF NOT EXISTS news_scraping_log (

@@ -1,26 +1,14 @@
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
 from datetime import datetime, timedelta
 import logging
 import re
 import time
 import praw
-import concurrent.futures
-from typing import List, Dict, Optional, Union, Tuple, Any, Callable
+from typing import List, Dict, Optional, Any, Callable
 from random import randint
 from dataclasses import dataclass
 from data.db import DatabaseManager
-import numpy as np
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from sklearn.decomposition import LatentDirichletAllocation, NMF
-from sklearn.cluster import KMeans
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-import joblib
-import os
 
 
 @dataclass
@@ -149,24 +137,6 @@ class NewsCollector:
         self.kmeans_model = None
         self.topic_words = {}
 
-        # Load topic models if they exist
-        self._load_topic_models()
-
-        # Download NLTK resources if needed
-        try:
-            nltk.data.find('tokenizers/punkt')
-        except LookupError:
-            nltk.download('punkt')
-
-        try:
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            nltk.download('stopwords')
-
-        try:
-            nltk.data.find('corpora/wordnet')
-        except LookupError:
-            nltk.download('wordnet')
 
     def _make_request(self, url: str, retries: int = 3, backoff_factor: float = 0.3) -> Optional[requests.Response]:
 
