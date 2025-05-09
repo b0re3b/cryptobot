@@ -466,3 +466,25 @@ def adaptive_ensemble_learning(symbols, timeframes, data_sources=None, meta_lear
     - analysis/market_correlation.py - для аналізу кореляцій між активами
     """
     pass
+def build_sentiment_features(news, crypto='bitcoin', freq='1H'):
+    rows = []
+
+    for item in news:
+        dt = item['published_at']
+        if isinstance(dt, str):
+            dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+
+        sentiment = item.get('sentiment_score') or item.get('sentiment', {}).get('score', 0.0)
+        importance = item.get('importance_score') or item.get('importance', {}).get('score', 0.5)
+        mentions = item.get('mentioned_cryptos', {}).get(crypto, 0) or \
+                   item.get('mentioned_coins', {}).get('coins', {}).get(crypto, 0)
+
+        rows.append({'time': dt, 'sentiment': sentiment, 'importance': importance, 'mentions': mentions})
+
+    df = pd.DataFrame(rows)
+    df.set_index('time', inplace=True)
+    return df.resample(freq).mean().fillna(0)  # усереднення ознак
+
+# Потім об’єднуємо ці фічі з ціною BTC
+# features_df = build_sentiment_features(news, 'bitcoin')
+# full_df = pd.merge(price_df, features_df, left_index=True, right_index=True)

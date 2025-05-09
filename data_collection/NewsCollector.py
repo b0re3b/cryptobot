@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Any, Callable
 from random import randint
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
-
+from models import NewsAnalyzer
 
 @dataclass
 class NewsItem:
@@ -68,7 +68,7 @@ class NewsCollector:
         self.max_pages = max_pages
         self.max_workers = max_workers
         self.topic_model_dir = topic_model_dir
-
+        self.NewsAnalyzer = NewsAnalyzer()
         # Configure logger
         if logger:
             self.logger = logger
@@ -255,13 +255,13 @@ class NewsCollector:
         sentiment_score = None
         if self.sentiment_analyzer:
             text_to_analyze = f"{title} {summary}"
-            sentiment_score = self.analyze_sentiment(text_to_analyze)
+            sentiment_score = self.NewsAnalyzer.analyze_sentiment(text_to_analyze)
 
         # Get topics if topic models are available
         topics = None
         if self.vectorizer and (self.lda_model or self.nmf_model):
             try:
-                topics = self.extract_topics(f"{title} {summary}")
+                topics = self.NewsAnalyzer.extract_topics(f"{title} {summary}")
             except Exception as e:
                 self.logger.error(f"Error extracting topics: {e}")
 
