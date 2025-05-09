@@ -1,398 +1,466 @@
-import logging
-from typing import List, Dict, Optional, Union
-from datetime import datetime, timedelta
 import argparse
-import sys
-import json
-from data_collection.NewsCollector import NewsCollector, NewsItem as CollectorNewsItem
-from models.NewsAnalyzer import BERTNewsAnalyzer, NewsItem as AnalyzerNewsItem
+import os
+from datetime import datetime
+import numpy as np
+
+from data.db import DatabaseManager
+from data_collection import NewsCollector
+from models import BERTNewsAnalyzer
+from data.NewsManager import NewsStorage
 
 
 class CryptoNewsScraper:
-    """Main class for crypto news scraping and analysis pipeline."""
+    """
+    Комплексний клас для збору, аналізу та зберігання новин про криптовалюти.
+    Об'єднує функціональність NewsCollector, BERTNewsAnalyzer та NewsStorage.
+    """
 
-    def __init__(self,
-                 news_sources: List[str] = None,
-                 bert_model_name: str = 'bert-base-uncased',
-                 sentiment_model_name: str = 'nlptown/bert-base-multilingual-uncased-sentiment',
-                 db_manager=None,
-                 logger: Optional[logging.Logger] = None,
-                 max_pages: int = 5,
-                 max_workers: int = 5,
-                 topic_model_dir: str = './models'):
+    def __init__(self, db_connection=None, bert_model_path=None, topic_models_path=None,
+                 use_proxies=False, user_agents=None, feedly_api_key=None):
         """
-        Initialize the crypto news scraper with integrated collection and analysis.
+        Ініціалізація скрапера новин про криптовалюти.
 
         Args:
-            news_sources: List of news sources to scrape
-            bert_model_name: Name of BERT model for analysis
-            sentiment_model_name: Name of sentiment analysis model
-            db_manager: Database manager instance
-            logger: Custom logger instance
-            max_pages: Maximum pages to scrape per source
-            max_workers: Maximum concurrent workers
-            topic_model_dir: Directory for topic model storage
+            db_connection: З'єднання з базою даних для зберігання
+            bert_model_path: Шлях до попередньо навченої BERT моделі
+            topic_models_path: Шлях до попередньо навчених моделей для виділення тем
+            use_proxies: Чи використовувати проксі для запитів
+            user_agents: Список агентів користувача для ротації
+            feedly_api_key: API ключ для доступу до Feedly
         """
-        # Configure logger
-        self.logger = logger or logging.getLogger('CryptoNewsScraper')
-        if not logger:
-            self.logger.setLevel(logging.INFO)
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-
-        self.db_manager = db_manager
-        self.topic_model_dir = topic_model_dir
-
-        # Initialize components
-        self.logger.info("Initializing News Collector...")
+        # Ініціалізація колектора новин
         self.collector = NewsCollector(
-            news_sources=news_sources,
-            logger=self.logger,
-            db_manager=db_manager,
-            max_pages=max_pages,
-            max_workers=max_workers,
-            topic_model_dir=topic_model_dir
+            use_proxies=use_proxies,
+            user_agents=user_agents,
+            feedly_api_key=feedly_api_key
         )
 
-        self.logger.info("Initializing News Analyzer...")
+        # Ініціалізація бази даних
+        self.db_manager = DatabaseManager() if db_connection is None else db_connection
+
+        # Ініціалізація аналізатора новин
         self.analyzer = BERTNewsAnalyzer(
-            bert_model_name=bert_model_name,
-            sentiment_model_name=sentiment_model_name,
-            db_manager=db_manager,
-            logger=self.logger,
-            topic_model_dir=topic_model_dir
+            bert_model_path=bert_model_path,
+            topic_models_path=topic_models_path
         )
 
-        # Link components
-        self.collector.sentiment_analyzer = self.analyzer
+        # Ініціалізація сховища новин
+        self.storage = NewsStorage(db_connection=self.db_manager)
 
-    def scrape_and_analyze(self,
-                           days_back: int = 1,
-                           categories: List[str] = None,
-                           save_results: bool = True) -> List[Dict]:
+        # Налаштування та кешування даних
+        self._cached_news = []
+        self._cached_analysis = {}
+
+    def collect_news(self, sources=None, days_back=1, limit_per_source=50):
         """
-        Full pipeline: scrape news from all sources and analyze them.
+        Збирає новини з усіх або вказаних джерел.
 
         Args:
-            days_back: Number of days to look back for news
-            categories: List of categories to filter by
-            save_results: Whether to save results to database
+            sources: Список джерел для скрапінгу (якщо None, використовуються всі)
+            days_back: За скільки днів назад збирати новини
+            limit_per_source: Максимальна кількість новин з кожного джерела
 
         Returns:
-            List of processed news items with analysis
+            Список зібраних новин
         """
-        self.logger.info(f"Starting full scraping and analysis pipeline for last {days_back} days")
+        if sources is None:
+            # Збір новин з усіх доступних джерел
+            news = self.collector.scrape_all_sources(days_back=days_back, limit_per_source=limit_per_source)
+        else:
+            news = []
+            # Збір новин з конкретних джерел
+            for source in sources:
+                if source == "coindesk":
+                    news.extend(self.collector.scrape_coindesk(days_back=days_back, limit=limit_per_source))
+                elif source == "cointelegraph":
+                    news.extend(self.collector.scrape_cointelegraph(days_back=days_back, limit=limit_per_source))
+                elif source == "decrypt":
+                    news.extend(self.collector.scrape_decrypt(days_back=days_back, limit=limit_per_source))
+                elif source == "cryptoslate":
+                    news.extend(self.collector.scrape_cryptoslate(days_back=days_back, limit=limit_per_source))
+                elif source == "theblock":
+                    news.extend(self.collector.scrape_theblock(days_back=days_back, limit=limit_per_source))
+                elif source == "cryptobriefing":
+                    news.extend(self.collector.scrape_cryptobriefing(days_back=days_back, limit=limit_per_source))
+                elif source == "cryptopanic":
+                    news.extend(self.collector.scrape_cryptopanic(days_back=days_back, limit=limit_per_source))
+                elif source == "coinmarketcal":
+                    news.extend(self.collector.scrape_coinmarketcal(days_back=days_back, limit=limit_per_source))
+                elif source == "feedly":
+                    news.extend(self.collector.scrape_feedly(days_back=days_back, limit=limit_per_source))
+                elif source == "newsnow":
+                    news.extend(self.collector.scrape_newsnow(days_back=days_back, limit=limit_per_source))
 
-        try:
-            # Step 1: Collect news
-            self.logger.info("Collecting news from all sources...")
-            news_items = self.collector.scrape_all_sources(days_back=days_back, categories=categories)
+        self._cached_news = news
+        return news
 
-            # Convert to analyzer format if needed
-            analyzer_items = []
-            for item in news_items:
-                if isinstance(item, CollectorNewsItem):
-                    # Convert collector NewsItem to analyzer NewsItem
-                    analyzer_item = AnalyzerNewsItem(
-                        title=item.title,
-                        url=item.link,
-                        source=item.source,
-                        published_at=item.published_at,
-                        content=item.summary,
-                        sentiment_score=item.sentiment_score,
-                        categories=[item.category] if item.category else []
-                    )
-                    analyzer_items.append(analyzer_item)
-                else:
-                    # Assume it's already in dict format compatible with analyzer
-                    analyzer_items.append(item)
-
-            # Step 2: Analyze news
-            self.logger.info(f"Analyzing {len(analyzer_items)} news items...")
-            analyzed_news = self.analyzer.analyze_news_batch(analyzer_items, save_results=save_results)
-
-            self.logger.info("Scraping and analysis completed successfully")
-            return analyzed_news
-
-        except Exception as e:
-            self.logger.error(f"Error in scraping and analysis pipeline: {e}")
-            raise
-
-    def scrape_single_source(self,
-                             source: str,
-                             days_back: int = 1,
-                             categories: List[str] = None,
-                             analyze: bool = True,
-                             save_results: bool = True) -> List[Dict]:
+    def analyze_news(self, news=None, keywords=None, coins=None, batch_size=16):
         """
-        Scrape news from a single source and optionally analyze them.
+        Аналізує зібрані новини, застосовуючи різні методи аналізу.
 
         Args:
-            source: News source to scrape
-            days_back: Number of days to look back for news
-            categories: List of categories to filter by
-            analyze: Whether to perform analysis
-            save_results: Whether to save results to database
+            news: Список новин для аналізу (якщо None, використовується кеш)
+            keywords: Ключові слова для фільтрації
+            coins: Конкретні криптовалюти для фільтрації
+            batch_size: Розмір партії для пакетної обробки
 
         Returns:
-            List of processed news items
+            Результати аналізу новин
         """
-        self.logger.info(f"Scraping from single source: {source}")
+        if news is None:
+            news = self._cached_news
+            if not news:
+                raise ValueError("Спочатку потрібно зібрати новини за допомогою методу collect_news()")
 
-        try:
-            # Scrape from specific source
-            news_items = self.collector._scrape_source(source, days_back, categories)
+        # Фільтрація за ключовими словами, якщо вказано
+        if keywords:
+            news = self.analyzer.filter_by_keywords(news, keywords)
 
-            if not analyze:
-                return [item.to_dict() if isinstance(item, CollectorNewsItem) else item for item in news_items]
+        # Виконання пакетного аналізу всіх новин
+        analysis_results = self.analyzer.analyze_news_batch(news, batch_size=batch_size)
 
-            # Convert to analyzer format if needed
-            analyzer_items = []
-            for item in news_items:
-                if isinstance(item, CollectorNewsItem):
-                    analyzer_item = AnalyzerNewsItem(
-                        title=item.title,
-                        url=item.link,
-                        source=item.source,
-                        published_at=item.published_at,
-                        content=item.summary,
-                        sentiment_score=item.sentiment_score,
-                        categories=[item.category] if item.category else []
-                    )
-                    analyzer_items.append(analyzer_item)
-                else:
-                    analyzer_items.append(item)
+        # Якщо вказані конкретні монети, відфільтруємо результати
+        if coins:
+            filtered_results = []
+            for result in analysis_results:
+                mentioned_coins = result.get('mentioned_coins', [])
+                if any(coin in mentioned_coins for coin in coins):
+                    filtered_results.append(result)
+            analysis_results = filtered_results
 
-            # Analyze news
-            analyzed_news = self.analyzer.analyze_news_batch(analyzer_items, save_results=save_results)
-            return analyzed_news
+        # Збереження результатів аналізу в кеш
+        self._cached_analysis = {
+            'individual_results': analysis_results,
+            'trending_topics': self.analyzer.get_trending_topics(analysis_results),
+            'sentiment_trends': self.analyzer.analyze_sentiment_trends(analysis_results),
+            'market_signals': self.analyzer.identify_market_signals(analysis_results)
+        }
 
-        except Exception as e:
-            self.logger.error(f"Error scraping from {source}: {e}")
-            raise
+        return self._cached_analysis
 
-    def analyze_existing_news(self,
-                              news_data: List[Union[Dict, CollectorNewsItem]],
-                              save_results: bool = True) -> List[Dict]:
+    def store_data(self, news=None, analysis_results=None):
         """
-        Analyze existing news items without scraping.
+        Зберігає зібрані новини та результати аналізу в базу даних.
 
         Args:
-            news_data: List of news items to analyze
-            save_results: Whether to save results to database
+            news: Список новин для збереження (якщо None, використовується кеш)
+            analysis_results: Результати аналізу для збереження (якщо None, використовується кеш)
 
         Returns:
-            List of analyzed news items
+            Кількість збережених записів
         """
-        self.logger.info(f"Analyzing {len(news_data)} existing news items")
+        if news is None:
+            news = self._cached_news
 
-        try:
-            # Convert to analyzer format if needed
-            analyzer_items = []
-            for item in news_data:
-                if isinstance(item, CollectorNewsItem):
-                    analyzer_item = AnalyzerNewsItem(
-                        title=item.title,
-                        url=item.link,
-                        source=item.source,
-                        published_at=item.published_at,
-                        content=item.summary,
-                        sentiment_score=item.sentiment_score,
-                        categories=[item.category] if item.category else []
-                    )
-                    analyzer_items.append(analyzer_item)
-                else:
-                    analyzer_items.append(item)
+        if analysis_results is None:
+            analysis_results = self._cached_analysis.get('individual_results', [])
 
-            # Analyze news
-            analyzed_news = self.analyzer.analyze_news_batch(analyzer_items, save_results=save_results)
-            return analyzed_news
+        # Комбінуємо новини та результати аналізу
+        news_with_analysis = []
+        for i, news_item in enumerate(news):
+            if i < len(analysis_results):
+                # Об'єднуємо оригінальні дані новини з результатами аналізу
+                news_item.update(analysis_results[i])
+            news_with_analysis.append(news_item)
 
-        except Exception as e:
-            self.logger.error(f"Error analyzing existing news: {e}")
-            raise
+        # Зберігаємо новини пакетом
+        stored_count = self.storage.store_news_batch(news_with_analysis)
 
-    def get_sentiment_timeseries(self,
-                                 days_back: int = 7,
-                                 source: Optional[str] = None) -> Dict:
+        # Зберігаємо додаткові дані аналізу
+        if self._cached_analysis:
+            self.storage.store_news_collector_data({
+                'trending_topics': self._cached_analysis.get('trending_topics', []),
+                'sentiment_trends': self._cached_analysis.get('sentiment_trends', {}),
+                'market_signals': self._cached_analysis.get('market_signals', {})
+            })
+
+        return stored_count
+
+    def get_news_summary(self, news=None, max_items=5):
         """
-        Get sentiment time series data from database.
+        Отримує короткі підсумки найважливіших новин.
 
         Args:
-            days_back: Number of days to look back
-            source: Optional source to filter by
+            news: Список новин для підсумовування (якщо None, використовується кеш)
+            max_items: Максимальна кількість новин у підсумку
 
         Returns:
-            Dictionary of sentiment time series data
+            Список найважливіших новин з підсумками
         """
-        if not self.db_manager:
-            self.logger.warning("No database manager configured")
-            return {}
+        if news is None:
+            news = self._cached_news
 
-        try:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days_back)
+        # Сортуємо новини за важливістю
+        sorted_news = sorted(
+            news,
+            key=lambda item: self.analyzer.calculate_importance_score(item),
+            reverse=True
+        )[:max_items]
 
-            return self.db_manager.get_sentiment_timeseries(start_date, end_date, source)
+        # Отримуємо підсумки для кожної новини
+        summaries = []
+        for news_item in sorted_news:
+            summary = self.analyzer.get_news_summary(news_item)
+            summaries.append({
+                'title': news_item.get('title', ''),
+                'source': news_item.get('source', ''),
+                'url': news_item.get('url', ''),
+                'summary': summary,
+                'sentiment': news_item.get('sentiment', 'neutral'),
+                'mentioned_coins': news_item.get('mentioned_coins', [])
+            })
 
-        except Exception as e:
-            self.logger.error(f"Error getting sentiment time series: {e}")
-            return {}
+        return summaries
 
-    def get_top_coins_mentions(self,
-                               days_back: int = 7,
-                               limit: int = 10) -> List[Dict]:
+    def analyze_news_clusters(self, threshold=0.7):
         """
-        Get most mentioned cryptocurrencies.
+        Групує та аналізує кластери пов'язаних новин.
 
         Args:
-            days_back: Number of days to look back
-            limit: Maximum number of coins to return
+            threshold: Поріг схожості для кластеризації
 
         Returns:
-            List of coins with mention counts
+            Список кластерів новин з їх аналізом
         """
-        if not self.db_manager:
-            self.logger.warning("No database manager configured")
-            return []
+        if not self._cached_news:
+            raise ValueError("Спочатку потрібно зібрати новини за допомогою методу collect_news()")
 
-        try:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days_back)
+        # Отримуємо ембеддінги для всіх новин
+        news_texts = [news.get('content', news.get('title', '')) for news in self._cached_news]
+        embeddings = [
+            self.analyzer._get_bert_embeddings(text)
+            for text in news_texts
+        ]
 
-            return self.db_manager.get_top_mentioned_coins(start_date, end_date, limit)
+        # Виконуємо кластеризацію на основі косинусної схожості
+        clusters = []
+        used_indices = set()
 
-        except Exception as e:
-            self.logger.error(f"Error getting top coins mentions: {e}")
-            return []
+        for i in range(len(self._cached_news)):
+            if i in used_indices:
+                continue
 
-    def initialize_reddit(self,
-                          client_id: str,
-                          client_secret: str,
-                          user_agent: str) -> bool:
+            cluster = [i]
+            used_indices.add(i)
+
+            for j in range(len(self._cached_news)):
+                if j in used_indices or i == j:
+                    continue
+
+                # Обчислюємо косинусну схожість між ембеддінгами
+                similarity = self._calculate_similarity(embeddings[i], embeddings[j])
+                if similarity >= threshold:
+                    cluster.append(j)
+                    used_indices.add(j)
+
+            if len(cluster) > 1:  # Додаємо тільки справжні кластери (більше 1 новини)
+                cluster_news = [self._cached_news[idx] for idx in cluster]
+                analysis = self.analyzer.analyze_news_cluster(cluster_news)
+                clusters.append({
+                    'news': cluster_news,
+                    'analysis': analysis
+                })
+
+        return clusters
+
+    def run_full_pipeline(self, sources=None, days_back=1, keywords=None, coins=None,
+                          store_results=True, get_summary=True, analyze_clusters=True):
         """
-        Initialize Reddit API connection.
+        Виконує повний цикл збору, аналізу та зберігання новин.
 
         Args:
-            client_id: Reddit API client ID
-            client_secret: Reddit API client secret
-            user_agent: Reddit API user agent
+            sources: Список джерел для скрапінгу
+            days_back: За скільки днів назад збирати новини
+            keywords: Ключові слова для фільтрації
+            coins: Конкретні криптовалюти для фільтрації
+            store_results: Чи зберігати результати в базу даних
+            get_summary: Чи отримувати підсумки найважливіших новин
+            analyze_clusters: Чи аналізувати кластери пов'язаних новин
 
         Returns:
-            True if initialization succeeded
+            Словник з результатами роботи
         """
-        return self.collector.initialize_reddit(client_id, client_secret, user_agent)
+        # Збір новин
+        news = self.collect_news(sources=sources, days_back=days_back)
+        print(f"Зібрано {len(news)} новин з {len(set(item.get('source', '') for item in news))} джерел")
 
-    @staticmethod
-    def main():
+        # Аналіз новин
+        analysis = self.analyze_news(news=news, keywords=keywords, coins=coins)
+        print(f"Проаналізовано {len(analysis['individual_results'])} новин")
+
+        results = {
+            'news_count': len(news),
+            'analysis': analysis
+        }
+
+        # Зберігання результатів, якщо потрібно
+        if store_results:
+            stored_count = self.store_data(news=news, analysis_results=analysis['individual_results'])
+            results['stored_count'] = stored_count
+            print(f"Збережено {stored_count} новин у базу даних")
+
+        # Отримання підсумків, якщо потрібно
+        if get_summary:
+            summaries = self.get_news_summary(news=news)
+            results['summaries'] = summaries
+            print(f"Створено {len(summaries)} підсумків найважливіших новин")
+
+        # Аналіз кластерів, якщо потрібно
+        if analyze_clusters:
+            clusters = self.analyze_news_clusters()
+            results['clusters'] = clusters
+            print(f"Виявлено {len(clusters)} кластерів пов'язаних новин")
+
+        return results
+
+    def _calculate_similarity(self, embedding1, embedding2):
         """
-        Main function to execute when running the scraper from the command line.
-        Collects and analyzes news from all configured sources.
+        Допоміжний метод для обчислення косинусної схожості між ембеддінгами.
+
+        Args:
+            embedding1: Перший ембеддінг
+            embedding2: Другий ембеддінг
+
+        Returns:
+            Значення косинусної схожості
         """
-        # Set up command-line argument parsing
-        parser = argparse.ArgumentParser(description='Crypto News Scraper and Analyzer')
-        parser.add_argument('--days', type=int, default=3, help='Number of days to look back for news (default: 3)')
-        parser.add_argument('--sources', type=str, help='Comma-separated list of news sources to scrape')
-        parser.add_argument('--categories', type=str, help='Comma-separated list of categories to filter by')
-        parser.add_argument('--output', type=str, help='Output file path for saving results (JSON format)')
-        parser.add_argument('--max-pages', type=int, default=5, help='Maximum pages to scrape per source (default: 5)')
-        parser.add_argument('--max-workers', type=int, default=5, help='Maximum concurrent workers (default: 5)')
-        parser.add_argument('--no-save', action='store_true', help='Do not save results to database')
-        parser.add_argument('--reddit', action='store_true', help='Include Reddit scraping')
-        parser.add_argument('--reddit-config', type=str, help='Path to Reddit API config JSON file')
-        parser.add_argument('--model-dir', type=str, default='./models', help='Directory for topic model storage')
-        parser.add_argument('--log-level', type=str, default='INFO',
-                            choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                            help='Logging level')
+        # Нормалізуємо вектори
+        norm1 = np.linalg.norm(embedding1)
+        norm2 = np.linalg.norm(embedding2)
 
-        args = parser.parse_args()
+        if norm1 == 0 or norm2 == 0:
+            return 0
 
-        # Set up logging
-        logger = logging.getLogger('CryptoNewsScraper')
-        logger.setLevel(getattr(logging, args.log_level))
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-
-        # Process arguments
-        news_sources = args.sources.split(',') if args.sources else None
-        categories = args.categories.split(',') if args.categories else None
-        save_results = not args.no_save
-
-        try:
-            # Initialize scraper
-            logger.info("Initializing CryptoNewsScraper")
-            scraper = CryptoNewsScraper(
-                news_sources=news_sources,
-                logger=logger,
-                max_pages=args.max_pages,
-                max_workers=args.max_workers,
-                topic_model_dir=args.model_dir
-            )
-
-            # Initialize Reddit if needed
-            if args.reddit:
-                if args.reddit_config:
-                    try:
-                        with open(args.reddit_config, 'r') as f:
-                            reddit_config = json.load(f)
-
-                        reddit_initialized = scraper.initialize_reddit(
-                            client_id=reddit_config.get('client_id'),
-                            client_secret=reddit_config.get('client_secret'),
-                            user_agent=reddit_config.get('user_agent')
-                        )
-
-                        if not reddit_initialized:
-                            logger.warning("Failed to initialize Reddit API")
-                    except Exception as e:
-                        logger.error(f"Error reading Reddit config: {e}")
-                else:
-                    logger.warning("Reddit scraping requested but no config provided")
-
-            # Execute the scraping and analysis pipeline
-            logger.info(f"Starting scraping and analysis for the last {args.days} days")
-            results = scraper.scrape_and_analyze(
-                days_back=args.days,
-                categories=categories,
-                save_results=save_results
-            )
-
-            # Output results
-            if results:
-                logger.info(f"Successfully processed {len(results)} news items")
-
-                # Save to file if requested
-                if args.output:
-                    with open(args.output, 'w', encoding='utf-8') as f:
-                        json.dump(results, f, ensure_ascii=False, indent=2, default=str)
-                    logger.info(f"Results saved to {args.output}")
-
-                # Print summary statistics
-                total_sentiment = sum(item.get('sentiment_score', 0) for item in results)
-                avg_sentiment = total_sentiment / len(results) if results else 0
-                sources_count = {}
-                for item in results:
-                    source = item.get('source', 'unknown')
-                    sources_count[source] = sources_count.get(source, 0) + 1
-
-                logger.info(f"Average sentiment score: {avg_sentiment:.2f}")
-                logger.info("Source distribution:")
-                for source, count in sources_count.items():
-                    logger.info(f"  - {source}: {count} articles")
-            else:
-                logger.warning("No news items were processed")
-
-            return 0  # Success exit code
-
-        except Exception as e:
-            logger.error(f"An error occurred in the main execution: {e}", exc_info=True)
-            return 1  # Error exit code
+        # Обчислюємо косинусну схожість
+        return np.dot(embedding1, embedding2) / (norm1 * norm2)
 
 
-# Execute main function if the script is run directly
+def main():
+    """
+    Головна функція для запуску скрапера криптовалютних новин.
+    Аналізує аргументи командного рядка та запускає процес збору і аналізу новин.
+    """
+    # Налаштування парсера аргументів командного рядка
+    parser = argparse.ArgumentParser(description="Скрапер криптовалютних новин")
+    parser.add_argument("--sources", nargs="+", default=None,
+                        help="Список джерел для скрапінгу (наприклад, coindesk cointelegraph)")
+    parser.add_argument("--days-back", type=int, default=1,
+                        help="За скільки днів назад збирати новини")
+    parser.add_argument("--keywords", nargs="+", default=None,
+                        help="Ключові слова для фільтрації новин")
+    parser.add_argument("--coins", nargs="+", default=None,
+                        help="Список криптовалют для фільтрації (наприклад, BTC ETH)")
+    parser.add_argument("--no-store", action="store_true",
+                        help="Не зберігати результати в базу даних")
+    parser.add_argument("--no-summary", action="store_true",
+                        help="Не створювати підсумки новин")
+    parser.add_argument("--no-clusters", action="store_true",
+                        help="Не аналізувати кластери новин")
+    parser.add_argument("--use-proxies", action="store_true",
+                        help="Використовувати проксі для запитів")
+    parser.add_argument("--db-path", type=str, default="crypto_news.db",
+                        help="Шлях до файлу бази даних SQLite")
+    parser.add_argument("--bert-model", type=str, default=None,
+                        help="Шлях до попередньо навченої BERT моделі")
+    parser.add_argument("--topic-models", type=str, default=None,
+                        help="Шлях до моделей для виділення тем")
+    parser.add_argument("--feedly-api-key", type=str, default=None,
+                        help="API ключ для доступу до Feedly")
+    parser.add_argument("--output-dir", type=str, default="results",
+                        help="Директорія для збереження результатів")
+
+    args = parser.parse_args()
+
+    # Створення директорії для результатів, якщо вона не існує
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+
+    # Інформація про запуск
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Запуск скрапера криптовалютних новин")
+
+    # Встановлення з'єднання з базою даних
+    db_connection = DatabaseManager(db_path=args.db_path)
+    print(f"З'єднання з базою даних встановлено: {args.db_path}")
+
+    # Базовий набір user-agents для ротації
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
+    ]
+
+    # Ініціалізація скрапера
+    scraper = CryptoNewsScraper(
+        db_connection=db_connection,
+        bert_model_path=args.bert_model,
+        topic_models_path=args.topic_models,
+        use_proxies=args.use_proxies,
+        user_agents=user_agents,
+        feedly_api_key=args.feedly_api_key
+    )
+    print("Скрапер ініціалізовано")
+
+    try:
+        # Запуск повного циклу
+        results = scraper.run_full_pipeline(
+            sources=args.sources,
+            days_back=args.days_back,
+            keywords=args.keywords,
+            coins=args.coins,
+            store_results=not args.no_store,
+            get_summary=not args.no_summary,
+            analyze_clusters=not args.no_clusters
+        )
+
+        # Виведення статистики
+        print("\n=== Статистика ===")
+        print(f"Всього зібрано новин: {results['news_count']}")
+        print(f"Виявлено трендових тем: {len(results['analysis']['trending_topics'])}")
+
+        # Збереження результатів у JSON файл
+        if 'summaries' in results and results['summaries']:
+            import json
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            summary_file = os.path.join(args.output_dir, f"news_summary_{timestamp}.json")
+
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                json.dump(results['summaries'], f, ensure_ascii=False, indent=2)
+            print(f"Зведення новин збережено у файлі: {summary_file}")
+
+            # Виведення стислого зведення важливих новин
+            print("\n=== Найважливіші новини ===")
+            for i, summary in enumerate(results['summaries'], 1):
+                print(f"{i}. {summary['title']} ({summary['source']})")
+                print(f"   {summary['summary']}")
+                print(f"   Монети: {', '.join(summary['mentioned_coins'])}")
+                print(f"   Тональність: {summary['sentiment']}")
+                print(f"   URL: {summary['url']}")
+                print()
+
+        # Вивід інформації про кластери
+        if 'clusters' in results and results['clusters']:
+            print(f"\n=== Виявлено {len(results['clusters'])} груп пов'язаних новин ===")
+            for i, cluster in enumerate(results['clusters'], 1):
+                print(f"Група {i}: {len(cluster['news'])} новин")
+                print(f"Загальна тема: {cluster['analysis'].get('common_topic', 'Не визначено')}")
+                print(f"Основна тональність: {cluster['analysis'].get('overall_sentiment', 'нейтральна')}")
+                print()
+
+    except Exception as e:
+        print(f"Помилка під час виконання: {e}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        # Закриття з'єднання з базою даних
+        if 'db_connection' in locals() and db_connection:
+            db_connection.close()
+            print("З'єднання з базою даних закрито")
+
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Завершено роботу скрапера")
+
+
 if __name__ == "__main__":
-    sys.exit(CryptoNewsScraper.main())
+    main()
