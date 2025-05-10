@@ -191,10 +191,31 @@ class DataResampler:
 
         return agg_dict
 
-    def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto') -> pd.DataFrame:
+    def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto',
+                             max_gap: int = 5, interpolate_prices: bool = True) -> pd.DataFrame:
+        """
+        Заповнює відсутні значення в DataFrame з часовими рядами фінансових даних.
 
+        Args:
+            df: Вхідний DataFrame з фінансовими даними
+            fill_method: Метод заповнення ('auto', 'ffill', 'zero', 'interpolate')
+            max_gap: Максимальний розмір проміжку для методів forward/backward fill
+            interpolate_prices: Чи використовувати інтерполяцію для цінових рядів
+
+        Returns:
+            DataFrame з заповненими пропущеними значеннями
+        """
         if df.empty:
             return df
+
+        # Створимо копію для запобігання модифікації оригінального DataFrame
+        df = df.copy()
+
+        # Створимо маску пропущених значень для подальшого аналізу
+        missing_mask = df.isna()
+
+        # Підрахуємо кількість пропущених значень до заповнення для логування
+        initial_missing = missing_mask.sum().sum()
 
         # Мапінг колонок до нижнього регістру для спрощення пошуку
         columns_lower = {col.lower(): col for col in df.columns}
@@ -206,11 +227,12 @@ class DataResampler:
         other_numeric_cols = []
         non_numeric_cols = []
 
-        # Визначаємо цінові колонки та колонки об'єму
+        # Визначаємо цінові колонки
         for col_pattern in ['open', 'high', 'low', 'close', 'vwap']:
             if col_pattern in columns_lower:
                 price_cols.append(columns_lower[col_pattern])
 
+        # Визначаємо колонки об'єму
         for col_pattern in ['volume', 'taker_buy_volume', 'taker_sell_volume', 'quote_volume',
                             'taker_buy_base_volume', 'taker_buy_quote_volume', 'quote_asset_volume']:
             if col_pattern in columns_lower:
@@ -229,18 +251,35 @@ class DataResampler:
         # Виділяємо не-числові колонки
         non_numeric_cols = [col for col in df.columns if col not in numeric_cols]
 
+        # Функція для безпечного forward fill з обмеженням на max_gap
+        def safe_ffill(series, limit=max_gap):
+            return series.fillna(method='ffill', limit=limit)
+
+        # Функція для безпечного backward fill з обмеженням на max_gap
+        def safe_bfill(series, limit=max_gap):
+            return series.fillna(method='bfill', limit=limit)
+
         # Заповнення цінових колонок
-        if price_cols and fill_method in ['auto', 'ffill']:
-            df[price_cols] = df[price_cols].fillna(method='ffill')
-            # Заповнення початкових NaN значень (якщо є)
-            df[price_cols] = df[price_cols].fillna(method='bfill')
+        if price_cols:
+            if fill_method in ['auto', 'interpolate'] and interpolate_prices:
+                # Спочатку спробуємо лінійну інтерполяцію для малих проміжків
+                df[price_cols] = df[price_cols].interpolate(method='linear', limit=max_gap, limit_area='inside')
+
+                # Для проміжків більших за max_gap або на краях використовуємо обмежений ffill/bfill
+                df[price_cols] = df[price_cols].apply(safe_ffill)
+                df[price_cols] = df[price_cols].apply(safe_bfill)
+            elif fill_method in ['auto', 'ffill']:
+                # Використовуємо безпечний ffill з обмеженням
+                df[price_cols] = df[price_cols].apply(safe_ffill)
+                df[price_cols] = df[price_cols].apply(safe_bfill)
 
         # Заповнення колонок об'єму
         if volume_cols:
             if fill_method in ['auto', 'zero']:
+                # Для об'єму логічно використовувати нулі за відсутності даних
                 df[volume_cols] = df[volume_cols].fillna(0)
             elif fill_method == 'ffill':
-                df[volume_cols] = df[volume_cols].fillna(method='ffill')
+                df[volume_cols] = df[volume_cols].apply(safe_ffill)
                 df[volume_cols] = df[volume_cols].fillna(0)  # Залишкові NaN як нулі
 
         # Заповнення колонок кількості угод
@@ -248,7 +287,7 @@ class DataResampler:
             if fill_method in ['auto', 'zero']:
                 df[trades_cols] = df[trades_cols].fillna(0)
             elif fill_method == 'ffill':
-                df[trades_cols] = df[trades_cols].fillna(method='ffill')
+                df[trades_cols] = df[trades_cols].apply(safe_ffill)
                 df[trades_cols] = df[trades_cols].fillna(0)
 
         # Заповнення інших числових колонок
@@ -256,19 +295,46 @@ class DataResampler:
             col_lower = col.lower()
             if fill_method == 'auto':
                 if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount']):
-                    df[col] = df[col].fillna(0)  # Лічильники заповнюємо нулями
+                    # Лічильники заповнюємо нулями
+                    df[col] = df[col].fillna(0)
                 elif any(x in col_lower for x in ['funding', 'rate', 'fee']):
-                    df[col] = df[col].fillna(method='ffill').fillna(0)  # Ставки заповнюємо попередніми або нулями
+                    # Ставки заповнюємо обмеженим ffill або нулями
+                    df[col] = safe_ffill(df[col]).fillna(0)
                 else:
-                    df[col] = df[col].fillna(method='ffill').fillna(method='bfill').fillna(0)
+                    # Решта - обмежений ffill/bfill і нулі
+                    df[col] = safe_ffill(df[col])
+                    df[col] = safe_bfill(df[col])
+                    df[col] = df[col].fillna(0)
             elif fill_method == 'ffill':
-                df[col] = df[col].fillna(method='ffill').fillna(method='bfill')
+                df[col] = safe_ffill(df[col])
+                df[col] = safe_bfill(df[col])
             elif fill_method == 'zero':
                 df[col] = df[col].fillna(0)
+            elif fill_method == 'interpolate':
+                df[col] = df[col].interpolate(method='linear', limit=max_gap, limit_area='inside')
+                df[col] = safe_ffill(df[col])
+                df[col] = df[col].fillna(0)
 
-        # Заповнення не-числових колонок
+        # Заповнення не-числових колонок (з обмеженням на max_gap)
         if non_numeric_cols and fill_method in ['auto', 'ffill', 'bfill']:
-            df[non_numeric_cols] = df[non_numeric_cols].fillna(method='ffill').fillna(method='bfill')
+            for col in non_numeric_cols:
+                df[col] = safe_ffill(df[col])
+                df[col] = safe_bfill(df[col])
+
+        # Підрахуємо кількість пропущених значень після заповнення для логування
+        remaining_missing = df.isna().sum().sum()
+
+        # Виявлення довгих проміжків пропусків, які можуть свідчити про проблеми з даними
+        if initial_missing > 0:
+            long_gaps = {}
+            for col in df.columns:
+                # Знаходимо проміжки NaN довші за max_gap
+                gaps = missing_mask[col].astype(int).groupby(
+                    (missing_mask[col] != missing_mask[col].shift()).cumsum()
+                ).sum()
+                long_gaps_count = (gaps[gaps > max_gap]).count()
+                if long_gaps_count > 0:
+                    long_gaps[col] = long_gaps_count
 
         return df
 
@@ -474,8 +540,13 @@ class DataResampler:
                 self.logger.info(f"make_stationary: Створено колонку {high_low_range_col}")
 
                 high_low_range_pct_col = 'high_low_range_pct'
-                result_df[high_low_range_pct_col] = result_df[high_low_range_col] / df[col]
+                # Виправлення: перевірка на ділення на нуль
+                mask = df[col] != 0  # Створюємо маску для ненульових значень
+                result_df[high_low_range_pct_col] = np.nan  # Ініціалізуємо колонку як NaN
+                # Застосовуємо ділення тільки там, де знаменник не дорівнює нулю
+                result_df.loc[mask, high_low_range_pct_col] = result_df.loc[mask, high_low_range_col] / df.loc[mask, col]
                 self.logger.info(f"make_stationary: Створено колонку {high_low_range_pct_col}")
+                self.logger.warning(f"make_stationary: Значення, де {col} = 0, замінені на NaN в {high_low_range_pct_col}")
 
             # Для об'єму додаємо логарифм, що часто корисно для криптовалют
             if col.lower() == 'volume' and (df[col] > 0).all():
@@ -495,8 +566,6 @@ class DataResampler:
         if na_count > 0:
             self.logger.info(f"make_stationary: У результуючому DataFrame виявлено {na_count} NaN значень")
 
-            # Видалення рядків з NaN після диференціювання (ВАЖЛИВО: це змінює кількість рядків)
-            rows_before = len(result_df)
             # Замість повного видалення NaN, можемо замінити їх на відповідні значення
             # Для збереження розмірності даних
             for col in result_df.columns:
@@ -507,6 +576,15 @@ class DataResampler:
                     elif col.endswith('_log'):
                         # Для логарифмічних даних використовуємо ffill/bfill
                         result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
+                    elif col == 'high_low_range_pct':  # Додаємо особливу обробку для high_low_range_pct
+                        # Для high_low_range_pct заповнюємо NaN середнім значенням або нулем
+                        if result_df[col].notna().any():  # Якщо є хоч якісь не-NaN значення
+                            mean_val = result_df[col].mean()
+                            result_df[col] = result_df[col].fillna(mean_val)
+                            self.logger.info(f"make_stationary: NaN в {col} замінені на середнє значення {mean_val}")
+                        else:
+                            result_df[col] = result_df[col].fillna(0)
+                            self.logger.info(f"make_stationary: NaN в {col} замінені на 0")
 
             # Перевіряємо, чи всі NaN були замінені
             remaining_na = result_df.isna().sum().sum()
@@ -534,9 +612,13 @@ class DataResampler:
 
         return result_df
 
-    def check_stationarity(self, data: pd.DataFrame, column='close_diff') -> dict:
+    def check_stationarity(self, data: pd.DataFrame, column='close_diff', sample_size=10000,
+                           parallel=True, confidence_level=0.05) -> dict:
+
 
         from statsmodels.tsa.stattools import adfuller, kpss, acf, pacf
+        import numpy as np
+        import concurrent.futures
 
         results = {}
 
@@ -555,93 +637,148 @@ class DataResampler:
             return {'error': error_msg, 'is_stationary': False}
 
         # Перевірка на відсутні значення
-        if data[column_to_use].isna().any():
-            self.logger.warning(f"check_stationarity: Виявлено NaN значення у колонці {column_to_use}")
-            clean_data = data[column_to_use].dropna()
-            if len(clean_data) < 2:
-                error_msg = f"check_stationarity: Недостатньо даних для перевірки стаціонарності після видалення NaN значень"
-                self.logger.error(error_msg)
-                return {'error': error_msg, 'is_stationary': False}
-        else:
-            clean_data = data[column_to_use]
-
-        self.logger.info(
-            f"check_stationarity: Перевірка стаціонарності для колонки {column_to_use} ({len(clean_data)} точок)")
-
-        # Тест Дікі-Фуллера (нульова гіпотеза: ряд нестаціонарний)
-        try:
-            adf_result = adfuller(clean_data)
-            results['adf_test'] = {
-                'test_statistic': adf_result[0],
-                'p-value': adf_result[1],
-                'is_stationary': adf_result[1] < 0.05,
-                'critical_values': adf_result[4]
-            }
-            self.logger.info(f"check_stationarity: ADF тест завершено, p-value={adf_result[1]:.4f}")
-        except Exception as e:
-            error_msg = f"check_stationarity: Помилка при виконанні ADF тесту: {str(e)}"
+        clean_data = data[column_to_use].dropna()
+        if len(clean_data) < 2:
+            error_msg = f"check_stationarity: Недостатньо даних для перевірки стаціонарності після видалення NaN значень"
             self.logger.error(error_msg)
-            results['adf_test'] = {
-                'error': error_msg,
-                'is_stationary': False
-            }
+            return {'error': error_msg, 'is_stationary': False}
 
-        # KPSS тест (нульова гіпотеза: ряд стаціонарний)
-        try:
-            kpss_result = kpss(clean_data)
-            results['kpss_test'] = {
-                'test_statistic': kpss_result[0],
-                'p-value': kpss_result[1],
-                'is_stationary': kpss_result[1] > 0.05,
-                'critical_values': kpss_result[3]
-            }
-            self.logger.info(f"check_stationarity: KPSS тест завершено, p-value={kpss_result[1]:.4f}")
-        except Exception as e:
-            error_msg = f"check_stationarity: Помилка при виконанні KPSS тесту: {str(e)}"
-            self.logger.warning(error_msg)
-            results['kpss_test'] = {
-                'error': error_msg,
-                'is_stationary': False
-            }
+        # Використання вибірки для великих наборів даних
+        data_size = len(clean_data)
+        self.logger.info(f"check_stationarity: Розмір даних - {data_size} точок")
 
-        # ACF and PACF для визначення параметрів моделі ARIMA
-        try:
-            # Максимальну кількість лагів обмежуємо розумним значенням
-            max_lags = min(40, int(len(clean_data) * 0.3))
+        # Якщо даних більше ніж sample_size, беремо вибірку
+        if data_size > sample_size:
+            # Стратегія вибірки: беремо рівномірно розподілені точки з усього ряду
+            step = max(1, data_size // sample_size)
+            sampled_data = clean_data.iloc[::step].copy()
+            self.logger.info(f"check_stationarity: Використовуємо вибірку {len(sampled_data)} точок (крок {step})")
+        else:
+            sampled_data = clean_data.copy()
 
-            acf_values = acf(clean_data, nlags=max_lags, fft=True)
-            pacf_values = pacf(clean_data, nlags=max_lags)
+        # Функції для виконання тестів
+        def run_adf_test():
+            try:
+                # Використовуємо менше лагів для прискорення
+                max_lags = min(int(np.ceil(12 * (len(sampled_data) / 100) ** (1 / 4))), 20)
+                adf_result = adfuller(sampled_data, maxlag=max_lags)
+                return {
+                    'test_statistic': adf_result[0],
+                    'p-value': adf_result[1],
+                    'is_stationary': adf_result[1] < confidence_level,
+                    'critical_values': adf_result[4],
+                    'used_lags': max_lags
+                }
+            except Exception as e:
+                return {'error': f"Помилка при виконанні ADF тесту: {str(e)}", 'is_stationary': False}
 
-            # Знаходження значимих лагів (з 95% довірчим інтервалом)
-            n = len(clean_data)
-            confidence_interval = 1.96 / np.sqrt(n)
+        def run_kpss_test():
+            try:
+                # Використовуємо менше лагів для прискорення
+                max_lags = min(int(np.ceil(12 * (len(sampled_data) / 100) ** (1 / 4))), 20)
+                kpss_result = kpss(sampled_data, nlags=max_lags)
+                return {
+                    'test_statistic': kpss_result[0],
+                    'p-value': kpss_result[1],
+                    'is_stationary': kpss_result[1] > confidence_level,
+                    'critical_values': kpss_result[3],
+                    'used_lags': max_lags
+                }
+            except Exception as e:
+                return {'error': f"Помилка при виконанні KPSS тесту: {str(e)}", 'is_stationary': False}
 
-            significant_acf_lags = [i for i, v in enumerate(acf_values) if abs(v) > confidence_interval and i > 0]
-            significant_pacf_lags = [i for i, v in enumerate(pacf_values) if abs(v) > confidence_interval and i > 0]
+        def run_acf_pacf_analysis():
+            try:
+                # Визначаємо розумну кількість лагів
+                # Для 4 млн точок, навіть sample_size може бути надто великим для ACF/PACF
+                acf_pacf_sample = sampled_data
+                if len(sampled_data) > 2000:
+                    # Для ACF/PACF використовуємо ще меншу вибірку
+                    step = max(1, len(sampled_data) // 2000)
+                    acf_pacf_sample = sampled_data.iloc[::step].copy()
+                    self.logger.info(f"ACF/PACF: Використовуємо зменшену вибірку {len(acf_pacf_sample)} точок")
 
-            # Якщо немає значимих лагів, використовуємо лаг 1
-            suggested_p = min(significant_pacf_lags) if significant_pacf_lags else 1
-            suggested_q = min(significant_acf_lags) if significant_acf_lags else 1
+                # Обмежуємо максимальну кількість лагів
+                max_lags = min(40, int(len(acf_pacf_sample) * 0.1))
 
-            results['acf_pacf'] = {
-                'significant_acf_lags': significant_acf_lags,
-                'significant_pacf_lags': significant_pacf_lags,
-                'suggested_p': suggested_p,
-                'suggested_q': suggested_q
-            }
-            self.logger.info(f"check_stationarity: ACF/PACF аналіз завершено, p={suggested_p}, q={suggested_q}")
-        except Exception as e:
-            error_msg = f"check_stationarity: Помилка при розрахунку ACF/PACF: {str(e)}"
-            self.logger.warning(error_msg)
-            results['acf_pacf'] = {
-                'error': error_msg
-            }
+                # Використовуємо fft=False для менших вибірок, щоб зменшити споживання пам'яті
+                use_fft = len(acf_pacf_sample) > 1000
+
+                acf_values = acf(acf_pacf_sample, nlags=max_lags, fft=use_fft)
+                pacf_values = pacf(acf_pacf_sample, nlags=max_lags, method="ywm")  # метод Юла-Уокера - швидший
+
+                # Знаходження значимих лагів (з 95% довірчим інтервалом)
+                n = len(acf_pacf_sample)
+                confidence_interval = 1.96 / np.sqrt(n)
+
+                significant_acf_lags = [i for i, v in enumerate(acf_values) if abs(v) > confidence_interval and i > 0]
+                significant_pacf_lags = [i for i, v in enumerate(pacf_values) if abs(v) > confidence_interval and i > 0]
+
+                # Якщо немає значимих лагів, використовуємо лаг 1
+                suggested_p = min(significant_pacf_lags) if significant_pacf_lags else 1
+                suggested_q = min(significant_acf_lags) if significant_acf_lags else 1
+
+                return {
+                    'significant_acf_lags': significant_acf_lags[:5],  # обмежуємо вивід для економії пам'яті
+                    'significant_pacf_lags': significant_pacf_lags[:5],
+                    'suggested_p': suggested_p,
+                    'suggested_q': suggested_q,
+                    'sample_size': len(acf_pacf_sample)
+                }
+            except Exception as e:
+                return {'error': f"Помилка при розрахунку ACF/PACF: {str(e)}"}
+
+        # Виконання тестів - паралельно або послідовно
+        if parallel and data_size > 5000:
+            self.logger.info("check_stationarity: Використовуємо паралельну обробку для тестів")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {
+                    'adf_test': executor.submit(run_adf_test),
+                    'kpss_test': executor.submit(run_kpss_test),
+                    'acf_pacf': executor.submit(run_acf_pacf_analysis)
+                }
+
+                for key, future in futures.items():
+                    try:
+                        results[key] = future.result()
+                        if key == 'adf_test':
+                            self.logger.info(
+                                f"check_stationarity: ADF тест завершено, p-value={results[key].get('p-value', 'N/A')}")
+                        elif key == 'kpss_test':
+                            self.logger.info(
+                                f"check_stationarity: KPSS тест завершено, p-value={results[key].get('p-value', 'N/A')}")
+                    except Exception as e:
+                        results[key] = {'error': f"Помилка при виконанні {key}: {str(e)}"}
+                        self.logger.error(f"check_stationarity: {results[key]['error']}")
+        else:
+            # Послідовне виконання
+            self.logger.info("check_stationarity: Виконуємо тести послідовно")
+            results['adf_test'] = run_adf_test()
+            if 'p-value' in results['adf_test']:
+                self.logger.info(
+                    f"check_stationarity: ADF тест завершено, p-value={results['adf_test']['p-value']:.4f}")
+
+            results['kpss_test'] = run_kpss_test()
+            if 'p-value' in results['kpss_test']:
+                self.logger.info(
+                    f"check_stationarity: KPSS тест завершено, p-value={results['kpss_test']['p-value']:.4f}")
+
+            results['acf_pacf'] = run_acf_pacf_analysis()
+            if 'suggested_p' in results['acf_pacf']:
+                self.logger.info(
+                    f"check_stationarity: ACF/PACF аналіз завершено, p={results['acf_pacf']['suggested_p']}, q={results['acf_pacf']['suggested_q']}")
 
         # Загальний висновок про стаціонарність
         adf_stationary = results.get('adf_test', {}).get('is_stationary', False)
         kpss_stationary = results.get('kpss_test', {}).get('is_stationary', True)
 
         results['is_stationary'] = adf_stationary and kpss_stationary
+        results['sample_info'] = {
+            'original_size': data_size,
+            'sample_size': len(sampled_data),
+            'sampling_rate': f"1/{data_size // len(sampled_data)}" if data_size > len(sampled_data) else "1/1"
+        }
+
         self.logger.info(f"check_stationarity: Загальний висновок про стаціонарність: {results['is_stationary']}")
 
         return results
@@ -659,7 +796,7 @@ class DataResampler:
         close_column = self.find_column(data, 'close')
         if not close_column:
             # Пробуємо інші можливі назви для колонки з ціною закриття
-            for variant in ['price', 'last', 'last_price', 'close_price']:
+            for variant in ['price', 'last', 'last_price', 'close_price', 'anomaly_iqr_close']:
                 close_column = self.find_column(data, variant)
                 if close_column:
                     break
@@ -823,7 +960,8 @@ class DataResampler:
         return arima_data
 
     def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str,
-                          sequence_length: int = 60, forecast_horizons: List[int] = [1, 5, 10]) -> pd.DataFrame:
+                          sequence_length: int = 60) -> pd.DataFrame:
+
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для підготовки LSTM даних")
@@ -850,11 +988,11 @@ class DataResampler:
 
         # Базові ринкові дані з різними варіантами назв колонок
         basic_feature_cols = {
-            'open': ['open', 'open_price','iqr_anomaly_open'],
-            'high': ['high', 'high_price', 'max_price', 'iqr_anomaly_high'],
-            'low': ['low', 'low_price', 'min_price', 'iqr_anomaly_low'],
-            'close': ['close', 'close_price', 'price', 'last', 'last_price', 'iqr_anomaly_close'],
-            'volume': ['volume', 'base_volume', 'quantity', 'amount', 'iqr_anomaly_volume']
+            'open': ['open', 'open_price', 'iqr_anomaly_open', 'anomaly_iqr_open'],
+            'high': ['high', 'high_price', 'max_price', 'iqr_anomaly_high', 'anomaly_iqr_high'],
+            'low': ['low', 'low_price', 'min_price', 'iqr_anomaly_low', 'anomaly_iqr_low'],
+            'close': ['close', 'close_price', 'price', 'last', 'last_price', 'iqr_anomaly_close', 'anomaly_iqr_close'],
+            'volume': ['volume', 'base_volume', 'quantity', 'amount', 'iqr_anomaly_volume','anomaly_iqr_volume']
         }
 
         feature_cols = []
@@ -968,33 +1106,17 @@ class DataResampler:
             return pd.DataFrame()
 
         # 5. Перевірка достатньої кількості даних
-        min_required_length = sequence_length + max(forecast_horizons)
-        if len(df) < min_required_length:
+        if len(df) < sequence_length:
             self.logger.warning(f"Недостатньо даних для створення послідовностей: {len(df)} точок, "
-                                f"потрібно мінімум {min_required_length}")
+                                f"потрібно мінімум {sequence_length}")
             return pd.DataFrame()
 
-        # 6. Визначаємо цільову колонку для прогнозування
-        target_col = None
-        for variant in ['close', 'price', 'last', 'close_price', 'last_price']:
-            variant_lower = variant.lower()
-            if variant_lower in column_map:
-                target_col = column_map[variant_lower]
-                break
-
-        if target_col is None:
-            self.logger.error("Не знайдено цільову колонку для прогнозування")
-            return pd.DataFrame()
-
-        self.logger.info(f"Цільова колонка для прогнозування: '{target_col}'")
-
-        # 7. Створення послідовностей для обробки
+        # 6. Створення послідовностей для обробки
         sequences_data = []
         sequence_counter = 0
 
         # Обмежуємо індекси, щоб уникнути виходу за межі
-        max_idx = len(df) - max(forecast_horizons)
-        valid_range = len(df) - sequence_length - max(forecast_horizons) + 1
+        valid_range = len(df) - sequence_length + 1
 
         self.logger.info(f"Початок створення послідовностей. Можлива кількість послідовностей: {valid_range}")
 
@@ -1035,36 +1157,6 @@ class DataResampler:
                             self.logger.error(
                                 f"Помилка при доступі до оригінальної колонки {col} в індексі {idx}: {str(e)}")
                             row[f"{col}_original"] = np.nan
-
-                    # Додаємо цільові значення для різних горизонтів прогнозування
-                    for horizon in forecast_horizons:
-                        target_idx = i + pos + horizon
-                        if target_idx < len(df):
-                            try:
-                                # Абсолютна ціна закриття
-                                row[f'target_close_{horizon}'] = df[target_col].iloc[target_idx]
-
-                                # Тільки для останнього елемента в послідовності додаємо додаткові цільові змінні
-                                if pos == sequence_length - 1:
-                                    current_price = df[target_col].iloc[idx]
-                                    target_price = df[target_col].iloc[target_idx]
-
-                                    if current_price is not None and current_price != 0:
-                                        # Відносна зміна ціни
-                                        pct_change = (target_price - current_price) / current_price
-                                        row[f'target_close_pct_{horizon}'] = pct_change
-
-                                        # Логарифмічна прибутковість
-                                        if current_price > 0 and target_price > 0:
-                                            log_return = np.log(target_price / current_price)
-                                            row[f'target_close_log_return_{horizon}'] = log_return
-
-                                        # Бінарний напрямок руху (1 - зростання, 0 - падіння)
-                                        row[f'target_direction_{horizon}'] = 1 if target_price > current_price else 0
-                            except Exception as e:
-                                self.logger.error(
-                                    f"Помилка при розрахунку цільових змінних для горизонту {horizon}: {str(e)}")
-                                row[f'target_close_{horizon}'] = np.nan
 
                     # Додаємо часові ознаки без масштабування (вони вже нормалізовані)
                     for feature in available_time_features:

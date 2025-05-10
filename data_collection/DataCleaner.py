@@ -86,6 +86,9 @@ class DataCleaner:
             data: DataFrame з даними
             std_dev: Множник для IQR при визначенні викидів
             price_pct_threshold: Поріг для % зміни ціни як додаткова перевірка (50% за замовчуванням)
+
+        Returns:
+            DataFrame без аномальних значень
         """
         self.logger.info("Видалення аномальних значень...")
         result = data.copy()
@@ -128,7 +131,7 @@ class DataCleaner:
 
                 # Не враховуємо цінові стрибки як викиди, якщо вони не занадто екстремальні
                 extreme_price_jumps = result['price_pct_change'] > price_pct_threshold * 2
-                outliers = outliers & ~price_jumps | extreme_price_jumps
+                outliers = outliers & (~price_jumps | extreme_price_jumps)
 
             if outliers.any():
                 outlier_count = outliers.sum()
@@ -160,9 +163,16 @@ class DataCleaner:
                 negative_count = negative_prices.sum()
                 self.logger.warning(f"Знайдено {negative_count} від'ємних значень у колонці {col}")
 
-                # Використовуємо абсолютні значення для виправлення
-                result.loc[negative_prices, col] = result.loc[negative_prices, col].abs()
-                self.logger.info(f"Від'ємні значення у колонці {col} замінені на їх абсолютні величини")
+                # Замість використання абсолютних значень, позначаємо ці дані як проблемні та заміняємо їх медіаною колонки
+                if result[col].median() > 0:  # Переконуємося, що медіана не є від'ємною або нульовою
+                    result.loc[negative_prices, col] = result[col].median()
+                    self.logger.info(
+                        f"Від'ємні значення у колонці {col} замінені на медіану колонки: {result[col].median()}")
+                else:
+                    # Якщо медіана теж некоректна, використовуємо останнє коректне значення або невелике додатне число
+                    result.loc[negative_prices, col] = result[col].abs().mean() or 0.0001
+                    self.logger.info(
+                        f"Від'ємні значення у колонці {col} замінені на середнє абсолютних значень: {result[col].abs().mean() or 0.0001}")
 
             # Перевірка на нульові значення high/low, що нетипово для криптовалют
             zero_prices = result[col] == 0
@@ -172,10 +182,35 @@ class DataCleaner:
 
                 # Для high використовуємо максимум із open та close
                 if col == 'high':
-                    result.loc[zero_prices, col] = result.loc[zero_prices, ['open', 'close']].max(axis=1)
+                    # Перевіряємо, що хоча б одне значення не нульове
+                    mask = (result.loc[zero_prices, 'open'] > 0) | (result.loc[zero_prices, 'close'] > 0)
+                    result.loc[zero_prices & mask, col] = result.loc[zero_prices & mask, ['open', 'close']].max(axis=1)
+
+                    # Якщо обидва значення нульові, використовуємо медіану або мінімальне ненульове значення колонки
+                    still_zero = zero_prices & ~mask
+                    if still_zero.any():
+                        if (result[col] > 0).any():
+                            result.loc[still_zero, col] = result[result[col] > 0][col].median()
+                        else:
+                            result.loc[still_zero, col] = 0.0001  # Мінімальне додатне значення як запасний варіант
+                        self.logger.info(
+                            f"Нульові значення в колонці {col} з нульовими open/close замінені на медіану або мінімальне додатне значення")
+
                 # Для low використовуємо мінімум із open та close
                 elif col == 'low':
-                    result.loc[zero_prices, col] = result.loc[zero_prices, ['open', 'close']].min(axis=1)
+                    # Перевіряємо, що хоча б одне значення не нульове
+                    mask = (result.loc[zero_prices, 'open'] > 0) | (result.loc[zero_prices, 'close'] > 0)
+                    result.loc[zero_prices & mask, col] = result.loc[zero_prices & mask, ['open', 'close']].min(axis=1)
+
+                    # Якщо обидва значення нульові, використовуємо медіану або мінімальне ненульове значення колонки
+                    still_zero = zero_prices & ~mask
+                    if still_zero.any():
+                        if (result[col] > 0).any():
+                            result.loc[still_zero, col] = result[result[col] > 0][col].median()
+                        else:
+                            result.loc[still_zero, col] = 0.0001  # Мінімальне додатне значення як запасний варіант
+                        self.logger.info(
+                            f"Нульові значення в колонці {col} з нульовими open/close замінені на медіану або мінімальне додатне значення")
 
                 self.logger.info(f"Нульові значення у колонці {col} виправлені")
 
@@ -186,9 +221,29 @@ class DataCleaner:
                 negative_count = negative_volumes.sum()
                 self.logger.warning(f"Знайдено {negative_count} від'ємних значень об'єму")
 
-                # Використовуємо абсолютні значення для виправлення
-                result.loc[negative_volumes, 'volume'] = result.loc[negative_volumes, 'volume'].abs()
-                self.logger.info(f"Від'ємні значення об'єму замінені на їх абсолютні величини")
+                # Замінюємо від'ємні значення на медіану або невелике додатне значення
+                if result['volume'].median() > 0:
+                    result.loc[negative_volumes, 'volume'] = result['volume'].median()
+                    self.logger.info(f"Від'ємні значення об'єму замінені на медіану: {result['volume'].median()}")
+                else:
+                    result.loc[negative_volumes, 'volume'] = result['volume'].abs().mean() or 0.01
+                    self.logger.info(
+                        f"Від'ємні значення об'єму замінені на середнє абсолютних значень: {result['volume'].abs().mean() or 0.01}")
+
+            # Перевірка на нульові об'єми
+            zero_volumes = result['volume'] == 0
+            if zero_volumes.any():
+                zero_count = zero_volumes.sum()
+                self.logger.warning(f"Знайдено {zero_count} нульових значень об'єму")
+
+                # Замінюємо нульові значення мінімальним ненульовим об'ємом або невеликим додатним значенням
+                if (result['volume'] > 0).any():
+                    min_volume = result[result['volume'] > 0]['volume'].min()
+                    result.loc[zero_volumes, 'volume'] = min_volume
+                    self.logger.info(f"Нульові значення об'єму замінені на мінімальний ненульовий об'єм: {min_volume}")
+                else:
+                    result.loc[zero_volumes, 'volume'] = 0.01
+                    self.logger.info("Нульові значення об'єму замінені на 0.01")
 
             # Перевірка на аномально великі об'єми (можливі помилки даних)
             if len(result) > 10:  # потрібно достатньо даних для розрахунку
@@ -207,18 +262,26 @@ class DataCleaner:
                         self.logger.debug(
                             f"Індекси аномальних об'ємів: {abnormal_indexes[:10]}{'...' if len(abnormal_indexes) > 10 else ''}")
 
+        # Перевірка логічного відношення значень high/low/open/close
+        if all(col in result.columns for col in ['high', 'low', 'open', 'close']):
+            # Перевіряємо, що high завжди найбільше значення
+            invalid_high = result['high'] < result[['open', 'close', 'low']].max(axis=1)
+            if invalid_high.any():
+                self.logger.warning(f"Знайдено {invalid_high.sum()} записів, де high менше за open, close або low")
+                result.loc[invalid_high, 'high'] = result.loc[invalid_high, ['open', 'close', 'low']].max(axis=1)
+                self.logger.info("Виправлено невалідні значення high")
+
+            # Перевіряємо, що low завжди найменше значення
+            invalid_low = result['low'] > result[['open', 'close']].min(axis=1)
+            if invalid_low.any():
+                self.logger.warning(f"Знайдено {invalid_low.sum()} записів, де low більше за open або close")
+                result.loc[invalid_low, 'low'] = result.loc[invalid_low, ['open', 'close']].min(axis=1)
+                self.logger.info("Виправлено невалідні значення low")
+
         return result
 
     def add_crypto_specific_features(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Додає специфічні для криптовалют ознаки.
 
-        Args:
-            data: DataFrame з OHLCV даними
-
-        Returns:
-            DataFrame з доданими ознаками
-        """
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для додавання крипто-специфічних ознак")
             return data if data is not None else pd.DataFrame()
@@ -837,25 +900,35 @@ class DataCleaner:
                 'method': method,
                 'columns': normalize_cols,
                 'imputers': {},
-                'scalers': {}
+                'scalers': {},
+                'original_mins': {},  # Зберігаємо мінімальні значення для відновлення
+                'scaling_factors': {}  # Зберігаємо фактори масштабування
             }
 
             if price_cols:
                 # Спочатку обробляємо цінові колонки, зберігаючи їх співвідношення
 
-                # 1. Спочатку обчислимо різниці high-low, high-open, close-low тощо
-                # Зберігаємо оригінальні співвідношення
+                # 1. Зберігаємо оригінальні співвідношення між цінами
                 if all(col in price_cols for col in ['high', 'low']):
-                    result['_hl_ratio'] = result['high'] - result['low']  # High-Low spread
+                    result['_hl_ratio'] = result['high'] / result['low']  # High-Low ratio
+                    # Замінюємо нескінченні значення та NaN на 1.01 (невелике перебільшення)
+                    result['_hl_ratio'].replace([float('inf'), float('-inf')], 1.01, inplace=True)
+                    result['_hl_ratio'].fillna(1.01, inplace=True)
 
                 if all(col in price_cols for col in ['high', 'open']):
-                    result['_ho_ratio'] = result['high'] - result['open']  # High-Open difference
+                    result['_ho_ratio'] = result['high'] / result['open']
+                    result['_ho_ratio'].replace([float('inf'), float('-inf')], 1.01, inplace=True)
+                    result['_ho_ratio'].fillna(1.01, inplace=True)
 
                 if all(col in price_cols for col in ['close', 'low']):
-                    result['_cl_ratio'] = result['close'] - result['low']  # Close-Low difference
+                    result['_cl_ratio'] = result['close'] / result['low']
+                    result['_cl_ratio'].replace([float('inf'), float('-inf')], 1.01, inplace=True)
+                    result['_cl_ratio'].fillna(1.01, inplace=True)
 
                 if all(col in price_cols for col in ['open', 'close']):
-                    result['_oc_ratio'] = result['open'] - result['close']  # Open-Close difference
+                    result['_oc_ratio'] = result['open'] / result['close']
+                    result['_oc_ratio'].replace([float('inf'), float('-inf')], 1.01, inplace=True)
+                    result['_oc_ratio'].fillna(1.01, inplace=True)
 
                 # 2. Нормалізуємо базову ціну (наприклад, low)
                 if 'low' in price_cols:
@@ -871,19 +944,55 @@ class DataCleaner:
                 base_imputer = SimpleImputer(strategy='mean')
                 base_values = base_imputer.fit_transform(result[[base_col]])
 
-                # Вибір скейлера для базової колонки
+                # Зберігаємо мінімальне значення для забезпечення невід'ємності
+                original_min = float(base_values.min())
+                scaler_meta['original_mins'][base_col] = original_min
+
+                # Вибір скейлера для базової колонки з гарантуванням невід'ємних значень
                 if method == 'z-score':
+                    from sklearn.preprocessing import StandardScaler
+                    # Зсув даних, щоб мінімум був > 0 перед масштабуванням
+                    shift_value = abs(min(0, original_min)) + 0.01  # Додаємо 0.01 для гарантії додатності
+                    base_values = base_values + shift_value
+
+                    # Зберігаємо зсув для подальшого використання
+                    scaler_meta['scaling_factors'][f'{base_col}_shift'] = shift_value
+
                     base_scaler = StandardScaler()
+                    base_scaled = base_scaler.fit_transform(base_values)
+
+                    # Після z-score масштабування переводимо значення у додатній діапазон
+                    min_scaled = float(base_scaled.min())
+                    shift_after = abs(min(0, min_scaled)) + 0.01
+                    base_scaled = base_scaled + shift_after
+                    scaler_meta['scaling_factors'][f'{base_col}_after_shift'] = shift_after
+
                 elif method == 'min-max':
-                    base_scaler = MinMaxScaler()
+                    from sklearn.preprocessing import MinMaxScaler
+                    # Використовуємо MinMaxScaler з додатнім діапазоном
+                    base_scaler = MinMaxScaler(feature_range=(0.01, 1.0))
+                    base_scaled = base_scaler.fit_transform(base_values)
+
                 elif method == 'robust':
+                    from sklearn.preprocessing import RobustScaler
+                    # Для RobustScaler також потрібно зсунути дані
+                    shift_value = abs(min(0, original_min)) + 0.01
+                    base_values = base_values + shift_value
+                    scaler_meta['scaling_factors'][f'{base_col}_shift'] = shift_value
+
                     base_scaler = RobustScaler()
+                    base_scaled = base_scaler.fit_transform(base_values)
+
+                    # Гарантуємо додатність після масштабування
+                    min_scaled = float(base_scaled.min())
+                    shift_after = abs(min(0, min_scaled)) + 0.01
+                    base_scaled = base_scaled + shift_after
+                    scaler_meta['scaling_factors'][f'{base_col}_after_shift'] = shift_after
                 else:
                     self.logger.error(f"Непідтримуваний метод нормалізації: {method}")
                     return result, None
 
-                # Масштабування базової колонки
-                base_scaled = base_scaler.fit_transform(base_values)
+                # Оновлюємо базову колонку нормалізованими значеннями
                 result[base_col] = base_scaled
 
                 # Зберігаємо скейлер і імпутер для базової колонки
@@ -894,86 +1003,32 @@ class DataCleaner:
                 if 'high' in price_cols and base_col != 'high':
                     if '_hl_ratio' in result.columns and base_col == 'low':
                         # Відновлюємо high на основі нормалізованого low та оригінального співвідношення
-                        # Створюємо позитивний зсув для збереження співвідношення high > low
-                        result['_hl_ratio'] = result['_hl_ratio'].clip(lower=0.0001)  # Забезпечуємо позитивну різницю
-
-                        # Нормалізуємо співвідношення окремо
-                        ratio_imputer = SimpleImputer(strategy='mean')
-                        ratio_values = ratio_imputer.fit_transform(result[['_hl_ratio']])
-
-                        if method == 'z-score':
-                            ratio_scaler = StandardScaler()
-                        elif method == 'min-max':
-                            ratio_scaler = MinMaxScaler(feature_range=(0.0001, 1))
-                        else:
-                            ratio_scaler = RobustScaler()
-
-                        ratio_scaled = ratio_scaler.fit_transform(ratio_values)
-                        result['_hl_ratio'] = ratio_scaled
-
-                        # Відновлюємо high = low + ratio
-                        result['high'] = result['low'] + result['_hl_ratio'].abs()
-
-                        # Зберігаємо метадані для співвідношення
-                        scaler_meta['imputers']['_hl_ratio'] = ratio_imputer
-                        scaler_meta['scalers']['_hl_ratio'] = ratio_scaler
+                        # Гарантуємо, що співвідношення high/low >= 1
+                        result['_hl_ratio'] = result['_hl_ratio'].clip(lower=1.001)
+                        result['high'] = result['low'] * result['_hl_ratio']
                     else:
-                        # Окрема нормалізація для high, якщо немає low або немає збереженого співвідношення
-                        result['high'] = self._normalize_single_column(result, 'high', method, scaler_meta)
+                        # Окрема нормалізація для high з гарантією невід'ємності
+                        result['high'] = self._normalize_single_column_non_negative(result, 'high', method, scaler_meta)
 
                 if 'open' in price_cols and base_col != 'open':
                     if base_col == 'low' and '_ho_ratio' in result.columns:
-                        # Відновлюємо open відносно low
-                        ratio_imputer = SimpleImputer(strategy='mean')
-                        ratio_values = ratio_imputer.fit_transform(result[['_ho_ratio']])
-
-                        if method == 'z-score':
-                            ratio_scaler = StandardScaler()
-                        elif method == 'min-max':
-                            ratio_scaler = MinMaxScaler()
-                        else:
-                            ratio_scaler = RobustScaler()
-
-                        ratio_scaled = ratio_scaler.fit_transform(ratio_values)
-                        result['_ho_ratio'] = ratio_scaled
-
-                        # open може бути вище або нижче low
-                        result['open'] = result['low'] + result['_ho_ratio']
-
-                        # Зберігаємо метадані
-                        scaler_meta['imputers']['_ho_ratio'] = ratio_imputer
-                        scaler_meta['scalers']['_ho_ratio'] = ratio_scaler
+                        # Відновлюємо open відносно low, використовуючи співвідношення
+                        result['open'] = result['low'] * result['_ho_ratio']
                     else:
-                        result['open'] = self._normalize_single_column(result, 'open', method, scaler_meta)
+                        result['open'] = self._normalize_single_column_non_negative(result, 'open', method, scaler_meta)
 
                 if 'close' in price_cols and base_col != 'close':
                     if base_col == 'low' and '_cl_ratio' in result.columns:
-                        # Відновлюємо close відносно low
-                        ratio_imputer = SimpleImputer(strategy='mean')
-                        ratio_values = ratio_imputer.fit_transform(result[['_cl_ratio']])
-
-                        if method == 'z-score':
-                            ratio_scaler = StandardScaler()
-                        elif method == 'min-max':
-                            ratio_scaler = MinMaxScaler(feature_range=(0.0001, 1))
-                        else:
-                            ratio_scaler = RobustScaler()
-
-                        ratio_scaled = ratio_scaler.fit_transform(ratio_values)
-                        result['_cl_ratio'] = ratio_scaled
-
-                        # close має бути >= low
-                        result['close'] = result['low'] + result['_cl_ratio'].abs()
-
-                        # Зберігаємо метадані
-                        scaler_meta['imputers']['_cl_ratio'] = ratio_imputer
-                        scaler_meta['scalers']['_cl_ratio'] = ratio_scaler
+                        # Гарантуємо, що співвідношення close/low >= 1
+                        result['_cl_ratio'] = result['_cl_ratio'].clip(lower=1.0)
+                        result['close'] = result['low'] * result['_cl_ratio']
                     else:
-                        result['close'] = self._normalize_single_column(result, 'close', method, scaler_meta)
+                        result['close'] = self._normalize_single_column_non_negative(result, 'close', method,
+                                                                                     scaler_meta)
 
-            # Обробляємо інші колонки окремо (наприклад, volume)
+            # Обробляємо інші колонки окремо (наприклад, volume) - завжди невід'ємні
             for col in other_cols:
-                result[col] = self._normalize_single_column(result, col, method, scaler_meta)
+                result[col] = self._normalize_single_column_non_negative(result, col, method, scaler_meta)
 
             # Видаляємо тимчасові колонки співвідношень
             for col in result.columns:
@@ -985,9 +1040,21 @@ class DataCleaner:
                 invalid_rows = (result['high'] < result['low']).sum()
                 if invalid_rows > 0:
                     self.logger.warning(f"Після нормалізації виявлено {invalid_rows} рядків з high < low")
-                    # Виправляємо проблему, встановлюючи high = low + невелике значення
+                    # Виправляємо проблему, встановлюючи high = low * 1.001
                     mask = result['high'] < result['low']
-                    result.loc[mask, 'high'] = result.loc[mask, 'low'] + 0.0001
+                    result.loc[mask, 'high'] = result.loc[mask, 'low'] * 1.001
+
+            # Перевірка наявності від'ємних значень
+            for col in normalize_cols:
+                neg_count = (result[col] < 0).sum()
+                if neg_count > 0:
+                    self.logger.warning(f"Після нормалізації виявлено {neg_count} від'ємних значень у колонці {col}")
+                    # Виправляємо проблему, зсуваючи всі значення для забезпечення невід'ємності
+                    min_val = result[col].min()
+                    shift = abs(min_val) + 0.01
+                    result[col] = result[col] + shift
+                    if col not in scaler_meta['scaling_factors']:
+                        scaler_meta['scaling_factors'][f'{col}_final_shift'] = shift
 
             return result, scaler_meta
 
@@ -998,29 +1065,66 @@ class DataCleaner:
             # Повертаємо оригінальні дані у разі помилки
             return data.copy(), None
 
-    def _normalize_single_column(self, df: pd.DataFrame, column: str, method: str, scaler_meta: Dict) -> pd.Series:
-        """Нормалізує окрему колонку з використанням вказаного методу."""
+    def _normalize_single_column_non_negative(self, df: pd.DataFrame, column: str, method: str,
+                                              scaler_meta: Dict) -> pd.Series:
+        """Нормалізує окрему колонку з використанням вказаного методу, гарантуючи невід'ємні значення."""
         from sklearn.impute import SimpleImputer
 
         # Імпутація пропущених значень
         imputer = SimpleImputer(strategy='mean')
         values = imputer.fit_transform(df[[column]])
 
-        # Вибір скейлера
+        # Зберігаємо оригінальний мінімум для відстеження
+        original_min = float(values.min())
+        scaler_meta['original_mins'][column] = original_min
+
+        # Вибір скейлера з гарантією невід'ємних значень
         if method == 'z-score':
-            from sklearn.preprocessing import StandardScaler
+            # Зсуваємо дані, щоб мінімум був додатній
+            shift_value = abs(min(0, original_min)) + 0.01
+            values = values + shift_value
+            scaler_meta['scaling_factors'][f'{column}_shift'] = shift_value
+
             scaler = StandardScaler()
+            scaled = scaler.fit_transform(values)
+
+            # Після z-score масштабування переводимо значення у додатній діапазон
+            min_scaled = float(scaled.min())
+            shift_after = abs(min(0, min_scaled)) + 0.01
+            scaled = scaled + shift_after
+            scaler_meta['scaling_factors'][f'{column}_after_shift'] = shift_after
+
         elif method == 'min-max':
             from sklearn.preprocessing import MinMaxScaler
-            scaler = MinMaxScaler()
+            # Використовуємо MinMaxScaler з додатнім діапазоном
+            scaler = MinMaxScaler(feature_range=(0.01, 1.0))
+            scaled = scaler.fit_transform(values)
+
         elif method == 'robust':
             from sklearn.preprocessing import RobustScaler
+            # Для RobustScaler також потрібно зсунути дані
+            shift_value = abs(min(0, original_min)) + 0.01
+            values = values + shift_value
+            scaler_meta['scaling_factors'][f'{column}_shift'] = shift_value
+
             scaler = RobustScaler()
+            scaled = scaler.fit_transform(values)
+
+            # Гарантуємо додатність після масштабування
+            min_scaled = float(scaled.min())
+            shift_after = abs(min(0, min_scaled)) + 0.01
+            scaled = scaled + shift_after
+            scaler_meta['scaling_factors'][f'{column}_after_shift'] = shift_after
         else:
             raise ValueError(f"Непідтримуваний метод нормалізації: {method}")
 
-        # Масштабування даних
-        scaled = scaler.fit_transform(values)
+        # Фінальна перевірка на від'ємні значення
+        if (scaled < 0).any():
+            # Зсуваємо все до додатніх значень
+            min_val = float(scaled.min())
+            final_shift = abs(min_val) + 0.01
+            scaled = scaled + final_shift
+            scaler_meta['scaling_factors'][f'{column}_final_shift'] = final_shift
 
         # Зберігаємо метадані
         scaler_meta['imputers'][column] = imputer

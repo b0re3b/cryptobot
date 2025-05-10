@@ -531,13 +531,13 @@ class MarketDataProcessor:
 
         return self.data_storage.save_volume_profile_to_db(data, symbol, timeframe)
 
-    def save_lstm_sequence(self, data: pd.DataFrame, symbol: str, **kwargs) -> bool:
+    def save_lstm_sequence(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> bool:
 
-        return self.data_storage.save_lstm_sequence(data, symbol, **kwargs)
+        return self.data_storage.save_lstm_sequence(data, symbol, timeframe)
 
-    def save_arima_data(self, data: pd.DataFrame, symbol: str, **kwargs) -> bool:
+    def save_arima_data(self, data: pd.DataFrame, timeframe:str, symbol: str, **kwargs) -> bool:
 
-        return self.data_storage.save_arima_data(data, symbol, **kwargs)
+        return self.data_storage.save_arima_data(data, symbol, timeframe)
 
     def load_lstm_sequence(self, symbol: str, **kwargs) -> pd.DataFrame:
 
@@ -590,7 +590,7 @@ class MarketDataProcessor:
 
                 if step_name in ['normalize_data', 'detect_outliers', 'detect_zscore_outliers',
                                  'detect_iqr_outliers', 'detect_isolation_forest_outliers',
-                                 'validate_data_integrity']:
+                                 'validate_data_integrity', 'detect_outliers_essemble']:
                     result, _ = method(result, **step_params)
                 else:
                     result = method(result, **step_params)
@@ -727,7 +727,7 @@ class MarketDataProcessor:
                         getattr(self.data_storage, method_name)(arima_data)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
                     else:
-                        self.save_arima_data(processed_data, timeframe)
+                        self.save_arima_data(processed_data, timeframe, symbol)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено (загальний метод)")
 
             try:
@@ -741,7 +741,7 @@ class MarketDataProcessor:
                             getattr(self.data_storage, method_name)(lstm_df)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
                         else:
-                            self.save_lstm_sequence(processed_data, timeframe)
+                            self.save_lstm_sequence(processed_data, timeframe, symbol)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено (загальний метод)")
             except Exception as e:
                 self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
@@ -886,7 +886,7 @@ class MarketDataProcessor:
 
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
-    SYMBOLS = ['BTC', 'ETH', 'SOL']
+    SYMBOLS = ['BTC']
 
     # Визначення базових та похідних таймфреймів
     BASE_TIMEFRAMES = ['1m', '1h', '1d']  # Таймфрейми, які зберігаються безпосередньо в БД
