@@ -693,7 +693,7 @@ class DatabaseManager:
 
 
 
-    def get_volume_profile(self, symbol, timeframe, time_bucket=None, limit=100):
+    def get_volume_profile(self, symbol, timeframe, time_bucket=None, start_time=None, end_time=None, limit=100):
         """Отримує профіль об'єму для валюти"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")

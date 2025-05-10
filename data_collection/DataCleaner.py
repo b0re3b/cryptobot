@@ -825,49 +825,208 @@ class DataCleaner:
             # Зберігаємо оригінальні дані для відновлення у разі помилки
             original_values = result[normalize_cols].copy()
 
+            # Перевіряємо наявність цінових колонок (OHLC)
+            price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in normalize_cols]
+            other_cols = [col for col in normalize_cols if col not in price_cols]
+
             # Використовуємо SimpleImputer для заповнення NaN значень
             from sklearn.impute import SimpleImputer
             imputer = SimpleImputer(strategy='mean')
-            X_imputed = imputer.fit_transform(result[normalize_cols].values)
-
-            # Вибір скейлера
-            if method == 'z-score':
-                scaler = StandardScaler()
-            elif method == 'min-max':
-                scaler = MinMaxScaler()
-            elif method == 'robust':
-                scaler = RobustScaler()
-            else:
-                self.logger.error(f"Непідтримуваний метод нормалізації: {method}")
-                return result, None
-
-            # Масштабування даних
-            X_scaled = scaler.fit_transform(X_imputed)
-
-            # Оновлення DataFrame
-            for i, col in enumerate(normalize_cols):
-                result[col] = X_scaled[:, i]
-
-            # Перевірка результатів
-            for col in normalize_cols:
-                if col not in result.columns or result[col].isna().all():
-                    self.logger.error(
-                        f"Проблема з колонкою {col} після нормалізації. Відновлення оригінальних значень.")
-                    result[col] = original_values[col]
 
             scaler_meta = {
                 'method': method,
                 'columns': normalize_cols,
-                'scaler': scaler,
-                'imputer': imputer
+                'imputers': {},
+                'scalers': {}
             }
+
+            if price_cols:
+                # Спочатку обробляємо цінові колонки, зберігаючи їх співвідношення
+
+                # 1. Спочатку обчислимо різниці high-low, high-open, close-low тощо
+                # Зберігаємо оригінальні співвідношення
+                if all(col in price_cols for col in ['high', 'low']):
+                    result['_hl_ratio'] = result['high'] - result['low']  # High-Low spread
+
+                if all(col in price_cols for col in ['high', 'open']):
+                    result['_ho_ratio'] = result['high'] - result['open']  # High-Open difference
+
+                if all(col in price_cols for col in ['close', 'low']):
+                    result['_cl_ratio'] = result['close'] - result['low']  # Close-Low difference
+
+                if all(col in price_cols for col in ['open', 'close']):
+                    result['_oc_ratio'] = result['open'] - result['close']  # Open-Close difference
+
+                # 2. Нормалізуємо базову ціну (наприклад, low)
+                if 'low' in price_cols:
+                    base_col = 'low'
+                elif 'close' in price_cols:
+                    base_col = 'close'
+                elif 'open' in price_cols:
+                    base_col = 'open'
+                else:
+                    base_col = 'high'
+
+                # Імпутація пропущених значень для базової колонки
+                base_imputer = SimpleImputer(strategy='mean')
+                base_values = base_imputer.fit_transform(result[[base_col]])
+
+                # Вибір скейлера для базової колонки
+                if method == 'z-score':
+                    base_scaler = StandardScaler()
+                elif method == 'min-max':
+                    base_scaler = MinMaxScaler()
+                elif method == 'robust':
+                    base_scaler = RobustScaler()
+                else:
+                    self.logger.error(f"Непідтримуваний метод нормалізації: {method}")
+                    return result, None
+
+                # Масштабування базової колонки
+                base_scaled = base_scaler.fit_transform(base_values)
+                result[base_col] = base_scaled
+
+                # Зберігаємо скейлер і імпутер для базової колонки
+                scaler_meta['imputers'][base_col] = base_imputer
+                scaler_meta['scalers'][base_col] = base_scaler
+
+                # 3. Відновлюємо інші цінові колонки на основі збережених співвідношень
+                if 'high' in price_cols and base_col != 'high':
+                    if '_hl_ratio' in result.columns and base_col == 'low':
+                        # Відновлюємо high на основі нормалізованого low та оригінального співвідношення
+                        # Створюємо позитивний зсув для збереження співвідношення high > low
+                        result['_hl_ratio'] = result['_hl_ratio'].clip(lower=0.0001)  # Забезпечуємо позитивну різницю
+
+                        # Нормалізуємо співвідношення окремо
+                        ratio_imputer = SimpleImputer(strategy='mean')
+                        ratio_values = ratio_imputer.fit_transform(result[['_hl_ratio']])
+
+                        if method == 'z-score':
+                            ratio_scaler = StandardScaler()
+                        elif method == 'min-max':
+                            ratio_scaler = MinMaxScaler(feature_range=(0.0001, 1))
+                        else:
+                            ratio_scaler = RobustScaler()
+
+                        ratio_scaled = ratio_scaler.fit_transform(ratio_values)
+                        result['_hl_ratio'] = ratio_scaled
+
+                        # Відновлюємо high = low + ratio
+                        result['high'] = result['low'] + result['_hl_ratio'].abs()
+
+                        # Зберігаємо метадані для співвідношення
+                        scaler_meta['imputers']['_hl_ratio'] = ratio_imputer
+                        scaler_meta['scalers']['_hl_ratio'] = ratio_scaler
+                    else:
+                        # Окрема нормалізація для high, якщо немає low або немає збереженого співвідношення
+                        result['high'] = self._normalize_single_column(result, 'high', method, scaler_meta)
+
+                if 'open' in price_cols and base_col != 'open':
+                    if base_col == 'low' and '_ho_ratio' in result.columns:
+                        # Відновлюємо open відносно low
+                        ratio_imputer = SimpleImputer(strategy='mean')
+                        ratio_values = ratio_imputer.fit_transform(result[['_ho_ratio']])
+
+                        if method == 'z-score':
+                            ratio_scaler = StandardScaler()
+                        elif method == 'min-max':
+                            ratio_scaler = MinMaxScaler()
+                        else:
+                            ratio_scaler = RobustScaler()
+
+                        ratio_scaled = ratio_scaler.fit_transform(ratio_values)
+                        result['_ho_ratio'] = ratio_scaled
+
+                        # open може бути вище або нижче low
+                        result['open'] = result['low'] + result['_ho_ratio']
+
+                        # Зберігаємо метадані
+                        scaler_meta['imputers']['_ho_ratio'] = ratio_imputer
+                        scaler_meta['scalers']['_ho_ratio'] = ratio_scaler
+                    else:
+                        result['open'] = self._normalize_single_column(result, 'open', method, scaler_meta)
+
+                if 'close' in price_cols and base_col != 'close':
+                    if base_col == 'low' and '_cl_ratio' in result.columns:
+                        # Відновлюємо close відносно low
+                        ratio_imputer = SimpleImputer(strategy='mean')
+                        ratio_values = ratio_imputer.fit_transform(result[['_cl_ratio']])
+
+                        if method == 'z-score':
+                            ratio_scaler = StandardScaler()
+                        elif method == 'min-max':
+                            ratio_scaler = MinMaxScaler(feature_range=(0.0001, 1))
+                        else:
+                            ratio_scaler = RobustScaler()
+
+                        ratio_scaled = ratio_scaler.fit_transform(ratio_values)
+                        result['_cl_ratio'] = ratio_scaled
+
+                        # close має бути >= low
+                        result['close'] = result['low'] + result['_cl_ratio'].abs()
+
+                        # Зберігаємо метадані
+                        scaler_meta['imputers']['_cl_ratio'] = ratio_imputer
+                        scaler_meta['scalers']['_cl_ratio'] = ratio_scaler
+                    else:
+                        result['close'] = self._normalize_single_column(result, 'close', method, scaler_meta)
+
+            # Обробляємо інші колонки окремо (наприклад, volume)
+            for col in other_cols:
+                result[col] = self._normalize_single_column(result, col, method, scaler_meta)
+
+            # Видаляємо тимчасові колонки співвідношень
+            for col in result.columns:
+                if col.startswith('_') and col.endswith('_ratio'):
+                    result.drop(col, axis=1, inplace=True)
+
+            # Перевірка результатів
+            if 'high' in result.columns and 'low' in result.columns:
+                invalid_rows = (result['high'] < result['low']).sum()
+                if invalid_rows > 0:
+                    self.logger.warning(f"Після нормалізації виявлено {invalid_rows} рядків з high < low")
+                    # Виправляємо проблему, встановлюючи high = low + невелике значення
+                    mask = result['high'] < result['low']
+                    result.loc[mask, 'high'] = result.loc[mask, 'low'] + 0.0001
 
             return result, scaler_meta
 
         except Exception as e:
             self.logger.error(f"Помилка при нормалізації даних: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             # Повертаємо оригінальні дані у разі помилки
             return data.copy(), None
+
+    def _normalize_single_column(self, df: pd.DataFrame, column: str, method: str, scaler_meta: Dict) -> pd.Series:
+        """Нормалізує окрему колонку з використанням вказаного методу."""
+        from sklearn.impute import SimpleImputer
+
+        # Імпутація пропущених значень
+        imputer = SimpleImputer(strategy='mean')
+        values = imputer.fit_transform(df[[column]])
+
+        # Вибір скейлера
+        if method == 'z-score':
+            from sklearn.preprocessing import StandardScaler
+            scaler = StandardScaler()
+        elif method == 'min-max':
+            from sklearn.preprocessing import MinMaxScaler
+            scaler = MinMaxScaler()
+        elif method == 'robust':
+            from sklearn.preprocessing import RobustScaler
+            scaler = RobustScaler()
+        else:
+            raise ValueError(f"Непідтримуваний метод нормалізації: {method}")
+
+        # Масштабування даних
+        scaled = scaler.fit_transform(values)
+
+        # Зберігаємо метадані
+        scaler_meta['imputers'][column] = imputer
+        scaler_meta['scalers'][column] = scaler
+
+        return pd.Series(scaled.flatten(), index=df.index)
 
     def add_time_features_safely(self, data: pd.DataFrame, cyclical: bool = True,
                                  add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:

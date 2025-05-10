@@ -451,7 +451,7 @@ class MarketDataProcessor:
 
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               fetch_missing: bool = False, symbol: Optional[str] = None,
-                              timeframe: Optional[str] = None, **kwargs) -> pd.DataFrame:
+                              timeframe: Optional[str] = None) -> pd.DataFrame:
 
         return self.data_cleaner.handle_missing_values(
             data,
@@ -459,7 +459,6 @@ class MarketDataProcessor:
             fetch_missing=fetch_missing,
             symbol=symbol,
             timeframe=timeframe,
-            **kwargs
         )
 
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
@@ -476,9 +475,9 @@ class MarketDataProcessor:
 
         return self.data_cleaner.add_time_features_safely(data, tz=tz)
 
-    def filter_by_time_range(self, data: pd.DataFrame, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+    def filter_by_time_range(self, data: pd.DataFrame, start_time: str = None, end_time: str = None) -> pd.DataFrame:
 
-        return self.data_cleaner.filter_by_time_range(data, start_date=start_date, end_date=end_date)
+        return self.data_cleaner.filter_by_time_range(data, start_time=start_time, end_time=end_time)
 
     def validate_data_integrity(self, data: pd.DataFrame) -> dict[str, Any]:
 
@@ -620,12 +619,11 @@ class MarketDataProcessor:
             return results
 
         # Визначення базових та похідних таймфреймів
-        base_timeframes = ['1m', '1h', '1d']  # Таймфрейми, які зберігаються безпосередньо в БД
-        derived_timeframes = ['4h', '1w']  # Таймфрейми, які потребують ресемплінгу
+        base_timeframes = ['1m', '1h', '1d']
+        derived_timeframes = ['4h', '1w']
 
         # 1. Завантаження даних
         if timeframe in base_timeframes:
-            # Для базових таймфреймів - завантаження напряму з БД
             raw_data = self.load_data(
                 data_source='database',
                 symbol=symbol,
@@ -638,16 +636,14 @@ class MarketDataProcessor:
                 return results
 
         elif timeframe in derived_timeframes:
-            # Для похідних таймфреймів - визначення базового джерела і ресемплінг
             source_timeframe = None
             if timeframe == '4h':
-                source_timeframe = '1h'  # Ресемплінг з годинних свічок
+                source_timeframe = '1h'
             elif timeframe == '1w':
-                source_timeframe = '1d'  # Ресемплінг з денних свічок
+                source_timeframe = '1d'
 
             self.logger.info(f"Створення {timeframe} даних через ресемплінг з {source_timeframe}")
 
-            # Завантаження базових даних
             source_data = self.load_data(
                 data_source='database',
                 symbol=symbol,
@@ -659,7 +655,6 @@ class MarketDataProcessor:
                 self.logger.warning(f"Базові дані не знайдено для {symbol} {source_timeframe}")
                 return results
 
-            # Ресемплінг даних
             raw_data = self.resample_data(source_data, target_interval=timeframe)
 
             if raw_data.empty:
@@ -673,7 +668,7 @@ class MarketDataProcessor:
 
         # 2. Фільтрація за часовим діапазоном
         if start_date or end_date:
-            raw_data = self.filter_by_time_range(raw_data, start_date=start_date, end_date=end_date)
+            raw_data = self.filter_by_time_range(raw_data, start_time=start_date, end_time=end_date)
             if raw_data.empty:
                 self.logger.warning(f"Після фільтрації за часом дані відсутні")
                 return results
@@ -701,7 +696,6 @@ class MarketDataProcessor:
         # 6. Виявлення та обробка аномалій
         processed_data, outliers_info = self.detect_outliers(processed_data)
 
-
         # 8. Створення профілю об'єму
         volume_profile = self.aggregate_volume_profile(
             processed_data,
@@ -714,7 +708,6 @@ class MarketDataProcessor:
         if not volume_profile.empty:
             results['volume_profile'] = volume_profile
 
-            # Збереження профілю об'єму
             if save_results:
                 success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
                 if success:
@@ -723,38 +716,31 @@ class MarketDataProcessor:
                     self.logger.error(f"Помилка збереження профілю об'єму для {symbol} {timeframe}")
 
         # 9. Підготовка даних для моделей ARIMA і LSTM
-        if timeframe in ['1m','4h', '1d','1w']:
-            # ARIMA дані
+        if timeframe in ['1m', '4h', '1d', '1w']:
+            # ARIMA
             arima_data = self.prepare_arima_data(processed_data, symbol=symbol, timeframe=timeframe)
             if not arima_data.empty:
                 results['arima_data'] = arima_data
                 if save_results:
-                    # Використання спеціального методу для збереження ARIMA даних з ім'ям символу
                     method_name = f"save_{symbol}_arima_data"
                     if hasattr(self.data_storage, method_name):
                         getattr(self.data_storage, method_name)(arima_data)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
                     else:
-                        # Якщо метод не існує, використовуємо загальний метод
                         self.save_arima_data(processed_data, timeframe)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено (загальний метод)")
 
-            # LSTM дані
             try:
-                X_lstm, y_lstm = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
-                if X_lstm is not None and y_lstm is not None:
-                    lstm_df = pd.DataFrame(X_lstm.reshape(X_lstm.shape[0], -1))
-                    lstm_df['target'] = y_lstm
+                lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
+                if not lstm_df.empty:
                     results['lstm_data'] = lstm_df
 
                     if save_results:
-                        # Використання спеціального методу для збереження LSTM даних з ім'ям символу
                         method_name = f"save_{symbol}_lstm_sequence"
                         if hasattr(self.data_storage, method_name):
                             getattr(self.data_storage, method_name)(lstm_df)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
                         else:
-
                             self.save_lstm_sequence(processed_data, timeframe)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено (загальний метод)")
             except Exception as e:
@@ -762,7 +748,6 @@ class MarketDataProcessor:
 
         self.logger.info(f"Комплексна обробка даних для {symbol} ({timeframe}) завершена успішно")
         return results
-
 
     def validate_market_data(self, data: pd.DataFrame) -> Tuple[bool, Dict]:
 
