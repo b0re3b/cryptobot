@@ -41,6 +41,10 @@ class AnomalyDetector:
             if col not in processed_data.columns:
                 continue
 
+            # Переконуємося, що колонка є числовою
+            if processed_data[col].dtype == object:
+                processed_data[col] = pd.to_numeric(processed_data[col], errors='coerce')
+
             if processed_data[col].isna().any():
                 if fill_method == 'mean':
                     fill_value = processed_data[col].mean()
@@ -59,6 +63,9 @@ class AnomalyDetector:
         # 2. Криптовалютні дані можуть мати екстремальні значення - використаємо робастну нормалізацію
         for col in numeric_cols:
             # Перевіряємо, чи всі значення однакові
+            if processed_data[col].dtype == object:
+                processed_data[col] = pd.to_numeric(processed_data[col], errors='coerce')
+
             unique_values = processed_data[col].nunique()
 
             if unique_values <= 1:
@@ -112,7 +119,19 @@ class AnomalyDetector:
         data = self.ensure_float(data)
 
         # Вибір числових колонок
-        numeric_cols = data.select_dtypes(include=[np.number]).columns
+        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+
+        # Перетворення об'єктів на числа, коли можливо
+        for col in data.columns:
+            if col not in numeric_cols and data[col].dtype == object:
+                try:
+                    # Якщо колонка містить числа як строки
+                    data[col] = pd.to_numeric(data[col], errors='coerce')
+                    if not data[col].isna().all():  # Якщо не всі значення стали NaN
+                        numeric_cols.append(col)
+                except:
+                    pass
+
         if len(numeric_cols) == 0:
             self.logger.warning("У DataFrame немає числових колонок для аналізу аномалій")
             return pd.DataFrame(), []
@@ -152,7 +171,12 @@ class AnomalyDetector:
             return pd.DataFrame(), []
 
         if not outliers_df.empty:
-            outliers_df['is_outlier'] = outliers_df.any(axis=1)
+            # Перевіряємо, чи були знайдені аномалії в будь-якій колонці
+            cols_to_check = [col for col in outliers_df.columns if col.endswith('_outlier')]
+            if cols_to_check:
+                outliers_df['is_outlier'] = outliers_df[cols_to_check].any(axis=1)
+            else:
+                outliers_df['is_outlier'] = False
 
         outlier_indices = list(all_outlier_indices)
 
@@ -163,20 +187,23 @@ class AnomalyDetector:
                                threshold: float, outliers_df: pd.DataFrame,
                                all_outlier_indices: set) -> None:
         """Виявлення аномалій за методом Z-Score."""
-        # Вектеризована обробка для швидкодії
+        # Відфільтруємо колонки з проблемами
         valid_cols = []
 
-        # Відфільтруємо колонки з проблемами
         for col in numeric_cols:
-            if col not in data.columns or data[col].isna().all():
-                self.logger.warning(f"Колонка {col} містить лише NaN значення або відсутня, пропускаємо")
+            if col not in data.columns:
                 continue
 
-            valid_data = data[col].dropna()
+            if data[col].isna().all():
+                self.logger.warning(f"Колонка {col} містить лише NaN значення, пропускаємо")
+                continue
+
+            # Переконуємося, що дані числові
+            valid_data = pd.to_numeric(data[col], errors='coerce').dropna()
+
             if valid_data.empty:
+                self.logger.warning(f"Колонка {col} не містить валідних числових даних")
                 continue
-
-            valid_data = pd.to_numeric(valid_data, errors='coerce')
 
             # Перевірка на однорідність даних
             if valid_data.nunique() <= 1:
@@ -185,7 +212,7 @@ class AnomalyDetector:
                 continue
 
             std = valid_data.std()
-            if std == 0 or pd.isna(std):
+            if np.isclose(std, 0) or pd.isna(std):
                 self.logger.warning(f"Колонка {col} має нульове стандартне відхилення або NaN")
                 continue
 
@@ -195,24 +222,21 @@ class AnomalyDetector:
             self.logger.warning("Немає валідних колонок для Z-Score аналізу")
             return
 
-        # Обчислимо Z-Score для всіх валідних колонок одночасно
+        # Обчислимо Z-Score для всіх валідних колонок
         for col in valid_cols:
-            valid_data = data[col].dropna()
-            valid_data = pd.to_numeric(valid_data, errors='coerce')
+            valid_data = pd.to_numeric(data[col], errors='coerce').dropna()
 
             # Використовуємо робастні оцінки для криптовалютних даних
-            # замість mean та std можна використати медіану та MAD
-            # для кращої стійкості до екстремальних значень
             median = valid_data.median()
             # MAD (Median Absolute Deviation) - робастна альтернатива std
             mad = np.median(np.abs(valid_data - median)) * 1.4826  # множник для приведення MAD до масштабу std
 
             # Запобігаємо діленню на нуль
-            if mad == 0:
+            if np.isclose(mad, 0):
                 self.logger.warning(f"MAD для колонки {col} дорівнює нулю, використовуємо стандартний Z-Score")
                 mean = valid_data.mean()
                 std = valid_data.std()
-                if std == 0:
+                if np.isclose(std, 0):
                     self.logger.warning(f"Std для колонки {col} також дорівнює нулю, пропускаємо")
                     continue
 
@@ -220,16 +244,22 @@ class AnomalyDetector:
                 z_scores = pd.Series(np.nan, index=data.index)
 
                 # Заповнюємо тільки валідні індекси
-                z_scores[valid_data.index] = np.abs((valid_data - mean) / std)
+                valid_indices = valid_data.index
+                z_scores.loc[valid_indices] = np.abs((valid_data - mean) / std)
             else:
                 # Ініціалізуємо серію для робастного Z-Score з NaN
                 z_scores = pd.Series(np.nan, index=data.index)
 
                 # Заповнюємо тільки валідні індекси
-                z_scores[valid_data.index] = np.abs((valid_data - median) / mad)
+                valid_indices = valid_data.index
+                z_scores.loc[valid_indices] = np.abs((valid_data - median) / mad)
 
             # Визначаємо аномалії
             outliers = z_scores > threshold
+
+            # Заповнюємо False для NaN значень
+            outliers = outliers.fillna(False)
+
             outliers_df[f'{col}_outlier'] = outliers
 
             if outliers.any():
@@ -245,12 +275,12 @@ class AnomalyDetector:
             if col not in data.columns:
                 continue
 
-            valid_data = data[col].dropna()
+            # Переконуємося, що дані числові
+            valid_data = pd.to_numeric(data[col], errors='coerce').dropna()
+
             if len(valid_data) < 4:
                 self.logger.warning(f"Недостатньо даних у колонці {col} для IQR методу")
                 continue
-
-            valid_data = pd.to_numeric(valid_data, errors='coerce')
 
             # Перевірка на однорідність даних
             unique_count = valid_data.nunique()
@@ -263,14 +293,14 @@ class AnomalyDetector:
                 Q3 = valid_data.quantile(0.75)
 
                 # Вирішення проблеми Q1=Q3 для криптовалют
-                if Q1 == Q3:
+                if np.isclose(Q1, Q3):
                     self.logger.warning(f"Q1=Q3 для колонки {col}. Застосовуємо модифікований метод.")
 
                     # Спробуємо використати більш широкий інтервал квантилів
                     Q1_alt = valid_data.quantile(0.10)
                     Q3_alt = valid_data.quantile(0.90)
 
-                    if Q1_alt == Q3_alt:
+                    if np.isclose(Q1_alt, Q3_alt):
                         # Якщо все ще однакові, спробуємо взяти відхилення від медіани
                         median = valid_data.median()
 
@@ -305,7 +335,11 @@ class AnomalyDetector:
 
                 # Створюємо серію з індексами original data
                 outliers = pd.Series(False, index=data.index)
-                outliers[valid_data.index] = (valid_data < lower_bound) | (valid_data > upper_bound)
+
+                # Заповнюємо тільки для валідних індексів
+                valid_indices = valid_data.index
+                outliers.loc[valid_indices] = (valid_data < lower_bound) | (valid_data > upper_bound)
+
                 outliers_df[f'{col}_outlier'] = outliers
 
                 if outliers.any():
@@ -335,11 +369,15 @@ class AnomalyDetector:
             self.logger.warning("Відсутні числові колонки для Isolation Forest")
             return
 
+        # Створюємо копію щоб уникнути попереджень SettingWithCopyWarning
         X = data[numeric_cols].copy()
 
         # Перевірка на однорідність даних
         non_constant_cols = []
         for col in X.columns:
+            if X[col].dtype == object:
+                X[col] = pd.to_numeric(X[col], errors='coerce')
+
             if X[col].nunique() > 1:
                 non_constant_cols.append(col)
 
@@ -348,9 +386,6 @@ class AnomalyDetector:
             return
 
         X = X[non_constant_cols]
-
-        for col in non_constant_cols:
-            X[col] = pd.to_numeric(X[col], errors='coerce')
 
         # Заповнення пропущених значень
         for col in non_constant_cols:
@@ -385,8 +420,8 @@ class AnomalyDetector:
             predictions = model.fit_predict(X)
 
             # -1 для викидів, 1 для нормальних значень
-            outliers = predictions == -1
-            outliers_df['isolation_forest_outlier'] = pd.Series(outliers, index=data.index)
+            outliers = pd.Series(predictions == -1, index=data.index)
+            outliers_df['isolation_forest_outlier'] = outliers
 
             if outliers.any():
                 outlier_indices = data.index[outliers]
@@ -420,6 +455,9 @@ class AnomalyDetector:
                     # Криптовалюти можуть мати дуже різкі стрибки
                     pct_change = data[col].pct_change()
 
+                    # Заповнюємо NaN значення (перший елемент) нулем
+                    pct_change = pct_change.fillna(0)
+
                     # Використовуємо різні пороги для крипто (більші ніж для звичайних активів)
                     # Враховуємо як додатні, так і від'ємні стрибки
                     pos_jumps = pct_change > 0.1  # 10% стрибок вгору
@@ -439,7 +477,12 @@ class AnomalyDetector:
                     self.logger.info(f"Знайдено {invalid_prices.sum()} нульових або від'ємних значень у колонці {col}")
 
         # 2. Перевірка узгодженості OHLC даних
-        if {'open', 'high', 'low', 'close'}.issubset(data.columns):
+        if all(col in data.columns for col in ['open', 'high', 'low', 'close']):
+            # Перетворення на числові дані
+            for col in ['open', 'high', 'low', 'close']:
+                if data[col].dtype == object:
+                    data[col] = pd.to_numeric(data[col], errors='coerce')
+
             # High має бути >= всіх інших цін
             invalid_high = (data['high'] < data['open']) | (data['high'] < data['low']) | (data['high'] < data['close'])
 
@@ -466,8 +509,14 @@ class AnomalyDetector:
                 self.logger.info(f"Знайдено {zero_volume.sum()} записів з нульовим об'ємом")
 
             # Перевірка на аномально високий об'єм
+            # Використовуємо min_periods=1 для обробки коротких даних
             rolling_vol = data[volume_col].rolling(window=24, min_periods=1).median()  # Медіанний об'єм за 24 періоди
-            vol_ratio = data[volume_col] / rolling_vol
+
+            # Уникаємо ділення на нуль
+            with np.errstate(divide='ignore', invalid='ignore'):
+                vol_ratio = data[volume_col] / rolling_vol
+                vol_ratio = vol_ratio.replace([np.inf, -np.inf], np.nan).fillna(0)
+
             high_volume = vol_ratio > 10  # Об'єм у 10+ разів вище медіанного
 
             if high_volume.any():
