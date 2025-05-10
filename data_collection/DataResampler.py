@@ -850,11 +850,11 @@ class DataResampler:
 
         # Базові ринкові дані з різними варіантами назв колонок
         basic_feature_cols = {
-            'open': ['open', 'open_price'],
-            'high': ['high', 'high_price', 'max_price'],
-            'low': ['low', 'low_price', 'min_price'],
-            'close': ['close', 'close_price', 'price', 'last', 'last_price'],
-            'volume': ['volume', 'base_volume', 'quantity', 'amount']
+            'open': ['open', 'open_price','iqr_anomaly_open'],
+            'high': ['high', 'high_price', 'max_price', 'iqr_anomaly_high'],
+            'low': ['low', 'low_price', 'min_price', 'iqr_anomaly_low'],
+            'close': ['close', 'close_price', 'price', 'last', 'last_price', 'iqr_anomaly_close'],
+            'volume': ['volume', 'base_volume', 'quantity', 'amount', 'iqr_anomaly_volume']
         }
 
         feature_cols = []
