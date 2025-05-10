@@ -9,14 +9,16 @@ from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
+
+
 class DataCleaner:
-    def __init__(self, logger):
-        self.logger = logger
+    def __init__(self, logger=None):
+        self.logger = logger if logger else self._setup_default_logger()
         self.anomaly_detector = AnomalyDetector(logger=self.logger)
         self.data_resampler = DataResampler(logger=self.logger)
 
-    def _setup_default_logger(self) -> logging.Logger:
-
+    @staticmethod
+    def _setup_default_logger() -> logging.Logger:
         logger = logging.getLogger("data_cleaner")
         logger.setLevel(logging.INFO)
 
@@ -28,6 +30,250 @@ class DataCleaner:
 
         return logger
 
+    def _fix_invalid_high_low(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Виправляє некоректні співвідношення між high і low значеннями.
+        Враховує особливість криптовалютних даних, де high та low можуть бути рівними.
+        """
+        result = data.copy()
+
+        # Перевірка на наявність необхідних колонок
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+        if len(price_cols) < 4:
+            return result
+
+        # 1. Перевірка та виправлення випадків high < low
+        invalid_hl = result['high'] < result['low']
+        if invalid_hl.any():
+            invalid_count = invalid_hl.sum()
+            self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
+
+            if self.logger.isEnabledFor(logging.DEBUG):
+                invalid_indexes = result.index[invalid_hl].tolist()
+                self.logger.debug(
+                    f"Індекси проблемних рядків: {invalid_indexes[:10]}{'...' if len(invalid_indexes) > 10 else ''}")
+
+            # Міняємо місцями high та low значення
+            temp = result.loc[invalid_hl, 'high'].copy()
+            result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
+            result.loc[invalid_hl, 'low'] = temp
+
+        # 2. Додаткова перевірка на випадки, коли high = low
+        equal_hl = (result['high'] == result['low']) & (result['volume'] > 0)
+        if equal_hl.any():
+            equal_count = equal_hl.sum()
+            self.logger.info(f"Знайдено {equal_count} рядків з рівними high і low при ненульовому об'ємі")
+
+            # Для таких записів можна додати невелику різницю, але лише якщо це необхідно для подальшої обробки
+            # Зазвичай рівні high/low в криптовалютах - це нормальна ситуація
+
+        # 3. Додаткова перевірка на випадки, коли всі OHLC значення рівні (flat price)
+        flat_price = (result['open'] == result['high']) & (result['high'] == result['low']) & (
+                    result['low'] == result['close']) & (result['volume'] > 0)
+        if flat_price.any():
+            flat_count = flat_price.sum()
+            self.logger.info(f"Знайдено {flat_count} записів з однаковими OHLC значеннями при ненульовому об'ємі")
+            # Це нормальна ситуація для неліквідних періодів на криптовалютному ринку
+
+        return result
+
+    def _remove_outliers(self, data: pd.DataFrame, std_dev: float = 3.0,
+                         price_pct_threshold: float = 0.5) -> pd.DataFrame:
+        """
+        Видаляє аномальні значення, враховуючи високу волатильність криптовалютного ринку.
+
+        Args:
+            data: DataFrame з даними
+            std_dev: Множник для IQR при визначенні викидів
+            price_pct_threshold: Поріг для % зміни ціни як додаткова перевірка (50% за замовчуванням)
+        """
+        self.logger.info("Видалення аномальних значень...")
+        result = data.copy()
+
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+
+        # Створюємо колонку для визначення цінових стрибків (price jumps)
+        if len(data) > 1 and 'close' in result.columns:
+            result['price_pct_change'] = result['close'].pct_change().abs()
+
+        for col in price_cols:
+            # Перевірка на порожню колонку
+            if col not in result.columns or result[col].empty or result[col].isna().all():
+                continue
+
+            # Використання IQR для виявлення викидів
+            Q1 = result[col].quantile(0.25)
+            Q3 = result[col].quantile(0.75)
+            IQR = Q3 - Q1
+
+            # Для криптовалют розширюємо діапазон допустимих значень через високу волатильність
+            lower_bound = Q1 - std_dev * IQR
+            upper_bound = Q3 + std_dev * IQR
+
+            # Перевірка на негативні значення нижньої межі (для криптовалют неможливі негативні ціни)
+            if lower_bound < 0:
+                lower_bound = 0
+                self.logger.info(f"Скоригована нижня межа для {col} до 0 (замість негативного значення)")
+
+            # Основний фільтр на викиди по IQR
+            outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
+
+            # Додаткова перевірка для різких стрибків ціни (якщо був створений price_pct_change)
+            if 'price_pct_change' in result.columns:
+                # Виключаємо з викидів різкі стрибки, які можуть бути легітимними для криптовалют
+                # при значних новинах чи ринкових подіях
+                price_jumps = result['price_pct_change'] > price_pct_threshold
+                self.logger.info(
+                    f"Знайдено {price_jumps.sum()} значних цінових стрибків (>{price_pct_threshold * 100}%)")
+
+                # Не враховуємо цінові стрибки як викиди, якщо вони не занадто екстремальні
+                extreme_price_jumps = result['price_pct_change'] > price_pct_threshold * 2
+                outliers = outliers & ~price_jumps | extreme_price_jumps
+
+            if outliers.any():
+                outlier_count = outliers.sum()
+                outlier_indexes = result.index[outliers].tolist()
+                self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
+
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(
+                        f"Індекси перших 10 аномалій: {outlier_indexes[:10]}{'...' if len(outlier_indexes) > 10 else ''}")
+
+                # Замінюємо викиди на NaN для подальшого заповнення
+                result.loc[outliers, col] = np.nan
+
+        # Видаляємо допоміжну колонку
+        if 'price_pct_change' in result.columns:
+            result.drop('price_pct_change', axis=1, inplace=True)
+
+        return result
+
+    def _fix_invalid_values(self, data: pd.DataFrame, essential_cols: List[str]) -> pd.DataFrame:
+        """Виправляє неприпустимі значення: від'ємні ціни, нульові high/low та аномальні об'єми"""
+        result = data.copy()
+
+        # Перевірка на від'ємні ціни
+        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+        for col in price_cols:
+            negative_prices = result[col] < 0
+            if negative_prices.any():
+                negative_count = negative_prices.sum()
+                self.logger.warning(f"Знайдено {negative_count} від'ємних значень у колонці {col}")
+
+                # Використовуємо абсолютні значення для виправлення
+                result.loc[negative_prices, col] = result.loc[negative_prices, col].abs()
+                self.logger.info(f"Від'ємні значення у колонці {col} замінені на їх абсолютні величини")
+
+            # Перевірка на нульові значення high/low, що нетипово для криптовалют
+            zero_prices = result[col] == 0
+            if zero_prices.any() and col in ['high', 'low']:
+                zero_count = zero_prices.sum()
+                self.logger.warning(f"Знайдено {zero_count} нульових значень у колонці {col}")
+
+                # Для high використовуємо максимум із open та close
+                if col == 'high':
+                    result.loc[zero_prices, col] = result.loc[zero_prices, ['open', 'close']].max(axis=1)
+                # Для low використовуємо мінімум із open та close
+                elif col == 'low':
+                    result.loc[zero_prices, col] = result.loc[zero_prices, ['open', 'close']].min(axis=1)
+
+                self.logger.info(f"Нульові значення у колонці {col} виправлені")
+
+        # Перевірка на від'ємні об'єми
+        if 'volume' in result.columns:
+            negative_volumes = result['volume'] < 0
+            if negative_volumes.any():
+                negative_count = negative_volumes.sum()
+                self.logger.warning(f"Знайдено {negative_count} від'ємних значень об'єму")
+
+                # Використовуємо абсолютні значення для виправлення
+                result.loc[negative_volumes, 'volume'] = result.loc[negative_volumes, 'volume'].abs()
+                self.logger.info(f"Від'ємні значення об'єму замінені на їх абсолютні величини")
+
+            # Перевірка на аномально великі об'єми (можливі помилки даних)
+            if len(result) > 10:  # потрібно достатньо даних для розрахунку
+                volume_mean = result['volume'].mean()
+                volume_std = result['volume'].std()
+                abnormal_volume = result['volume'] > (volume_mean + 10 * volume_std)  # 10 стандартних відхилень
+
+                if abnormal_volume.any():
+                    abnormal_count = abnormal_volume.sum()
+                    self.logger.warning(f"Знайдено {abnormal_count} аномально великих значень об'єму")
+
+                    # Відмічаємо їх для додаткової перевірки, але не змінюємо автоматично
+                    # Криптовалютні ринки можуть мати легітимні великі скачки об'єму при значних подіях
+                    if self.logger.isEnabledFor(logging.DEBUG):
+                        abnormal_indexes = result.index[abnormal_volume].tolist()
+                        self.logger.debug(
+                            f"Індекси аномальних об'ємів: {abnormal_indexes[:10]}{'...' if len(abnormal_indexes) > 10 else ''}")
+
+        return result
+
+    def add_crypto_specific_features(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Додає специфічні для криптовалют ознаки.
+
+        Args:
+            data: DataFrame з OHLCV даними
+
+        Returns:
+            DataFrame з доданими ознаками
+        """
+        if data is None or data.empty:
+            self.logger.warning("Отримано порожній DataFrame для додавання крипто-специфічних ознак")
+            return data if data is not None else pd.DataFrame()
+
+        result = data.copy()
+
+        # Перевіряємо наявність необхідних колонок
+        required_cols = ['open', 'high', 'low', 'close', 'volume']
+        missing_cols = [col for col in required_cols if col not in result.columns]
+        if missing_cols:
+            self.logger.warning(f"Відсутні необхідні колонки для розрахунку крипто-ознак: {missing_cols}")
+            return result
+
+        try:
+            # 1. Волатильність
+            result['volatility'] = (result['high'] - result['low']) / result['low']
+
+            # 2. Об'єм/волатильність співвідношення (індикатор ліквідності)
+            result['volume_volatility_ratio'] = result['volume'] / (
+                        result['volatility'] + 0.0001)  # уникаємо ділення на нуль
+
+            # 3. Індикатор нульового об'єму (характерно для неактивних періодів)
+            result['zero_volume'] = (result['volume'] == 0).astype(int)
+
+            # 4. Flat price індикатор (всі ціни однакові)
+            result['flat_price'] = ((result['open'] == result['high']) &
+                                    (result['high'] == result['low']) &
+                                    (result['low'] == result['close'])).astype(int)
+
+            # 5. Відсоткова зміна ціни
+            result['price_change_pct'] = (result['close'] - result['open']) / result['open']
+
+            # 6. Candle body size (відносний)
+            result['body_size_pct'] = abs(result['close'] - result['open']) / result['open']
+
+            # 7. Upper and lower shadows (відносні)
+            result['upper_shadow_pct'] = (result['high'] - result[['open', 'close']].max(axis=1)) / result['open']
+            result['lower_shadow_pct'] = (result[['open', 'close']].min(axis=1) - result['low']) / result['open']
+
+            # 8. Is Doji (тіло свічки дуже мале)
+            doji_threshold = 0.0005  # 0.05%
+            result['is_doji'] = (result['body_size_pct'] < doji_threshold).astype(int)
+
+            # 9. Volume spike (раптовий скачок об'єму) - використовуємо ковзне середнє
+            if len(result) > 24:  # потрібно достатньо історії
+                vol_ma = result['volume'].rolling(window=24).mean()
+                result['volume_spike'] = (result['volume'] > vol_ma * 3).astype(int)
+
+            self.logger.info(f"Успішно додано криптовалютні ознаки")
+
+        except Exception as e:
+            self.logger.error(f"Помилка при додаванні криптовалютних ознак: {str(e)}")
+
+        return result
+
     def clean_data(self,
                    data: pd.DataFrame,
                    remove_outliers: bool = True,
@@ -38,9 +284,11 @@ class DataCleaner:
                    target_interval: str = None,
                    add_time_features: bool = True,
                    cyclical: bool = True,
-                   add_sessions: bool = False) -> pd.DataFrame:
+                   add_sessions: bool = False,
+                   add_crypto_features: bool = False,  # Новий параметр для крипто-специфічних ознак
+                   crypto_volatility_tolerance: float = 0.5) -> pd.DataFrame:  # Параметр для врахування волатильності криптовалют
 
-        self.logger.info(f"Початок комплексного очищення даних")
+        self.logger.info(f"Початок комплексного очищення даних для криптовалютних таймсерій")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для очищення")
@@ -61,66 +309,149 @@ class DataCleaner:
             self.logger.error(f"Відсутні обов'язкові колонки на початку: {missing_essential}")
             raise ValueError(f"Вхідні дані не містять обов'язкових колонок: {missing_essential}")
 
-        # 3. Видалення дублікатів
+        # 3. Виправлення неприпустимих значень (від'ємні ціни та об'єми)
+        result = self._fix_invalid_values(result, essential_cols)
+        self._verify_essential_columns(result, essential_cols)
+
+        # 4. Видалення дублікатів
         result = self._remove_duplicates(result)
         self._verify_essential_columns(result, essential_cols)
 
-        # 4. Видалення викидів
+        # 5. Видалення викидів (з врахуванням підвищеної волатильності криптовалют)
         if remove_outliers:
-            result = self._remove_outliers(result)
+            result = self._remove_outliers(result, std_dev=5.0, price_pct_threshold=crypto_volatility_tolerance)
             self._verify_essential_columns(result, essential_cols)
 
-        # 5. Заповнення відсутніх значень
+        # 6. Заповнення відсутніх значень
         if fill_missing:
             result = self.handle_missing_values(result)
             self._verify_essential_columns(result, essential_cols)
 
-        # 6. Виправлення невалідних high/low значень
+        # 7. Виправлення невалідних high/low значень
         result = self._fix_invalid_high_low(result)
         self._verify_essential_columns(result, essential_cols)
 
-        # 7. Ресемплінг даних
+        # 8. Ресемплінг даних
         if resample and target_interval and isinstance(result.index, pd.DatetimeIndex):
-            result = self.data_resampler.resample_data(result, target_interval)
-            self._verify_essential_columns(result, essential_cols)
+            backup_data = result.copy()  # Створюємо резервну копію перед ресемплінгом
+            try:
+                result = self.data_resampler.resample_data(result, target_interval)
+                # Перевірка на пустий результат або відсутність необхідних колонок
+                if result.empty or any(col not in result.columns for col in essential_cols):
+                    self.logger.error("Ресемплінг призвів до втрати даних або колонок. Відновлення з резервної копії.")
+                    result = backup_data
+                else:
+                    self._verify_essential_columns(result, essential_cols)
+            except Exception as e:
+                self.logger.error(f"Помилка під час ресемплінгу: {str(e)}. Відновлення з резервної копії.")
+                result = backup_data
 
-        # 8. Нормалізація даних (перед додаванням часових ознак)
+        # 9. Нормалізація даних (перед додаванням часових ознак)
         if normalize:
+            # Зберігаємо копію перед нормалізацією
+            pre_normalize_data = result.copy()
+
             # Виконуємо нормалізацію тільки для необхідних колонок
-            normalized_result, scaler_meta = self.normalize_data(
-                result,
-                norm_method,
-                columns=essential_cols
-            )
+            try:
+                normalized_result, scaler_meta = self.normalize_data(
+                    result,
+                    norm_method,
+                    columns=essential_cols
+                )
 
-            if normalized_result is not None:
-                result = normalized_result
-                # Перевіряємо, чи всі колонки на місці
-                self._verify_essential_columns(result, essential_cols)
-            else:
-                self.logger.warning("Нормалізація не вдалася, використовуємо оригінальні дані")
-                result = result.copy()
+                if normalized_result is not None:
+                    # Перевіряємо результати нормалізації
+                    is_valid = self._validate_normalized_data(normalized_result, essential_cols)
 
-        # 9. Додавання часових ознак (після нормалізації)
+                    if is_valid:
+                        result = normalized_result
+                        self._verify_essential_columns(result, essential_cols)
+                    else:
+                        self.logger.warning("Результати нормалізації недійсні. Використання оригінальних даних.")
+                        result = pre_normalize_data
+                else:
+                    self.logger.warning("Нормалізація не вдалася, використовуємо оригінальні дані")
+                    result = pre_normalize_data
+            except Exception as e:
+                self.logger.error(f"Помилка під час нормалізації: {str(e)}. Використання оригінальних даних.")
+                result = pre_normalize_data
+
+        # 10. Додавання часових ознак (після нормалізації)
         if add_time_features and isinstance(result.index, pd.DatetimeIndex):
-            # Зберігаємо копію критичних колонок перед додаванням фічей
-            essential_data = {col: result[col].copy() for col in essential_cols if col in result.columns}
+            # Зберігаємо копію перед додаванням часових ознак
+            pre_time_features_data = result.copy()
 
-            # Додаємо часові ознаки
-            result = self.add_time_features(result, cyclical, add_sessions)
+            try:
+                # Додаємо часові ознаки безпечно, без перезапису існуючих колонок
+                result = self.add_time_features_safely(result, cyclical, add_sessions)
 
-            # Перевіряємо та відновлюємо критичні колонки
-            for col in essential_cols:
-                if col not in result.columns and col in essential_data:
-                    self.logger.warning(f"Відновлення втраченої колонки {col} після додавання часових ознак")
-                    result[col] = essential_data[col]
+                # Перевіряємо, чи всі обов'язкові колонки збереглися
+                missing_after_features = [col for col in essential_cols if col not in result.columns]
+                if missing_after_features:
+                    self.logger.error(f"Втрачено колонки після додавання часових ознак: {missing_after_features}")
+                    # Відновлюємо з попередньої копії
+                    result = pre_time_features_data
+                    self.logger.info("Відновлено дані з резервної копії")
+            except Exception as e:
+                self.logger.error(f"Помилка при додаванні часових ознак: {str(e)}. Використання попередніх даних.")
+                result = pre_time_features_data
+
+        # 11. NEW: Додавання крипто-специфічних ознак
+        if add_crypto_features:
+            pre_crypto_features_data = result.copy()
+
+            try:
+                result = self.add_crypto_specific_features(result)
+
+                # Перевіряємо, чи всі обов'язкові колонки збереглися
+                missing_after_crypto = [col for col in essential_cols if col not in result.columns]
+                if missing_after_crypto:
+                    self.logger.error(f"Втрачено колонки після додавання крипто-ознак: {missing_after_crypto}")
+                    result = pre_crypto_features_data
+                    self.logger.info("Відновлено дані з резервної копії")
+            except Exception as e:
+                self.logger.error(f"Помилка при додаванні крипто-ознак: {str(e)}. Використання попередніх даних.")
+                result = pre_crypto_features_data
 
         # Фінальна перевірка
         self._verify_essential_columns(result, essential_cols)
-        self.validate_data_integrity(result)
+        issues = self.validate_data_integrity(result)
+
+        if issues:
+            issue_count = sum(1 for issue in issues.values() if issue)
+            self.logger.warning(f"Після очищення залишилось {issue_count} проблем з цілісністю даних")
+        else:
+            self.logger.info("Дані успішно очищені, проблем з цілісністю не виявлено")
 
         self.logger.info(f"Очищення даних завершено: {result.shape[0]} рядків, {result.shape[1]} стовпців")
         return result
+
+
+
+    def _validate_normalized_data(self, data: pd.DataFrame, essential_cols: List[str]) -> bool:
+        """Перевіряє коректність нормалізованих даних"""
+        # Перевірка на NaN
+        for col in essential_cols:
+            if col not in data.columns:
+                self.logger.error(f"Колонка {col} відсутня після нормалізації")
+                return False
+
+            if data[col].isna().any():
+                self.logger.error(f"Виявлено NaN значення в нормалізованій колонці {col}")
+                return False
+
+            # Перевірка на нескінченні значення
+            if np.isinf(data[col]).any():
+                self.logger.error(f"Виявлено нескінченні значення в нормалізованій колонці {col}")
+                return False
+
+        # Перевірка співвідношення high і low
+        if 'high' in data.columns and 'low' in data.columns:
+            invalid_hl = data['high'] < data['low']
+            if invalid_hl.any():
+                self.logger.warning(f"Після нормалізації виявлено {invalid_hl.sum()} рядків з high < low")
+
+        return True
 
     # Нова допоміжна функція для перевірки наявності необхідних колонок
     def _verify_essential_columns(self, data: pd.DataFrame, essential_cols: List[str]):
@@ -187,65 +518,7 @@ class DataCleaner:
             issues["data_values_error"] = str(e)
 
         return issues
-    def _remove_outliers(self, data: pd.DataFrame, std_dev: float = 3.0) -> pd.DataFrame:
 
-        self.logger.info("Видалення аномальних значень...")
-        result = data.copy()
-
-        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-
-        for col in price_cols:
-            # Перевірка на порожню колонку
-            if col not in result.columns or result[col].empty or result[col].isna().all():
-                continue
-
-            # Використання IQR для виявлення викидів
-            Q1 = result[col].quantile(0.25)
-            Q3 = result[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - std_dev * IQR
-            upper_bound = Q3 + std_dev * IQR
-
-            outliers = (result[col] < lower_bound) | (result[col] > upper_bound)
-            if outliers.any():
-                outlier_count = outliers.sum()
-                outlier_indexes = result.index[outliers].tolist()
-                self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
-
-                if self.logger.isEnabledFor(logging.DEBUG):
-                    self.logger.debug(
-                        f"Індекси перших 10 аномалій: {outlier_indexes[:10]}{'...' if len(outlier_indexes) > 10 else ''}")
-
-                # Замінюємо викиди на NaN для подальшого заповнення
-                result.loc[outliers, col] = np.nan
-
-        return result
-    def _fix_invalid_high_low(self, data: pd.DataFrame) -> pd.DataFrame:
-
-        result = data.copy()
-
-        # Перевірка на наявність необхідних колонок
-        price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
-        if len(price_cols) < 4:
-            return result
-
-        # Перевірка та виправлення випадків high < low
-        invalid_hl = result['high'] < result['low']
-        if invalid_hl.any():
-            invalid_count = invalid_hl.sum()
-            self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
-
-            if self.logger.isEnabledFor(logging.DEBUG):
-                invalid_indexes = result.index[invalid_hl].tolist()
-                self.logger.debug(
-                    f"Індекси проблемних рядків: {invalid_indexes[:10]}{'...' if len(invalid_indexes) > 10 else ''}")
-
-            # Міняємо місцями high та low значення
-            temp = result.loc[invalid_hl, 'high'].copy()
-            result.loc[invalid_hl, 'high'] = result.loc[invalid_hl, 'low']
-            result.loc[invalid_hl, 'low'] = temp
-
-        return result
     def _remove_duplicates(self, data: pd.DataFrame) -> pd.DataFrame:
 
         if not isinstance(data.index, pd.DatetimeIndex):
@@ -596,15 +869,14 @@ class DataCleaner:
             # Повертаємо оригінальні дані у разі помилки
             return data.copy(), None
 
-    def add_time_features(self, data: pd.DataFrame, cyclical: bool = True,
-                          add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
-
+    def add_time_features_safely(self, data: pd.DataFrame, cyclical: bool = True,
+                                 add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
+        """Додає часові ознаки безпечно, без перезапису існуючих колонок"""
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для додавання часових ознак")
             return data if data is not None else pd.DataFrame()
 
         # Зберігаємо копію вхідних даних
-        original_data = data.copy()
         result = data.copy()
 
         # Зберігаємо список оригінальних колонок
@@ -626,7 +898,6 @@ class DataCleaner:
                         nat_count = result.index.isna().sum()
                         self.logger.warning(f"Знайдено {nat_count} NaT значень в індексі після конвертації")
                         result = result[~result.index.isna()]
-
                 else:
                     self.logger.error("Неможливо додати часові ознаки: не знайдено часову колонку")
                     return data
@@ -636,7 +907,7 @@ class DataCleaner:
 
         self.logger.info("Додавання часових ознак")
 
-        # Покращена обробка часових поясів
+        # Обробка часових поясів з обробкою помилок
         try:
             if result.index.tz is None:
                 self.logger.info(f"Встановлення часового поясу {tz}")
@@ -647,47 +918,38 @@ class DataCleaner:
                     # Перехід на літній час: пропущена година
                     self.logger.warning(
                         "Виявлено час, що не існує при переході на літній час. Використання нестрогої локалізації.")
-
-                    # Спробуємо різні стратегії
                     try:
-                        # Зсув вперед (найбільш безпечний метод)
+                        # Зсув вперед
                         result.index = result.index.tz_localize(tz, nonexistent='shift_forward')
                     except Exception:
                         try:
                             # Зсув назад як альтернатива
                             result.index = result.index.tz_localize(tz, nonexistent='shift_backward')
                         except Exception:
-                            # Створення нового часу як остання спроба
+                            # Створення NaT як остання спроба
                             self.logger.warning("Використання методу 'NaT' для неіснуючих значень часу")
                             result.index = result.index.tz_localize(tz, nonexistent='NaT')
                             # Видалення NaT
                             result = result[~result.index.isna()]
-
                 except pytz.exceptions.AmbiguousTimeError:
                     # Перехід на зимовий час: дубльована година
                     self.logger.warning(
                         "Виявлено неоднозначний час при переході на зимовий час. Використання стратегії.")
-
                     try:
-                        # Спочатку пробуємо встановити False для всіх неоднозначних значень
-                        # (вибираємо другу появу часу, тобто після переходу на зимовий час)
+                        # Спочатку пробуємо False
                         result.index = result.index.tz_localize(tz, ambiguous=False)
                     except Exception:
                         try:
                             # Якщо не вдалося, спробуємо True
                             result.index = result.index.tz_localize(tz, ambiguous=True)
                         except Exception:
-                            # Якщо і це не працює, створюємо маску і застосовуємо поелементно
+                            # Як остання спроба, використовуємо індивідуальний підхід
                             temp_index = pd.DatetimeIndex([
-                                timestamp.tz_localize(tz, ambiguous=False
-                                if pd.Timestamp(timestamp).fold == 0 else True)
+                                timestamp.tz_localize(tz, ambiguous=False)
+                                if pd.Timestamp(timestamp).fold == 0 else timestamp.tz_localize(tz, ambiguous=True)
                                 for timestamp in result.index
                             ])
                             result.index = temp_index
-
-                except Exception as e:
-                    self.logger.warning(
-                        f"Помилка при локалізації часового поясу: {str(e)}. Продовжуємо без часового поясу.")
             elif result.index.tz.zone != tz:
                 self.logger.info(f"Конвертація часового поясу з {result.index.tz.zone} в {tz}")
                 try:
@@ -698,99 +960,55 @@ class DataCleaner:
         except Exception as e:
             self.logger.error(f"Загальна помилка при обробці часового поясу: {str(e)}")
 
-        # Перевіряємо, що основні колонки не будуть перезаписані
-        time_feature_names = ['hour', 'day', 'weekday', 'week', 'month', 'quarter', 'year', 'dayofyear',
-                              'is_weekend', 'is_month_start', 'is_month_end', 'is_quarter_start',
-                              'is_quarter_end', 'is_year_start', 'is_year_end']
-
-        # Додаємо імена циклічних ознак
-        if cyclical:
-            time_feature_names.extend([
-                'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'weekday_sin', 'weekday_cos',
-                'week_sin', 'week_cos', 'month_sin', 'month_cos', 'quarter_sin', 'quarter_cos'
-            ])
-
-        # Додаємо імена торгових сесій
-        if add_sessions:
-            time_feature_names.extend([
-                'asian_session', 'european_session', 'american_session',
-                'asia_europe_overlap', 'europe_america_overlap', 'inactive_hours'
-            ])
-
-        # Перевіряємо конфлікти
-        conflicts = [col for col in time_feature_names if col in original_columns]
-        if conflicts:
-            self.logger.warning(f"Виявлено конфлікт імен колонок: {conflicts}. Ці колонки будуть перезаписані.")
+        # Створюємо імена для нових колонок
+        time_feature_names = []
 
         # Базові часові ознаки
-        result['hour'] = result.index.hour
-        result['day'] = result.index.day
-        result['weekday'] = result.index.weekday
+        time_features = {}
+        time_features['tf_hour'] = result.index.hour
+        time_features['tf_day'] = result.index.day
+        time_features['tf_weekday'] = result.index.weekday
 
         # Безпечне отримання номера тижня
         try:
             if hasattr(result.index, 'isocalendar') and callable(result.index.isocalendar):
                 isocal = result.index.isocalendar()
                 if isinstance(isocal, pd.DataFrame):  # pandas >= 1.1.0
-                    result['week'] = isocal['week']
+                    time_features['tf_week'] = isocal['week']
                 else:  # старіші версії pandas
-                    result['week'] = [x[1] for x in isocal]
+                    time_features['tf_week'] = [x[1] for x in isocal]
             else:
-                # Альтернативний метод для старіших версій
-                result['week'] = result.index.to_series().apply(lambda x: x.isocalendar()[1])
+                # Альтернативний метод
+                time_features['tf_week'] = result.index.to_series().apply(lambda x: x.isocalendar()[1])
         except Exception as e:
             self.logger.warning(f"Помилка при отриманні номера тижня: {str(e)}. Використовуємо альтернативний метод.")
             # Запасний варіант
-            result['week'] = result.index.week if hasattr(result.index, 'week') else result.index.to_series().dt.week
+            time_features['tf_week'] = result.index.week if hasattr(result.index,
+                                                                    'week') else result.index.to_series().dt.week
 
-        result['month'] = result.index.month
-        result['quarter'] = result.index.quarter
-        result['year'] = result.index.year
-        result['dayofyear'] = result.index.dayofyear
+        time_features['tf_month'] = result.index.month
+        time_features['tf_quarter'] = result.index.quarter
+        time_features['tf_year'] = result.index.year
+        time_features['tf_dayofyear'] = result.index.dayofyear
 
         # Бінарні ознаки
-        result['is_weekend'] = result['weekday'].isin([5, 6]).astype(int)
-        result['is_month_start'] = result.index.is_month_start.astype(int)
-        result['is_month_end'] = result.index.is_month_end.astype(int)
-        result['is_quarter_start'] = result.index.is_quarter_start.astype(int)
-        result['is_quarter_end'] = result.index.is_quarter_end.astype(int)
-        result['is_year_start'] = result.index.is_year_start.astype(int)
-        result['is_year_end'] = result.index.is_year_end.astype(int)
+        time_features['tf_is_weekend'] = (time_features['tf_weekday'].isin([5, 6])).astype(int)
+        time_features['tf_is_month_start'] = result.index.is_month_start.astype(int)
+        time_features['tf_is_month_end'] = result.index.is_month_end.astype(int)
+        time_features['tf_is_quarter_start'] = result.index.is_quarter_start.astype(int)
+        time_features['tf_is_quarter_end'] = result.index.is_quarter_end.astype(int)
+        time_features['tf_is_year_start'] = result.index.is_year_start.astype(int)
+        time_features['tf_is_year_end'] = result.index.is_year_end.astype(int)
 
-        # Додаємо ознаку переходу на літній/зимовий час
-        if result.index.tz is not None:
-            # Перевіряємо, чи змінюється зсув часового поясу протягом дня
-            result['is_dst_change'] = False
-
-            # Перевіряємо попарно послідовні індекси на зміну зсуву
-            if len(result) > 1:
-                try:
-                    # Отримуємо зсуви часового поясу в секундах
-                    utc_offsets = [ts.utcoffset().total_seconds() for ts in result.index]
-
-                    # Порівнюємо сусідні зсуви
-                    offset_shifts = np.diff(utc_offsets)
-
-                    # Якщо є зміна часового зсуву, відзначаємо
-                    idx_with_shifts = np.where(offset_shifts != 0)[0]
-                    if len(idx_with_shifts) > 0:
-                        for i in idx_with_shifts:
-                            result.iloc[i + 1, result.columns.get_loc('is_dst_change')] = True
-
-                            # Логуємо виявлені переходи DST
-                            shift_amount = offset_shifts[i] / 3600  # в годинах
-                            direction = "вперед" if shift_amount < 0 else "назад"
-                            self.logger.info(
-                                f"Виявлено перехід на {'літній' if shift_amount < 0 else 'зимовий'} час ({abs(shift_amount)} год {direction}) між {result.index[i]} та {result.index[i + 1]}")
-                except Exception as e:
-                    self.logger.warning(f"Помилка при виявленні переходів DST: {str(e)}")
+        # Додаємо префікс tf_ до всіх часових ознак для уникнення конфліктів
+        time_feature_names.extend(time_features.keys())
 
         # Циклічні ознаки
         if cyclical:
             self.logger.info("Додавання циклічних ознак")
 
-            result['hour_sin'] = np.sin(2 * np.pi * result['hour'] / 24)
-            result['hour_cos'] = np.cos(2 * np.pi * result['hour'] / 24)
+            time_features['tf_hour_sin'] = np.sin(2 * np.pi * time_features['tf_hour'] / 24)
+            time_features['tf_hour_cos'] = np.cos(2 * np.pi * time_features['tf_hour'] / 24)
 
             # Безпечне обчислення кількості днів у місяці
             try:
@@ -802,52 +1020,95 @@ class DataCleaner:
             # Перевірка на нульові значення у знаменнику
             days_in_month = pd.Series(days_in_month).replace(0, 30).values
 
-            result['day_sin'] = np.sin(2 * np.pi * result['day'] / days_in_month)
-            result['day_cos'] = np.cos(2 * np.pi * result['day'] / days_in_month)
+            time_features['tf_day_sin'] = np.sin(2 * np.pi * time_features['tf_day'] / days_in_month)
+            time_features['tf_day_cos'] = np.cos(2 * np.pi * time_features['tf_day'] / days_in_month)
 
-            result['weekday_sin'] = np.sin(2 * np.pi * result['weekday'] / 7)
-            result['weekday_cos'] = np.cos(2 * np.pi * result['weekday'] / 7)
+            time_features['tf_weekday_sin'] = np.sin(2 * np.pi * time_features['tf_weekday'] / 7)
+            time_features['tf_weekday_cos'] = np.cos(2 * np.pi * time_features['tf_weekday'] / 7)
 
-            result['week_sin'] = np.sin(2 * np.pi * result['week'] / 52)
-            result['week_cos'] = np.cos(2 * np.pi * result['week'] / 52)
+            time_features['tf_week_sin'] = np.sin(2 * np.pi * time_features['tf_week'] / 52)
+            time_features['tf_week_cos'] = np.cos(2 * np.pi * time_features['tf_week'] / 52)
 
-            result['month_sin'] = np.sin(2 * np.pi * result['month'] / 12)
-            result['month_cos'] = np.cos(2 * np.pi * result['month'] / 12)
+            time_features['tf_month_sin'] = np.sin(2 * np.pi * time_features['tf_month'] / 12)
+            time_features['tf_month_cos'] = np.cos(2 * np.pi * time_features['tf_month'] / 12)
 
-            result['quarter_sin'] = np.sin(2 * np.pi * result['quarter'] / 4)
-            result['quarter_cos'] = np.cos(2 * np.pi * result['quarter'] / 4)
+            time_features['tf_quarter_sin'] = np.sin(2 * np.pi * time_features['tf_quarter'] / 4)
+            time_features['tf_quarter_cos'] = np.cos(2 * np.pi * time_features['tf_quarter'] / 4)
+
+            # Додаємо назви циклічних ознак
+            time_feature_names.extend([
+                'tf_hour_sin', 'tf_hour_cos', 'tf_day_sin', 'tf_day_cos',
+                'tf_weekday_sin', 'tf_weekday_cos', 'tf_week_sin', 'tf_week_cos',
+                'tf_month_sin', 'tf_month_cos', 'tf_quarter_sin', 'tf_quarter_cos'
+            ])
 
         # Торгові сесії
         if add_sessions:
             self.logger.info("Додавання індикаторів торгових сесій")
 
             # Азійська сесія: 00:00-09:00
-            result['asian_session'] = ((result['hour'] >= 0) & (result['hour'] < 9)).astype(int)
+            time_features['tf_asian_session'] = ((time_features['tf_hour'] >= 0) &
+                                                 (time_features['tf_hour'] < 9)).astype(int)
 
             # Європейська сесія: 08:00-17:00
-            result['european_session'] = ((result['hour'] >= 8) & (result['hour'] < 17)).astype(int)
+            time_features['tf_european_session'] = ((time_features['tf_hour'] >= 8) &
+                                                    (time_features['tf_hour'] < 17)).astype(int)
 
             # Американська сесія: 13:00-22:00
-            result['american_session'] = ((result['hour'] >= 13) & (result['hour'] < 22)).astype(int)
+            time_features['tf_american_session'] = ((time_features['tf_hour'] >= 13) &
+                                                    (time_features['tf_hour'] < 22)).astype(int)
 
             # Перекриття сесій
-            result['asia_europe_overlap'] = ((result['hour'] >= 8) & (result['hour'] < 9)).astype(int)
-            result['europe_america_overlap'] = ((result['hour'] >= 13) & (result['hour'] < 17)).astype(int)
+            time_features['tf_asia_europe_overlap'] = ((time_features['tf_hour'] >= 8) &
+                                                       (time_features['tf_hour'] < 9)).astype(int)
+            time_features['tf_europe_america_overlap'] = ((time_features['tf_hour'] >= 13) &
+                                                          (time_features['tf_hour'] < 17)).astype(int)
 
-            # Виправлено: неактивні години (22:00-00:00)
-            result['inactive_hours'] = (result['hour'] >= 22).astype(int)
+            # Неактивні години (22:00-00:00)
+            time_features['tf_inactive_hours'] = (time_features['tf_hour'] >= 22).astype(int)
 
-        # Перевіряємо, чи всі основні колонки збереглися
+            # Додаємо назви ознак сесій
+            time_feature_names.extend([
+                'tf_asian_session', 'tf_european_session', 'tf_american_session',
+                'tf_asia_europe_overlap', 'tf_europe_america_overlap', 'tf_inactive_hours'
+            ])
+
+        # Перевіряємо наявність конфліктів із існуючими колонками
+        conflicts = [feature for feature in time_feature_names if feature in original_columns]
+        if conflicts:
+            # Замість перезапису додаємо унікальний суфікс до конфліктуючих колонок
+            self.logger.warning(f"Виявлено потенційні конфлікти імен колонок: {conflicts}")
+
+            for feature_name in conflicts:
+                i = 1
+                new_name = f"{feature_name}_{i}"
+                while new_name in original_columns:
+                    i += 1
+                    new_name = f"{feature_name}_{i}"
+
+                self.logger.info(f"Перейменування конфліктної колонки {feature_name} на {new_name}")
+
+                # Оновлюємо ім'я в словнику та списку
+                if feature_name in time_features:
+                    time_features[new_name] = time_features.pop(feature_name)
+                    time_feature_names.remove(feature_name)
+                    time_feature_names.append(new_name)
+
+        # Додаємо часові ознаки до DataFrame
+        for feature_name, feature_values in time_features.items():
+            result[feature_name] = feature_values
+
+        # Перевіряємо, чи всі оригінальні колонки збереглися
         for col in original_columns:
-            if col in conflicts:
-                self.logger.warning(f"Колонка {col} була перезаписана як часова ознака")
-            elif col not in result.columns:
+            if col not in result.columns:
                 self.logger.error(f"Колонка {col} зникла після додавання часових ознак. Відновлення...")
-                if col in original_data.columns:
-                    result[col] = original_data[col]
+                if col in data.columns:
+                    result[col] = data[col]
 
-        self.logger.info(f"Успішно додано {len(result.columns) - len(original_columns)} часових ознак")
+        self.logger.info(f"Успішно додано {len(time_features)} часових ознак")
         return result
+
+
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame) -> pd.DataFrame:
 

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import json
 from sklearn.preprocessing import MinMaxScaler
-from typing import Dict,List
+from typing import Dict, List, Union, Optional
 import statsmodels.api as sm
 
 
@@ -26,9 +26,9 @@ class DataResampler:
         original_columns = set(data.columns)
         self.logger.info(f"Початкові колонки: {original_columns}")
 
-        # Перевірка необхідних колонок
+        # Перевірка необхідних колонок, з урахуванням специфіки криптовалют
         if required_columns is None:
-            required_columns = ['open', 'high', 'low', 'close']
+            required_columns = ['open', 'high', 'low', 'close', 'volume']
 
         # Перевірка наявності колонок (незалежно від регістру)
         data_columns_lower = {col.lower(): col for col in data.columns}
@@ -117,8 +117,25 @@ class DataResampler:
             'volume': 'sum'
         }
 
+        # Додаткові специфічні колонки для криптовалютних даних
+        crypto_specific_columns = {
+            'trades': 'sum',                      # Кількість угод
+            'taker_buy_volume': 'sum',            # Об'єм покупок taker
+            'taker_sell_volume': 'sum',           # Об'єм продажів taker
+            'taker_buy_base_volume': 'sum',       # Об'єм у базовій валюті покупок через taker
+            'taker_buy_quote_volume': 'sum',      # Об'єм у котированій валюті покупок через taker
+            'quote_volume': 'sum',                # Об'єм у котированій валюті
+            'quote_asset_volume': 'sum',          # Об'єм у котированій валюті (альтернативна назва)
+            'number_of_trades': 'sum',            # Кількість угод (альтернативна назва)
+            'vwap': 'mean',                       # Volume Weighted Average Price
+            'funding_rate': 'mean'                # Funding Rate для ф'ючерсів
+        }
+
+        # Об'єднуємо базові і специфічні для криптовалют колонки
+        all_columns = {**base_columns, **crypto_specific_columns}
+
         # Додаємо базові колонки зі словника (незалежно від регістру)
-        for base_col_lower, agg_method in base_columns.items():
+        for base_col_lower, agg_method in all_columns.items():
             if base_col_lower in columns_lower_map:
                 actual_col = columns_lower_map[base_col_lower]
                 agg_dict[actual_col] = agg_method
@@ -128,10 +145,12 @@ class DataResampler:
         for col in numeric_cols:
             if col not in agg_dict:  # Якщо колонку ще не додано
                 col_lower = col.lower()
-                if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount']):
+                if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount', 'volume']):
                     agg_dict[col] = 'sum'
                 elif any(x in col_lower for x in ['id', 'code', 'identifier']):
                     agg_dict[col] = 'last'  # Для ідентифікаторів беремо останнє значення
+                elif any(x in col_lower for x in ['price', 'rate', 'fee', 'vwap']):
+                    agg_dict[col] = 'mean'  # Для цін та ставок використовуємо середнє
                 else:
                     agg_dict[col] = 'mean'  # Для всіх інших числових - середнє
 
@@ -160,21 +179,29 @@ class DataResampler:
         # Визначення колонок за категоріями
         price_cols = []
         volume_cols = []
+        trades_cols = []
         other_numeric_cols = []
         non_numeric_cols = []
 
         # Визначаємо цінові колонки та колонки об'єму
-        for col_pattern in ['open', 'high', 'low', 'close']:
+        for col_pattern in ['open', 'high', 'low', 'close', 'vwap']:
             if col_pattern in columns_lower:
                 price_cols.append(columns_lower[col_pattern])
 
-        for col_pattern in ['volume']:
+        for col_pattern in ['volume', 'taker_buy_volume', 'taker_sell_volume', 'quote_volume',
+                           'taker_buy_base_volume', 'taker_buy_quote_volume', 'quote_asset_volume']:
             if col_pattern in columns_lower:
                 volume_cols.append(columns_lower[col_pattern])
 
+        # Колонки для кількості угод
+        for col_pattern in ['trades', 'number_of_trades']:
+            if col_pattern in columns_lower:
+                trades_cols.append(columns_lower[col_pattern])
+
         # Виділяємо всі інші числові колонки
         numeric_cols = df.select_dtypes(include=[np.number]).columns
-        remaining_numeric = [col for col in numeric_cols if col not in price_cols and col not in volume_cols]
+        remaining_numeric = [col for col in numeric_cols if col not in price_cols and
+                            col not in volume_cols and col not in trades_cols]
 
         # Виділяємо не-числові колонки
         non_numeric_cols = [col for col in df.columns if col not in numeric_cols]
@@ -193,12 +220,22 @@ class DataResampler:
                 df[volume_cols] = df[volume_cols].fillna(method='ffill')
                 df[volume_cols] = df[volume_cols].fillna(0)  # Залишкові NaN як нулі
 
+        # Заповнення колонок кількості угод
+        if trades_cols:
+            if fill_method in ['auto', 'zero']:
+                df[trades_cols] = df[trades_cols].fillna(0)
+            elif fill_method == 'ffill':
+                df[trades_cols] = df[trades_cols].fillna(method='ffill')
+                df[trades_cols] = df[trades_cols].fillna(0)
+
         # Заповнення інших числових колонок
         for col in remaining_numeric:
             col_lower = col.lower()
             if fill_method == 'auto':
                 if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount']):
                     df[col] = df[col].fillna(0)  # Лічильники заповнюємо нулями
+                elif any(x in col_lower for x in ['funding', 'rate', 'fee']):
+                    df[col] = df[col].fillna(method='ffill').fillna(0)  # Ставки заповнюємо попередніми або нулями
                 else:
                     df[col] = df[col].fillna(method='ffill').fillna(method='bfill').fillna(0)
             elif fill_method == 'ffill':
@@ -211,8 +248,6 @@ class DataResampler:
             df[non_numeric_cols] = df[non_numeric_cols].fillna(method='ffill').fillna(method='bfill')
 
         return df
-
-    # Заміна методу convert_interval_to_pandas_format
 
     def convert_interval_to_pandas_format(self, timeframe: str) -> str:
 
@@ -248,7 +283,6 @@ class DataResampler:
         self.logger.info(f"Перетворено інтервал '{timeframe}' у pandas формат '{pandas_interval}'")
 
         return pandas_interval
-
 
     def parse_interval(self, timeframe: str) -> pd.Timedelta:
 
@@ -293,14 +327,22 @@ class DataResampler:
         df['quarter'] = df.index.quarter
         df['year'] = df.index.year
 
-        # Додаємо is_weekend флаг
+        # Додаємо is_weekend флаг (менш важливо для криптовалют, але залишаємо для повноти)
         df['is_weekend'] = df['day_of_week'].isin([5, 6])  # 5=Saturday, 6=Sunday
 
-        # Додаємо торгову сесію
+        # Для криптовалют поняття торгової сесії менш важливе, але можна залишити
+        # з точки зору активності різних регіонів
         df['session'] = 'Unknown'
         df.loc[(df['hour'] >= 0) & (df['hour'] < 8), 'session'] = 'Asia'
         df.loc[(df['hour'] >= 8) & (df['hour'] < 16), 'session'] = 'Europe'
         df.loc[(df['hour'] >= 16) & (df['hour'] < 24), 'session'] = 'US'
+
+        # Додаємо ознаку "час доби" для криптовалют
+        df['time_of_day'] = 'Unknown'
+        df.loc[(df['hour'] >= 0) & (df['hour'] < 6), 'time_of_day'] = 'Night'
+        df.loc[(df['hour'] >= 6) & (df['hour'] < 12), 'time_of_day'] = 'Morning'
+        df.loc[(df['hour'] >= 12) & (df['hour'] < 18), 'time_of_day'] = 'Afternoon'
+        df.loc[(df['hour'] >= 18) & (df['hour'] < 24), 'time_of_day'] = 'Evening'
 
         # Циклічні ознаки для часових компонентів
         df['hour_sin'] = np.sin(df['hour'] * (2 * np.pi / 24))
@@ -382,6 +424,16 @@ class DataResampler:
             # Відсоткова зміна
             if method == 'pct_change' or method == 'all':
                 df[f'{col}_pct'] = df[col].pct_change(order)
+
+            # Додаємо різницю між high та low (волатильність)
+            if col == 'close' and 'high' in df.columns and 'low' in df.columns:
+                df['high_low_range'] = df['high'] - df['low']
+                df['high_low_range_pct'] = df['high_low_range'] / df['close']
+
+            # Для об'єму додаємо логарифм, що часто корисно для криптовалют
+            if col.lower() == 'volume' and (df[col] > 0).all():
+                df[f'{col}_log'] = np.log(df[col])
+                df[f'{col}_log_diff'] = df[f'{col}_log'].diff(order)
 
         # Видалення рядків з NaN після диференціювання
         rows_before = len(df)
@@ -492,17 +544,10 @@ class DataResampler:
 
         # Загальний висновок про стаціонарність
         results['is_stationary'] = results.get('adf_test', {}).get('is_stationary', False) and \
-                                   (results.get('kpss_test', {}).get('is_stationary', False) or
-                                    'error' in results.get('kpss_test', {}))
-
-        # Збереження інформації про дані
-        results['data_info'] = {
-            'column': column_to_use,
-            'data_length': len(clean_data),
-            'has_nan': data[column_to_use].isna().any()
-        }
+                                   results.get('kpss_test', {}).get('is_stationary', True)  # KPSS: True якщо тест успішний або недоступний
 
         return results
+
     def prepare_arima_data(self, data: pd.DataFrame, symbol: str, timeframe: str) -> pd.DataFrame:
 
         if data.empty:
@@ -512,12 +557,18 @@ class DataResampler:
         # Нормалізація імен колонок до нижнього регістру для пошуку
         column_map = {col.lower(): col for col in data.columns}
 
-        # Перевірка наявності необхідної колонки 'close'
-        if 'close' not in column_map:
-            self.logger.error(f"Колонка 'close' відсутня у DataFrame. Доступні колонки: {list(data.columns)}")
-            return pd.DataFrame()
+        # Перевірка наявності необхідної колонки 'close' з різними варіантами написання
+        close_variants = ['close', 'price', 'last', 'last_price', 'close_price']
+        close_column = None
 
-        close_column = column_map['close']
+        for variant in close_variants:
+            if variant in column_map:
+                close_column = column_map[variant]
+                break
+
+        if close_column is None:
+            self.logger.error(f"Не знайдено колонку з ціною закриття. Доступні колонки: {list(data.columns)}")
+            return pd.DataFrame()
 
         self.logger.info(f"Підготовка ARIMA даних для {symbol} на інтервалі {timeframe}")
 
@@ -530,14 +581,22 @@ class DataResampler:
         # 2. Перетворення для стаціонарності
         stationary_data = self.make_stationary(working_data, columns=[close_column], method='all')
 
+        # Базові трансформації для ARIMA
+        if (working_data[close_column] > 0).all():
+            stationary_data[f'{close_column}_log_return'] = np.log(
+                working_data[close_column] / working_data[close_column].shift(1))
+
         # 3. Перевірка стаціонарності після різних перетворень
         diff_column = f"{close_column}_diff"
         log_diff_column = f"{close_column}_log_diff"
+        log_return_column = f"{close_column}_log_return"
 
         diff_stationarity = self.check_stationarity(stationary_data,
                                                     diff_column) if diff_column in stationary_data.columns else None
         log_diff_stationarity = self.check_stationarity(stationary_data,
                                                         log_diff_column) if log_diff_column in stationary_data.columns else None
+        log_return_stationarity = self.check_stationarity(stationary_data,
+                                                          log_return_column) if log_return_column in stationary_data.columns else None
 
         # 4. Підготовка даних для результату
         arima_data = pd.DataFrame()
@@ -545,22 +604,44 @@ class DataResampler:
         arima_data['original_close'] = working_data[close_column]
 
         # Додаємо трансформовані дані
-        for suffix in ['diff', 'diff2', 'log', 'log_diff', 'pct', 'seasonal_diff', 'combo_diff']:
+        for suffix in ['diff', 'diff2', 'log', 'log_diff', 'pct', 'seasonal_diff', 'combo_diff', 'log_return']:
             col_name = f"{close_column}_{suffix}"
             if col_name in stationary_data.columns:
                 arima_data[f"close_{suffix}"] = stationary_data[col_name]
 
         # 5. Додаємо результати тестів на стаціонарність (якщо доступні)
-        if diff_stationarity:
-            arima_data['adf_pvalue'] = diff_stationarity['adf_test']['p-value']
-            arima_data['kpss_pvalue'] = diff_stationarity.get('kpss_test', {}).get('p-value', None)
-            arima_data['is_stationary'] = diff_stationarity['is_stationary']
+        stationarity_tests = {
+            'diff': diff_stationarity,
+            'log_diff': log_diff_stationarity,
+            'log_return': log_return_stationarity
+        }
+
+        # Вибираємо найкращий тест (з найменшим p-value для ADF)
+        best_transform = None
+        best_adf = 1.0
+        best_stationarity = None
+
+        for transform_name, stationarity_test in stationarity_tests.items():
+            if not stationarity_test:
+                continue
+
+            current_adf = stationarity_test['adf_test']['p-value']
+            if current_adf < best_adf:
+                best_adf = current_adf
+                best_transform = f"close_{transform_name}"
+                best_stationarity = stationarity_test
+
+        if best_stationarity:
+            arima_data['adf_pvalue'] = best_adf
+            arima_data['kpss_pvalue'] = best_stationarity.get('kpss_test', {}).get('p-value', None)
+            arima_data['is_stationary'] = best_stationarity['is_stationary']
+            arima_data['best_transform'] = best_transform
 
             # Серіалізуємо значимі лаги для ACF/PACF
-            if 'acf_pacf' in diff_stationarity and 'error' not in diff_stationarity['acf_pacf']:
+            if 'acf_pacf' in best_stationarity and 'error' not in best_stationarity['acf_pacf']:
                 arima_data['significant_lags'] = json.dumps({
-                    'acf': diff_stationarity['acf_pacf']['significant_acf_lags'],
-                    'pacf': diff_stationarity['acf_pacf']['significant_pacf_lags']
+                    'acf': best_stationarity['acf_pacf']['significant_acf_lags'],
+                    'pacf': best_stationarity['acf_pacf']['significant_pacf_lags']
                 })
 
         # Додаємо метадані
@@ -569,44 +650,49 @@ class DataResampler:
 
         # 6. Спроба підбору параметрів ARIMA для найкращого стаціонарного перетворення
         try:
-            # Вибираємо найкраще перетворення на основі ADF p-value
-            best_transform = 'close_diff'
-            best_adf = diff_stationarity['adf_test']['p-value'] if diff_stationarity else 1.0
+            if best_transform and best_stationarity:
+                # Вибираємо параметри p, d, q на основі результатів ACF/PACF
+                p = best_stationarity.get('acf_pacf', {}).get('suggested_p', 1) if best_stationarity else 1
 
-            if log_diff_stationarity and log_diff_stationarity['adf_test']['p-value'] < best_adf:
-                best_transform = 'close_log_diff'
-                best_adf = log_diff_stationarity['adf_test']['p-value']
+                if 'log_return' in best_transform:
+                    d = 0  # Логарифмічні прибутки часто вже стаціонарні
+                else:
+                    d = 1  # Для інших трансформацій використовуємо стандартне диференціювання
 
-            # Вибираємо параметри p, d, q на основі результатів ACF/PACF
-            best_stationarity = diff_stationarity if best_transform == 'close_diff' else log_diff_stationarity
+                q = best_stationarity.get('acf_pacf', {}).get('suggested_q', 1) if best_stationarity else 1
 
-            p = best_stationarity.get('acf_pacf', {}).get('suggested_p', 1) if best_stationarity else 1
-            d = 1  # Ми вже диференціювали ряд
-            q = best_stationarity.get('acf_pacf', {}).get('suggested_q', 1) if best_stationarity else 1
+                # Підготовка даних для моделі (видалення NaN значень)
+                model_data = stationary_data[best_transform].dropna()
 
-            # Обмежуємо значення параметрів для уникнення надто складних моделей
-            p = min(p, 5)
-            q = min(q, 5)
+                if len(model_data) >= p + q + 2:  # Мінімальна необхідна довжина для ARIMA
+                    # Підганяємо ARIMA модель
+                    model = sm.tsa.ARIMA(model_data, order=(p, d, q))
+                    model_fit = model.fit()
 
-            # Підготовка даних для моделі (видалення NaN значень)
-            model_data = stationary_data[best_transform].dropna()
+                    # Додаємо метрики моделі
+                    arima_data['aic_score'] = model_fit.aic
+                    arima_data['bic_score'] = model_fit.bic
+                    arima_data['residual_variance'] = model_fit.resid.var()
+                    arima_data['arima_params'] = json.dumps({'p': p, 'd': d, 'q': q, 'transform': best_transform})
 
-            if len(model_data) >= p + q + 2:  # Мінімальна необхідна довжина для ARIMA
-                # Підганяємо ARIMA модель
-                model = sm.tsa.ARIMA(model_data, order=(p, 0, q))
-                model_fit = model.fit()
+                    # Додаємо інформацію про сезонність, якщо це годинні або щоденні дані
+                    if 'h' in timeframe or 'd' in timeframe:
+                        # Для годинних даних - можлива денна сезонність (24 години)
+                        # Для денних даних - можлива тижнева сезонність (7 днів)
+                        seasonality_period = 24 if 'h' in timeframe else 7
+                        arima_data['suggested_seasonality'] = seasonality_period
+                        arima_data['suggested_sarima_params'] = json.dumps(
+                            {'P': 1, 'D': 1, 'Q': 1, 'S': seasonality_period})
 
-                # Додаємо метрики моделі
-                arima_data['aic_score'] = model_fit.aic
-                arima_data['bic_score'] = model_fit.bic
-                arima_data['residual_variance'] = model_fit.resid.var()
-                arima_data['arima_params'] = json.dumps({'p': p, 'd': d, 'q': q, 'transform': best_transform})
-
-                self.logger.info(f"ARIMA модель успішно створена для {symbol} з параметрами ({p},{d},{q})")
+                    self.logger.info(f"ARIMA модель успішно створена для {symbol} з параметрами ({p},{d},{q})")
+                else:
+                    self.logger.warning(
+                        f"Недостатньо даних для підбору ARIMA моделі: {len(model_data)} точок, потрібно мінімум {p + q + 2}")
+                    arima_data['arima_error'] = "Недостатньо даних для підбору моделі"
             else:
-                self.logger.warning(
-                    f"Недостатньо даних для підбору ARIMA моделі: {len(model_data)} точок, потрібно мінімум {p + q + 2}")
-                arima_data['arima_error'] = "Недостатньо даних для підбору моделі"
+                self.logger.warning("Не вдалося визначити найкращу трансформацію для ARIMA моделі")
+                arima_data['arima_error'] = "Не вдалося визначити оптимальну трансформацію"
+
         except Exception as e:
             self.logger.warning(f"Помилка при підборі ARIMA моделі: {str(e)}")
             arima_data['arima_error'] = str(e)
@@ -628,14 +714,38 @@ class DataResampler:
         # 2. Визначення колонок для обробки (з урахуванням можливих відмінностей у регістрі)
         column_map = {col.lower(): col for col in df.columns}
 
-        # Базові ринкові дані
+        # Базові ринкові дані з різними варіантами назв колонок
+        basic_feature_cols = {
+            'open': ['open', 'open_price'],
+            'high': ['high', 'high_price', 'max_price'],
+            'low': ['low', 'low_price', 'min_price'],
+            'close': ['close', 'close_price', 'price', 'last', 'last_price'],
+            'volume': ['volume', 'base_volume', 'quantity', 'amount']
+        }
+
         feature_cols = []
-        for basic_col in ['open', 'high', 'low', 'close', 'volume']:
-            if basic_col in column_map:
-                feature_cols.append(column_map[basic_col])
+
+        # Шукаємо відповідні колонки у різних варіантах
+        for base_name, variants in basic_feature_cols.items():
+            found = False
+            for variant in variants:
+                if variant in column_map:
+                    feature_cols.append(column_map[variant])
+                    found = True
+                    break
+            if not found:
+                self.logger.warning(f"Колонку '{base_name}' не знайдено в жодному з варіантів {variants}")
+
+        # Додаткові колонки, специфічні для криптовалют
+        crypto_specific_cols = ['trades', 'quote_volume', 'taker_buy_volume', 'taker_sell_volume',
+                                'number_of_trades', 'taker_buy_base_volume', 'taker_buy_quote_volume']
+
+        for col in crypto_specific_cols:
+            if col in column_map:
+                feature_cols.append(column_map[col])
 
         if not feature_cols:
-            self.logger.error("Не знайдено жодної з необхідних колонок (open, high, low, close, volume)")
+            self.logger.error("Не знайдено жодної з необхідних колонок для аналізу")
             return pd.DataFrame()
 
         # Часові ознаки
@@ -683,7 +793,18 @@ class DataResampler:
                                 f"потрібно мінімум {sequence_length + max(forecast_horizons)}")
             return pd.DataFrame()
 
-        # 5. Створення послідовностей для обробки
+        # 5. Визначаємо цільову колонку для прогнозування
+        target_col = None
+        for variant in ['close', 'price', 'last', 'close_price', 'last_price']:
+            if variant in column_map:
+                target_col = column_map[variant]
+                break
+
+        if target_col is None:
+            self.logger.error("Не знайдено цільову колонку для прогнозування")
+            return pd.DataFrame()
+
+        # 6. Створення послідовностей для обробки
         sequences_data = []
         sequence_counter = 0
 
@@ -714,19 +835,26 @@ class DataResampler:
                 for horizon in forecast_horizons:
                     target_idx = i + pos + horizon
                     if target_idx < len(df):
-                        for target_col in ['close']:
-                            if target_col in column_map:
-                                col_name = column_map[target_col]
-                                row[f'target_{target_col}_{horizon}'] = df[col_name].iloc[target_idx]
+                        # Абсолютна ціна закриття
+                        row[f'target_close_{horizon}'] = df[target_col].iloc[target_idx]
 
-                                # Додаємо також відносну зміну ціни для кожного горизонту
-                                if pos == sequence_length - 1:  # Тільки для останнього елемента в послідовності
-                                    current_price = df[col_name].iloc[idx]
-                                    target_price = df[col_name].iloc[target_idx]
+                        # Тільки для останнього елемента в послідовності
+                        if pos == sequence_length - 1:
+                            current_price = df[target_col].iloc[idx]
+                            target_price = df[target_col].iloc[target_idx]
 
-                                    if current_price != 0:
-                                        pct_change = (target_price - current_price) / current_price
-                                        row[f'target_{target_col}_pct_{horizon}'] = pct_change
+                            if current_price != 0:
+                                # Відносна зміна ціни
+                                pct_change = (target_price - current_price) / current_price
+                                row[f'target_close_pct_{horizon}'] = pct_change
+
+                                # Логарифмічна прибутковість
+                                if current_price > 0 and target_price > 0:
+                                    log_return = np.log(target_price / current_price)
+                                    row[f'target_close_log_return_{horizon}'] = log_return
+
+                                # Бінарний напрямок руху (1 - зростання, 0 - падіння)
+                                row[f'target_direction_{horizon}'] = 1 if target_price > current_price else 0
 
                 # Додаємо часові ознаки без масштабування (вони вже нормалізовані)
                 for feature in available_time_features:

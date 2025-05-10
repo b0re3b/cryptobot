@@ -472,9 +472,9 @@ class MarketDataProcessor:
             **kwargs
         )
 
-    def add_time_features(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
+    def add_time_features_safely(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
 
-        return self.data_cleaner.add_time_features(data, tz=tz)
+        return self.data_cleaner.add_time_features_safely(data, tz=tz)
 
     def filter_by_time_range(self, data: pd.DataFrame, start_date: str = None, end_date: str = None) -> pd.DataFrame:
 
@@ -611,19 +611,7 @@ class MarketDataProcessor:
 
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
                             end_date: Optional[str] = None, save_results: bool = True) -> Dict[str, pd.DataFrame]:
-        """
-        Комплексна обробка ринкових даних для заданого символу та таймфрейму
 
-        Args:
-            symbol: Торговий символ
-            timeframe: Таймфрейм даних ('1m', '1h', '1d', '4h', '1w')
-            start_date: Початкова дата для фільтрації даних
-            end_date: Кінцева дата для фільтрації даних
-            save_results: Чи зберігати результати обробки
-
-        Returns:
-            Словник з результатами обробки
-        """
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
 
@@ -708,7 +696,7 @@ class MarketDataProcessor:
         results['processed_data'] = processed_data
 
         # 5. Додавання часових ознак
-        processed_data = self.add_time_features(processed_data, tz='UTC')
+        processed_data = self.add_time_features_safely(processed_data, tz='UTC')
 
         # 6. Виявлення та обробка аномалій
         processed_data, outliers_info = self.detect_outliers(processed_data)
@@ -748,7 +736,7 @@ class MarketDataProcessor:
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
                     else:
                         # Якщо метод не існує, використовуємо загальний метод
-                        self.save_arima_data(arima_data, symbol=symbol)
+                        self.save_arima_data(processed_data, timeframe)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено (загальний метод)")
 
             # LSTM дані
@@ -766,8 +754,8 @@ class MarketDataProcessor:
                             getattr(self.data_storage, method_name)(lstm_df)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
                         else:
-                            # Якщо метод не існує, використовуємо загальний метод
-                            self.save_lstm_sequence(lstm_df, symbol=symbol)
+
+                            self.save_lstm_sequence(processed_data, timeframe)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено (загальний метод)")
             except Exception as e:
                 self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
