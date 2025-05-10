@@ -531,10 +531,8 @@ class AnomalyDetector:
                 all_outlier_indices.update(data.index[negative_volume])
                 self.logger.info(f"Знайдено {negative_volume.sum()} записів з від'ємним об'ємом")
 
-
-
     def validate_datetime_index(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
-
+        """Перевірка часового індексу на проблеми."""
         if not isinstance(data.index, pd.DatetimeIndex):
             issues["not_datetime_index"] = True
             self.logger.warning("Індекс не є DatetimeIndex")
@@ -632,36 +630,48 @@ class AnomalyDetector:
                 self.logger.error(f"Помилка при визначенні частоти часового ряду: {str(e)}")
 
     def validate_price_data(self, data: pd.DataFrame, price_jump_threshold: float,
-                             issues: Dict[str, Any]) -> None:
-
+                            issues: Dict[str, Any]) -> None:
+        """Валідація цінових даних з урахуванням специфіки Binance (всі значення додатні)."""
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in data.columns]
 
+        # Переконуємося, що всі цінові колонки числові
         for col in price_cols:
             if data[col].dtype == object:
                 data[col] = pd.to_numeric(data[col], errors='coerce')
 
         if len(price_cols) == 4:
-            # Перевірка high < low
+            # Перевірка на некоректні співвідношення high і low
             invalid_hl = data['high'] < data['low']
             if invalid_hl.any():
                 invalid_hl_indices = data.index[invalid_hl].tolist()
-                issues["high_lower_than_low"] = invalid_hl_indices
+                issues["invalid_high_low"] = invalid_hl_indices
                 self.logger.warning(f"Знайдено {len(invalid_hl_indices)} записів де high < low")
 
-            # Перевірка від'ємних цін
+            # Перевірка на неконсистентність OHLC
+            invalid_ohlc = (
+                    (data['high'] < data['open']) |
+                    (data['high'] < data['close']) |
+                    (data['low'] > data['open']) |
+                    (data['low'] > data['close'])
+            )
+            if invalid_ohlc.any():
+                invalid_ohlc_indices = data.index[invalid_ohlc].tolist()
+                issues["inconsistent_ohlc"] = invalid_ohlc_indices
+                self.logger.warning(f"Знайдено {len(invalid_ohlc_indices)} записів з неконсистентними OHLC даними")
+
+            # Для даних Binance - перевірка на нульові ціни (замість від'ємних)
             for col in price_cols:
-                negative_prices = data[col] < 0
-                if negative_prices.any():
-                    neg_price_indices = data.index[negative_prices].tolist()
-                    issues[f"negative_{col}"] = neg_price_indices
-                    self.logger.warning(f"Знайдено {len(neg_price_indices)} записів з від'ємними значеннями у {col}")
+                zero_prices = data[col] == 0
+                if zero_prices.any():
+                    zero_price_indices = data.index[zero_prices].tolist()
+                    issues[f"zero_{col}"] = zero_price_indices
+                    self.logger.warning(f"Знайдено {len(zero_price_indices)} записів з нульовими значеннями у {col}")
 
             # Перевірка різких стрибків цін
             for col in price_cols:
                 try:
                     # Безпечне обчислення відсоткової зміни з обробкою NaN
                     valid_data = data[col].dropna()
-                    # Ensure values are float
                     valid_data = pd.to_numeric(valid_data, errors='coerce')
 
                     if len(valid_data) > 1:
@@ -675,18 +685,18 @@ class AnomalyDetector:
                     self.logger.error(f"Помилка при аналізі стрибків цін у колонці {col}: {str(e)}")
 
     def validate_volume_data(self, data: pd.DataFrame, volume_anomaly_threshold: float,
-                              issues: Dict[str, Any]) -> None:
-
+                             issues: Dict[str, Any]) -> None:
+        """Валідація даних об'єму з урахуванням специфіки Binance (всі значення додатні)."""
         if 'volume' in data.columns:
             if data['volume'].dtype == object:
                 data['volume'] = pd.to_numeric(data['volume'], errors='coerce')
 
-            # Перевірка від'ємного об'єму
-            negative_volume = data['volume'] < 0
-            if negative_volume.any():
-                neg_vol_indices = data.index[negative_volume].tolist()
-                issues["negative_volume"] = neg_vol_indices
-                self.logger.warning(f"Знайдено {len(neg_vol_indices)} записів з від'ємним об'ємом")
+            # Для даних Binance - перевірка на нульовий об'єм замість від'ємного
+            zero_volume = data['volume'] == 0
+            if zero_volume.any():
+                zero_vol_indices = data.index[zero_volume].tolist()
+                issues["zero_volume"] = zero_vol_indices
+                self.logger.warning(f"Знайдено {len(zero_vol_indices)} записів з нульовим об'ємом")
 
             # Перевірка аномального об'єму
             try:
@@ -694,108 +704,133 @@ class AnomalyDetector:
                 valid_volume = pd.to_numeric(valid_volume, errors='coerce')
 
                 if not valid_volume.empty:
-                    volume_std = valid_volume.std()
-                    volume_mean = valid_volume.mean()
+                    # Використовуємо робастний підхід для криптовалют
+                    volume_median = valid_volume.median()
+                    volume_mad = (valid_volume - volume_median).abs().median() * 1.4826  # масштабований MAD
 
-                    if volume_std > 0:  # Уникаємо ділення на нуль
-                        volume_zscore = np.abs((valid_volume - volume_mean) / volume_std)
+                    if volume_mad > 0:  # Уникаємо ділення на нуль
+                        volume_zscore = np.abs((valid_volume - volume_median) / volume_mad)
                         volume_anomalies = volume_zscore > volume_anomaly_threshold
 
                         if volume_anomalies.any():
                             vol_anomaly_indices = valid_volume.index[volume_anomalies].tolist()
                             issues["volume_anomalies"] = vol_anomaly_indices
                             self.logger.warning(f"Знайдено {len(vol_anomaly_indices)} записів з аномальним об'ємом")
+                    else:
+                        # Альтернативний метод при близьких до однорідних даних
+                        if volume_median > 0:
+                            # Перевіряємо на стрибки більше ніж у 5 разів від медіани
+                            volume_anomalies = valid_volume > (volume_median * 5)
+                            if volume_anomalies.any():
+                                vol_anomaly_indices = valid_volume.index[volume_anomalies].tolist()
+                                issues["volume_spikes"] = vol_anomaly_indices
+                                self.logger.warning(f"Знайдено {len(vol_anomaly_indices)} аномальних стрибків об'єму")
             except Exception as e:
                 self.logger.error(f"Помилка при аналізі аномалій об'єму: {str(e)}")
 
     def validate_data_values(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
-
+        """Загальна валідація даних на відсутні та некоректні значення."""
         # Перевірка на NaN значення
         na_counts = data.isna().sum()
-        cols_with_na = na_counts[na_counts > 0].index.tolist()
+        cols_with_na = na_counts[na_counts > 0].to_dict()
         if cols_with_na:
-            issues["columns_with_na"] = {col: data.index[data[col].isna()].tolist() for col in cols_with_na}
-            self.logger.warning(f"Знайдено відсутні значення у колонках: {cols_with_na}")
+            issues["na_counts"] = cols_with_na
+            self.logger.warning(f"Знайдено відсутні значення у колонках: {list(cols_with_na.keys())}")
 
         # Перевірка на нескінченні значення
         try:
             numeric_cols = data.select_dtypes(include=[np.number]).columns
             if not numeric_cols.empty:
-                inf_data = pd.DataFrame(index=data.index)
-                for col in numeric_cols:
-                    inf_data[col] = np.isinf(data[col])
-
-                inf_counts = inf_data.sum()
-                cols_with_inf = inf_counts[inf_counts > 0].index.tolist()
+                inf_counts = {col: np.isinf(data[col]).sum() for col in numeric_cols}
+                cols_with_inf = {col: count for col, count in inf_counts.items() if count > 0}
 
                 if cols_with_inf:
-                    issues["columns_with_inf"] = {col: data.index[np.isinf(data[col])].tolist() for col in
-                                                  cols_with_inf}
-                    self.logger.warning(f"Знайдено нескінченні значення у колонках: {cols_with_inf}")
+                    issues["inf_counts"] = cols_with_inf
+                    self.logger.warning(f"Знайдено нескінченні значення у колонках: {list(cols_with_inf.keys())}")
         except Exception as e:
             self.logger.error(f"Помилка при перевірці нескінченних значень: {str(e)}")
 
-    def detect_outliers_ensemble(self, data: pd.DataFrame, methods: List[str] = None,
-                                 threshold: float = 3.0, preprocess: bool = True,
-                                 fill_method: str = 'mean', contamination: float = 0.1,
-                                 min_votes: int = 2) -> Tuple[pd.DataFrame, List]:
-
-        if methods is None:
-            methods = ['zscore', 'iqr', 'isolation_forest']
-
-        if len(methods) < min_votes:
-            self.logger.warning(f"min_votes ({min_votes}) більше, ніж кількість методів ({len(methods)}). "
-                                f"Встановлюємо min_votes = {len(methods)}")
-            min_votes = len(methods)
-
-        # Ініціалізуємо результуючий DataFrame для збору голосів
-        ensemble_df = pd.DataFrame(index=data.index)
-        all_method_results = {}
-
-        # Застосовуємо кожен метод окремо
-        for method in methods:
-            try:
-                outliers_df, _ = self.detect_outliers(
-                    data=data,
-                    method=method,
-                    threshold=threshold,
-                    preprocess=preprocess,
-                    fill_method=fill_method,
-                    contamination=contamination
-                )
-
-                if 'is_outlier' in outliers_df.columns:
-                    ensemble_df[f'{method}_vote'] = outliers_df['is_outlier']
-                    all_method_results[method] = outliers_df
-                else:
-                    self.logger.warning(f"Метод {method} не виявив жодної аномалії")
-                    ensemble_df[f'{method}_vote'] = False
-
-            except Exception as e:
-                self.logger.error(f"Помилка при застосуванні методу {method}: {str(e)}")
-                ensemble_df[f'{method}_vote'] = False
-
-        # Підрахунок голосів
-        vote_columns = [col for col in ensemble_df.columns if col.endswith('_vote')]
-        if not vote_columns:
-            self.logger.warning("Жоден метод не видав результатів")
+    def detect_outliers_essemble(self, data: pd.DataFrame, method: str = 'zscore',
+                        threshold: float = 3.0, preprocess: bool = True,
+                        fill_method: str = 'mean', contamination: float = 0.1) -> Tuple[pd.DataFrame, List]:
+        """Виявлення аномалій з використанням різних методів."""
+        if data is None or data.empty:
+            self.logger.warning("Отримано порожній DataFrame для виявлення аномалій")
             return pd.DataFrame(), []
 
-        ensemble_df['vote_count'] = ensemble_df[vote_columns].sum(axis=1)
-        ensemble_df['is_ensemble_outlier'] = ensemble_df['vote_count'] >= min_votes
+        # Валідація параметрів
+        if method not in ['zscore', 'iqr', 'isolation_forest', 'crypto_specific']:
+            self.logger.warning(f"Непідтримуваний метод: {method}. Використовуємо 'zscore'")
+            method = 'zscore'
 
-        # Формування результатів
-        ensemble_outlier_indices = data.index[ensemble_df['is_ensemble_outlier']].tolist()
+        if threshold <= 0:
+            self.logger.warning(
+                f"Отримано недопустиме порогове значення: {threshold}. Встановлено значення за замовчуванням 3")
+            threshold = 3
 
-        self.logger.info(f"Ансамблеве виявлення аномалій завершено. "
-                         f"Знайдено {len(ensemble_outlier_indices)} аномалій із {min_votes}+ голосами")
+        if contamination <= 0 or contamination > 0.5:
+            self.logger.warning(f"Неправильне значення contamination: {contamination}. Використовуємо 0.1")
+            contamination = 0.1
 
-        # Додаємо інформацію про індивідуальні методи
-        for method in methods:
-            if method in all_method_results:
-                # Виключаємо колонку is_outlier, щоб уникнути дублювання
-                method_cols = [col for col in all_method_results[method].columns if col != 'is_outlier']
-                for col in method_cols:
-                    ensemble_df[col] = all_method_results[method][col]
+        self.logger.info(f"Початок виявлення аномалій методом {method} з порогом {threshold}")
 
-        return ensemble_df, ensemble_outlier_indices
+        data = self.ensure_float(data)
+
+        # Вибір числових колонок
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) == 0:
+            self.logger.warning("У DataFrame немає числових колонок для аналізу аномалій")
+            return pd.DataFrame(), []
+
+        # Попередня обробка даних
+        processed_data = data
+        if preprocess:
+            try:
+                processed_data = self._preprocess_data(data, numeric_cols, fill_method)
+                self.logger.info(f"Дані передоброблені з методом заповнення '{fill_method}'")
+            except Exception as e:
+                self.logger.error(f"Помилка під час передобробки даних: {str(e)}")
+                processed_data = data
+
+        # Використовуємо словник для зберігання аномалій замість додавання колонок з суфіксом _outlier
+        anomalies_dict = {}
+        all_outlier_indices = set()
+
+        try:
+            if method == 'zscore':
+                self.detect_zscore_outliers(processed_data, numeric_cols, threshold, anomalies_dict,
+                                            all_outlier_indices)
+            elif method == 'iqr':
+                self.detect_iqr_outliers(processed_data, numeric_cols, threshold, anomalies_dict, all_outlier_indices)
+            elif method == 'isolation_forest':
+                # Для isolation_forest використовуємо contamination замість threshold
+                self.detect_isolation_forest_outliers(processed_data, numeric_cols, contamination, anomalies_dict,
+                                                      all_outlier_indices)
+            elif method == 'crypto_specific':
+                # Метод, специфічний для криптовалют
+                self.detect_crypto_specific_outliers(processed_data, numeric_cols, threshold, anomalies_dict,
+                                                     all_outlier_indices)
+            else:
+                self.logger.error(f"Непідтримуваний метод виявлення аномалій: {method}")
+                return pd.DataFrame(), []
+
+        except Exception as e:
+            self.logger.error(f"Помилка під час виявлення аномалій методом {method}: {str(e)}")
+            return pd.DataFrame(), []
+
+        # Створюємо результуючий DataFrame з аномаліями
+        outliers_df = pd.DataFrame(index=data.index)
+
+        # Додаємо виявлені аномалії до результуючого DataFrame
+        for col_name, anomalies in anomalies_dict.items():
+            outliers_df[col_name] = pd.Series(False, index=data.index)
+            outliers_df.loc[anomalies, col_name] = True
+
+        # Додаємо загальну колонку is_outlier
+        if not outliers_df.empty:
+            outliers_df['is_outlier'] = outliers_df.any(axis=1)
+
+        outlier_indices = list(all_outlier_indices)
+
+        self.logger.info(f"Виявлення аномалій завершено. Знайдено {len(outlier_indices)} аномалій у всіх колонках")
+        return outliers_df, outlier_indices
