@@ -1,18 +1,27 @@
 import numpy as np
 import pandas as pd
-import json
+import dask.dataframe as dd
+from statsmodels.tsa.stattools import adfuller
+from sklearn.model_selection import train_test_split
+from pmdarima.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from typing import Dict, List, Union, Optional
 import statsmodels.api as sm
-
+import concurrent.futures
+from functools import lru_cache
+import numba
 
 class DataResampler:
-    def __init__(self, logger):
+    def __init__(self, logger, chunk_size=500_000, scaling_sample_size= 1_000_000):
         self.logger = logger
         self.scalers = {}
         self.original_data_map = {}
+        self.chunk_size = chunk_size
+        self.scaling_sample_size = scaling_sample_size
+        # Кешування методів пошуку колонок
+        self.find_column = lru_cache(maxsize=128)(self._find_column_original)
 
-    def find_column(self, df, column_name):
+    def _find_column_original(self, df, column_name):
         """Знаходить колонку незалежно від регістру з обробкою конфліктів"""
         exact_match = [col for col in df.columns if col == column_name]
         if exact_match:
@@ -27,8 +36,59 @@ class DataResampler:
 
         return None
 
+    def _optimize_aggregation_dict(self, data: pd.DataFrame) -> Dict:
+        """
+        Оптимізована версія створення словника агрегацій з паралельною обробкою
+        """
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
+        agg_dict = {}
+
+        # Базові пріоритетні колонки
+        priority_columns = {
+            'open': 'first', 'high': 'max', 'low': 'min',
+            'close': 'last', 'volume': 'sum'
+        }
+
+        # Додаткові специфічні колонки
+        crypto_specific_columns = {
+            'trades': 'sum', 'taker_buy_volume': 'sum',
+            'taker_sell_volume': 'sum', 'quote_volume': 'sum',
+            'vwap': 'mean', 'funding_rate': 'mean'
+        }
+
+        # Пошук колонок з використанням прискорених методів
+        columns_lower_map = {col.lower(): col for col in data.columns}
+
+        # Додавання пріоритетних колонок
+        for base_col_lower, agg_method in {**priority_columns, **crypto_specific_columns}.items():
+            if base_col_lower in columns_lower_map:
+                actual_col = columns_lower_map[base_col_lower]
+                agg_dict[actual_col] = agg_method
+
+        # Обробка решти числових колонок
+        for col in numeric_cols:
+            if col not in agg_dict:
+                col_lower = col.lower()
+                if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount', 'volume']):
+                    agg_dict[col] = 'sum'
+                elif any(x in col_lower for x in ['price', 'rate', 'fee', 'vwap']):
+                    agg_dict[col] = 'mean'
+                else:
+                    agg_dict[col] = 'last'
+
+        # Додавання не-числових колонок
+        non_numeric_cols = [col for col in data.columns if col not in numeric_cols]
+        for col in non_numeric_cols:
+            if col not in agg_dict:
+                agg_dict[col] = 'last'
+
+        return agg_dict
+
     def resample_data(self, data: pd.DataFrame, target_interval: str,
                       required_columns: List[str] = None) -> pd.DataFrame:
+        """
+        Оптимізована версія методу ресемплінгу з підтримкою великих обсягів даних
+        """
         self.logger.info(f"Наявні колонки в resample_data: {list(data.columns)}")
 
         if data.empty:
@@ -38,24 +98,23 @@ class DataResampler:
         if not isinstance(data.index, pd.DatetimeIndex):
             raise ValueError("Дані повинні мати DatetimeIndex для ресемплінгу")
 
-        # Збереження списку оригінальних колонок для перевірки після ресемплінгу
+        # Збереження списку оригінальних колонок
         original_columns = set(data.columns)
         self.logger.info(f"Початкові колонки: {original_columns}")
 
-        # Зберігаємо оригінальні дані, щоб не втратити доступ до них
+        # Зберігаємо оригінальні дані
         self.original_data_map['original_data'] = data.copy()
 
-        # Перевірка необхідних колонок, з урахуванням специфіки криптовалют
+        # Перевірка необхідних колонок
         if required_columns is None:
             required_columns = ['open', 'high', 'low', 'close', 'volume']
 
         # Перевірка наявності колонок (незалежно від регістру)
         data_columns_lower = {col.lower(): col for col in data.columns}
-        missing_cols = []
-
-        for required_col in required_columns:
-            if required_col.lower() not in data_columns_lower:
-                missing_cols.append(required_col)
+        missing_cols = [
+            col for col in required_columns
+            if col.lower() not in data_columns_lower
+        ]
 
         if missing_cols:
             self.logger.error(f"Відсутні необхідні колонки: {missing_cols}")
@@ -73,54 +132,56 @@ class DataResampler:
             self.logger.error(f"Неправильний формат інтервалу: {str(e)}")
             return data
 
-        if len(data) > 1:
-            current_interval = pd.Timedelta(data.index[1] - data.index[0])
-            estimated_target_interval = self.parse_interval(target_interval)
+        # Оптимізована підготовка агрегацій
+        agg_dict = self._optimize_aggregation_dict(data)
 
-            if estimated_target_interval < current_interval:
-                self.logger.warning(f"Цільовий інтервал ({target_interval}) менший за поточний інтервал даних. "
-                                    f"Даунсемплінг неможливий без додаткових даних.")
-                return data
+        # Оптимізована обробка великих наборів даних
+        batch_size = 500_000  # Налаштуйте під ваші обмеження пам'яті
+        total_rows = len(data)
 
-        # Створення словника агрегацій для всіх типів колонок
-        agg_dict = self._create_aggregation_dict(data)
+        if total_rows <= batch_size:
+            # Якщо дані менші за batch_size, обробляємо весь DataFrame
+            try:
+                resampled = data.resample(pandas_interval).agg(agg_dict)
 
-        try:
-            # Виконання ресемплінгу
-            self.logger.info(f"Починаємо ресемплінг з інтервалом {pandas_interval}")
-            resampled = data.resample(pandas_interval).agg(agg_dict)
-
-            # Перевірка результату ресемплінгу
-            if resampled.empty:
-                self.logger.warning(f"Результат ресемплінгу порожній. Можливо, проблема з інтервалом {pandas_interval}")
-                return data
-
-            # Зберігаємо ресемпльовані дані для подальшого доступу
-            self.original_data_map['resampled_data'] = resampled.copy()
-
-            # Заповнення відсутніх значень для всіх колонок після ресемплінгу
-            if resampled.isna().any().any():
-                self.logger.info("Заповнення відсутніх значень після ресемплінгу...")
+                # Заповнення відсутніх значень з оптимізацією
                 resampled = self._fill_missing_values(resampled)
 
-            # Перевірка збереження всіх колонок
-            resampled_columns = set(resampled.columns)
-            missing_after_resample = original_columns - resampled_columns
+                self.original_data_map['resampled_data'] = resampled.copy()
+                return resampled
+            except Exception as e:
+                self.logger.error(f"Помилка при ресемплінгу: {str(e)}")
+                return data
 
-            if missing_after_resample:
-                self.logger.warning(f"Після ресемплінгу відсутні колонки: {missing_after_resample}")
-                # Відновлення відсутніх колонок з NaN значеннями
-                for col in missing_after_resample:
-                    resampled[col] = np.nan
+        # Batch-обробка для великих наборів даних
+        result_batches = []
+        for start in range(0, total_rows, batch_size):
+            end = min(start + batch_size, total_rows)
+            batch = data.iloc[start:end]
+
+            try:
+                # Ресемплінг батчу
+                resampled_batch = batch.resample(pandas_interval).agg(agg_dict)
+                result_batches.append(resampled_batch)
+            except Exception as e:
+                self.logger.error(f"Помилка при обробці батчу: {str(e)}")
+                continue
+
+        # Об'єднання результатів
+        try:
+            resampled = pd.concat(result_batches, ignore_index=False)
+
+            # Заповнення відсутніх значень
+            resampled = self._fill_missing_values(resampled)
+
+            self.original_data_map['resampled_data'] = resampled.copy()
 
             self.logger.info(
                 f"Ресемплінг успішно завершено: {resampled.shape[0]} рядків, {len(resampled.columns)} колонок")
             return resampled
 
         except Exception as e:
-            self.logger.error(f"Помилка при ресемплінгу даних: {str(e)}")
-            self.logger.error(f"Спробуйте інший формат інтервалу або перевірте вхідні дані")
-            # Повертаємо вихідні дані замість помилки
+            self.logger.error(f"Помилка при об'єднанні батчів: {str(e)}")
             return data
 
     def _create_aggregation_dict(self, data: pd.DataFrame) -> Dict:
@@ -363,6 +424,31 @@ class DataResampler:
         self.logger.info(f"Перетворено інтервал '{timeframe}' у pandas формат '{pandas_interval}'")
 
         return pandas_interval
+
+    @lru_cache(maxsize=128)
+    def _cached_convert_interval(self, timeframe: str) -> str:
+        """
+        Кешована версія конвертації інтервалу з підтримкою різних форматів
+        """
+        import re
+        interval_map = {
+            's': 'S', 'm': 'T', 'h': 'H',
+            'd': 'D', 'w': 'W', 'M': 'M'
+        }
+
+        match = re.match(r'(\d+)([smhdwM])', timeframe)
+        if not match:
+            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
+
+        number, unit = match.groups()
+
+        if int(number) <= 0:
+            raise ValueError(f"Інтервал повинен бути додатнім: {timeframe}")
+
+        if unit not in interval_map:
+            raise ValueError(f"Непідтримувана одиниця часу: {unit}")
+
+        return f"{number}{interval_map[unit]}"
 
     def parse_interval(self, timeframe: str) -> pd.Timedelta:
 
@@ -774,131 +860,145 @@ class DataResampler:
 
         return results
 
-    def prepare_arima_data(self, data: pd.DataFrame, symbol: str, timeframe: str) -> pd.DataFrame:
+    def prepare_arima_data(
+            self,
+            data: pd.DataFrame | dd.DataFrame,
+            symbol: str,
+            timeframe: str
+    ) -> pd.DataFrame:
         """
-        Оптимізована версія підготовки даних для ARIMA з мінімізацією копіювань та використанням numpy
+        Prepare data for ARIMA time series analysis.
+
+        :param data: Input DataFrame (pandas or Dask)
+        :param symbol: Trading symbol
+        :param timeframe: Trading timeframe
+        :return: Prepared DataFrame for ARIMA analysis
         """
-        # Швидка перевірка порожніх даних
-        if data is None or len(data) == 0:
-            self.logger.warning(f"Порожній DataFrame для {symbol} на інтервалі {timeframe}")
-            return pd.DataFrame()
-
-        # Логування наявних колонок з мінімальними витратами
-        self.logger.info(f"Наявні колонки: {list(data.columns)}")
-
-        # Пошук колонки закриття з мінімальною кількістю ітерацій
-        close_column = None
-        close_variants = ['close', 'price', 'last', 'last_price', 'close_price', 'anomaly_iqr_close']
-        for variant in close_variants:
-            close_cols = [col for col in data.columns if variant in col.lower()]
-            if close_cols:
-                close_column = close_cols[0]
-                break
-
-        if not close_column:
-            self.logger.error(f"Не знайдено колонку закриття для {symbol}")
-            return pd.DataFrame()
-
-        # Використання numpy для мінімізації копіювань та прискорення обчислень
         try:
-            # Пряме numpy-перетворення замість послідовних копіювань
-            close_values = data[close_column].to_numpy()
+            # Convert Dask DataFrame to pandas if necessary
+            if hasattr(data, 'compute'):
+                data = data.compute()
 
-            # Обчислення різних трансформацій з мінімальними проміжними копіюваннями
-            log_returns = np.log(close_values[1:] / close_values[:-1])
-            diff_values = np.diff(close_values)
+            # 1. Select close price column
+            close_columns = ['close', 'price', 'last', 'last_price']
+            close_column = next((col for col in close_columns if col in data.columns), None)
 
-            # Створення результуючого DataFrame без зайвих проміжних копіювань
-            arima_data = pd.DataFrame({
-                'open_time': data.index[1:],
-                'original_close': close_values[1:],
-                f'{close_column}_log_return': log_returns,
-                f'{close_column}_diff': diff_values
+            if not close_column:
+                self.logger.error("No close price column found")
+                return pd.DataFrame()
+
+            # 2. Compute differences and log returns
+            data = data.copy()
+            data['diff'] = data[close_column].diff()
+            data['log_return'] = np.log(data[close_column] / data[close_column].shift(1))
+
+            # 3. Check stationarity
+            log_returns = data['log_return'].dropna()
+
+            if len(log_returns) > 10:
+                # Perform Augmented Dickey-Fuller test
+                adf_result = adfuller(log_returns)
+
+                # 4. Prepare result DataFrame
+                result_df = pd.DataFrame({
+                    'symbol': [symbol],
+                    'timeframe': [timeframe],
+                    'close_price': [data[close_column]],
+                    'log_return': [data['log_return']],
+                    'diff': [data['diff']],
+                    'adf_statistic': [adf_result[0]],
+                    'adf_pvalue': [adf_result[1]],
+                    'is_stationary': [adf_result[1] <= 0.05]
+                })
+
+                self.logger.info(f"Prepared ARIMA data for {symbol}")
+                return result_df
+            else:
+                self.logger.warning(f"Insufficient data for stationarity test for {symbol}")
+                return pd.DataFrame()
+
+        except Exception as e:
+            self.logger.error(f"Error preparing ARIMA data: {e}")
+            return pd.DataFrame()
+
+    def prepare_lstm_data(
+            self,
+            data: pd.DataFrame | dd.DataFrame,
+            symbol: str,
+            timeframe: str,
+            sequence_length: int = 60
+    ) -> pd.DataFrame:
+        """
+        Prepare data for LSTM time series analysis.
+
+        :param data: Input DataFrame (pandas or Dask)
+        :param symbol: Trading symbol
+        :param timeframe: Trading timeframe
+        :param sequence_length: Length of input sequences
+        :return: Prepared DataFrame for LSTM analysis
+        """
+        try:
+            # Convert Dask DataFrame to pandas if necessary
+            if hasattr(data, 'compute'):
+                data = data.compute()
+
+            # 1. Select and prepare feature columns
+            feature_columns = [
+                'open', 'high', 'low', 'close', 'volume',
+                'trades', 'quote_volume'
+            ]
+            feature_columns = [col for col in feature_columns if col in data.columns]
+
+            if not feature_columns:
+                self.logger.error("No feature columns found for analysis")
+                return pd.DataFrame()
+
+            # 2. Sampling for scaling
+            sample_data = data[feature_columns].sample(
+                frac=0.2,
+                random_state=42
+            )
+
+            # 3. Scaling using scikit-learn
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            scaled_data = scaler.fit_transform(sample_data)
+
+            # 4. Create sequences
+            def create_sequences(df):
+                X, y = [], []
+                for i in range(len(df) - sequence_length):
+                    X.append(df.iloc[i:i + sequence_length][feature_columns].values)
+                    y.append(df.iloc[i + sequence_length]['close'])
+                return np.array(X), np.array(y)
+
+            # 5. Split into train/test sets
+            X, y = create_sequences(sample_data)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
+
+            # 6. Prepare results
+            result_df = pd.DataFrame({
+                'symbol': [symbol],
+                'timeframe': [timeframe],
+                'X_train_shape': [X_train.shape],
+                'X_test_shape': [X_test.shape],
+                'sequence_length': [sequence_length],
+                'features': [feature_columns]
             })
 
-            # Додаткові метадані з мінімальними накладними витратами
-            arima_data['timeframe'] = timeframe
-            arima_data['symbol'] = symbol
+            # Store additional metadata in cache
+            self.cache[f'{symbol}_{timeframe}_lstm_data'] = {
+                'X_train': X_train,
+                'X_test': X_test,
+                'y_train': y_train,
+                'y_test': y_test,
+                'scaler': scaler
+            }
 
-            # Пряме логування без зайвих перетворень
-            self.logger.info(f"Підготовка ARIMA даних для {symbol}: {len(arima_data)} рядків")
-
-            return arima_data
-
-        except Exception as e:
-            # Компактна обробка помилок
-            self.logger.error(f"Помилка при підготовці ARIMA даних: {str(e)}")
-            return pd.DataFrame()
-
-    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str,
-                          sequence_length: int = 60) -> pd.DataFrame:
-        """
-        Оптимізована версія підготовки LSTM даних з ефективним використанням пам'яті
-        """
-        # Швидка перевірка вхідних даних
-        if data is None or len(data) == 0:
-            self.logger.warning(f"Порожній DataFrame для {symbol} на інтервалі {timeframe}")
-            return pd.DataFrame()
-
-        # Логування з мінімальними витратами
-        self.logger.info(f"Наявні колонки в prepare_lstm_data: {list(data.columns)}")
-
-        # Пошук колонок з використанням numpy-подібних операцій
-        def find_columns(data, base_variants):
-            found_cols = {}
-            for base, variants in base_variants.items():
-                for variant in variants:
-                    matching_cols = [col for col in data.columns if variant in col.lower()]
-                    if matching_cols:
-                        found_cols[base] = matching_cols[0]
-                        break
-            return found_cols
-
-        # Колонки для пошуку
-        base_feature_variants = {
-            'close': ['close', 'price', 'last', 'last_price', 'iqr_anomaly_close', 'anomaly_iqr_close'],
-            'open': ['open', 'open_price', 'iqr_anomaly_open', 'anomaly_iqr_open'],
-            'high': ['high', 'high_price', 'max_price', 'iqr_anomaly_high', 'anomaly_iqr_high'],
-            'low': ['low', 'low_price', 'min_price', 'iqr_anomaly_low', 'anomaly_iqr_low'],
-            'volume': ['volume', 'base_volume', 'quantity', 'amount', 'iqr_anomaly_volume', 'anomaly_iqr_volume']
-        }
-
-        found_cols = find_columns(data, base_feature_variants)
-
-        # Перевірка наявності мінімального набору колонок
-        if not all(col in found_cols for col in ['close', 'open', 'high', 'low', 'volume']):
-            self.logger.error("Недостатньо колонок для LSTM")
-            return pd.DataFrame()
-
-        # Використання numpy для ефективної підготовки даних
-        try:
-            # Пряме numpy-масштабування без зайвих копіювань
-            scaler = MinMaxScaler(feature_range=(0, 1))
-            scaled_data = scaler.fit_transform(data[[found_cols['close'], found_cols['open'],
-                                                     found_cols['high'], found_cols['low'],
-                                                     found_cols['volume']]])
-
-            # Створення послідовностей з мінімальними проміжними копіюваннями
-            sequences = []
-            for i in range(len(scaled_data) - sequence_length + 1):
-                sequence = scaled_data[i:i + sequence_length].flatten()
-                sequences.append(sequence)
-
-            # Створення DataFrame з послідовностями
-            columns = [f'{col}_seq_{i}' for col in found_cols.values() for i in range(sequence_length)]
-            lstm_data = pd.DataFrame(sequences, columns=columns)
-
-            # Додаткові метадані
-            lstm_data['symbol'] = symbol
-            lstm_data['timeframe'] = timeframe
-            lstm_data['sequence_length'] = sequence_length
-
-            # Логування з мінімальними витратами
-            self.logger.info(f"Підготовка LSTM даних для {symbol}: {len(lstm_data)} послідовностей")
-
-            return lstm_data
+            self.logger.info(f"Prepared LSTM data for {symbol}")
+            return result_df
 
         except Exception as e:
-            # Компактна обробка помилок
-            self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
+            self.logger.error(f"Error preparing LSTM data: {e}")
             return pd.DataFrame()

@@ -297,25 +297,31 @@ class MarketDataProcessor:
         price_min = data[price_col].min()
         price_max = data[price_col].max()
 
-        if price_min == price_max:
-            self.logger.warning("Мінімальна та максимальна ціни однакові. Неможливо створити профіль об'єму.")
+        # Додаємо невеликий буфер, якщо ціни майже ідентичні
+        price_range = price_max - price_min
+        if price_range == 0:
+            # Якщо всі ціни однакові, створюємо штучний діапазон
+            price_min = price_max * 0.99  # на 1% менше
+            price_max = price_max * 1.01  # на 1% більше
+            price_range = price_max - price_min
+
+        # Обчислення ефективної кількості бінів
+        min_bin_width = price_range * 0.001  # мінімальна ширина біну 0.1% від діапазону
+        effective_bins = max(min(bins, int(price_range / min_bin_width)), 2)
+
+        if effective_bins < 2:
+            self.logger.warning(f"Неможливо створити профіль об'єму. Діапазон цін занадто малий.")
             return pd.DataFrame()
 
-        effective_bins = min(bins, int((price_max - price_min) * 100) + 1)
-        if effective_bins < bins:
-            self.logger.warning(f"Зменшено кількість бінів з {bins} до {effective_bins} через малий діапазон цін")
-            bins = effective_bins
-
-        if bins <= 1:
-            self.logger.warning("Недостатньо бінів для створення профілю об'єму")
-            return pd.DataFrame()
+        self.logger.info(f"Створення профілю об'єму з {effective_bins} ціновими рівнями")
 
         try:
-            bin_edges = np.linspace(price_min, price_max, bins + 1)
-            bin_width = (price_max - price_min) / bins
+            # Створення бінів з урахуванням нового ефективного діапазону
+            bin_edges = np.linspace(price_min, price_max, effective_bins + 1)
+            bin_width = (price_max - price_min) / effective_bins
 
-            bin_labels = list(range(bins))
-            data = data.copy()  # гарантія, що не змінюємо оригінал
+            bin_labels = list(range(effective_bins))
+            data = data.copy()
 
             # Виправлено SettingWithCopyWarning
             data.loc[:, 'price_bin'] = pd.cut(
@@ -526,16 +532,37 @@ class MarketDataProcessor:
             **kwargs
         )
 
-
     def save_volume_profile_to_db(self, data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
+        if data.empty:
+            self.logger.warning("Спроба зберегти порожній профіль об'єму")
+            return False
 
-        return self.data_storage.save_volume_profile_to_db(data, symbol, timeframe)
+        try:
+            for _, row in data.iterrows():
+                time_bucket = row.get('period') if pd.notna(row.get('period')) else row.name
 
-    def save_lstm_sequence(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> bool:
+                profile_data = {
+                    'interval': timeframe,
+                    'time_bucket': time_bucket,
+                    'price_bin_start': float(row.get('bin_lower')),
+                    'price_bin_end': float(row.get('bin_upper')),
+                    'volume': float(row['volume'])
+                }
+
+                # Конвертуємо numpy типи
+                profile_data = {k: v.item() if isinstance(v, np.generic) else v for k, v in profile_data.items()}
+
+                self.db_manager.insert_volume_profile(symbol, profile_data)
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
+            return False
+    def save_btc_lstm_sequence(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> bool:
 
         return self.data_storage.save_lstm_sequence(data, symbol, timeframe)
 
-    def save_arima_data(self, data: pd.DataFrame, timeframe:str, symbol: str, **kwargs) -> bool:
+    def save_btc_arima_data(self, data: pd.DataFrame, timeframe:str, symbol: str, **kwargs) -> bool:
 
         return self.data_storage.save_arima_data(data, symbol, timeframe)
 
@@ -709,6 +736,8 @@ class MarketDataProcessor:
             results['volume_profile'] = volume_profile
 
             if save_results:
+                self.logger.info(f"Спроба збереження профілю об'єму: symbol={symbol}, timeframe={timeframe}")
+
                 success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
                 if success:
                     self.logger.info(f"Профіль об'єму для {symbol} {timeframe} успішно збережено")
@@ -727,7 +756,7 @@ class MarketDataProcessor:
                         getattr(self.data_storage, method_name)(arima_data)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
                     else:
-                        self.save_arima_data(processed_data, timeframe, symbol)
+                        self.save_btc_arima_data(processed_data, timeframe, symbol)
                         self.logger.info(f"Дані ARIMA для {symbol} успішно збережено (загальний метод)")
 
             try:
@@ -741,7 +770,7 @@ class MarketDataProcessor:
                             getattr(self.data_storage, method_name)(lstm_df)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
                         else:
-                            self.save_lstm_sequence(processed_data, timeframe, symbol)
+                            self.save_btc_lstm_sequence(processed_data, timeframe, symbol)
                             self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено (загальний метод)")
             except Exception as e:
                 self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
