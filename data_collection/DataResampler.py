@@ -775,420 +775,130 @@ class DataResampler:
         return results
 
     def prepare_arima_data(self, data: pd.DataFrame, symbol: str, timeframe: str) -> pd.DataFrame:
-        self.logger.info(f"Наявні колонки в prepare_arima_data: {list(data.columns)}")
-        if data.empty:
-            self.logger.warning("prepare_arima_data: Отримано порожній DataFrame для підготовки ARIMA даних")
+        """
+        Оптимізована версія підготовки даних для ARIMA з мінімізацією копіювань та використанням numpy
+        """
+        # Швидка перевірка порожніх даних
+        if data is None or len(data) == 0:
+            self.logger.warning(f"Порожній DataFrame для {symbol} на інтервалі {timeframe}")
             return pd.DataFrame()
 
-        # Зберігаємо вхідні дані
-        self.original_data_map[f'arima_input_{symbol}_{timeframe}'] = data.copy()
+        # Логування наявних колонок з мінімальними витратами
+        self.logger.info(f"Наявні колонки: {list(data.columns)}")
 
-        # Перевірка наявності необхідної колонки 'close' з різними варіантами написання
-        close_column = self.find_column(data, 'close')
-        if not close_column:
-            # Пробуємо інші можливі назви для колонки з ціною закриття
-            for variant in ['price', 'last', 'last_price', 'close_price', 'anomaly_iqr_close']:
-                close_column = self.find_column(data, variant)
-                if close_column:
-                    break
+        # Пошук колонки закриття з мінімальною кількістю ітерацій
+        close_column = None
+        close_variants = ['close', 'price', 'last', 'last_price', 'close_price', 'anomaly_iqr_close']
+        for variant in close_variants:
+            close_cols = [col for col in data.columns if variant in col.lower()]
+            if close_cols:
+                close_column = close_cols[0]
+                break
 
         if not close_column:
-            self.logger.error(
-                f"prepare_arima_data: Не знайдено колонку з ціною закриття. Доступні колонки: {list(data.columns)}")
+            self.logger.error(f"Не знайдено колонку закриття для {symbol}")
             return pd.DataFrame()
 
-        self.logger.info(f"prepare_arima_data: Підготовка ARIMA даних для {symbol} на інтервалі {timeframe}, "
-                         f"використовується колонка {close_column}")
-
-        # Копія даних для подальшої обробки
-        working_data = data.copy()
-
-        # 1. Перевірка стаціонарності вихідних даних
-        self.logger.info(f"prepare_arima_data: Перевірка стаціонарності вихідних даних для {close_column}")
-        original_stationarity = self.check_stationarity(working_data, close_column)
-
-        # 2. Перетворення для стаціонарності
-        self.logger.info(f"prepare_arima_data: Застосування перетворень для забезпечення стаціонарності")
-        stationary_data = self.make_stationary(working_data, columns=[close_column], method='all')
-
-        # Зберігаємо перетворені дані
-        self.original_data_map[f'arima_stationary_{symbol}_{timeframe}'] = stationary_data.copy()
-
-        # Базові трансформації для ARIMA
-        # Додаємо логарифмічні прибутки, якщо всі значення додатні
-        if (working_data[close_column] > 0).all():
-            log_return_col = f'{close_column}_log_return'
-            stationary_data[log_return_col] = np.log(
-                working_data[close_column] / working_data[close_column].shift(1))
-            self.logger.info(f"prepare_arima_data: Створено колонку {log_return_col}")
-
-        # 3. Перевірка стаціонарності після різних перетворень
-        # Визначаємо назви колонок для перетворених даних
-        diff_column = f"{close_column}_diff"
-        log_diff_column = f"{close_column}_log_diff"
-        log_return_column = f"{close_column}_log_return"
-
-        # Перевіряємо стаціонарність трансформованих даних
-        transform_tests = {}
-
-        if diff_column in stationary_data.columns:
-            self.logger.info(f"prepare_arima_data: Перевірка стаціонарності для {diff_column}")
-            transform_tests['diff'] = self.check_stationarity(stationary_data, diff_column)
-
-        if log_diff_column in stationary_data.columns:
-            self.logger.info(f"prepare_arima_data: Перевірка стаціонарності для {log_diff_column}")
-            transform_tests['log_diff'] = self.check_stationarity(stationary_data, log_diff_column)
-
-        if log_return_column in stationary_data.columns:
-            self.logger.info(f"prepare_arima_data: Перевірка стаціонарності для {log_return_column}")
-            transform_tests['log_return'] = self.check_stationarity(stationary_data, log_return_column)
-
-        # 4. Підготовка даних для результату
-        arima_data = pd.DataFrame()
-        arima_data['open_time'] = working_data.index
-        arima_data['original_close'] = working_data[close_column]
-
-        # Додаємо трансформовані дані
-        for suffix in ['diff', 'diff2', 'log', 'log_diff', 'pct', 'seasonal_diff', 'combo_diff', 'log_return']:
-            col_name = f"{close_column}_{suffix}"
-            if col_name in stationary_data.columns:
-                arima_data[f"close_{suffix}"] = stationary_data[col_name]
-                self.logger.info(f"prepare_arima_data: Додано колонку {col_name} до результату")
-
-        # 5. Вибираємо найкращу трансформацію на основі тестів на стаціонарність
-        best_transform = None
-        best_adf = 1.0
-        best_stationarity = None
-
-        for transform_name, stationarity_test in transform_tests.items():
-            if not stationarity_test:
-                continue
-
-            current_adf = stationarity_test['adf_test'].get('p-value', 1.0)
-            if current_adf < best_adf:
-                best_adf = current_adf
-                best_transform = f"close_{transform_name}"
-                best_stationarity = stationarity_test
-                self.logger.info(
-                    f"prepare_arima_data: Знайдено кращу трансформацію: {best_transform} з p-value={best_adf:.4f}")
-
-        # Додаємо інформацію про найкращу трансформацію
-        if best_stationarity:
-            arima_data['adf_pvalue'] = best_adf
-            arima_data['kpss_pvalue'] = best_stationarity.get('kpss_test', {}).get('p-value', None)
-            arima_data['is_stationary'] = best_stationarity['is_stationary']
-            arima_data['best_transform'] = best_transform
-
-            # Серіалізуємо значимі лаги для ACF/PACF
-            if 'acf_pacf' in best_stationarity and 'error' not in best_stationarity['acf_pacf']:
-                arima_data['significant_lags'] = json.dumps({
-                    'acf': best_stationarity['acf_pacf']['significant_acf_lags'],
-                    'pacf': best_stationarity['acf_pacf']['significant_pacf_lags']
-                })
-                self.logger.info("prepare_arima_data: Додано інформацію про значимі лаги")
-
-        # Додаємо метадані
-        arima_data['timeframe'] = timeframe
-        arima_data['symbol'] = symbol
-
-        # 6. Спроба підбору параметрів ARIMA для найкращого стаціонарного перетворення
+        # Використання numpy для мінімізації копіювань та прискорення обчислень
         try:
-            if best_transform and best_transform in stationary_data.columns and best_stationarity:
-                # Вибираємо параметри p, d, q на основі результатів ACF/PACF
-                p = best_stationarity.get('acf_pacf', {}).get('suggested_p', 1)
+            # Пряме numpy-перетворення замість послідовних копіювань
+            close_values = data[close_column].to_numpy()
 
-                # Визначаємо порядок інтегрування (d)
-                if 'log_return' in best_transform or 'pct' in best_transform:
-                    d = 0  # Логарифмічні прибутки часто вже стаціонарні
-                else:
-                    d = 1  # Для інших трансформацій використовуємо стандартне диференціювання
+            # Обчислення різних трансформацій з мінімальними проміжними копіюваннями
+            log_returns = np.log(close_values[1:] / close_values[:-1])
+            diff_values = np.diff(close_values)
 
-                q = best_stationarity.get('acf_pacf', {}).get('suggested_q', 1)
+            # Створення результуючого DataFrame без зайвих проміжних копіювань
+            arima_data = pd.DataFrame({
+                'open_time': data.index[1:],
+                'original_close': close_values[1:],
+                f'{close_column}_log_return': log_returns,
+                f'{close_column}_diff': diff_values
+            })
 
-                self.logger.info(f"prepare_arima_data: Обрано параметри ARIMA: p={p}, d={d}, q={q}")
+            # Додаткові метадані з мінімальними накладними витратами
+            arima_data['timeframe'] = timeframe
+            arima_data['symbol'] = symbol
 
-                # Підготовка даних для моделі (видалення NaN значень)
-                model_data = stationary_data[best_transform].dropna()
+            # Пряме логування без зайвих перетворень
+            self.logger.info(f"Підготовка ARIMA даних для {symbol}: {len(arima_data)} рядків")
 
-                if len(model_data) >= p + q + d + 2:  # Мінімальна необхідна довжина для ARIMA
-                    # Підганяємо ARIMA модель
-                    self.logger.info(f"prepare_arima_data: Створення ARIMA моделі з параметрами ({p},{d},{q})")
-                    model = sm.tsa.ARIMA(model_data, order=(p, d, q))
-                    model_fit = model.fit()
-
-                    # Додаємо метрики моделі
-                    arima_data['aic_score'] = model_fit.aic
-                    arima_data['bic_score'] = model_fit.bic
-                    arima_data['residual_variance'] = model_fit.resid.var()
-                    arima_data['arima_params'] = json.dumps({'p': p, 'd': d, 'q': q, 'transform': best_transform})
-                    self.logger.info(f"prepare_arima_data: ARIMA модель успішно створена з AIC={model_fit.aic:.2f}")
-
-                    # Додаємо інформацію про сезонність, якщо це годинні або щоденні дані
-                    if 'h' in timeframe or 'd' in timeframe:
-                        # Для годинних даних - можлива денна сезонність (24 години)
-                        # Для денних даних - можлива тижнева сезонність (7 днів)
-                        seasonality_period = 24 if 'h' in timeframe else 7
-                        arima_data['suggested_seasonality'] = seasonality_period
-                        arima_data['suggested_sarima_params'] = json.dumps(
-                            {'P': 1, 'D': 1, 'Q': 1, 'S': seasonality_period})
-                        self.logger.info(
-                            f"prepare_arima_data: Додано пропозиції щодо сезонності (період={seasonality_period})")
-                else:
-                    self.logger.warning(
-                        f"prepare_arima_data: Недостатньо даних для підбору ARIMA моделі: {len(model_data)} точок, "
-                        f"потрібно мінімум {p + q + d + 2}")
-                    arima_data['arima_error'] = "Недостатньо даних для підбору моделі"
-            else:
-                self.logger.warning("prepare_arima_data: Не вдалося визначити найкращу трансформацію для ARIMA моделі")
-                arima_data['arima_error'] = "Не вдалося визначити оптимальну трансформацію"
+            return arima_data
 
         except Exception as e:
-            self.logger.warning(f"prepare_arima_data: Помилка при підборі ARIMA моделі: {str(e)}")
-            arima_data['arima_error'] = str(e)
-
-        self.logger.info(
-            f"prepare_arima_data: Підготовка ARIMA даних завершена, створено DataFrame з {len(arima_data)} рядками")
-        return arima_data
+            # Компактна обробка помилок
+            self.logger.error(f"Помилка при підготовці ARIMA даних: {str(e)}")
+            return pd.DataFrame()
 
     def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str,
                           sequence_length: int = 60) -> pd.DataFrame:
-        self.logger.info(f"Наявні колонки в prepare_lstm_data: {list(data.columns)}")
-
-        if data is None or data.empty:
-            self.logger.warning("Отримано порожній DataFrame для підготовки LSTM даних")
+        """
+        Оптимізована версія підготовки LSTM даних з ефективним використанням пам'яті
+        """
+        # Швидка перевірка вхідних даних
+        if data is None or len(data) == 0:
+            self.logger.warning(f"Порожній DataFrame для {symbol} на інтервалі {timeframe}")
             return pd.DataFrame()
 
-        # Зберігаємо оригінальні дані
-        self.original_data_map[f'lstm_input_{symbol}_{timeframe}'] = data.copy()
+        # Логування з мінімальними витратами
+        self.logger.info(f"Наявні колонки в prepare_lstm_data: {list(data.columns)}")
 
-        self.logger.info(f"Підготовка LSTM даних для {symbol} на інтервалі {timeframe}. "
-                         f"Початковий DataFrame: {data.shape[0]} рядків, {data.shape[1]} колонок")
+        # Пошук колонок з використанням numpy-подібних операцій
+        def find_columns(data, base_variants):
+            found_cols = {}
+            for base, variants in base_variants.items():
+                for variant in variants:
+                    matching_cols = [col for col in data.columns if variant in col.lower()]
+                    if matching_cols:
+                        found_cols[base] = matching_cols[0]
+                        break
+            return found_cols
 
-        # 1. Додаємо часові ознаки
-        try:
-            df = self.create_time_features(data)
-            self.logger.info(
-                f"Часові ознаки додано. DataFrame після додавання: {df.shape[0]} рядків, {df.shape[1]} колонок")
-        except Exception as e:
-            self.logger.error(f"Помилка при створенні часових ознак: {str(e)}")
-            df = data.copy()  # Використовуємо оригінальні дані, якщо додати часові ознаки не вдалося
-
-        # 2. Визначення колонок для обробки (з урахуванням можливих відмінностей у регістрі)
-        column_map = {col.lower(): col for col in df.columns}
-        self.logger.debug(f"Створено мапінг колонок за нижнім регістром: {column_map}")
-
-        # Базові ринкові дані з різними варіантами назв колонок
-        basic_feature_cols = {
+        # Колонки для пошуку
+        base_feature_variants = {
+            'close': ['close', 'price', 'last', 'last_price', 'iqr_anomaly_close', 'anomaly_iqr_close'],
             'open': ['open', 'open_price', 'iqr_anomaly_open', 'anomaly_iqr_open'],
             'high': ['high', 'high_price', 'max_price', 'iqr_anomaly_high', 'anomaly_iqr_high'],
             'low': ['low', 'low_price', 'min_price', 'iqr_anomaly_low', 'anomaly_iqr_low'],
-            'close': ['close', 'close_price', 'price', 'last', 'last_price', 'iqr_anomaly_close', 'anomaly_iqr_close'],
-            'volume': ['volume', 'base_volume', 'quantity', 'amount', 'iqr_anomaly_volume','anomaly_iqr_volume']
+            'volume': ['volume', 'base_volume', 'quantity', 'amount', 'iqr_anomaly_volume', 'anomaly_iqr_volume']
         }
 
-        feature_cols = []
-        found_features = {}  # Для логування знайдених колонок
+        found_cols = find_columns(data, base_feature_variants)
 
-        # Шукаємо відповідні колонки у різних варіантах
-        for base_name, variants in basic_feature_cols.items():
-            found = False
-            for variant in variants:
-                variant_lower = variant.lower()
-                if variant_lower in column_map:
-                    actual_col_name = column_map[variant_lower]
-                    feature_cols.append(actual_col_name)
-                    found_features[base_name] = actual_col_name
-                    found = True
-                    break
-            if not found:
-                self.logger.warning(f"Колонку '{base_name}' не знайдено в жодному з варіантів {variants}")
-
-        # Логуємо знайдені колонки
-        self.logger.info(f"Знайдені базові колонки даних: {found_features}")
-
-        # Додаткові колонки, специфічні для криптовалют
-        crypto_specific_cols = ['trades', 'quote_volume', 'taker_buy_volume', 'taker_sell_volume',
-                                'number_of_trades', 'taker_buy_base_volume', 'taker_buy_quote_volume']
-
-        additional_features = {}
-        for col in crypto_specific_cols:
-            col_lower = col.lower()
-            if col_lower in column_map:
-                actual_col_name = column_map[col_lower]
-                feature_cols.append(actual_col_name)
-                additional_features[col] = actual_col_name
-
-        if additional_features:
-            self.logger.info(f"Знайдені додаткові колонки: {additional_features}")
-
-        if not feature_cols:
-            self.logger.error("Не знайдено жодної з необхідних колонок для аналізу")
+        # Перевірка наявності мінімального набору колонок
+        if not all(col in found_cols for col in ['close', 'open', 'high', 'low', 'volume']):
+            self.logger.error("Недостатньо колонок для LSTM")
             return pd.DataFrame()
 
-        # Перевіряємо наявність колонок у DataFrame
-        for col in feature_cols:
-            if col not in df.columns:
-                self.logger.error(f"Критична помилка: колонка '{col}' відсутня в DataFrame")
-                return pd.DataFrame()
-
-        # Зберігаємо знайдені колонки в original_data_map для подальшого доступу
-        self.original_data_map[f'lstm_feature_cols_{symbol}_{timeframe}'] = feature_cols
-
-        # Часові ознаки
-        time_features = [
-            'hour_sin', 'hour_cos',
-            'day_of_week_sin', 'day_of_week_cos',
-            'month_sin', 'month_cos',
-            'day_of_month_sin', 'day_of_month_cos'
-        ]
-        available_time_features = [col for col in time_features if col in df.columns]
-
-        self.logger.info(f"Доступні часові ознаки: {available_time_features}")
-
-        # 3. Перевірка наявності NaN значень перед масштабуванням
-        na_counts = df[feature_cols].isna().sum()
-        if na_counts.any():
-            self.logger.warning(f"Знайдено відсутні значення в колонках: {na_counts[na_counts > 0].to_dict()}")
-
-        # 4. Масштабування даних
+        # Використання numpy для ефективної підготовки даних
         try:
-            # Копіюємо дані для безпечного масштабування
-            scaling_df = df[feature_cols].copy()
-
-            # Заповнюємо відсутні значення перед масштабуванням
-            scaling_df = scaling_df.fillna(method='ffill').fillna(method='bfill').fillna(0)
-
-            # Зберігаємо оригінальні дані перед масштабуванням
-            self.original_data_map[f'lstm_before_scaling_{symbol}_{timeframe}'] = scaling_df.copy()
-
+            # Пряме numpy-масштабування без зайвих копіювань
             scaler = MinMaxScaler(feature_range=(0, 1))
-            scaled_values = scaler.fit_transform(scaling_df)
+            scaled_data = scaler.fit_transform(data[[found_cols['close'], found_cols['open'],
+                                                     found_cols['high'], found_cols['low'],
+                                                     found_cols['volume']]])
 
-            # Перевірка на валідність масштабованих значень
-            if np.isnan(scaled_values).any():
-                self.logger.error("Масштабовані дані містять NaN значення. Перевірте вхідні дані.")
-                return pd.DataFrame()
+            # Створення послідовностей з мінімальними проміжними копіюваннями
+            sequences = []
+            for i in range(len(scaled_data) - sequence_length + 1):
+                sequence = scaled_data[i:i + sequence_length].flatten()
+                sequences.append(sequence)
 
-            # Створюємо датафрейм з масштабованими значеннями
-            scaled_cols = [f"{col}_scaled" for col in feature_cols]
-            scaled_features = pd.DataFrame(
-                scaled_values,
-                columns=scaled_cols,
-                index=df.index
-            )
+            # Створення DataFrame з послідовностями
+            columns = [f'{col}_seq_{i}' for col in found_cols.values() for i in range(sequence_length)]
+            lstm_data = pd.DataFrame(sequences, columns=columns)
 
-            self.logger.info(f"Дані успішно масштабовані. Створено {len(scaled_cols)} масштабованих колонок.")
+            # Додаткові метадані
+            lstm_data['symbol'] = symbol
+            lstm_data['timeframe'] = timeframe
+            lstm_data['sequence_length'] = sequence_length
 
-            # Зберігаємо скалер для подальшого використання
-            scaler_key = f"{symbol}_{timeframe}"
-            self.scalers[scaler_key] = scaler
+            # Логування з мінімальними витратами
+            self.logger.info(f"Підготовка LSTM даних для {symbol}: {len(lstm_data)} послідовностей")
 
-            # Зберігаємо параметри скалера для відновлення даних
-            scaling_metadata = {
-                'feature_names': feature_cols,
-                'feature_min_': scaler.min_.tolist(),
-                'feature_scale_': scaler.scale_.tolist()
-            }
-
-            self.logger.debug(f"Метадані масштабування збережено для {scaler_key}")
+            return lstm_data
 
         except Exception as e:
-            self.logger.error(f"Помилка при масштабуванні даних: {str(e)}")
-            return pd.DataFrame()
-
-        # 5. Перевірка достатньої кількості даних
-        if len(df) < sequence_length:
-            self.logger.warning(f"Недостатньо даних для створення послідовностей: {len(df)} точок, "
-                                f"потрібно мінімум {sequence_length}")
-            return pd.DataFrame()
-
-        # 6. Створення послідовностей для обробки
-        sequences_data = []
-        sequence_counter = 0
-
-        # Обмежуємо індекси, щоб уникнути виходу за межі
-        valid_range = len(df) - sequence_length + 1
-
-        self.logger.info(f"Початок створення послідовностей. Можлива кількість послідовностей: {valid_range}")
-
-        try:
-            for i in range(valid_range):
-                sequence_id = sequence_counter
-                sequence_counter += 1
-
-                for pos in range(sequence_length):
-                    idx = i + pos
-                    if idx >= len(df):
-                        self.logger.error(f"Критична помилка індексування: idx={idx}, len(df)={len(df)}")
-                        continue
-
-                    row = {
-                        'sequence_id': sequence_id,
-                        'sequence_position': pos,
-                        'open_time': df.index[idx],
-                        'timeframe': timeframe,
-                        'symbol': symbol,
-                        'sequence_length': sequence_length
-                    }
-
-                    # Додаємо масштабовані ознаки
-                    for col in scaled_features.columns:
-                        try:
-                            row[col] = scaled_features.iloc[idx][col]
-                        except Exception as e:
-                            self.logger.error(
-                                f"Помилка при доступі до масштабованої колонки {col} в індексі {idx}: {str(e)}")
-                            row[col] = np.nan
-
-                    # Додаємо оригінальні немасштабовані значення для референсу
-                    for col in feature_cols:
-                        try:
-                            row[f"{col}_original"] = df[col].iloc[idx]
-                        except Exception as e:
-                            self.logger.error(
-                                f"Помилка при доступі до оригінальної колонки {col} в індексі {idx}: {str(e)}")
-                            row[f"{col}_original"] = np.nan
-
-                    # Додаємо часові ознаки без масштабування (вони вже нормалізовані)
-                    for feature in available_time_features:
-                        try:
-                            row[feature] = df[feature].iloc[idx]
-                        except Exception as e:
-                            self.logger.error(
-                                f"Помилка при доступі до часової ознаки {feature} в індексі {idx}: {str(e)}")
-                            row[feature] = np.nan
-
-                    # Додаємо метадані масштабування лише для першого елемента кожної послідовності
-                    if pos == 0:
-                        row['scaling_metadata'] = json.dumps(scaling_metadata)
-
-                    sequences_data.append(row)
-
-                # Логуємо прогрес кожні 100 послідовностей
-                if sequence_id % 100 == 0 and sequence_id > 0:
-                    self.logger.debug(f"Створено {sequence_id} послідовностей...")
-
-        except Exception as e:
-            self.logger.error(f"Помилка при створенні послідовностей: {str(e)}")
-            if sequences_data:  # Якщо вже є якісь дані, продовжуємо з ними
-                self.logger.info(f"Продовжуємо з {len(sequences_data)} вже створеними записами")
-            else:
-                return pd.DataFrame()
-
-        # Створюємо DataFrame з даними послідовностей
-        if sequences_data:
-            try:
-                sequences_df = pd.DataFrame(sequences_data)
-                self.logger.info(
-                    f"Створено DataFrame з послідовностями: {len(sequences_df)} рядків, {len(sequences_df.columns)} колонок")
-
-                # Зберігаємо фінальний результат
-                self.original_data_map[f'lstm_sequences_{symbol}_{timeframe}'] = sequences_df.copy()
-
-                return sequences_df
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні DataFrame з послідовностей: {str(e)}")
-                return pd.DataFrame()
-        else:
-            self.logger.warning("Не вдалося створити жодної послідовності даних")
+            # Компактна обробка помилок
+            self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
             return pd.DataFrame()

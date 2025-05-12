@@ -13,13 +13,19 @@ except ImportError:
 
 
 class AnomalyDetector:
+    def __init__(self, logger: Any, preserve_original_columns: bool = True):
+        """
+        Ініціалізація детектора аномалій.
 
-    def __init__(self, logger: Any):
+        :param logger: Об'єкт логування
+        :param preserve_original_columns: Зберігати всі оригінальні колонки під час обробки
+        """
         self.logger = logger
+        self.preserve_original_columns = preserve_original_columns
 
     def ensure_float(self, df: pd.DataFrame) -> pd.DataFrame:
         """Перетворює decimal.Decimal значення на float."""
-        result = df.copy()
+        result = df.copy(deep=True)
         for col in result.columns:
             if result[col].dtype == object:
                 has_decimal = any(isinstance(x, decimal.Decimal) for x in result[col].dropna())
@@ -31,27 +37,32 @@ class AnomalyDetector:
     def _preprocess_data(self, data: pd.DataFrame, numeric_cols: List[str],
                          fill_method: str = 'median') -> pd.DataFrame:
         """Попередня обробка даних з врахуванням специфіки криптовалют."""
-        self.logger.info(f"Наявні колонки в _detect_robust_zscore_anomalies: {list(data.columns)}")
-        self.logger.info(f"Числові колонки для аналізу: {numeric_cols}")
-        if data.empty or not numeric_cols:
+        self.logger.info(f"Наявні колонки в _preprocess_data: {list(data.columns)}")
+
+        # Створюємо глибоку копію з усіма оригінальними колонками
+        processed_data = data.copy(deep=True)
+
+        # Перетворення на float з збереженням оригінальних колонок
+        for col in processed_data.columns:
+            if processed_data[col].dtype == object:
+                try:
+                    processed_data[col] = pd.to_numeric(processed_data[col], errors='coerce')
+                except:
+                    pass
+
+        if processed_data.empty or not numeric_cols:
             self.logger.warning("Порожні вхідні дані або відсутні числові колонки")
-            return data
+            return processed_data
 
-        processed_data = self.ensure_float(data)
-
-        # 1. Заповнення відсутніх значень - краще використовувати медіану для криптовалют через викиди
+        # 1. Заповнення відсутніх значень
         for col in numeric_cols:
             if col not in processed_data.columns:
                 continue
 
-            # Переконуємося, що колонка є числовою
-            if processed_data[col].dtype == object:
-                processed_data[col] = pd.to_numeric(processed_data[col], errors='coerce')
-
             if processed_data[col].isna().any():
                 if fill_method == 'mean':
                     fill_value = processed_data[col].mean()
-                elif fill_method == 'median':  # Рекомендований для крипти
+                elif fill_method == 'median':
                     fill_value = processed_data[col].median()
                 elif fill_method == 'ffill':
                     processed_data[col] = processed_data[col].ffill()
@@ -63,26 +74,21 @@ class AnomalyDetector:
                     fill_value = 0
                 processed_data[col] = processed_data[col].fillna(fill_value)
 
-        # 2. Логарифмічне перетворення для криптовалютних даних з високою скошеністю
-        # ВИПРАВЛЕНО: Додано перевірку на нульові значення перед логарифмуванням
+        # 2. Логарифмічне перетворення для криптовалютних даних
         log_columns = []
         for col in numeric_cols:
-            if processed_data[col].dtype == object:
-                processed_data[col] = pd.to_numeric(processed_data[col], errors='coerce')
-
             # Пропускаємо колонки з одним унікальним значенням
             unique_values = processed_data[col].nunique()
             if unique_values <= 1:
                 continue
 
             # Перевірка на викиди та позитивні значення
-            # ВИПРАВЛЕНО: нульові значення тепер допустимі для логарифмічного перетворення
-            if (processed_data[col] >= 0).all():  # Змінено з > на >= для врахування нулів
+            if (processed_data[col] >= 0).all():
                 skewness = processed_data[col].skew()
-                # Криптовалютні дані часто сильно скошені
-                if abs(skewness) > 1.5:  # Підвищуємо поріг для крипто
+                if abs(skewness) > 1.5:
                     log_col = f'{col}_log'
-                    processed_data[log_col] = np.log1p(processed_data[col])  # log1p(0) = 0, що безпечно
+                    # Додаємо логарифмічну колонку
+                    processed_data[log_col] = np.log1p(processed_data[col])
                     log_columns.append(log_col)
                     self.logger.info(f"Застосовано логарифмічне перетворення для {col} (скошеність={skewness:.2f})")
 
@@ -114,7 +120,7 @@ class AnomalyDetector:
             self.logger.warning(f"Непідтримуваний метод: {method}. Використовуємо 'crypto_specific'")
             method = 'crypto_specific'
 
-        # Збільшуємо стандартний поріг для крипто - вони мають більше природних коливань
+        # Збільшуємо стандартний поріг для криптовалют - вони мають більше природних коливань
         if threshold <= 0:
             self.logger.warning(f"Отримано недопустиме порогове значення: {threshold}. Встановлено значення 5")
             threshold = 5.0
@@ -126,17 +132,26 @@ class AnomalyDetector:
 
         self.logger.info(f"Початок виявлення аномалій методом {method} з порогом {threshold}")
 
-        data = self.ensure_float(data)
+        # Власний метод перетворення на float, щоб уникнути помилок
+        def ensure_float(df):
+            for col in df.columns:
+                try:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                except:
+                    pass
+            return df
+
+        data_copy = ensure_float(data.copy(deep=True))
 
         # Вибір числових колонок
-        numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = data_copy.select_dtypes(include=[np.number]).columns.tolist()
 
         # Перетворення об'єктів на числа, коли можливо
-        for col in data.columns:
-            if col not in numeric_cols and data[col].dtype == object:
+        for col in data_copy.columns:
+            if col not in numeric_cols and data_copy[col].dtype == object:
                 try:
-                    data[col] = pd.to_numeric(data[col], errors='coerce')
-                    if not data[col].isna().all():
+                    data_copy[col] = pd.to_numeric(data_copy[col], errors='coerce')
+                    if not data_copy[col].isna().all():
                         numeric_cols.append(col)
                 except:
                     pass
@@ -146,14 +161,14 @@ class AnomalyDetector:
             return pd.DataFrame(), []
 
         # Попередня обробка даних
-        processed_data = data
+        processed_data = data_copy
         if preprocess:
             try:
-                processed_data = self._preprocess_data(data, numeric_cols, fill_method)
+                processed_data = self._preprocess_data(data_copy, numeric_cols, fill_method)
                 self.logger.info(f"Дані передоброблені з методом заповнення '{fill_method}'")
             except Exception as e:
                 self.logger.error(f"Помилка під час передобробки даних: {str(e)}")
-                processed_data = data
+                processed_data = data_copy
 
         # Результати зберігаємо в словнику, з префіксами для індикаторів аномалій
         anomalies = {}
@@ -163,13 +178,15 @@ class AnomalyDetector:
             if method == 'ensemble':
                 # Використовуємо комбінацію методів для криптовалют
                 self.logger.info("Використовуємо ансамблевий метод виявлення аномалій")
+
                 self._detect_crypto_specific_anomalies(processed_data, threshold, anomalies, all_outlier_indices)
                 self._detect_robust_zscore_anomalies(processed_data, numeric_cols, threshold, anomalies,
                                                      all_outlier_indices)
                 self._detect_robust_iqr_anomalies(processed_data, numeric_cols, threshold * 0.8, anomalies,
                                                   all_outlier_indices)
 
-                if SKLEARN_AVAILABLE and len(processed_data) >= 50:  # Мінімум 50 точок для надійності
+                # Перевірка наявності scikit-learn та достатньої кількості даних
+                if SKLEARN_AVAILABLE and len(processed_data) >= 50:
                     self._detect_isolation_forest_anomalies(processed_data, numeric_cols, contamination, anomalies,
                                                             all_outlier_indices)
 
@@ -182,9 +199,11 @@ class AnomalyDetector:
                                                   all_outlier_indices)
 
             elif method == 'isolation_forest':
+                # Перевірка наявності scikit-learn
                 if not SKLEARN_AVAILABLE:
                     self.logger.error("Для використання методу 'isolation_forest' необхідно встановити scikit-learn")
                     return pd.DataFrame(), []
+
                 self._detect_isolation_forest_anomalies(processed_data, numeric_cols, contamination, anomalies,
                                                         all_outlier_indices)
 
@@ -199,25 +218,22 @@ class AnomalyDetector:
             self.logger.error(f"Помилка під час виявлення аномалій методом {method}: {str(e)}")
             return pd.DataFrame(), []
 
-        # Перетворюємо результати на DataFrame
-        result_df = pd.DataFrame(index=data.index)
+        # Перетворюємо результати на DataFrame - ВИПРАВЛЕНО для збереження оригінальних колонок
+        result_df = data.copy(deep=True)
 
-        # Додаємо інформацію про аномалії без перейменування колонок,
-        # використовуючи окремі колонки з префіксом anomaly_
+        # Додаємо інформацію про аномалії без перейменування колонок
         for anomaly_type, indices in anomalies.items():
             if indices:
                 # Додаємо префікс anomaly_ до всіх колонок аномалій, якщо його ще немає
-                if not anomaly_type.startswith("anomaly_"):
-                    anomaly_col = f"anomaly_{anomaly_type}"
-                else:
-                    anomaly_col = anomaly_type
+                anomaly_col = f"anomaly_{anomaly_type}" if not anomaly_type.startswith("anomaly_") else anomaly_type
 
                 result_df[anomaly_col] = False
                 result_df.loc[indices, anomaly_col] = True
 
         # Додаємо загальний індикатор аномалій
-        if not result_df.empty:
-            result_df['is_anomaly'] = result_df.any(axis=1)
+        anomaly_columns = [col for col in result_df.columns if col.startswith('anomaly_')]
+        if anomaly_columns:
+            result_df['is_anomaly'] = result_df[anomaly_columns].any(axis=1)
         else:
             result_df['is_anomaly'] = False
 
@@ -226,6 +242,7 @@ class AnomalyDetector:
         self.logger.info(f"Виявлення аномалій завершено. Знайдено {len(outlier_indices)} аномалій у всіх колонках")
         return result_df, outlier_indices
 
+    # Решта методів класу залишаються без змін (вони вже були правильно реалізовані)
     def _detect_robust_zscore_anomalies(self, data: pd.DataFrame, numeric_cols: List[str],
                                         threshold: float, anomalies: Dict[str, List],
                                         all_outlier_indices: set) -> None:
@@ -278,14 +295,15 @@ class AnomalyDetector:
         """Виявлення аномалій за методом IQR з адаптацією для криптовалют."""
         self.logger.info(f"Наявні колонки в _detect_robust_iqr_anomalies: {list(data.columns)}")
         self.logger.info(f"Числові колонки для аналізу: {numeric_cols}")
+
         for col in numeric_cols:
             if col not in data.columns:
                 continue
 
-            # Переконуємося, що дані числові
-            valid_data = pd.to_numeric(data[col], errors='coerce').dropna()
+            # Створюємо копію стовпця з відновленням індексації
+            valid_data = pd.to_numeric(data[col], errors='coerce')
 
-            if len(valid_data) < 4 or valid_data.nunique() <= 1:
+            if valid_data.isna().all() or valid_data.nunique() <= 1:
                 continue
 
             try:
@@ -315,10 +333,8 @@ class AnomalyDetector:
                     lower_bound = Q1 - threshold * IQR
                     upper_bound = Q3 + threshold * IQR
 
-                # Створюємо серію з індексами original data
-                outliers = pd.Series(False, index=data.index)
-                valid_indices = valid_data.index
-                outliers.loc[valid_indices] = (valid_data < lower_bound) | (valid_data > upper_bound)
+                # Створюємо серію з позначками аномалій з повним збереженням індексів
+                outliers = (valid_data < lower_bound) | (valid_data > upper_bound)
 
                 if outliers.any():
                     # Зберігаємо індекси аномалій для кожної колонки окремо
