@@ -2,7 +2,14 @@ import traceback
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple, Any, Union, Callable
+from functools import lru_cache
+import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+import os
+import gc
+import psutil
+from joblib import Memory
 
 from pandas import DataFrame
 
@@ -14,16 +21,36 @@ from data.db import DatabaseManager
 
 
 class MarketDataProcessor:
+    """
+    Клас для обробки ринкових даних з оптимізаціями для швидкості та ефективності пам'яті.
+    """
+    # Налаштування кешування
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
+    memory = Memory(cache_dir, verbose=0)
 
+    def __init__(self, log_level=logging.INFO, use_multiprocessing=True,
+                 cache_enabled=True, chunk_size=100000):
+        """
+        Ініціалізація обробника ринкових даних з розширеними опціями.
 
-    def __init__(self, log_level=logging.INFO):
-
+        Args:
+            log_level: Рівень логування
+            use_multiprocessing: Включити паралельну обробку
+            cache_enabled: Включити кешування результатів
+            chunk_size: Розмір чанка для обробки великих даних
+        """
         self.log_level = log_level
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
         self.logger.info("Ініціалізація класу...")
 
-        # Initialize dependency classes
+        # Налаштування оптимізацій
+        self.use_multiprocessing = use_multiprocessing
+        self.cache_enabled = cache_enabled
+        self.chunk_size = chunk_size
+        self.num_workers = max(1, mp.cpu_count() - 1)  # Залишаємо один потік вільним
+
+        # Ініціалізація залежних класів
         self.data_cleaner = DataCleaner(logger=self.logger)
         self.data_resampler = DataResampler(logger=self.logger)
         self.data_storage = DataStorageManager(logger=self.logger)
@@ -31,13 +58,156 @@ class MarketDataProcessor:
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
 
+        # Кеш для проміжних результатів обробки даних
+        self._result_cache = {}
+
         self.ready = True
         self.filtered_data = None
         self.orderbook_statistics = None
 
+    def _get_memory_usage(self):
+        """Отримати поточне використання пам'яті."""
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 / 1024  # MB
+
+    def _log_memory_usage(self, message=""):
+        """Логувати поточне використання пам'яті."""
+        memory_mb = self._get_memory_usage()
+        self.logger.info(f"{message} Використання пам'яті: {memory_mb:.2f} MB")
+
+    def _process_in_chunks(self, data: pd.DataFrame,
+                           process_func: Callable,
+                           **kwargs) -> pd.DataFrame:
+        """
+        Обробка великого DataFrame по частинах для зменшення використання пам'яті.
+
+        Args:
+            data: вхідний DataFrame
+            process_func: функція обробки для кожного чанка
+            **kwargs: додаткові аргументи для функції обробки
+
+        Returns:
+            Оброблений DataFrame
+        """
+        if data is None or data.empty:
+            return data
+
+        # Якщо дані менші за розмір чанка, обробляємо цілим
+        if len(data) <= self.chunk_size:
+            return process_func(data, **kwargs)
+
+        self.logger.info(f"Обробка даних по чанкам: {len(data)} рядків, розмір чанка {self.chunk_size}")
+        self._log_memory_usage("До обробки по чанкам:")
+
+        chunks = []
+        chunk_indices = list(range(0, len(data), self.chunk_size))
+
+        for i, start_idx in enumerate(chunk_indices):
+            end_idx = min(start_idx + self.chunk_size, len(data))
+            chunk = data.iloc[start_idx:end_idx].copy()
+
+            self.logger.debug(f"Обробка чанка {i + 1}/{len(chunk_indices)}: рядки {start_idx}-{end_idx}")
+
+            try:
+                processed_chunk = process_func(chunk, **kwargs)
+                if processed_chunk is not None and not processed_chunk.empty:
+                    chunks.append(processed_chunk)
+            except Exception as e:
+                self.logger.error(f"Помилка при обробці чанка {i + 1}: {str(e)}")
+
+            # Явно очищуємо пам'ять
+            del chunk
+            gc.collect()
+
+        if not chunks:
+            return pd.DataFrame()
+
+        # Об'єднуємо результати
+        try:
+            result = pd.concat(chunks, axis=0)
+            self._log_memory_usage("Після обробки по чанкам:")
+            return result
+        except Exception as e:
+            self.logger.error(f"Помилка при об'єднанні результатів: {str(e)}")
+            return pd.DataFrame()
+
+    def _parallel_process(self, data_list: List[pd.DataFrame],
+                          func: Callable,
+                          **kwargs) -> List[pd.DataFrame]:
+        """
+        Паралельно застосовує функцію обробки до списку DataFrame.
+
+        Args:
+            data_list: список DataFrame для обробки
+            func: функція обробки
+            **kwargs: аргументи для функції обробки
+
+        Returns:
+            Список оброблених DataFrame
+        """
+        if not self.use_multiprocessing or len(data_list) <= 1:
+            return [func(df, **kwargs) for df in data_list]
+
+        self.logger.info(f"Паралельна обробка {len(data_list)} наборів даних на {self.num_workers} ядрах")
+
+        def _process_one(df_idx_pair):
+            idx, df = df_idx_pair
+            try:
+                if df is None or df.empty:
+                    return idx, pd.DataFrame()
+                result = func(df, **kwargs)
+                return idx, result
+            except Exception as e:
+                self.logger.error(f"Помилка в паралельній обробці #{idx}: {str(e)}")
+                return idx, pd.DataFrame()
+
+        # Створення списку індекс-датафрейм пар для збереження порядку
+        indexed_data = list(enumerate(data_list))
+
+        # Вибір типу виконавця в залежності від операції
+        # ProcessPoolExecutor для CPU-bound операцій, ThreadPoolExecutor для I/O-bound
+        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
+            results = list(executor.map(_process_one, indexed_data))
+
+        # Відновлення оригінального порядку результатів
+        sorted_results = sorted(results, key=lambda x: x[0])
+        return [result for _, result in sorted_results]
+
+    @lru_cache(maxsize=32)
+    def _get_cached_data(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """
+        Кешована функція для завантаження даних.
+
+        Args:
+            symbol: символ ринкового інструмента
+            timeframe: часовий інтервал
+            start_date: початкова дата
+            end_date: кінцева дата
+
+        Returns:
+            DataFrame з даними
+        """
+        return self.load_data(
+            data_source='database',
+            symbol=symbol,
+            timeframe=timeframe,
+            data_type='candles',
+            start_date=start_date,
+            end_date=end_date
+        )
+
     def align_time_series(self, data_list: List[pd.DataFrame],
                           reference_index: int = 0) -> List[pd.DataFrame]:
+        """
+        Вирівнює часові ряди, оптимізовано для швидкодії та пам'яті.
 
+        Args:
+            data_list: список DataFrame з часовими рядами
+            reference_index: індекс еталонного DataFrame
+
+        Returns:
+            Список вирівняних DataFrame
+        """
         if not data_list:
             self.logger.warning("Порожній список DataFrame для вирівнювання")
             return []
@@ -46,7 +216,7 @@ class MarketDataProcessor:
             self.logger.error(f"Невірний reference_index: {reference_index}. Має бути від 0 до {len(data_list) - 1}")
             reference_index = 0
 
-        # Підготовка DataFrames
+        # Підготовка DataFrames - векторизована обробка
         processed_data_list = []
 
         for i, df in enumerate(data_list):
@@ -61,12 +231,15 @@ class MarketDataProcessor:
             if not isinstance(df_copy.index, pd.DatetimeIndex):
                 self.logger.warning(f"DataFrame {i} не має часового індексу. Спроба конвертувати.")
                 try:
-                    time_cols = [col for col in df_copy.columns if
-                                 any(x in col.lower() for x in ['time', 'date', 'timestamp'])]
-                    if time_cols:
+                    # Векторизована перевірка часових колонок
+                    time_cols = df_copy.columns[
+                        df_copy.columns.str.lower().str.contains('|'.join(['time', 'date', 'timestamp']))]
+
+                    if len(time_cols) > 0:
                         df_copy[time_cols[0]] = pd.to_datetime(df_copy[time_cols[0]], errors='coerce')
                         df_copy.set_index(time_cols[0], inplace=True)
-                        df_copy = df_copy.loc[df_copy.index.notna()]  # Видалення рядків з невалідними датами
+                        # Векторизована фільтрація невалідних дат
+                        df_copy = df_copy.loc[df_copy.index.notna()]
                     else:
                         self.logger.error(f"Неможливо конвертувати DataFrame {i}: не знайдено часову колонку")
                         processed_data_list.append(pd.DataFrame())
@@ -88,16 +261,16 @@ class MarketDataProcessor:
             self.logger.error("Еталонний DataFrame є порожнім")
             return processed_data_list
 
-        # Знаходження спільного часового діапазону
-        all_start_times = [df.index.min() for df in processed_data_list if not df.empty]
-        all_end_times = [df.index.max() for df in processed_data_list if not df.empty]
+        # Векторизований пошук спільного часового діапазону
+        all_start_times = pd.Series([df.index.min() for df in processed_data_list if not df.empty])
+        all_end_times = pd.Series([df.index.max() for df in processed_data_list if not df.empty])
 
-        if not all_start_times or not all_end_times:
+        if all_start_times.empty or all_end_times.empty:
             self.logger.error("Неможливо визначити спільний часовий діапазон")
             return processed_data_list
 
-        common_start = max(all_start_times)
-        common_end = min(all_end_times)
+        common_start = all_start_times.max()
+        common_end = all_end_times.min()
 
         self.logger.info(f"Визначено спільний часовий діапазон: {common_start} - {common_end}")
 
@@ -112,29 +285,25 @@ class MarketDataProcessor:
 
             if not reference_freq:
                 self.logger.warning("Не вдалося визначити частоту reference DataFrame. Визначення вручну.")
-                # Розрахунок медіанної різниці часових міток
+                # Векторизований розрахунок медіанної різниці часових міток
                 time_diffs = reference_df.index.to_series().diff().dropna()
                 if not time_diffs.empty:
                     median_diff = time_diffs.median()
                     # Конвертація до рядка частоти pandas
-                    if median_diff.seconds == 60:
-                        reference_freq = '1min'
-                    elif median_diff.seconds == 300:
-                        reference_freq = '5min'
-                    elif median_diff.seconds == 900:
-                        reference_freq = '15min'
-                    elif median_diff.seconds == 1800:
-                        reference_freq = '30min'
-                    elif median_diff.seconds == 3600:
-                        reference_freq = '1H'
-                    elif median_diff.seconds == 14400:
-                        reference_freq = '4H'
-                    elif median_diff.days == 1:
+                    seconds_mapping = {
+                        60: '1min',
+                        300: '5min',
+                        900: '15min',
+                        1800: '30min',
+                        3600: '1H',
+                        14400: '4H'
+                    }
+
+                    if median_diff.days == 1:
                         reference_freq = '1D'
                     else:
-                        # Використовуємо кількість секунд як частоту
                         total_seconds = median_diff.total_seconds()
-                        reference_freq = f"{int(total_seconds)}S"
+                        reference_freq = seconds_mapping.get(total_seconds, f"{int(total_seconds)}S")
 
                     self.logger.info(f"Визначено частоту: {reference_freq}")
                 else:
@@ -142,8 +311,8 @@ class MarketDataProcessor:
                     return processed_data_list
 
             # Створення нового індексу з використанням визначеної частоти
-            reference_subset = reference_df.loc[(reference_df.index >= common_start) &
-                                                (reference_df.index <= common_end)]
+            # Векторизована фільтрація для reference_subset
+            reference_subset = reference_df[(reference_df.index >= common_start) & (reference_df.index <= common_end)]
             common_index = reference_subset.index
 
             # Якщо частота визначена, перестворимо індекс для забезпечення регулярності
@@ -153,45 +322,34 @@ class MarketDataProcessor:
                 except pd.errors.OutOfBoundsDatetime:
                     self.logger.warning("Помилка створення date_range. Використання оригінального індексу.")
 
-            aligned_data_list = []
-
-            # Вирівнювання всіх DataFrame до спільного індексу
-            for i, df in enumerate(processed_data_list):
+            # Паралельне вирівнювання всіх DataFrame до спільного індексу
+            def _align_one_df(df_info):
+                i, df = df_info
                 if df.empty:
-                    aligned_data_list.append(df)
-                    continue
+                    return i, df
 
-                self.logger.info(f"Вирівнювання DataFrame {i} до спільного індексу")
+                self.logger.debug(f"Вирівнювання DataFrame {i} до спільного індексу")
 
                 # Якщо це еталонний DataFrame
                 if i == reference_index:
                     # Використовуємо оригінальний індекс, обмежений спільним діапазоном
-                    df_aligned = df.loc[(df.index >= common_start) & (df.index <= common_end)]
+                    # Векторизована фільтрація
+                    df_aligned = df[(df.index >= common_start) & (df.index <= common_end)]
                     # Перевірка, чи потрібно перестворити індекс з визначеною частотою
                     if len(df_aligned.index) != len(common_index):
-                        self.logger.info(f"Перестворення індексу для еталонного DataFrame {i}")
+                        self.logger.debug(f"Перестворення індексу для еталонного DataFrame {i}")
                         df_aligned = df_aligned.reindex(common_index)
                 else:
                     # Для інших DataFrame - вирівнюємо до спільного індексу
                     df_aligned = df.reindex(common_index)
 
-                # Інтерполяція числових даних
+                # Векторизована інтерполяція числових даних
                 numeric_cols = df_aligned.select_dtypes(include=[np.number]).columns
                 if len(numeric_cols) > 0:
-                    for col in numeric_cols:
-                        # Обробка кожної колонки окремо
-                        if df_aligned[col].isna().sum() > 0:
-                            try:
-                                # Спочатку спроба інтерполяції за часом
-                                df_aligned[col] = df_aligned[col].interpolate(method='time')
-                                # Якщо залишились NA на краях, використовуємо заповнення вперед/назад
-                                if df_aligned[col].isna().sum() > 0:
-                                    df_aligned[col] = df_aligned[col].fillna(method='ffill').fillna(method='bfill')
-                            except Exception as e:
-                                self.logger.warning(f"Помилка інтерполяції колонки {col}: {str(e)}")
-                                # Спробуємо простіший метод
-                                df_aligned[col] = df_aligned[col].interpolate(method='linear').fillna(
-                                    method='ffill').fillna(method='bfill')
+                    # Інтерполяція всіх числових колонок одразу
+                    df_aligned[numeric_cols] = df_aligned[numeric_cols].interpolate(method='time')
+                    # Заповнення NaN, що залишились
+                    df_aligned[numeric_cols] = df_aligned[numeric_cols].fillna(method='ffill').fillna(method='bfill')
 
                 # Перевірка та звіт про відсутні значення
                 missing_values = df_aligned.isna().sum().sum()
@@ -199,7 +357,24 @@ class MarketDataProcessor:
                     self.logger.warning(
                         f"Після вирівнювання DataFrame {i} залишилося {missing_values} відсутніх значень")
 
-                aligned_data_list.append(df_aligned)
+                return i, df_aligned
+
+            if self.use_multiprocessing and len(processed_data_list) > 1:
+                # Паралельне вирівнювання
+                with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+                    results = list(executor.map(
+                        _align_one_df,
+                        [(i, df) for i, df in enumerate(processed_data_list)]
+                    ))
+                # Відновлення початкового порядку
+                results.sort(key=lambda x: x[0])
+                aligned_data_list = [df for _, df in results]
+            else:
+                # Послідовне вирівнювання
+                aligned_data_list = []
+                for i, df in enumerate(processed_data_list):
+                    _, aligned_df = _align_one_df((i, df))
+                    aligned_data_list.append(aligned_df)
 
             return aligned_data_list
 
@@ -208,10 +383,23 @@ class MarketDataProcessor:
             self.logger.error(traceback.format_exc())
             return processed_data_list
 
+    @memory.cache
     def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 10,
                                  price_col: str = 'close', volume_col: str = 'volume',
                                  time_period: Optional[str] = None) -> pd.DataFrame:
+        """
+        Створює профіль об'єму з оптимізацією та кешуванням.
 
+        Args:
+            data: вхідні дані
+            bins: кількість цінових рівнів
+            price_col: назва колонки ціни
+            volume_col: назва колонки об'єму
+            time_period: часовий період для групування
+
+        Returns:
+            DataFrame з профілем об'єму
+        """
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
             return pd.DataFrame()
@@ -241,39 +429,42 @@ class MarketDataProcessor:
                     try:
                         # Безпечна локалізація
                         data = data.copy()
-                        data.index = data.index.tz_localize('UTC', ambiguous='NaT')
-                        # Прибираємо рядки з NaT
-                        mask = data.index.isna()
-                        if mask.any():
-                            self.logger.warning(f"Знайдено {mask.sum()} неоднозначних часових міток. Видаляємо.")
-                            data = data[~mask]
+                        # Векторизована локалізація
+                        data.index = pd.DatetimeIndex(data.index).tz_localize('UTC', ambiguous='NaT')
+                        # Прибираємо рядки з NaT - векторизована операція
+                        data = data[~data.index.isna()]
                     except pd.errors.OutOfBoundsDatetime:
                         self.logger.warning("Помилка локалізації часового індексу. Продовжуємо без локалізації.")
 
                 # Безпечне групування з перевіркою на порожні групи
                 period_groups = data.groupby(pd.Grouper(freq=time_period, dropna=True))
 
-                result_dfs = []
+                # Обробка даних по чанках, якщо вони великі
+                def _process_groups():
+                    result_dfs = []
+                    for period, group in period_groups:
+                        if group.empty or len(group) < 2:
+                            continue
 
-                for period, group in period_groups:
-                    if group.empty:
-                        continue
+                        period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
+                        if not period_profile.empty:
+                            period_profile['period'] = period
+                            result_dfs.append(period_profile)
+                    return result_dfs
 
-                    # Перевірка наявності даних у групі
-                    if len(group) < 2:
-                        self.logger.info(f"Пропуск періоду {period}: недостатньо даних")
-                        continue
-
-                    period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
-                    if not period_profile.empty:
-                        period_profile['period'] = period
-                        result_dfs.append(period_profile)
+                if len(data) > self.chunk_size:
+                    # Обробка груп у чанках
+                    result_dfs = self._process_in_chunks(data, _process_groups)
+                else:
+                    result_dfs = _process_groups()
 
                 if result_dfs:
-                    # Сортування за періодом перед об'єднанням
+                    # Об'єднання результатів
                     result = pd.concat(result_dfs)
+
                     # Перетворення колонки period на DatetimeIndex, якщо це можливо
                     if 'period' in result.columns and not result['period'].isna().any():
+                        # Векторизована конвертація
                         result['period'] = pd.to_datetime(result['period'])
                         # Сортування за періодом
                         result = result.sort_values('period')
@@ -293,7 +484,19 @@ class MarketDataProcessor:
 
     def _create_volume_profile(self, data: pd.DataFrame, bins: int,
                                price_col: str, volume_col: str) -> pd.DataFrame:
+        """
+        Створює профіль об'єму з оптимізацією для швидкої обробки.
 
+        Args:
+            data: вхідні дані
+            bins: кількість цінових рівнів
+            price_col: назва колонки ціни
+            volume_col: назва колонки об'єму
+
+        Returns:
+            DataFrame з профілем об'єму
+        """
+        # Векторизоване знаходження мін/макс замість покроковій ітерації
         price_min = data[price_col].min()
         price_max = data[price_col].max()
 
@@ -320,10 +523,10 @@ class MarketDataProcessor:
             bin_edges = np.linspace(price_min, price_max, effective_bins + 1)
             bin_width = (price_max - price_min) / effective_bins
 
-            bin_labels = list(range(effective_bins))
+            bin_labels = np.arange(effective_bins)  # Використання numpy для оптимізації
             data = data.copy()
 
-            # Виправлено SettingWithCopyWarning
+            # Векторизоване створення бінів
             data.loc[:, 'price_bin'] = pd.cut(
                 data[price_col],
                 bins=bin_edges,
@@ -331,7 +534,7 @@ class MarketDataProcessor:
                 include_lowest=True
             )
 
-            # Виправлено FutureWarning — додано observed=True
+            # Векторизоване групування з параметром observed=True
             volume_profile = data.groupby('price_bin', observed=True).agg({
                 volume_col: 'sum',
                 price_col: ['count', 'min', 'max']
@@ -341,6 +544,7 @@ class MarketDataProcessor:
                 self.logger.warning("Отримано порожній профіль об'єму після групування")
                 return pd.DataFrame()
 
+            # Оптимізоване перейменування колонок
             volume_profile.columns = [f'{col[0]}_{col[1]}' if col[1] else col[0] for col in volume_profile.columns]
             volume_profile = volume_profile.rename(columns={
                 f'{volume_col}_sum': 'volume',
@@ -349,18 +553,23 @@ class MarketDataProcessor:
                 f'{price_col}_max': 'price_max'
             })
 
+            # Векторизована обробка відсотків об'єму
             total_volume = volume_profile['volume'].sum()
-            if total_volume > 0:
-                volume_profile['volume_percent'] = (volume_profile['volume'] / total_volume * 100).round(2)
-            else:
-                volume_profile['volume_percent'] = 0
+            volume_profile['volume_percent'] = np.where(
+                total_volume > 0,
+                (volume_profile['volume'] / total_volume * 100).round(2),
+                0
+            )
 
+            # Векторизований розрахунок середньої ціни
             volume_profile['price_mid'] = (volume_profile['price_min'] + volume_profile['price_max']) / 2
 
+            # Векторизоване створення меж бінів
             volume_profile['bin_lower'] = [bin_edges[i] for i in volume_profile.index]
             volume_profile['bin_upper'] = [bin_edges[i + 1] for i in volume_profile.index]
 
             volume_profile = volume_profile.reset_index()
+            # Оптимізоване сортування
             volume_profile = volume_profile.sort_values('price_bin', ascending=False)
 
             if 'price_bin' in volume_profile.columns:
@@ -373,8 +582,20 @@ class MarketDataProcessor:
             return pd.DataFrame()
 
     def merge_datasets(self, datasets: List[pd.DataFrame],
-                       merge_on: str = 'timestamp') -> pd.DataFrame:
+                       merge_on: str = 'timestamp',
+                       chunk_size: Optional[int] = None) -> pd.DataFrame:
+        """
+        Вдосконалена функція об'єднання наборів даних з використанням векторизованих операцій,
+        оптимізацією пам'яті та підтримкою обробки по чанках.
 
+        Args:
+            datasets: список DataFrame для об'єднання
+            merge_on: колонка або індекс для об'єднання
+            chunk_size: розмір чанка для обробки великих наборів даних
+
+        Returns:
+            Об'єднаний DataFrame
+        """
         if not datasets:
             self.logger.warning("Порожній список наборів даних для об'єднання")
             return pd.DataFrame()
@@ -382,19 +603,46 @@ class MarketDataProcessor:
         if len(datasets) == 1:
             return datasets[0].copy()
 
-        self.logger.info(f"Початок об'єднання {len(datasets)} наборів даних")
+        # Використовуємо власний chunk_size або значення з класу
+        if chunk_size is None:
+            chunk_size = self.chunk_size
 
-        all_have_merge_on = all(merge_on in df.columns or df.index.name == merge_on for df in datasets)
+        # Визначення загального розміру даних для вибору стратегії
+        total_rows = sum(len(df) for df in datasets if df is not None and not df.empty)
+        total_cols = sum(len(df.columns) for df in datasets if df is not None and not df.empty)
+
+        self.logger.info(f"Початок об'єднання {len(datasets)} наборів даних "
+                         f"(всього ~{total_rows} рядків, ~{total_cols} колонок)")
+        self._log_memory_usage("До об'єднання наборів даних:")
+
+        # Перевірка чи потрібна обробка чанками
+        needs_chunking = total_rows > chunk_size
+
+        # Генеруємо кеш-ключ для збереження результату
+        if self.cache_enabled:
+            cache_key = f"merge_datasets_{hash(tuple([id(df) for df in datasets]))}"
+            if cache_key in self._result_cache:
+                self.logger.info(f"Повернення кешованого результату об'єднання наборів даних")
+                return self._result_cache[cache_key].copy()
+
+        # Попередня перевірка структури даних для оптимізації
+        all_have_merge_on = all(merge_on in df.columns or
+                                (isinstance(df.index, pd.Index) and df.index.name == merge_on)
+                                for df in datasets if df is not None and not df.empty)
 
         if not all_have_merge_on:
             if merge_on == 'timestamp':
                 self.logger.info("Перевірка, чи всі DataFrame мають DatetimeIndex")
-                all_have_datetime_index = all(isinstance(df.index, pd.DatetimeIndex) for df in datasets)
+
+                # Використання генератора замість циклу
+                all_have_datetime_index = all(isinstance(df.index, pd.DatetimeIndex)
+                                              for df in datasets if df is not None and not df.empty)
 
                 if all_have_datetime_index:
-                    for i in range(len(datasets)):
-                        if datasets[i].index.name is None:
-                            datasets[i].index.name = 'timestamp'
+                    # Векторизоване перейменування індексів
+                    for df in datasets:
+                        if df is not None and not df.empty and df.index.name is None:
+                            df.index.name = 'timestamp'
 
                     all_have_merge_on = True
 
@@ -402,40 +650,265 @@ class MarketDataProcessor:
                 self.logger.error(f"Не всі набори даних містять '{merge_on}' для об'єднання")
                 return pd.DataFrame()
 
-        datasets_copy = []
+        # Якщо потрібна обробка по чанках і дані великі
+        if needs_chunking:
+            return self._merge_datasets_in_chunks(datasets, merge_on, chunk_size)
+
+        # Стандартна обробка для менших наборів даних
+        try:
+            # Підготовка даних - векторизовані операції
+            datasets_copy = []
+
+            for i, df in enumerate(datasets):
+                if df is None or df.empty:
+                    continue
+
+                df_copy = df.copy()
+
+                # Встановлюємо merge_on як індекс, якщо потрібно
+                if merge_on in df_copy.columns:
+                    df_copy.set_index(merge_on, inplace=True)
+                    self.logger.debug(f"DataFrame {i} перетворено: колонка '{merge_on}' стала індексом")
+                elif df_copy.index.name != merge_on:
+                    df_copy.index.name = merge_on
+                    self.logger.debug(f"DataFrame {i}: індекс перейменовано на '{merge_on}'")
+
+                datasets_copy.append(df_copy)
+
+            if not datasets_copy:
+                self.logger.warning("Після підготовки не залишилось даних для об'єднання")
+                return pd.DataFrame()
+
+            # Об'єднання даних ефективним способом
+            result = datasets_copy[0]
+            columns_count = len(result.columns)
+
+            # Створюємо словники для перейменування заздалегідь
+            renaming_actions = []
+
+            for i, df in enumerate(datasets_copy[1:], 2):
+                # Векторизоване виявлення дублікатів колонок
+                duplicate_cols = np.intersect1d(result.columns, df.columns)
+
+                if len(duplicate_cols) > 0:
+                    # Створюємо словник перейменування для всіх дублікатів одразу
+                    rename_dict = {col: f"{col}_{i}" for col in duplicate_cols}
+                    renaming_actions.append((i, df, rename_dict))
+                else:
+                    renaming_actions.append((i, df, {}))
+
+            # Виконуємо перейменування та об'єднання
+            for i, df, rename_dict in renaming_actions:
+                if rename_dict:
+                    self.logger.debug(f"Перейменування {len(rename_dict)} колонок у DataFrame {i}")
+                    df = df.rename(columns=rename_dict)
+
+                # Векторизоване об'єднання
+                result = result.join(df, how='outer')
+                columns_count += len(df.columns)
+
+            duplicate_columns = columns_count - len(result.columns)
+            self.logger.info(f"Об'єднання завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
+            self.logger.info(f"З {columns_count} вхідних колонок, {duplicate_columns} були дублікатами")
+
+            self._log_memory_usage("Після об'єднання наборів даних:")
+
+            # Кешування результату, якщо увімкнено
+            if self.cache_enabled:
+                self._result_cache[cache_key] = result.copy()
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка при об'єднанні наборів даних: {str(e)}")
+            self.logger.error(traceback.format_exc())
+            return pd.DataFrame()
+
+    def _merge_datasets_in_chunks(self, datasets: List[pd.DataFrame],
+                                  merge_on: str,
+                                  chunk_size: int) -> pd.DataFrame:
+        """
+        Об'єднання наборів даних по чанках для оптимізації пам'яті.
+
+        Args:
+            datasets: список DataFrame для об'єднання
+            merge_on: колонка або індекс для об'єднання
+            chunk_size: розмір чанка для обробки
+
+        Returns:
+            Об'єднаний DataFrame
+        """
+        self.logger.info(f"Об'єднання наборів даних по чанках (розмір чанка: {chunk_size})")
+
+        # Підготовка даних - встановлення індексу
+        prepared_datasets = []
         for i, df in enumerate(datasets):
+            if df is None or df.empty:
+                continue
+
             df_copy = df.copy()
 
             if merge_on in df_copy.columns:
                 df_copy.set_index(merge_on, inplace=True)
-                self.logger.info(f"DataFrame {i} перетворено: колонка '{merge_on}' стала індексом")
             elif df_copy.index.name != merge_on:
                 df_copy.index.name = merge_on
-                self.logger.info(f"DataFrame {i}: індекс перейменовано на '{merge_on}'")
 
-            datasets_copy.append(df_copy)
+            prepared_datasets.append(df_copy)
 
-        result = datasets_copy[0]
-        total_columns = len(result.columns)
+        if not prepared_datasets:
+            return pd.DataFrame()
 
-        for i, df in enumerate(datasets_copy[1:], 2):
-            rename_dict = {}
-            for col in df.columns:
-                if col in result.columns:
-                    rename_dict[col] = f"{col}_{i}"
+        # Визначення загального індексу для чанкування
+        all_indices = pd.Index([])
+        for df in prepared_datasets:
+            all_indices = all_indices.union(df.index)
+        all_indices = all_indices.sort_values()
 
-            if rename_dict:
-                self.logger.info(f"Перейменування колонок у DataFrame {i}: {rename_dict}")
-                df = df.rename(columns=rename_dict)
+        # Розбиття на чанки
+        chunks = []
+        for i in range(0, len(all_indices), chunk_size):
+            chunk_indices = all_indices[i:i + chunk_size]
+            chunk_results = []
 
-            result = result.join(df, how='outer')
-            total_columns += len(df.columns)
+            self.logger.debug(f"Обробка чанка {i // chunk_size + 1}/{(len(all_indices) - 1) // chunk_size + 1}")
 
-        self.logger.info(f"Об'єднання завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
-        self.logger.info(f"З {total_columns} вхідних колонок, {total_columns - len(result.columns)} були дублікатами")
+            for j, df in enumerate(prepared_datasets):
+                # Вибір тільки рядків, що входять у поточний чанк
+                chunk_df = df[df.index.isin(chunk_indices)]
+                if not chunk_df.empty:
+                    chunk_results.append(chunk_df)
+
+            # Рекурсивний виклик для обробки чанка (без чанкування)
+            if chunk_results:
+                merged_chunk = self.merge_datasets(chunk_results, merge_on=merge_on, chunk_size=None)
+                if not merged_chunk.empty:
+                    chunks.append(merged_chunk)
+
+            # Очищення пам'яті після обробки чанка
+            gc.collect()
+
+        # Об'єднання всіх чанків
+        if not chunks:
+            return pd.DataFrame()
+
+        try:
+            result = pd.concat(chunks)
+            return result
+        except Exception as e:
+            self.logger.error(f"Помилка при об'єднанні чанків: {str(e)}")
+            return pd.DataFrame()
+
+    # Додавання утилітних методів для кешування та управління пам'яттю
+    def clear_cache(self):
+        """Очищує всі внутрішні кеші."""
+        self._result_cache.clear()
+        self.memory.clear()
+        gc.collect()
+        self.logger.info("Кеш очищено")
+        self._log_memory_usage("Після очищення кешу:")
+
+    def optimize_memory(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Оптимізує використання пам'яті DataFrame шляхом перетворення типів даних.
+
+        Args:
+            data: вхідний DataFrame
+
+        Returns:
+            Оптимізований DataFrame
+        """
+        if data is None or data.empty:
+            return data
+
+        start_mem = data.memory_usage(deep=True).sum() / 1024 ** 2
+        self.logger.debug(f"Початковий розмір DataFrame: {start_mem:.2f} MB")
+
+        # Копіювання для запобігання зміни оригіналу
+        result = data.copy()
+
+        # Оптимізація числових колонок
+        numerics = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+        for col in result.select_dtypes(include=numerics).columns:
+            col_dtype = result[col].dtype
+
+            # Цілі числа
+            if np.issubdtype(col_dtype, np.integer):
+                c_min = result[col].min()
+                c_max = result[col].max()
+
+                # Визначення оптимального цілочисельного типу на основі діапазону
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    result[col] = result[col].astype(np.int8)
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    result[col] = result[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    result[col] = result[col].astype(np.int32)
+                else:
+                    result[col] = result[col].astype(np.int64)
+
+            # Числа з плаваючою точкою
+            elif np.issubdtype(col_dtype, np.floating):
+                # Перетворення в float32, якщо не призводить до втрати точності
+                # Для фінансових даних часто потрібна висока точність, тому перевіряємо різницю
+                f32_col = result[col].astype(np.float32)
+                if (result[col] - f32_col).abs().max() < 1e-6:
+                    result[col] = f32_col
+
+        # Оптимізація категоріальних колонок
+        for col in result.select_dtypes(include=['object']).columns:
+            num_unique = result[col].nunique()
+            num_total = len(result[col])
+
+            # Якщо колонка має невелику кількість унікальних значень відносно загальної кількості
+            if num_unique / num_total < 0.5:  # менше 50% унікальних значень
+                result[col] = result[col].astype('category')
+
+        end_mem = result.memory_usage(deep=True).sum() / 1024 ** 2
+        savings = (1 - end_mem / start_mem) * 100
+        self.logger.info(f"Оптимізований розмір DataFrame: {end_mem:.2f} MB, економія: {savings:.1f}%")
 
         return result
 
+    def parallel_apply(self, data: pd.DataFrame, func: Callable,
+                       column: Optional[str] = None,
+                       axis: int = 0) -> pd.Series:
+        """
+        Паралельне застосування функції до DataFrame з оптимізацією пам'яті.
+
+        Args:
+            data: вхідний DataFrame
+            func: функція для застосування
+            column: колонка для обробки (якщо None, обробляється весь DataFrame)
+            axis: вісь для застосування (0 - рядки, 1 - колонки)
+
+        Returns:
+            Series або DataFrame з результатами
+        """
+        if data is None or data.empty:
+            return pd.Series() if column else pd.DataFrame()
+
+        # Визначення обробника даних
+        if column is not None:
+            data_to_process = data[column]
+        else:
+            data_to_process = data
+
+        # Розділення даних на частини для паралельної обробки
+        splits = np.array_split(data_to_process, self.num_workers)
+
+        # Функція для обробки однієї частини
+        def process_chunk(chunk):
+            return chunk.apply(func, axis=axis)
+
+        # Паралельне застосування
+        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
+            results = list(executor.map(process_chunk, splits))
+
+        # Об'єднання результатів
+        if isinstance(results[0], pd.Series):
+            return pd.concat(results)
+        else:
+            return pd.concat(results)
     # --- Methods delegated to DataCleaner ---
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
