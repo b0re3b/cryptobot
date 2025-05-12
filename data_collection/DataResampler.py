@@ -1,15 +1,13 @@
+import json
+
 import numpy as np
 import pandas as pd
 import dask.dataframe as dd
 from statsmodels.tsa.stattools import adfuller
-from sklearn.model_selection import train_test_split
-from pmdarima.model_selection import train_test_split
+from sklearn.model_selection import train_test_split as sklearn_train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from typing import Dict, List, Union, Optional
-import statsmodels.api as sm
-import concurrent.futures
+from typing import Dict, List
 from functools import lru_cache
-import numba
 
 class DataResampler:
     def __init__(self, logger, chunk_size=500_000, scaling_sample_size= 1_000_000):
@@ -18,9 +16,8 @@ class DataResampler:
         self.original_data_map = {}
         self.chunk_size = chunk_size
         self.scaling_sample_size = scaling_sample_size
-        # Кешування методів пошуку колонок
         self.find_column = lru_cache(maxsize=128)(self._find_column_original)
-
+        self.cache = {}
     def _find_column_original(self, df, column_name):
         """Знаходить колонку незалежно від регістру з обробкою конфліктів"""
         exact_match = [col for col in df.columns if col == column_name]
@@ -866,18 +863,19 @@ class DataResampler:
             symbol: str,
             timeframe: str
     ) -> pd.DataFrame:
-        """
-        Prepare data for ARIMA time series analysis.
 
-        :param data: Input DataFrame (pandas or Dask)
-        :param symbol: Trading symbol
-        :param timeframe: Trading timeframe
-        :return: Prepared DataFrame for ARIMA analysis
-        """
         try:
             # Convert Dask DataFrame to pandas if necessary
             if hasattr(data, 'compute'):
                 data = data.compute()
+
+            # Ensure we have datetime index
+            if not isinstance(data.index, pd.DatetimeIndex):
+                if 'open_time' in data.columns:
+                    data.set_index('open_time', inplace=True)
+                else:
+                    self.logger.error("No datetime index or open_time column found")
+                    return pd.DataFrame()
 
             # 1. Select close price column
             close_columns = ['close', 'price', 'last', 'last_price']
@@ -887,118 +885,290 @@ class DataResampler:
                 self.logger.error("No close price column found")
                 return pd.DataFrame()
 
-            # 2. Compute differences and log returns
-            data = data.copy()
-            data['diff'] = data[close_column].diff()
-            data['log_return'] = np.log(data[close_column] / data[close_column].shift(1))
+            # Create a copy to avoid modifying the original
+            result_df = pd.DataFrame(index=data.index)
 
-            # 3. Check stationarity
-            log_returns = data['log_return'].dropna()
+            # Basic info
+            result_df['timeframe'] = timeframe
+            result_df['open_time'] = data.index
+            result_df['original_close'] = data[close_column]
+
+            # 2. Compute various stationary transformations
+            # First difference
+            result_df['close_diff'] = data[close_column].diff()
+
+            # Second difference
+            result_df['close_diff2'] = result_df['close_diff'].diff()
+
+            # Log transformation
+            result_df['close_log'] = np.log(data[close_column])
+
+            # Log difference (log return)
+            result_df['close_log_diff'] = result_df['close_log'].diff()
+
+            # Percentage change
+            result_df['close_pct_change'] = data[close_column].pct_change()
+
+            # Seasonal differencing (assuming daily data with weekly seasonality)
+            season_period = self._determine_seasonal_period(timeframe)
+            result_df['close_seasonal_diff'] = data[close_column].diff(season_period)
+
+            # Combined differencing (first difference + seasonal)
+            result_df['close_combo_diff'] = result_df['close_seasonal_diff'].diff()
+
+            # 3. Perform stationarity tests on log returns (most commonly used transformation)
+            log_returns = result_df['close_log_diff'].dropna()
 
             if len(log_returns) > 10:
-                # Perform Augmented Dickey-Fuller test
+                # Augmented Dickey-Fuller test
                 adf_result = adfuller(log_returns)
+                result_df['adf_pvalue'] = adf_result[1]
 
-                # 4. Prepare result DataFrame
-                result_df = pd.DataFrame({
-                    'symbol': [symbol],
-                    'timeframe': [timeframe],
-                    'close_price': [data[close_column]],
-                    'log_return': [data['log_return']],
-                    'diff': [data['diff']],
-                    'adf_statistic': [adf_result[0]],
-                    'adf_pvalue': [adf_result[1]],
-                    'is_stationary': [adf_result[1] <= 0.05]
-                })
+                # KPSS test
+                try:
+                    from statsmodels.tsa.stattools import kpss
+                    kpss_result = kpss(log_returns)
+                    result_df['kpss_pvalue'] = kpss_result[1]
+                except:
+                    result_df['kpss_pvalue'] = None
+                    self.logger.warning("KPSS test failed, consider installing statsmodels")
 
-                self.logger.info(f"Prepared ARIMA data for {symbol}")
+                # Determine stationarity based on both tests
+                result_df['is_stationary'] = (
+                        (result_df['adf_pvalue'] <= 0.05) &
+                        ((result_df['kpss_pvalue'] > 0.05) if 'kpss_pvalue' in result_df else True)
+                )
+
+                # 4. Calculate ACF/PACF for model configuration
+                try:
+                    from statsmodels.tsa.stattools import acf, pacf
+                    acf_values = acf(log_returns, nlags=20)
+                    pacf_values = pacf(log_returns, nlags=20)
+
+                    # Find significant lags (using 95% confidence interval)
+                    significant_lags = []
+                    confidence_level = 1.96 / np.sqrt(len(log_returns))
+
+                    for i, (acf_val, pacf_val) in enumerate(zip(acf_values, pacf_values)):
+                        if i > 0 and (abs(acf_val) > confidence_level or abs(pacf_val) > confidence_level):
+                            significant_lags.append(i)
+
+                    result_df['significant_lags'] = json.dumps(significant_lags)
+                except:
+                    result_df['significant_lags'] = '[]'
+                    self.logger.warning("ACF/PACF calculation failed")
+
+                # 5. Fit a basic ARIMA model to get additional metrics
+                try:
+                    from statsmodels.tsa.arima.model import ARIMA
+                    # Use a simple ARIMA(1,1,1) as default
+                    model = ARIMA(data[close_column], order=(1, 1, 1))
+                    model_fit = model.fit()
+
+                    result_df['residual_variance'] = model_fit.resid.var()
+                    result_df['aic_score'] = model_fit.aic
+                    result_df['bic_score'] = model_fit.bic
+                except:
+                    result_df['residual_variance'] = None
+                    result_df['aic_score'] = None
+                    result_df['bic_score'] = None
+                    self.logger.warning("ARIMA model fitting failed")
+
+                self.logger.info(f"Prepared ARIMA data for {symbol} ({timeframe})")
                 return result_df
             else:
-                self.logger.warning(f"Insufficient data for stationarity test for {symbol}")
+                self.logger.warning(f"Insufficient data for stationarity tests for {symbol}")
                 return pd.DataFrame()
 
         except Exception as e:
             self.logger.error(f"Error preparing ARIMA data: {e}")
             return pd.DataFrame()
 
+    def _determine_seasonal_period(self, timeframe: str) -> int:
+            """
+            Determine the appropriate seasonal period based on timeframe.
+
+            :param timeframe: Trading timeframe string (e.g., '1d', '1h', '15m')
+            :return: Integer representing the seasonal period
+            """
+            # Extract the numeric part and unit from timeframe
+            import re
+            match = re.match(r'(\d+)([a-zA-Z]+)', timeframe)
+            if not match:
+                return 7  # Default to weekly seasonality
+
+            value, unit = match.groups()
+            value = int(value)
+
+            # Set seasonal periods based on common patterns
+            if unit.lower() in ['m', 'min', 'minute']:
+                if value <= 5:
+                    return 288  # Daily seasonality for 5m or less (288 5-min periods in a day)
+                elif value <= 15:
+                    return 96  # Daily seasonality for 15m (96 15-min periods in a day)
+                elif value <= 60:
+                    return 24  # Daily seasonality for hourly data (24 hours in a day)
+            elif unit.lower() in ['h', 'hour']:
+                return 24  # Daily seasonality for hourly data
+            elif unit.lower() in ['d', 'day']:
+                return 7  # Weekly seasonality for daily data
+            elif unit.lower() in ['w', 'week']:
+                return 4  # Monthly seasonality for weekly data
+
+            # Default to weekly seasonality
+            return 7
+
     def prepare_lstm_data(
             self,
             data: pd.DataFrame | dd.DataFrame,
             symbol: str,
             timeframe: str,
-            sequence_length: int = 60
+            sequence_length: int = 60,
+            target_horizons: list = [1, 5, 10]
     ) -> pd.DataFrame:
-        """
-        Prepare data for LSTM time series analysis.
 
-        :param data: Input DataFrame (pandas or Dask)
-        :param symbol: Trading symbol
-        :param timeframe: Trading timeframe
-        :param sequence_length: Length of input sequences
-        :return: Prepared DataFrame for LSTM analysis
-        """
         try:
+            self.logger.info(f"Preparing LSTM data for database storage: {symbol}, {timeframe}")
+
             # Convert Dask DataFrame to pandas if necessary
             if hasattr(data, 'compute'):
                 data = data.compute()
 
-            # 1. Select and prepare feature columns
-            feature_columns = [
-                'open', 'high', 'low', 'close', 'volume',
-                'trades', 'quote_volume'
-            ]
-            feature_columns = [col for col in feature_columns if col in data.columns]
-
-            if not feature_columns:
-                self.logger.error("No feature columns found for analysis")
+            if data.empty:
+                self.logger.warning("Empty DataFrame provided")
                 return pd.DataFrame()
 
-            # 2. Sampling for scaling
-            sample_data = data[feature_columns].sample(
-                frac=0.2,
-                random_state=42
-            )
+            # Ensure we have a DatetimeIndex
+            if not isinstance(data.index, pd.DatetimeIndex):
+                self.logger.error("Data must have a DatetimeIndex")
+                return pd.DataFrame()
 
-            # 3. Scaling using scikit-learn
+            # 1. Select required feature columns
+            required_columns = ['open', 'high', 'low', 'close', 'volume']
+
+            # Check for missing columns (case-insensitive)
+            data_columns_lower = {col.lower(): col for col in data.columns}
+            missing_cols = [col for col in required_columns if col.lower() not in data_columns_lower]
+
+            if missing_cols:
+                self.logger.error(f"Missing required columns: {missing_cols}")
+                return pd.DataFrame()
+
+            # Map to actual column names in the DataFrame
+            feature_mapping = {col: data_columns_lower[col.lower()] for col in required_columns}
+
+            # Create a copy with standardized column names
+            df = data.copy()
+            for std_name, actual_name in feature_mapping.items():
+                if std_name != actual_name:
+                    df[std_name] = df[actual_name]
+
+            # 2. Add time features from the create_time_features method
+            df = self.create_time_features(df)
+
+            # 3. Scale the features
             scaler = MinMaxScaler(feature_range=(0, 1))
-            scaled_data = scaler.fit_transform(sample_data)
 
-            # 4. Create sequences
-            def create_sequences(df):
-                X, y = [], []
-                for i in range(len(df) - sequence_length):
-                    X.append(df.iloc[i:i + sequence_length][feature_columns].values)
-                    y.append(df.iloc[i + sequence_length]['close'])
-                return np.array(X), np.array(y)
+            # Select a sample for fitting the scaler if the dataset is very large
+            if len(df) > self.scaling_sample_size:
+                sample_indices = np.random.choice(df.index, size=self.scaling_sample_size, replace=False)
+                sample_df = df.loc[sample_indices, required_columns]
+                scaler.fit(sample_df)
+            else:
+                scaler.fit(df[required_columns])
 
-            # 5. Split into train/test sets
-            X, y = create_sequences(sample_data)
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42
+            # Scale the required columns
+            scaled_data = scaler.transform(df[required_columns])
+            scaled_df = pd.DataFrame(
+                scaled_data,
+                columns=[f"{col}_scaled" for col in required_columns],
+                index=df.index
             )
 
-            # 6. Prepare results
-            result_df = pd.DataFrame({
-                'symbol': [symbol],
-                'timeframe': [timeframe],
-                'X_train_shape': [X_train.shape],
-                'X_test_shape': [X_test.shape],
-                'sequence_length': [sequence_length],
-                'features': [feature_columns]
-            })
+            # Combine with original DataFrame
+            result_df = pd.concat([df, scaled_df], axis=1)
 
-            # Store additional metadata in cache
-            self.cache[f'{symbol}_{timeframe}_lstm_data'] = {
-                'X_train': X_train,
-                'X_test': X_test,
-                'y_train': y_train,
-                'y_test': y_test,
-                'scaler': scaler
+            # 4. Create target values for different horizons
+            for horizon in target_horizons:
+                result_df[f'target_close_{horizon}'] = result_df['close'].shift(-horizon)
+
+            # 5. Create sequence IDs and positions
+            # We'll create sequences with overlap, shifting by 1 each time
+            sequences = []
+
+            # Store the scaling parameters as JSON
+            import json
+            scaling_metadata = {
+                'feature_range': scaler.feature_range,
+                'data_min': scaler.data_min_.tolist(),
+                'data_max': scaler.data_max_.tolist(),
+                'columns': required_columns
             }
+            scaling_json = json.dumps(scaling_metadata)
 
-            self.logger.info(f"Prepared LSTM data for {symbol}")
-            return result_df
+            # Generate sequence data with IDs and positions
+            valid_end_idx = len(result_df) - max(target_horizons)
+
+            # Generate a reasonable number of sequences
+            # For large datasets, we might not want to create a sequence starting at every point
+            step = 1
+            if valid_end_idx > 10000:  # If we have a lot of data
+                step = valid_end_idx // 10000  # Limit to ~10K sequences
+                self.logger.info(f"Large dataset detected, using step size: {step} for sequence generation")
+
+            sequence_data = []
+            for seq_id, start_idx in enumerate(range(0, valid_end_idx - sequence_length, step)):
+                for pos in range(sequence_length):
+                    idx = start_idx + pos
+                    row = result_df.iloc[idx].copy()
+
+                    # Only include rows where we have target values for all horizons
+                    if idx + max(target_horizons) < len(result_df):
+                        sequence_data.append({
+                            'timeframe': timeframe,
+                            'sequence_id': seq_id,
+                            'sequence_position': pos,
+                            'open_time': result_df.index[idx],
+
+                            # Scaled features
+                            'open_scaled': row['open_scaled'],
+                            'high_scaled': row['high_scaled'],
+                            'low_scaled': row['low_scaled'],
+                            'close_scaled': row['close_scaled'],
+                            'volume_scaled': row['volume_scaled'],
+
+                            # Cyclic time features
+                            'hour_sin': row['hour_sin'],
+                            'hour_cos': row['hour_cos'],
+                            'day_of_week_sin': row['day_of_week_sin'],
+                            'day_of_week_cos': row['day_of_week_cos'],
+                            'month_sin': row['month_sin'],
+                            'month_cos': row['month_cos'],
+                            'day_of_month_sin': row['day_of_month_sin'],
+                            'day_of_month_cos': row['day_of_month_cos'],
+
+                            # Target values
+                            'target_close_1': result_df.iloc[idx + 1]['close'] if 1 in target_horizons else None,
+                            'target_close_5': result_df.iloc[idx + 5]['close'] if 5 in target_horizons else None,
+                            'target_close_10': result_df.iloc[idx + 10]['close'] if 10 in target_horizons else None,
+
+                            # Metadata
+                            'sequence_length': sequence_length,
+                            'scaling_metadata': scaling_json
+                        })
+
+            final_df = pd.DataFrame(sequence_data)
+
+            self.logger.info(f"Prepared {len(final_df)} rows of LSTM data for database storage")
+            self.logger.info(f"Created {final_df['sequence_id'].nunique()} unique sequences")
+
+            # Store the scaler in cache for later use
+            self.scalers[f'{symbol}_{timeframe}_lstm_scaler'] = scaler
+
+            return final_df
 
         except Exception as e:
-            self.logger.error(f"Error preparing LSTM data: {e}")
+            self.logger.error(f"Error preparing LSTM data for database: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return pd.DataFrame()

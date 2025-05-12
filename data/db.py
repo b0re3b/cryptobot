@@ -2936,97 +2936,41 @@ class DatabaseManager:
             results = cursor.fetchall()
             return results
 
-    def save_btc_arima_data(self,
-                            timeframe: str,
-                            open_time: datetime,
-                            original_close: float,
-                            close_diff: Optional[float] = None,
-                            close_diff2: Optional[float] = None,
-                            close_log: Optional[float] = None,
-                            close_log_diff: Optional[float] = None,
-                            close_pct_change: Optional[float] = None,
-                            close_seasonal_diff: Optional[float] = None,
-                            close_combo_diff: Optional[float] = None,
-                            adf_pvalue: Optional[float] = None,
-                            kpss_pvalue: Optional[float] = None,
-                            is_stationary: Optional[bool] = None,
-                            significant_lags: Optional[List[int]] = None,
-                            residual_variance: Optional[float] = None,
-                            aic_score: Optional[float] = None,
-                            bic_score: Optional[float] = None,
-                            id: Optional[int] = None) -> int:
+    def save_btc_arima_data(self, data_list: List[Dict[str, Any]]) -> List[int]:
+
+        results = []
 
         with self.connect() as conn:
             with conn.cursor() as cursor:
-                # Конвертація списку лагів у JSON якщо вони вказані
-                significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
+                # Підготовка даних для масового вставлення
+                for data in data_list:
+                    # Конвертація списку лагів у JSON
+                    significant_lags = data.get('significant_lags')
+                    significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
 
-                if id is None:
-                    # Перевіряємо, чи існує запис з такими timeframe і open_time
-                    check_query = ("""
-                                          SELECT id
-                                          FROM btc_arima_data
-                                          WHERE timeframe = %s
-                                            AND open_time = %s
-                                          """)
-                    cursor.execute(check_query, (timeframe, open_time))
-                    existing_record = cursor.fetchone()
+                    # Перевіряємо наявність обов'язкових полів
+                    timeframe = data['timeframe']
+                    open_time = data['open_time']
+                    original_close = data['original_close']
+                    id_value = data.get('id')
 
-                    if existing_record:
-                        # Якщо запис існує, оновлюємо його
-                        id = existing_record[0]
-                        query = ("""
-                                        UPDATE btc_arima_data
-                                        SET original_close      = %s,
-                                            close_diff          = %s,
-                                            close_diff2         = %s,
-                                            close_log           = %s,
-                                            close_log_diff      = %s,
-                                            close_pct_change    = %s,
-                                            close_seasonal_diff = %s,
-                                            close_combo_diff    = %s,
-                                            adf_pvalue          = %s,
-                                            kpss_pvalue         = %s,
-                                            is_stationary       = %s,
-                                            significant_lags    = %s,
-                                            residual_variance   = %s,
-                                            aic_score           = %s,
-                                            bic_score           = %s,
-                                            updated_at          = CURRENT_TIMESTAMP
-                                        WHERE id = %s RETURNING id
-                                        """)
-                        cursor.execute(query, (
-                            original_close, close_diff, close_diff2, close_log,
-                            close_log_diff, close_pct_change, close_seasonal_diff,
-                            close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary,
-                            significant_lags_json, residual_variance, aic_score, bic_score, id
-                        ))
-                    else:
-                        # Якщо запису немає, створюємо новий
-                        query = ("""
-                                        INSERT INTO btc_arima_data (timeframe, open_time, original_close, close_diff,
-                                                                    close_diff2,
-                                                                    close_log, close_log_diff, close_pct_change,
-                                                                    close_seasonal_diff,
-                                                                    close_combo_diff, adf_pvalue, kpss_pvalue,
-                                                                    is_stationary, significant_lags,
-                                                                    residual_variance, aic_score, bic_score)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                                                %s) RETURNING id
-                                        """)
-                        cursor.execute(query, (
-                            timeframe, open_time, original_close, close_diff, close_diff2,
-                            close_log, close_log_diff, close_pct_change, close_seasonal_diff,
-                            close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags_json,
-                            residual_variance, aic_score, bic_score
-                        ))
-                else:
-                    # Якщо ID вказано, оновлюємо існуючий запис
-                    query = ("""
+                    # Перевіряємо, чи існує запис, якщо id не вказано
+                    if id_value is None:
+                        check_query = """
+                                      SELECT id
+                                      FROM btc_arima_data
+                                      WHERE timeframe = %s \
+                                        AND open_time = %s \
+                                      """
+                        cursor.execute(check_query, (timeframe, open_time))
+                        existing_record = cursor.fetchone()
+
+                        if existing_record:
+                            # Якщо запис існує, оновлюємо його
+                            id_value = existing_record[0]
+                            query = """
                                     UPDATE btc_arima_data
-                                    SET timeframe           = %s,
-                                        open_time           = %s,
-                                        original_close      = %s,
+                                    SET original_close      = %s,
                                         close_diff          = %s,
                                         close_diff2         = %s,
                                         close_log           = %s,
@@ -3042,18 +2986,108 @@ class DatabaseManager:
                                         aic_score           = %s,
                                         bic_score           = %s,
                                         updated_at          = CURRENT_TIMESTAMP
-                                    WHERE id = %s RETURNING id
-                                    """)
-                    cursor.execute(query, (
-                        timeframe, open_time, original_close, close_diff, close_diff2,
-                        close_log, close_log_diff, close_pct_change, close_seasonal_diff,
-                        close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags_json,
-                        residual_variance, aic_score, bic_score, id
-                    ))
+                                    WHERE id = %s RETURNING id \
+                                    """
+                            cursor.execute(query, (
+                                original_close,
+                                data.get('close_diff'),
+                                data.get('close_diff2'),
+                                data.get('close_log'),
+                                data.get('close_log_diff'),
+                                data.get('close_pct_change'),
+                                data.get('close_seasonal_diff'),
+                                data.get('close_combo_diff'),
+                                data.get('adf_pvalue'),
+                                data.get('kpss_pvalue'),
+                                data.get('is_stationary'),
+                                significant_lags_json,
+                                data.get('residual_variance'),
+                                data.get('aic_score'),
+                                data.get('bic_score'),
+                                id_value
+                            ))
+                        else:
+                            # Якщо запису немає, створюємо новий
+                            query = """
+                                    INSERT INTO btc_arima_data (timeframe, open_time, original_close, close_diff, \
+                                                                close_diff2, close_log, close_log_diff, \
+                                                                close_pct_change, \
+                                                                close_seasonal_diff, close_combo_diff, adf_pvalue, \
+                                                                kpss_pvalue, \
+                                                                is_stationary, significant_lags, residual_variance, \
+                                                                aic_score, bic_score)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
+                                            %s) RETURNING id \
+                                    """
+                            cursor.execute(query, (
+                                timeframe,
+                                open_time,
+                                original_close,
+                                data.get('close_diff'),
+                                data.get('close_diff2'),
+                                data.get('close_log'),
+                                data.get('close_log_diff'),
+                                data.get('close_pct_change'),
+                                data.get('close_seasonal_diff'),
+                                data.get('close_combo_diff'),
+                                data.get('adf_pvalue'),
+                                data.get('kpss_pvalue'),
+                                data.get('is_stationary'),
+                                significant_lags_json,
+                                data.get('residual_variance'),
+                                data.get('aic_score'),
+                                data.get('bic_score')
+                            ))
+                    else:
+                        # Якщо ID вказано, оновлюємо існуючий запис
+                        query = """
+                                UPDATE btc_arima_data
+                                SET timeframe           = %s,
+                                    open_time           = %s,
+                                    original_close      = %s,
+                                    close_diff          = %s,
+                                    close_diff2         = %s,
+                                    close_log           = %s,
+                                    close_log_diff      = %s,
+                                    close_pct_change    = %s,
+                                    close_seasonal_diff = %s,
+                                    close_combo_diff    = %s,
+                                    adf_pvalue          = %s,
+                                    kpss_pvalue         = %s,
+                                    is_stationary       = %s,
+                                    significant_lags    = %s,
+                                    residual_variance   = %s,
+                                    aic_score           = %s,
+                                    bic_score           = %s,
+                                    updated_at          = CURRENT_TIMESTAMP
+                                WHERE id = %s RETURNING id \
+                                """
+                        cursor.execute(query, (
+                            timeframe,
+                            open_time,
+                            original_close,
+                            data.get('close_diff'),
+                            data.get('close_diff2'),
+                            data.get('close_log'),
+                            data.get('close_log_diff'),
+                            data.get('close_pct_change'),
+                            data.get('close_seasonal_diff'),
+                            data.get('close_combo_diff'),
+                            data.get('adf_pvalue'),
+                            data.get('kpss_pvalue'),
+                            data.get('is_stationary'),
+                            significant_lags_json,
+                            data.get('residual_variance'),
+                            data.get('aic_score'),
+                            data.get('bic_score'),
+                            id_value
+                        ))
 
-                result = cursor.fetchone()
+                    result = cursor.fetchone()
+                    results.append(result[0])
+
                 conn.commit()
-                return result[0]
+                return results
 
     def get_btc_arima_data_by_id(self, id: int) -> Optional[Dict[str, Any]]:
 
@@ -3162,97 +3196,41 @@ class DatabaseManager:
 
     # --------- ETH ARIMA Data функції ---------
 
-    def save_eth_arima_data(self,
-                            timeframe: str,
-                            open_time: datetime,
-                            original_close: float,
-                            close_diff: Optional[float] = None,
-                            close_diff2: Optional[float] = None,
-                            close_log: Optional[float] = None,
-                            close_log_diff: Optional[float] = None,
-                            close_pct_change: Optional[float] = None,
-                            close_seasonal_diff: Optional[float] = None,
-                            close_combo_diff: Optional[float] = None,
-                            adf_pvalue: Optional[float] = None,
-                            kpss_pvalue: Optional[float] = None,
-                            is_stationary: Optional[bool] = None,
-                            significant_lags: Optional[List[int]] = None,
-                            residual_variance: Optional[float] = None,
-                            aic_score: Optional[float] = None,
-                            bic_score: Optional[float] = None,
-                            id: Optional[int] = None) -> int:
+    def save_eth_arima_data(self, data_list: List[Dict[str, Any]]) -> List[int]:
+
+        results = []
 
         with self.connect() as conn:
             with conn.cursor() as cursor:
-                # Конвертація списку лагів у JSON якщо вони вказані
-                significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
+                # Підготовка даних для масового вставлення
+                for data in data_list:
+                    # Конвертація списку лагів у JSON
+                    significant_lags = data.get('significant_lags')
+                    significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
 
-                if id is None:
-                    # Перевіряємо, чи існує запис з такими timeframe і open_time
-                    check_query = ("""
-                                          SELECT id
-                                          FROM eth_arima_data
-                                          WHERE timeframe = %s
-                                            AND open_time = %s
-                                          """)
-                    cursor.execute(check_query, (timeframe, open_time))
-                    existing_record = cursor.fetchone()
+                    # Перевіряємо наявність обов'язкових полів
+                    timeframe = data['timeframe']
+                    open_time = data['open_time']
+                    original_close = data['original_close']
+                    id_value = data.get('id')
 
-                    if existing_record:
-                        # Якщо запис існує, оновлюємо його
-                        id = existing_record[0]
-                        query = ("""
-                                        UPDATE eth_arima_data
-                                        SET original_close      = %s,
-                                            close_diff          = %s,
-                                            close_diff2         = %s,
-                                            close_log           = %s,
-                                            close_log_diff      = %s,
-                                            close_pct_change    = %s,
-                                            close_seasonal_diff = %s,
-                                            close_combo_diff    = %s,
-                                            adf_pvalue          = %s,
-                                            kpss_pvalue         = %s,
-                                            is_stationary       = %s,
-                                            significant_lags    = %s,
-                                            residual_variance   = %s,
-                                            aic_score           = %s,
-                                            bic_score           = %s,
-                                            updated_at          = CURRENT_TIMESTAMP
-                                        WHERE id = %s RETURNING id
-                                        """)
-                        cursor.execute(query, (
-                            original_close, close_diff, close_diff2, close_log,
-                            close_log_diff, close_pct_change, close_seasonal_diff,
-                            close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary,
-                            significant_lags_json, residual_variance, aic_score, bic_score, id
-                        ))
-                    else:
-                        # Якщо запису немає, створюємо новий
-                        query = ("""
-                                        INSERT INTO eth_arima_data (timeframe, open_time, original_close, close_diff,
-                                                                    close_diff2,
-                                                                    close_log, close_log_diff, close_pct_change,
-                                                                    close_seasonal_diff,
-                                                                    close_combo_diff, adf_pvalue, kpss_pvalue,
-                                                                    is_stationary, significant_lags,
-                                                                    residual_variance, aic_score, bic_score)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                                                %s) RETURNING id
-                                        """)
-                        cursor.execute(query, (
-                            timeframe, open_time, original_close, close_diff, close_diff2,
-                            close_log, close_log_diff, close_pct_change, close_seasonal_diff,
-                            close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags_json,
-                            residual_variance, aic_score, bic_score
-                        ))
-                else:
-                    # Якщо ID вказано, оновлюємо існуючий запис
-                    query = ("""
+                    # Перевіряємо, чи існує запис, якщо id не вказано
+                    if id_value is None:
+                        check_query = """
+                                      SELECT id
+                                      FROM eth_arima_data
+                                      WHERE timeframe = %s \
+                                        AND open_time = %s \
+                                      """
+                        cursor.execute(check_query, (timeframe, open_time))
+                        existing_record = cursor.fetchone()
+
+                        if existing_record:
+                            # Якщо запис існує, оновлюємо його
+                            id_value = existing_record[0]
+                            query = """
                                     UPDATE eth_arima_data
-                                    SET timeframe           = %s,
-                                        open_time           = %s,
-                                        original_close      = %s,
+                                    SET original_close      = %s,
                                         close_diff          = %s,
                                         close_diff2         = %s,
                                         close_log           = %s,
@@ -3268,18 +3246,108 @@ class DatabaseManager:
                                         aic_score           = %s,
                                         bic_score           = %s,
                                         updated_at          = CURRENT_TIMESTAMP
-                                    WHERE id = %s RETURNING id
-                                    """)
-                    cursor.execute(query, (
-                        timeframe, open_time, original_close, close_diff, close_diff2,
-                        close_log, close_log_diff, close_pct_change, close_seasonal_diff,
-                        close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags_json,
-                        residual_variance, aic_score, bic_score, id
-                    ))
+                                    WHERE id = %s RETURNING id \
+                                    """
+                            cursor.execute(query, (
+                                original_close,
+                                data.get('close_diff'),
+                                data.get('close_diff2'),
+                                data.get('close_log'),
+                                data.get('close_log_diff'),
+                                data.get('close_pct_change'),
+                                data.get('close_seasonal_diff'),
+                                data.get('close_combo_diff'),
+                                data.get('adf_pvalue'),
+                                data.get('kpss_pvalue'),
+                                data.get('is_stationary'),
+                                significant_lags_json,
+                                data.get('residual_variance'),
+                                data.get('aic_score'),
+                                data.get('bic_score'),
+                                id_value
+                            ))
+                        else:
+                            # Якщо запису немає, створюємо новий
+                            query = """
+                                    INSERT INTO eth_arima_data (timeframe, open_time, original_close, close_diff, \
+                                                                close_diff2, close_log, close_log_diff, \
+                                                                close_pct_change, \
+                                                                close_seasonal_diff, close_combo_diff, adf_pvalue, \
+                                                                kpss_pvalue, \
+                                                                is_stationary, significant_lags, residual_variance, \
+                                                                aic_score, bic_score)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
+                                            %s) RETURNING id \
+                                    """
+                            cursor.execute(query, (
+                                timeframe,
+                                open_time,
+                                original_close,
+                                data.get('close_diff'),
+                                data.get('close_diff2'),
+                                data.get('close_log'),
+                                data.get('close_log_diff'),
+                                data.get('close_pct_change'),
+                                data.get('close_seasonal_diff'),
+                                data.get('close_combo_diff'),
+                                data.get('adf_pvalue'),
+                                data.get('kpss_pvalue'),
+                                data.get('is_stationary'),
+                                significant_lags_json,
+                                data.get('residual_variance'),
+                                data.get('aic_score'),
+                                data.get('bic_score')
+                            ))
+                    else:
+                        # Якщо ID вказано, оновлюємо існуючий запис
+                        query = """
+                                UPDATE eth_arima_data
+                                SET timeframe           = %s,
+                                    open_time           = %s,
+                                    original_close      = %s,
+                                    close_diff          = %s,
+                                    close_diff2         = %s,
+                                    close_log           = %s,
+                                    close_log_diff      = %s,
+                                    close_pct_change    = %s,
+                                    close_seasonal_diff = %s,
+                                    close_combo_diff    = %s,
+                                    adf_pvalue          = %s,
+                                    kpss_pvalue         = %s,
+                                    is_stationary       = %s,
+                                    significant_lags    = %s,
+                                    residual_variance   = %s,
+                                    aic_score           = %s,
+                                    bic_score           = %s,
+                                    updated_at          = CURRENT_TIMESTAMP
+                                WHERE id = %s RETURNING id \
+                                """
+                        cursor.execute(query, (
+                            timeframe,
+                            open_time,
+                            original_close,
+                            data.get('close_diff'),
+                            data.get('close_diff2'),
+                            data.get('close_log'),
+                            data.get('close_log_diff'),
+                            data.get('close_pct_change'),
+                            data.get('close_seasonal_diff'),
+                            data.get('close_combo_diff'),
+                            data.get('adf_pvalue'),
+                            data.get('kpss_pvalue'),
+                            data.get('is_stationary'),
+                            significant_lags_json,
+                            data.get('residual_variance'),
+                            data.get('aic_score'),
+                            data.get('bic_score'),
+                            id_value
+                        ))
 
-                result = cursor.fetchone()
+                    result = cursor.fetchone()
+                    results.append(result[0])
+
                 conn.commit()
-                return result[0]
+                return results
 
     def get_eth_arima_data_by_id(self, id: int) -> Optional[Dict[str, Any]]:
 
@@ -3386,124 +3454,158 @@ class DatabaseManager:
                 conn.commit()
                 return result is not None
 
-    def save_sol_arima_data(self,
-                            timeframe: str,
-                            open_time: datetime,
-                            original_close: float,
-                            close_diff: Optional[float] = None,
-                            close_diff2: Optional[float] = None,
-                            close_log: Optional[float] = None,
-                            close_log_diff: Optional[float] = None,
-                            close_pct_change: Optional[float] = None,
-                            close_seasonal_diff: Optional[float] = None,
-                            close_combo_diff: Optional[float] = None,
-                            adf_pvalue: Optional[float] = None,
-                            kpss_pvalue: Optional[float] = None,
-                            is_stationary: Optional[bool] = None,
-                            significant_lags: Optional[List[int]] = None,
-                            residual_variance: Optional[float] = None,
-                            aic_score: Optional[float] = None,
-                            bic_score: Optional[float] = None,
-                            id: Optional[int] = None) -> int:
+    def save_sol_arima_data(self, data_list: List[Dict[str, Any]]) -> List[int]:
+
+        results = []
 
         with self.connect() as conn:
             with conn.cursor() as cursor:
-                # Конвертація списку лагів у JSON якщо вони вказані
-                significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
+                # Підготовка даних для масового вставлення
+                for data in data_list:
+                    # Конвертація списку лагів у JSON
+                    significant_lags = data.get('significant_lags')
+                    significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
 
-                if id is None:
-                    # Перевіряємо, чи існує запис з такими timeframe і open_time
-                    check_query = ("""
-                                   SELECT id
-                                   FROM sol_arima_data
-                                   WHERE timeframe = %s
-                                     AND open_time = %s
-                                   """)
-                    cursor.execute(check_query, (timeframe, open_time))
-                    existing_record = cursor.fetchone()
+                    # Перевіряємо наявність обов'язкових полів
+                    timeframe = data['timeframe']
+                    open_time = data['open_time']
+                    original_close = data['original_close']
+                    id_value = data.get('id')
 
-                    if existing_record:
-                        # Якщо запис існує, оновлюємо його
-                        id = existing_record[0]
-                        query = ("""
-                                 UPDATE sol_arima_data
-                                 SET original_close      = %s,
-                                     close_diff          = %s,
-                                     close_diff2         = %s,
-                                     close_log           = %s,
-                                     close_log_diff      = %s,
-                                     close_pct_change    = %s,
-                                     close_seasonal_diff = %s,
-                                     close_combo_diff    = %s,
-                                     adf_pvalue          = %s,
-                                     kpss_pvalue         = %s,
-                                     is_stationary       = %s,
-                                     significant_lags    = %s,
-                                     residual_variance   = %s,
-                                     aic_score           = %s,
-                                     bic_score           = %s,
-                                     updated_at          = CURRENT_TIMESTAMP
-                                 WHERE id = %s RETURNING id
-                                 """)
-                        cursor.execute(query, (
-                            original_close, close_diff, close_diff2, close_log,
-                            close_log_diff, close_pct_change, close_seasonal_diff,
-                            close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary,
-                            significant_lags_json, residual_variance, aic_score, bic_score, id
-                        ))
+                    # Перевіряємо, чи існує запис, якщо id не вказано
+                    if id_value is None:
+                        check_query = """
+                                      SELECT id
+                                      FROM sol_arima_data
+                                      WHERE timeframe = %s \
+                                        AND open_time = %s \
+                                      """
+                        cursor.execute(check_query, (timeframe, open_time))
+                        existing_record = cursor.fetchone()
+
+                        if existing_record:
+                            # Якщо запис існує, оновлюємо його
+                            id_value = existing_record[0]
+                            query = """
+                                    UPDATE sol_arima_data
+                                    SET original_close      = %s,
+                                        close_diff          = %s,
+                                        close_diff2         = %s,
+                                        close_log           = %s,
+                                        close_log_diff      = %s,
+                                        close_pct_change    = %s,
+                                        close_seasonal_diff = %s,
+                                        close_combo_diff    = %s,
+                                        adf_pvalue          = %s,
+                                        kpss_pvalue         = %s,
+                                        is_stationary       = %s,
+                                        significant_lags    = %s,
+                                        residual_variance   = %s,
+                                        aic_score           = %s,
+                                        bic_score           = %s,
+                                        updated_at          = CURRENT_TIMESTAMP
+                                    WHERE id = %s RETURNING id \
+                                    """
+                            cursor.execute(query, (
+                                original_close,
+                                data.get('close_diff'),
+                                data.get('close_diff2'),
+                                data.get('close_log'),
+                                data.get('close_log_diff'),
+                                data.get('close_pct_change'),
+                                data.get('close_seasonal_diff'),
+                                data.get('close_combo_diff'),
+                                data.get('adf_pvalue'),
+                                data.get('kpss_pvalue'),
+                                data.get('is_stationary'),
+                                significant_lags_json,
+                                data.get('residual_variance'),
+                                data.get('aic_score'),
+                                data.get('bic_score'),
+                                id_value
+                            ))
+                        else:
+                            # Якщо запису немає, створюємо новий
+                            query = """
+                                    INSERT INTO sol_arima_data (timeframe, open_time, original_close, close_diff, \
+                                                                close_diff2, close_log, close_log_diff, \
+                                                                close_pct_change, \
+                                                                close_seasonal_diff, close_combo_diff, adf_pvalue, \
+                                                                kpss_pvalue, \
+                                                                is_stationary, significant_lags, residual_variance, \
+                                                                aic_score, bic_score)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
+                                            %s) RETURNING id \
+                                    """
+                            cursor.execute(query, (
+                                timeframe,
+                                open_time,
+                                original_close,
+                                data.get('close_diff'),
+                                data.get('close_diff2'),
+                                data.get('close_log'),
+                                data.get('close_log_diff'),
+                                data.get('close_pct_change'),
+                                data.get('close_seasonal_diff'),
+                                data.get('close_combo_diff'),
+                                data.get('adf_pvalue'),
+                                data.get('kpss_pvalue'),
+                                data.get('is_stationary'),
+                                significant_lags_json,
+                                data.get('residual_variance'),
+                                data.get('aic_score'),
+                                data.get('bic_score')
+                            ))
                     else:
-                        # Якщо запису немає, створюємо новий
-                        query = ("""
-                                 INSERT INTO sol_arima_data (timeframe, open_time, original_close, close_diff,
-                                                             close_diff2,
-                                                             close_log, close_log_diff, close_pct_change,
-                                                             close_seasonal_diff,
-                                                             close_combo_diff, adf_pvalue, kpss_pvalue,
-                                                             is_stationary, significant_lags,
-                                                             residual_variance, aic_score, bic_score)
-                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                                         %s) RETURNING id
-                                 """)
+                        # Якщо ID вказано, оновлюємо існуючий запис
+                        query = """
+                                UPDATE sol_arima_data
+                                SET timeframe           = %s,
+                                    open_time           = %s,
+                                    original_close      = %s,
+                                    close_diff          = %s,
+                                    close_diff2         = %s,
+                                    close_log           = %s,
+                                    close_log_diff      = %s,
+                                    close_pct_change    = %s,
+                                    close_seasonal_diff = %s,
+                                    close_combo_diff    = %s,
+                                    adf_pvalue          = %s,
+                                    kpss_pvalue         = %s,
+                                    is_stationary       = %s,
+                                    significant_lags    = %s,
+                                    residual_variance   = %s,
+                                    aic_score           = %s,
+                                    bic_score           = %s,
+                                    updated_at          = CURRENT_TIMESTAMP
+                                WHERE id = %s RETURNING id \
+                                """
                         cursor.execute(query, (
-                            timeframe, open_time, original_close, close_diff, close_diff2,
-                            close_log, close_log_diff, close_pct_change, close_seasonal_diff,
-                            close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags_json,
-                            residual_variance, aic_score, bic_score
+                            timeframe,
+                            open_time,
+                            original_close,
+                            data.get('close_diff'),
+                            data.get('close_diff2'),
+                            data.get('close_log'),
+                            data.get('close_log_diff'),
+                            data.get('close_pct_change'),
+                            data.get('close_seasonal_diff'),
+                            data.get('close_combo_diff'),
+                            data.get('adf_pvalue'),
+                            data.get('kpss_pvalue'),
+                            data.get('is_stationary'),
+                            significant_lags_json,
+                            data.get('residual_variance'),
+                            data.get('aic_score'),
+                            data.get('bic_score'),
+                            id_value
                         ))
-                else:
-                    # Якщо ID вказано, оновлюємо існуючий запис
-                    query = ("""
-                             UPDATE sol_arima_data
-                             SET timeframe           = %s,
-                                 open_time           = %s,
-                                 original_close      = %s,
-                                 close_diff          = %s,
-                                 close_diff2         = %s,
-                                 close_log           = %s,
-                                 close_log_diff      = %s,
-                                 close_pct_change    = %s,
-                                 close_seasonal_diff = %s,
-                                 close_combo_diff    = %s,
-                                 adf_pvalue          = %s,
-                                 kpss_pvalue         = %s,
-                                 is_stationary       = %s,
-                                 significant_lags    = %s,
-                                 residual_variance   = %s,
-                                 aic_score           = %s,
-                                 bic_score           = %s,
-                                 updated_at          = CURRENT_TIMESTAMP
-                             WHERE id = %s RETURNING id
-                             """)
-                    cursor.execute(query, (
-                        timeframe, open_time, original_close, close_diff, close_diff2,
-                        close_log, close_log_diff, close_pct_change, close_seasonal_diff,
-                        close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags_json,
-                        residual_variance, aic_score, bic_score, id
-                    ))
 
-                result = cursor.fetchone()
+                    result = cursor.fetchone()
+                    results.append(result[0])
+
                 conn.commit()
-                return result[0]
+                return results
 
     def get_sol_arima_data_by_id(self, id: int) -> Optional[Dict[str, Any]]:
 

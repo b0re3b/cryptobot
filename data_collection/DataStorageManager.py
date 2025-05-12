@@ -1,4 +1,4 @@
-from typing import Optional, Union, Dict, List
+from typing import Optional, Union, Dict, List, Any
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -40,132 +40,287 @@ class DataStorageManager:
             except Exception as e:
                 self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
 
-    def save_model_data(self, df: pd.DataFrame, symbol: str, timeframe: str, model_type: str):
-        """Універсальний метод для збереження даних моделей (LSTM або ARIMA) для будь-якої криптовалюти"""
-        if df.empty:
-            self.logger.warning(f"Спроба зберегти порожні дані {model_type} для {symbol} ({timeframe})")
-            return False
-
-        # Конвертуємо символ до верхнього регістру для стандартизації
-        symbol = symbol.upper()
-        model_type = model_type.upper()
-
-        # Перевірка підтримуваних криптовалют та часових проміжків
-        if symbol not in self.supported_cryptos:
-            self.logger.error(f"Непідтримувана криптовалюта: {symbol}")
-            return False
-
-        if timeframe not in self.supported_timeframes:
-            self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
-            return False
-
-        if model_type not in self.supported_models:
-            self.logger.error(f"Непідтримуваний тип моделі: {model_type}")
-            return False
-
+    # Методи для BTC + LSTM
+    def save_btc_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        """Зберігає послідовності LSTM для BTC"""
         try:
+            self.logger.info(f"Збереження LSTM послідовностей для BTC")
+
             # Конвертуємо numpy типи перед збереженням
-            for col in df.select_dtypes(include=[np.number]).columns:
-                df[col] = df[col].astype(float)
-
-            # Підготовка даних для збереження
             processed_data = []
-            for idx, row in df.iterrows():
-                record = {
-                    'timestamp': idx if not isinstance(idx, (int, float)) else pd.to_datetime(idx, unit='ms'),
-                    'symbol': symbol,
-                    'timeframe': timeframe,
-                    'model_type': model_type
-                }
-                for col, val in row.items():
-                    # Перетворюємо numpy типи
+            for point in data_points:
+                processed_point = {}
+                for key, val in point.items():
                     if isinstance(val, np.generic):
-                        record[col] = val.item()
+                        processed_point[key] = val.item()
                     else:
-                        record[col] = val
-                processed_data.append(record)
+                        processed_point[key] = val
+                processed_data.append(processed_point)
 
-            # Збереження через менеджер БД
-            if model_type == 'LSTM':
-                self.db_manager.save_lstm_data(processed_data)
-                self.logger.info(f"LSTM дані для {symbol} ({timeframe}) збережено в єдину таблицю")
-            elif model_type == 'ARIMA':
-                self.db_manager.save_arima_data(processed_data)
-                self.logger.info(f"ARIMA дані для {symbol} ({timeframe}) збережено в єдину таблицю")
-            else:
-                self.logger.error(f"Невідомий тип моделі: {model_type}")
-                return False
-
-            return True
+            # Виклик відповідного методу з db_manager
+            sequence_ids = self.db_manager.save_btc_lstm_sequence(processed_data)
+            self.logger.info(f"LSTM послідовності для BTC успішно збережено, IDs: {sequence_ids}")
+            return sequence_ids
         except Exception as e:
-            self.logger.error(f"Помилка при збереженні даних {model_type} для {symbol} ({timeframe}): {str(e)}")
-            return False
+            self.logger.error(f"Помилка при збереженні LSTM послідовностей для BTC: {str(e)}")
+            return []
 
-    def save_lstm_sequence(self, df: pd.DataFrame, symbol: str, timeframe: str):
-        """Зберігає послідовності LSTM для конкретної криптовалюти та часового проміжку"""
-        return self.save_model_data(df, symbol, timeframe, 'LSTM')
-
-    def save_arima_data(self, df: pd.DataFrame, symbol: str, timeframe: str):
-        """Зберігає дані ARIMA для конкретної криптовалюти та часового проміжку"""
-        return self.save_model_data(df, symbol, timeframe, 'ARIMA')
-
-    def load_model_data(self, symbol: str, timeframe: str, model_type: str) -> pd.DataFrame:
-        """Універсальний метод для завантаження даних моделей (LSTM або ARIMA) для будь-якої криптовалюти"""
-        symbol = symbol.upper()
-        model_type = model_type.upper()
-
-        if symbol not in self.supported_cryptos:
-            self.logger.error(f"Непідтримувана криптовалюта: {symbol}")
-            return pd.DataFrame()
-
-        if timeframe not in self.supported_timeframes:
-            self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
-            return pd.DataFrame()
-
-        if model_type not in self.supported_models:
-            self.logger.error(f"Непідтримуваний тип моделі: {model_type}")
-            return pd.DataFrame()
-
+    def get_btc_lstm_sequence(self, timeframe: str, sequence_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Завантажує послідовності LSTM для BTC"""
         try:
-            self.logger.info(f"Завантаження {model_type} даних для {symbol} ({timeframe}) з єдиної таблиці")
+            self.logger.info(
+                f"Завантаження LSTM послідовностей для BTC, timeframe: {timeframe}, sequence_id: {sequence_id}")
 
-            if model_type == 'LSTM':
-                data = self.db_manager.get_lstm_data(symbol, timeframe)
-            elif model_type == 'ARIMA':
-                data = self.db_manager.get_arima_data(symbol, timeframe)
-            else:
-                self.logger.error(f"Невідомий тип моделі: {model_type}")
-                return pd.DataFrame()
+            if timeframe not in self.supported_timeframes:
+                self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
+                return []
 
-            if data is None:
-                self.logger.warning(f"Не знайдено {model_type} дані для {symbol} ({timeframe})")
-                return pd.DataFrame()
+            # Виклик відповідного методу з db_manager
+            data = self.db_manager.get_btc_lstm_sequence(timeframe, sequence_id)
 
-            if not isinstance(data, pd.DataFrame):
-                data = pd.DataFrame(data)
-
-            # Видаляємо додаткові системні колонки, якщо вони є
-            for col in ['symbol', 'timeframe', 'model_type']:
-                if col in data.columns:
-                    data = data.drop(columns=[col])
-
-            # Встановлюємо часовий індекс
-            if 'timestamp' in data.columns:
-                data['timestamp'] = pd.to_datetime(data['timestamp'])
-                data.set_index('timestamp', inplace=True)
+            if not data:
+                self.logger.warning(
+                    f"Не знайдено LSTM послідовності для BTC (timeframe: {timeframe}, sequence_id: {sequence_id})")
+                return []
 
             return data
         except Exception as e:
-            self.logger.error(f"Помилка при завантаженні {model_type} даних для {symbol} ({timeframe}): {str(e)}")
-            return pd.DataFrame()
+            self.logger.error(f"Помилка при завантаженні LSTM послідовностей для BTC: {str(e)}")
+            return []
 
-    def load_lstm_sequence(self, symbol: str, timeframe: str) -> pd.DataFrame:
-        """Завантажує послідовності LSTM для конкретної криптовалюти та часового проміжку"""
-        return self.load_model_data(symbol, timeframe, 'LSTM')
+    # Методи для ETH + LSTM
+    def save_eth_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        """Зберігає послідовності LSTM для ETH"""
+        try:
+            self.logger.info(f"Збереження LSTM послідовностей для ETH")
 
-    def load_arima_data(self, symbol: str, timeframe: str) -> pd.DataFrame:
-        """Завантажує дані ARIMA для конкретної криптовалюти та часового проміжку"""
-        return self.load_model_data(symbol, timeframe, 'ARIMA')
+            # Конвертуємо numpy типи перед збереженням
+            processed_data = []
+            for point in data_points:
+                processed_point = {}
+                for key, val in point.items():
+                    if isinstance(val, np.generic):
+                        processed_point[key] = val.item()
+                    else:
+                        processed_point[key] = val
+                processed_data.append(processed_point)
+
+            # Виклик відповідного методу з db_manager
+            sequence_ids = self.db_manager.save_eth_lstm_sequence(processed_data)
+            self.logger.info(f"LSTM послідовності для ETH успішно збережено, IDs: {sequence_ids}")
+            return sequence_ids
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні LSTM послідовностей для ETH: {str(e)}")
+            return []
+
+    def get_eth_lstm_sequence(self, timeframe: str, sequence_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Завантажує послідовності LSTM для ETH"""
+        try:
+            self.logger.info(
+                f"Завантаження LSTM послідовностей для ETH, timeframe: {timeframe}, sequence_id: {sequence_id}")
+
+            if timeframe not in self.supported_timeframes:
+                self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
+                return []
+
+            # Виклик відповідного методу з db_manager
+            data = self.db_manager.get_eth_lstm_sequence(timeframe, sequence_id)
+
+            if not data:
+                self.logger.warning(
+                    f"Не знайдено LSTM послідовності для ETH (timeframe: {timeframe}, sequence_id: {sequence_id})")
+                return []
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні LSTM послідовностей для ETH: {str(e)}")
+            return []
+
+    # Методи для SOL + LSTM
+    def save_sol_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        """Зберігає послідовності LSTM для SOL"""
+        try:
+            self.logger.info(f"Збереження LSTM послідовностей для SOL")
+
+            # Конвертуємо numpy типи перед збереженням
+            processed_data = []
+            for point in data_points:
+                processed_point = {}
+                for key, val in point.items():
+                    if isinstance(val, np.generic):
+                        processed_point[key] = val.item()
+                    else:
+                        processed_point[key] = val
+                processed_data.append(processed_point)
+
+            # Виклик відповідного методу з db_manager
+            sequence_ids = self.db_manager.save_sol_lstm_sequence(processed_data)
+            self.logger.info(f"LSTM послідовності для SOL успішно збережено, IDs: {sequence_ids}")
+            return sequence_ids
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні LSTM послідовностей для SOL: {str(e)}")
+            return []
+
+    def get_sol_lstm_sequence(self, timeframe: str, sequence_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Завантажує послідовності LSTM для SOL"""
+        try:
+            self.logger.info(
+                f"Завантаження LSTM послідовностей для SOL, timeframe: {timeframe}, sequence_id: {sequence_id}")
+
+            if timeframe not in self.supported_timeframes:
+                self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
+                return []
+
+            # Виклик відповідного методу з db_manager
+            data = self.db_manager.get_sol_lstm_sequence(timeframe, sequence_id)
+
+            if not data:
+                self.logger.warning(
+                    f"Не знайдено LSTM послідовності для SOL (timeframe: {timeframe}, sequence_id: {sequence_id})")
+                return []
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні LSTM послідовностей для SOL: {str(e)}")
+            return []
+
+    # Методи для BTC + ARIMA
+    def save_btc_arima_data(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        """Зберігає дані ARIMA для BTC"""
+        try:
+            self.logger.info(f"Збереження ARIMA даних для BTC")
+
+            # Конвертуємо numpy типи перед збереженням
+            processed_data = []
+            for point in data_points:
+                processed_point = {}
+                for key, val in point.items():
+                    if isinstance(val, np.generic):
+                        processed_point[key] = val.item()
+                    else:
+                        processed_point[key] = val
+                processed_data.append(processed_point)
+
+            # Виклик відповідного методу з db_manager
+            data_ids = self.db_manager.save_btc_arima_data(processed_data)
+            self.logger.info(f"ARIMA дані для BTC успішно збережено, IDs: {data_ids}")
+            return data_ids
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні ARIMA даних для BTC: {str(e)}")
+            return []
+
+    def get_btc_arima_data(self, timeframe: str, data_id: Optional[int] = None) -> list[Any] | dict[Any, Any]:
+        """Завантажує дані ARIMA для BTC"""
+        try:
+            self.logger.info(f"Завантаження ARIMA даних для BTC, timeframe: {timeframe}, data_id: {data_id}")
+
+            if timeframe not in self.supported_timeframes:
+                self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
+                return []
+
+            # Виклик відповідного методу з db_manager
+            data = self.db_manager.get_btc_arima_data(timeframe, data_id)
+
+            if not data:
+                self.logger.warning(f"Не знайдено ARIMA дані для BTC (timeframe: {timeframe}, data_id: {data_id})")
+                return []
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні ARIMA даних для BTC: {str(e)}")
+            return []
+
+    # Методи для ETH + ARIMA
+    def save_eth_arima_data(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        """Зберігає дані ARIMA для ETH"""
+        try:
+            self.logger.info(f"Збереження ARIMA даних для ETH")
+
+            # Конвертуємо numpy типи перед збереженням
+            processed_data = []
+            for point in data_points:
+                processed_point = {}
+                for key, val in point.items():
+                    if isinstance(val, np.generic):
+                        processed_point[key] = val.item()
+                    else:
+                        processed_point[key] = val
+                processed_data.append(processed_point)
+
+            # Виклик відповідного методу з db_manager
+            data_ids = self.db_manager.save_eth_arima_data(processed_data)
+            self.logger.info(f"ARIMA дані для ETH успішно збережено, IDs: {data_ids}")
+            return data_ids
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні ARIMA даних для ETH: {str(e)}")
+            return []
+
+    def get_eth_arima_data(self, timeframe: str, data_id: Optional[int] = None) -> list[Any] | dict[Any, Any]:
+        """Завантажує дані ARIMA для ETH"""
+        try:
+            self.logger.info(f"Завантаження ARIMA даних для ETH, timeframe: {timeframe}, data_id: {data_id}")
+
+            if timeframe not in self.supported_timeframes:
+                self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
+                return []
+
+            # Виклик відповідного методу з db_manager
+            data = self.db_manager.get_eth_arima_data(timeframe, data_id)
+
+            if not data:
+                self.logger.warning(f"Не знайдено ARIMA дані для ETH (timeframe: {timeframe}, data_id: {data_id})")
+                return []
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні ARIMA даних для ETH: {str(e)}")
+            return []
+
+    # Методи для SOL + ARIMA
+    def save_sol_arima_data(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        """Зберігає дані ARIMA для SOL"""
+        try:
+            self.logger.info(f"Збереження ARIMA даних для SOL")
+
+            # Конвертуємо numpy типи перед збереженням
+            processed_data = []
+            for point in data_points:
+                processed_point = {}
+                for key, val in point.items():
+                    if isinstance(val, np.generic):
+                        processed_point[key] = val.item()
+                    else:
+                        processed_point[key] = val
+                processed_data.append(processed_point)
+
+            # Виклик відповідного методу з db_manager
+            data_ids = self.db_manager.save_sol_arima_data(processed_data)
+            self.logger.info(f"ARIMA дані для SOL успішно збережено, IDs: {data_ids}")
+            return data_ids
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні ARIMA даних для SOL: {str(e)}")
+            return []
+
+    def get_sol_arima_data(self, timeframe: str, data_id: Optional[int] = None) -> list[Any] | dict[Any, Any]:
+        """Завантажує дані ARIMA для SOL"""
+        try:
+            self.logger.info(f"Завантаження ARIMA даних для SOL, timeframe: {timeframe}, data_id: {data_id}")
+
+            if timeframe not in self.supported_timeframes:
+                self.logger.error(f"Непідтримуваний часовий проміжок: {timeframe}")
+                return []
+
+            # Виклик відповідного методу з db_manager
+            data = self.db_manager.get_sol_arima_data(timeframe, data_id)
+
+            if not data:
+                self.logger.warning(f"Не знайдено ARIMA дані для SOL (timeframe: {timeframe}, data_id: {data_id})")
+                return []
+
+            return data
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні ARIMA даних для SOL: {str(e)}")
+            return []
 
     def load_data(self, data_source: str, symbol: str, timeframe: str,
                   start_date: Optional[Union[str, datetime]] = None,

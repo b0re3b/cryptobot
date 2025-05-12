@@ -944,7 +944,7 @@ CREATE TABLE IF NOT EXISTS btc_arima_data (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, open_time)
+    UNIQUE (timeframe)
 );
 
 -- Similar tables for ETH and SOL
@@ -983,7 +983,7 @@ CREATE TABLE IF NOT EXISTS eth_arima_data (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, open_time)
+    UNIQUE (timeframe)
 );
 CREATE TABLE IF NOT EXISTS sol_arima_data (
     id SERIAL PRIMARY KEY,
@@ -1019,7 +1019,7 @@ CREATE TABLE IF NOT EXISTS sol_arima_data (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, open_time)
+    UNIQUE (timeframe)
 );
 CREATE INDEX IF NOT EXISTS idx_btc_arima_timeframe ON btc_arima_data(timeframe);
 CREATE INDEX IF NOT EXISTS idx_btc_arima_open_time ON btc_arima_data(open_time);

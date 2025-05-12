@@ -2,7 +2,7 @@ import traceback
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Optional, Tuple, Any, Union, Callable
+from typing import List, Dict, Optional, Tuple, Any, Callable
 from functools import lru_cache
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -11,7 +11,7 @@ import gc
 import psutil
 from joblib import Memory
 
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataCleaner import DataCleaner
@@ -30,15 +30,7 @@ class MarketDataProcessor:
 
     def __init__(self, log_level=logging.INFO, use_multiprocessing=True,
                  cache_enabled=True, chunk_size=100000):
-        """
-        Ініціалізація обробника ринкових даних з розширеними опціями.
 
-        Args:
-            log_level: Рівень логування
-            use_multiprocessing: Включити паралельну обробку
-            cache_enabled: Включити кешування результатів
-            chunk_size: Розмір чанка для обробки великих даних
-        """
         self.log_level = log_level
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
@@ -78,17 +70,7 @@ class MarketDataProcessor:
     def _process_in_chunks(self, data: pd.DataFrame,
                            process_func: Callable,
                            **kwargs) -> pd.DataFrame:
-        """
-        Обробка великого DataFrame по частинах для зменшення використання пам'яті.
 
-        Args:
-            data: вхідний DataFrame
-            process_func: функція обробки для кожного чанка
-            **kwargs: додаткові аргументи для функції обробки
-
-        Returns:
-            Оброблений DataFrame
-        """
         if data is None or data.empty:
             return data
 
@@ -134,17 +116,7 @@ class MarketDataProcessor:
     def _parallel_process(self, data_list: List[pd.DataFrame],
                           func: Callable,
                           **kwargs) -> List[pd.DataFrame]:
-        """
-        Паралельно застосовує функцію обробки до списку DataFrame.
 
-        Args:
-            data_list: список DataFrame для обробки
-            func: функція обробки
-            **kwargs: аргументи для функції обробки
-
-        Returns:
-            Список оброблених DataFrame
-        """
         if not self.use_multiprocessing or len(data_list) <= 1:
             return [func(df, **kwargs) for df in data_list]
 
@@ -175,18 +147,7 @@ class MarketDataProcessor:
 
     @lru_cache(maxsize=32)
     def _get_cached_data(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        Кешована функція для завантаження даних.
 
-        Args:
-            symbol: символ ринкового інструмента
-            timeframe: часовий інтервал
-            start_date: початкова дата
-            end_date: кінцева дата
-
-        Returns:
-            DataFrame з даними
-        """
         return self.load_data(
             data_source='database',
             symbol=symbol,
@@ -198,16 +159,7 @@ class MarketDataProcessor:
 
     def align_time_series(self, data_list: List[pd.DataFrame],
                           reference_index: int = 0) -> List[pd.DataFrame]:
-        """
-        Вирівнює часові ряди, оптимізовано для швидкодії та пам'яті.
 
-        Args:
-            data_list: список DataFrame з часовими рядами
-            reference_index: індекс еталонного DataFrame
-
-        Returns:
-            Список вирівняних DataFrame
-        """
         if not data_list:
             self.logger.warning("Порожній список DataFrame для вирівнювання")
             return []
@@ -387,19 +339,7 @@ class MarketDataProcessor:
     def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 10,
                                  price_col: str = 'close', volume_col: str = 'volume',
                                  time_period: Optional[str] = None) -> pd.DataFrame:
-        """
-        Створює профіль об'єму з оптимізацією та кешуванням.
 
-        Args:
-            data: вхідні дані
-            bins: кількість цінових рівнів
-            price_col: назва колонки ціни
-            volume_col: назва колонки об'єму
-            time_period: часовий період для групування
-
-        Returns:
-            DataFrame з профілем об'єму
-        """
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
             return pd.DataFrame()
@@ -484,18 +424,7 @@ class MarketDataProcessor:
 
     def _create_volume_profile(self, data: pd.DataFrame, bins: int,
                                price_col: str, volume_col: str) -> pd.DataFrame:
-        """
-        Створює профіль об'єму з оптимізацією для швидкої обробки.
 
-        Args:
-            data: вхідні дані
-            bins: кількість цінових рівнів
-            price_col: назва колонки ціни
-            volume_col: назва колонки об'єму
-
-        Returns:
-            DataFrame з профілем об'єму
-        """
         # Векторизоване знаходження мін/макс замість покроковій ітерації
         price_min = data[price_col].min()
         price_max = data[price_col].max()
@@ -584,18 +513,8 @@ class MarketDataProcessor:
     def merge_datasets(self, datasets: List[pd.DataFrame],
                        merge_on: str = 'timestamp',
                        chunk_size: Optional[int] = None) -> pd.DataFrame:
-        """
-        Вдосконалена функція об'єднання наборів даних з використанням векторизованих операцій,
-        оптимізацією пам'яті та підтримкою обробки по чанках.
 
-        Args:
-            datasets: список DataFrame для об'єднання
-            merge_on: колонка або індекс для об'єднання
-            chunk_size: розмір чанка для обробки великих наборів даних
-
-        Returns:
-            Об'єднаний DataFrame
-        """
+        global cache_key
         if not datasets:
             self.logger.warning("Порожній список наборів даних для об'єднання")
             return pd.DataFrame()
@@ -727,17 +646,7 @@ class MarketDataProcessor:
     def _merge_datasets_in_chunks(self, datasets: List[pd.DataFrame],
                                   merge_on: str,
                                   chunk_size: int) -> pd.DataFrame:
-        """
-        Об'єднання наборів даних по чанках для оптимізації пам'яті.
 
-        Args:
-            datasets: список DataFrame для об'єднання
-            merge_on: колонка або індекс для об'єднання
-            chunk_size: розмір чанка для обробки
-
-        Returns:
-            Об'єднаний DataFrame
-        """
         self.logger.info(f"Об'єднання наборів даних по чанках (розмір чанка: {chunk_size})")
 
         # Підготовка даних - встановлення індексу
@@ -808,15 +717,7 @@ class MarketDataProcessor:
         self._log_memory_usage("Після очищення кешу:")
 
     def optimize_memory(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Оптимізує використання пам'яті DataFrame шляхом перетворення типів даних.
 
-        Args:
-            data: вхідний DataFrame
-
-        Returns:
-            Оптимізований DataFrame
-        """
         if data is None or data.empty:
             return data
 
@@ -871,19 +772,8 @@ class MarketDataProcessor:
 
     def parallel_apply(self, data: pd.DataFrame, func: Callable,
                        column: Optional[str] = None,
-                       axis: int = 0) -> pd.Series:
-        """
-        Паралельне застосування функції до DataFrame з оптимізацією пам'яті.
+                       axis: int = 0) -> Series | DataFrame:
 
-        Args:
-            data: вхідний DataFrame
-            func: функція для застосування
-            column: колонка для обробки (якщо None, обробляється весь DataFrame)
-            axis: вісь для застосування (0 - рядки, 1 - колонки)
-
-        Returns:
-            Series або DataFrame з результатами
-        """
         if data is None or data.empty:
             return pd.Series() if column else pd.DataFrame()
 
@@ -1031,21 +921,40 @@ class MarketDataProcessor:
         except Exception as e:
             self.logger.error(f"Помилка при збереженні профілю об'єму: {e}")
             return False
-    def save_btc_lstm_sequence(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> bool:
 
-        return self.data_storage.save_lstm_sequence(data, symbol, timeframe)
+    def save_sol_lstm_sequence(self, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
 
-    def save_btc_arima_data(self, data: pd.DataFrame, timeframe:str, symbol: str, **kwargs) -> bool:
+        return self.data_storage.save_sol_lstm_sequence(data_points)
 
-        return self.data_storage.save_arima_data(data, symbol, timeframe)
+    def save_sol_arima_data(self, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
 
-    def load_lstm_sequence(self, symbol: str, **kwargs) -> pd.DataFrame:
+        return self.data_storage.save_sol_arima_data(data_points)
 
-        return self.data_storage.load_lstm_sequence(symbol, **kwargs)
+    def load_lstm_sequence(self, symbol: str, timeframe: str, sequence_id: Optional[int] = None, **kwargs) -> List[
+        Dict[str, Any]]:
 
-    def load_arima_data(self, symbol: str, **kwargs) -> pd.DataFrame:
+        if symbol == 'BTC':
+            return self.data_storage.get_btc_lstm_sequence(timeframe, sequence_id)
+        elif symbol == 'ETH':
+            return self.data_storage.get_eth_lstm_sequence(timeframe, sequence_id)
+        elif symbol == 'SOL':
+            return self.data_storage.get_sol_lstm_sequence(timeframe, sequence_id)
+        else:
+            self.logger.error(f"Непідтримуваний символ: {symbol}")
+            return []
 
-        return self.data_storage.load_arima_data(symbol, **kwargs)
+    def load_arima_data(self, symbol: str, timeframe: str, data_id: Optional[int] = None, **kwargs) -> List[
+        Dict[str, Any]]:
+
+        if symbol == 'BTC':
+            return self.data_storage.get_btc_arima_data(timeframe, data_id)
+        elif symbol == 'ETH':
+            return self.data_storage.get_eth_arima_data(timeframe, data_id)
+        elif symbol == 'SOL':
+            return self.data_storage.get_sol_arima_data(timeframe, data_id)
+        else:
+            self.logger.error(f"Непідтримуваний символ: {symbol}")
+            return []
 
 
 
@@ -1197,25 +1106,32 @@ class MarketDataProcessor:
         processed_data, outliers_info = self.detect_outliers(processed_data)
 
         # 8. Створення профілю об'єму
-        volume_profile = self.aggregate_volume_profile(
-            processed_data,
-            bins=20,
-            price_col='close',
-            volume_col='volume',
-            time_period='1D'
-        )
+        if not isinstance(processed_data, pd.DataFrame) or processed_data.empty:
+            self.logger.warning("Дані для створення профілю об'єму відсутні або мають неправильний формат")
+        else:
+            try:
+                # Виправлено: використання processed_data замість df
+                volume_profile = self.aggregate_volume_profile(
+                    data=processed_data,  # виправлено з df на processed_data
+                    bins=20,
+                    price_col='close',
+                    volume_col='volume',
+                    time_period='1W'  # переконуємося, що це строка
+                )
 
-        if not volume_profile.empty:
-            results['volume_profile'] = volume_profile
+                if not volume_profile.empty:
+                    results['volume_profile'] = volume_profile
 
-            if save_results:
-                self.logger.info(f"Спроба збереження профілю об'єму: symbol={symbol}, timeframe={timeframe}")
+                    if save_results:
+                        self.logger.info(f"Спроба збереження профілю об'єму: symbol={symbol}, timeframe={timeframe}")
 
-                success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
-                if success:
-                    self.logger.info(f"Профіль об'єму для {symbol} {timeframe} успішно збережено")
-                else:
-                    self.logger.error(f"Помилка збереження профілю об'єму для {symbol} {timeframe}")
+                        success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
+                        if success:
+                            self.logger.info(f"Профіль об'єму для {symbol} {timeframe} успішно збережено")
+                        else:
+                            self.logger.error(f"Помилка збереження профілю об'єму для {symbol} {timeframe}")
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
 
         # 9. Підготовка даних для моделей ARIMA і LSTM
         if timeframe in ['1m', '4h', '1d', '1w']:
@@ -1223,30 +1139,76 @@ class MarketDataProcessor:
             arima_data = self.prepare_arima_data(processed_data, symbol=symbol, timeframe=timeframe)
             if not arima_data.empty:
                 results['arima_data'] = arima_data
-                if save_results:
-                    method_name = f"save_{symbol}_arima_data"
-                    if hasattr(self.data_storage, method_name):
-                        getattr(self.data_storage, method_name)(arima_data)
-                        self.logger.info(f"Дані ARIMA для {symbol} успішно збережено")
-                    else:
-                        self.save_btc_arima_data(processed_data, timeframe, symbol)
-                        self.logger.info(f"Дані ARIMA для {symbol} успішно збережено (загальний метод)")
 
+                if save_results:
+                    try:
+                        # Convert DataFrame to list of dicts and ensure required fields exist
+                        arima_data_points = arima_data.reset_index().to_dict('records')
+
+                        # Add missing required fields if they don't exist
+                        for record in arima_data_points:
+                            if 'open_time' not in record:
+                                record['open_time'] = record.get('timestamp', record.get('index', pd.Timestamp.now()))
+                            if 'original_close' not in record:
+                                record['original_close'] = record.get('close', None)
+
+                        # Try specific method first, then fall back to general
+                        method_name = f"save_{symbol.lower()}_arima_data"
+                        if hasattr(self.data_storage, method_name):
+                            arima_ids = getattr(self.data_storage, method_name)(arima_data_points)
+                        else:
+                            arima_ids = self.data_storage.save_sol_arima_data(
+                                data_points=arima_data_points,
+                            )
+
+                        if arima_ids:
+                            self.logger.info(f"ARIMA data saved for {symbol}, IDs: {arima_ids}")
+                        else:
+                            self.logger.warning(f"Failed to save ARIMA data for {symbol}")
+                    except Exception as e:
+                        self.logger.error(f"Error saving ARIMA data for {symbol}: {str(e)}")
+
+            # LSTM data preparation and saving
             try:
                 lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
                 if not lstm_df.empty:
                     results['lstm_data'] = lstm_df
 
                     if save_results:
-                        method_name = f"save_{symbol}_lstm_sequence"
-                        if hasattr(self.data_storage, method_name):
-                            getattr(self.data_storage, method_name)(lstm_df)
-                            self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено")
-                        else:
-                            self.save_btc_lstm_sequence(processed_data, timeframe, symbol)
-                            self.logger.info(f"Послідовності LSTM для {symbol} успішно збережено (загальний метод)")
+                        try:
+                            # Convert DataFrame and add required fields
+                            lstm_data_points = lstm_df.reset_index().to_dict('records')
+
+                            # Add sequence_position if missing (sequential numbering)
+                            for i, record in enumerate(lstm_data_points):
+                                if 'sequence_position' not in record:
+                                    record['sequence_position'] = i + 1  # 1-based indexing
+                                if 'sequence_id' not in record:
+                                    record[
+                                        'sequence_id'] = f"{symbol}_{timeframe}_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}_{i}"
+
+                            # Validate required fields
+                            required_fields = ['sequence_position', 'sequence_id', 'features', 'target']
+                            for record in lstm_data_points:
+                                missing = [f for f in required_fields if f not in record]
+                                if missing:
+                                    raise ValueError(f"Missing required fields: {missing}")
+
+                            # Save using appropriate method
+                            method_name = f"save_{symbol.lower()}_lstm_sequence"
+                            if hasattr(self.data_storage, method_name):
+                                sequence_ids = getattr(self.data_storage, method_name)(lstm_data_points)
+                            else:
+                                sequence_ids = self.data_storage.save_sol_lstm_sequence(lstm_data_points)
+
+                            if sequence_ids:
+                                self.logger.info(f"Saved LSTM sequences for {symbol}, IDs: {sequence_ids}")
+                            else:
+                                self.logger.warning(f"Failed to save LSTM sequences for {symbol}")
+                        except Exception as e:
+                            self.logger.error(f"Error saving LSTM sequences for {symbol}: {str(e)}")
             except Exception as e:
-                self.logger.error(f"Помилка при підготовці LSTM даних: {str(e)}")
+                self.logger.error(f"Error preparing LSTM data: {str(e)}")
 
         self.logger.info(f"Комплексна обробка даних для {symbol} ({timeframe}) завершена успішно")
         return results
@@ -1388,11 +1350,11 @@ class MarketDataProcessor:
 
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
-    SYMBOLS = ['BTC']
+    SYMBOLS = ['SOL']
 
     # Визначення базових та похідних таймфреймів
-    BASE_TIMEFRAMES = ['1m', '1h', '1d']  # Таймфрейми, які зберігаються безпосередньо в БД
-    DERIVED_TIMEFRAMES = ['4h', '1w']  # Таймфрейми, які потребують ресемплінгу
+    BASE_TIMEFRAMES = ['1d']  # Таймфрейми, які зберігаються безпосередньо в БД
+    DERIVED_TIMEFRAMES = [ '1w']  # Таймфрейми, які потребують ресемплінгу
 
     processor = MarketDataProcessor(log_level=logging.INFO)
 
