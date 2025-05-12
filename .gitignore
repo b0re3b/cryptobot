@@ -6,3 +6,4 @@ utils/__pycache__
 .idea
 .idea/kursova.iml
 .idea/misc.xml
+models/__pycache__
