@@ -823,8 +823,8 @@ class DataResampler:
                 return pd.DataFrame()
 
             # Create a copy to avoid modifying the original
-            result_df = pd.DataFrame(
-                index=data.index.reset_index(drop=True))  # Reset index to avoid duplicate open_time
+            # Виправлений рядок: створюємо DataFrame з правильним індексом замість reset_index
+            result_df = pd.DataFrame(index=pd.RangeIndex(len(data.index)))
 
             # Basic info
             result_df['timeframe'] = timeframe
