@@ -32,7 +32,7 @@ class CryptoNewsScraper:
         self.collector = NewsCollector()
 
         # Ініціалізація бази даних
-        self.db_manager = DatabaseManager() if db_connection is None else db_connection
+        self.db_manager = DatabaseManager()
 
         # Ініціалізація аналізатора новин
         self.analyzer = BERTNewsAnalyzer()

@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Any, Callable
 from random import randint
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
-from models import NewsAnalyzer
+from models.NewsAnalyzer import BERTNewsAnalyzer
 
 @dataclass
 class NewsItem:
@@ -68,7 +68,7 @@ class NewsCollector:
         self.max_pages = max_pages
         self.max_workers = max_workers
         self.topic_model_dir = topic_model_dir
-        self.NewsAnalyzer = NewsAnalyzer()
+        self.NewsAnalyzer = BERTNewsAnalyzer()
         # Configure logger
         if logger:
             self.logger = logger
