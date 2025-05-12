@@ -22,3 +22,4 @@ nltk~= 3.9.1
 torch~=2.7.0
 dask~=2025.4.1
 psutil~=7.0.0
+pyarrow~=20.0.0

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 from models.NewsAnalyzer import BERTNewsAnalyzer
 
+
 @dataclass
 class NewsItem:
     title: str
@@ -59,8 +60,8 @@ class NewsCollector:
 
         self.news_sources = news_sources or [
             'coindesk', 'cointelegraph', 'decrypt', 'cryptoslate',
-            'theblock', 'cryptopanic', 'coinmarketcal', 'feedly',
-            'newsnow', 'cryptobriefing'
+            'theblock', 'cryptopanic', 'coinmarketcal', 'newsnow',
+            'cryptobriefing'
         ]
         self.sentiment_analyzer = sentiment_analyzer
         self.db_manager = db_manager
@@ -118,7 +119,6 @@ class NewsCollector:
                 'base_url': 'https://coinmarketcal.com',
                 'default_categories': ["events", "upcoming", "ongoing", "recent"]
             },
-
             'newsnow': {
                 'base_url': 'https://www.newsnow.co.uk',
                 'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum"]
@@ -228,7 +228,6 @@ class NewsCollector:
         except Exception as e:
             self.logger.error(f"Error parsing date string '{date_text}': {e}")
             return datetime.now()
-
 
     def _create_news_item(self,
                           title: str,
@@ -690,13 +689,14 @@ class NewsCollector:
                 # Call the appropriate function for the source
                 news_from_source = source_functions[source](days_back=days_back, categories=source_categories)
 
-                if news_from_source:
-                    self.logger.info(f"Successfully collected {len(news_from_source)} news items from {source}")
-                    return news_from_source
-                else:
-                    self.logger.warning(f"No news collected from {source}")
+                # Ensure we're returning a list of NewsItem objects
+                if not isinstance(news_from_source, list):
+                    self.logger.error(
+                        f"Expected a list of NewsItem objects from {source}, but got {type(news_from_source)}")
                     return []
 
+                self.logger.info(f"Successfully collected {len(news_from_source)} news items from {source}")
+                return news_from_source
             except Exception as e:
                 self.logger.error(f"Error collecting news from {source}: {e}")
                 return []
@@ -707,14 +707,17 @@ class NewsCollector:
 
         # Flatten results
         for result in results:
-            all_news.extend(result)
+            if isinstance(result, list):
+                all_news.extend(result)
+            else:
+                self.logger.error(f"Unexpected result type: {type(result)}. Expected list of NewsItem.")
 
         # Remove duplicates based on title
         unique_news = []
         seen_titles = set()
 
         for news_item in all_news:
-            if news_item.title not in seen_titles:
+            if isinstance(news_item, NewsItem) and news_item.title not in seen_titles:
                 seen_titles.add(news_item.title)
                 unique_news.append(news_item)
 

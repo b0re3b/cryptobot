@@ -550,66 +550,6 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    # Нові методи для таблиць оброблених даних
-    def insert_kline_processed(self, symbol, processed_data):
-        """Додає оброблену свічку до відповідної таблиці"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return False
-
-        table_name = f"{symbol.lower()}_klines_processed"
-
-        try:
-            self.cursor.execute(f'''
-            INSERT INTO {table_name} 
-            (timeframe, open_time, open, high, low, close, volume, 
-            price_zscore, volume_zscore, volatility, trend, 
-            hour, day_of_week, is_weekend, session, is_anomaly, has_missing)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (timeframe, open_time) DO UPDATE SET
-            open = EXCLUDED.open,
-            high = EXCLUDED.high,
-            low = EXCLUDED.low,
-            close = EXCLUDED.close,
-            volume = EXCLUDED.volume,
-            price_zscore = EXCLUDED.price_zscore,
-            volume_zscore = EXCLUDED.volume_zscore,
-            volatility = EXCLUDED.volatility,
-            trend = EXCLUDED.trend,
-            hour = EXCLUDED.hour,
-            day_of_week = EXCLUDED.day_of_week,
-            is_weekend = EXCLUDED.is_weekend,
-            session = EXCLUDED.session,
-            is_anomaly = EXCLUDED.is_anomaly,
-            has_missing = EXCLUDED.has_missing
-            ''', (
-                processed_data['timeframe'],
-                processed_data['open_time'],
-                processed_data['open'],
-                processed_data['high'],
-                processed_data['low'],
-                processed_data['close'],
-                processed_data['volume'],
-                processed_data.get('price_zscore'),
-                processed_data.get('volume_zscore'),
-                processed_data.get('volatility'),
-                processed_data.get('trend'),
-                processed_data.get('hour'),
-                processed_data.get('day_of_week'),
-                processed_data.get('is_weekend'),
-                processed_data.get('session'),
-                processed_data.get('is_anomaly', False),
-                processed_data.get('has_missing', False)
-            ))
-            self.conn.commit()
-            return True
-        except psycopg2.Error as e:
-            print(f"Помилка додавання обробленої свічки для {symbol}: {e}")
-            self.conn.rollback()
-            return False
-
-
-
     def insert_volume_profile(self, symbol, profile_data):
         """Додає запис профілю об'єму до відповідної таблиці"""
         if symbol.upper() not in self.supported_symbols:
@@ -639,59 +579,6 @@ class DatabaseManager:
             print(f"Помилка додавання запису профілю об'єму для {symbol}: {e}")
             self.conn.rollback()
             return False
-
-    def log_data_processing(self, symbol, data_type, timeframe, start_time, end_time, status, steps=None,
-                            error_message=None):
-        """Додає запис про обробку даних до логу"""
-        try:
-            self.cursor.execute('''
-                                INSERT INTO data_processing_log
-                                (symbol, data_type, timeframe, start_time, end_time, status, steps, error_message)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                                ''', (symbol, data_type, timeframe, start_time, end_time, status, steps, error_message))
-            self.conn.commit()
-            return True
-        except psycopg2.Error as e:
-            print(f"Помилка додавання запису про обробку даних: {e}")
-            self.conn.rollback()
-            return False
-
-    def get_klines_processed(self, symbol, timeframe, start_time=None, end_time=None, limit=100):
-        """Отримує оброблені свічки для валюти"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return pd.DataFrame()
-
-        table_name = f"{symbol.lower()}_klines_processed"
-
-        query = f'''
-        SELECT * FROM {table_name} 
-        WHERE timeframe = %s
-        '''
-        params = [timeframe]
-
-        if start_time:
-            query += ' AND open_time >= %s'
-            params.append(start_time)
-        if end_time:
-            query += ' AND open_time <= %s'
-            params.append(end_time)
-
-        query += ' ORDER BY open_time DESC LIMIT %s'
-        params.append(limit)
-
-        try:
-            self.cursor.execute(query, params)
-            rows = self.cursor.fetchall()
-            if not rows:
-                return pd.DataFrame()
-            df = pd.DataFrame(rows)
-            return df
-        except psycopg2.Error as e:
-            print(f"Помилка отримання оброблених свічок для {symbol}: {e}")
-            return pd.DataFrame()
-
-
 
     def get_volume_profile(self, symbol, timeframe, time_bucket=None, start_time=None, end_time=None, limit=100):
         """Отримує профіль об'єму для валюти"""
@@ -1328,17 +1215,7 @@ class DatabaseManager:
             return False
 
     def save_data_transformations(self, model_id: int, transformations: List[Dict]) -> bool:
-        """
-        Збереження інформації про перетворення даних.
 
-        Args:
-            model_id: ID моделі
-            transformations: Список словників з інформацією про перетворення
-                            [{'type': 'log', 'params': {}, 'order': 1}, ...]
-
-        Returns:
-            Успішність операції
-        """
         try:
             conn = self.conn()
             with conn.cursor() as cursor:
@@ -1365,15 +1242,7 @@ class DatabaseManager:
             return False
 
     def get_model_by_key(self, model_key: str) -> Optional[Dict]:
-        """
-        Отримання інформації про модель за ключем.
 
-        Args:
-            model_key: Ключ моделі
-
-        Returns:
-            Словник з інформацією про модель або None
-        """
         try:
             conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
@@ -1388,15 +1257,7 @@ class DatabaseManager:
             return None
 
     def get_model_parameters(self, model_id: int) -> Dict:
-        """
-        Отримання параметрів моделі.
 
-        Args:
-            model_id: ID моделі
-
-        Returns:
-            Словник параметрів моделі
-        """
         try:
             conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
@@ -1414,16 +1275,7 @@ class DatabaseManager:
             return {}
 
     def get_model_metrics(self, model_id: int, test_date: datetime = None) -> Dict:
-        """
-        Отримання метрик ефективності моделі.
 
-        Args:
-            model_id: ID моделі
-            test_date: Дата тестування (якщо None, повертаються всі метрики)
-
-        Returns:
-            Словник метрик моделі
-        """
         try:
             conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
@@ -1458,17 +1310,7 @@ class DatabaseManager:
 
     def get_model_forecasts(self, model_id: int, start_date: datetime = None,
                             end_date: datetime = None) -> pd.DataFrame:
-        """
-        Отримання прогнозів моделі.
 
-        Args:
-            model_id: ID моделі
-            start_date: Початкова дата прогнозів (якщо None, від найранішого)
-            end_date: Кінцева дата прогнозів (якщо None, до найпізнішого)
-
-        Returns:
-            DataFrame з прогнозами та довірчими інтервалами
-        """
         try:
             conn = self.conn()
             query = """SELECT forecast_date, forecast_value, lower_bound, upper_bound, confidence_level
@@ -1495,15 +1337,7 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def load_model_binary(self, model_id: int) -> Any:
-        """
-        Завантаження серіалізованої моделі з бази даних.
 
-        Args:
-            model_id: ID моделі
-
-        Returns:
-            Десеріалізований об'єкт моделі або None
-        """
         try:
             conn = self.conn()
             with conn.cursor() as cursor:
@@ -1521,15 +1355,7 @@ class DatabaseManager:
             return None
 
     def get_data_transformations(self, model_id: int) -> List[Dict]:
-        """
-        Отримання інформації про перетворення даних.
 
-        Args:
-            model_id: ID моделі
-
-        Returns:
-            Список словників з інформацією про перетворення
-        """
         try:
             conn = self.conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:

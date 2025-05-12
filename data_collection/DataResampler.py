@@ -33,6 +33,144 @@ class DataResampler:
 
         return None
 
+    def detect_interval(self, data: pd.DataFrame) -> str:
+
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.error("DataFrame повинен мати DatetimeIndex для визначення інтервалу")
+            return None
+
+        if len(data) < 2:
+            self.logger.error("Потрібно щонайменше 2 точки даних для визначення інтервалу")
+            return None
+
+        # Обчислюємо різницю в часі між сусідніми індексами
+        time_diffs = data.index.to_series().diff().dropna()
+
+        # Визначаємо найбільш поширену різницю (моду)
+        from collections import Counter
+        counter = Counter(time_diffs)
+        most_common_diff = counter.most_common(1)[0][0]
+
+        # Перетворюємо в загальні одиниці виміру (секунди)
+        diff_seconds = most_common_diff.total_seconds()
+
+        # Визначаємо інтервал на основі кількості секунд
+        if diff_seconds < 60:
+            interval = f"{int(diff_seconds)}s"
+        elif diff_seconds < 3600:
+            minutes = int(diff_seconds / 60)
+            interval = f"{minutes}m"
+        elif diff_seconds < 86400:
+            hours = int(diff_seconds / 3600)
+            interval = f"{hours}h"
+        elif diff_seconds < 604800:
+            days = int(diff_seconds / 86400)
+            interval = f"{days}d"
+        elif diff_seconds < 2592000:
+            weeks = int(diff_seconds / 604800)
+            interval = f"{weeks}w"
+        else:
+            months = max(1, int(diff_seconds / 2592000))
+            interval = f"{months}M"
+
+        self.logger.info(f"Визначений інтервал даних: {interval}")
+
+        # Зберігаємо результат для подальшого використання
+        self.original_data_map['detected_interval'] = interval
+        return interval
+
+    def auto_resample(self, data: pd.DataFrame, target_interval: str = None,
+                      scaling_factor: int = None) -> pd.DataFrame:
+
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.error("DataFrame повинен мати DatetimeIndex для ресемплінгу")
+            return data
+
+        # Визначаємо поточний інтервал
+        current_interval = self.detect_interval(data)
+        if not current_interval:
+            self.logger.error("Не вдалося визначити поточний інтервал даних")
+            return data
+
+        # Якщо цільовий інтервал не задано, використовуємо scaling_factor
+        if target_interval is None:
+            if scaling_factor is None:
+                # За замовчуванням множимо інтервал на 4
+                scaling_factor = 4
+                self.logger.info(f"Використовується масштабуючий коефіцієнт за замовчуванням: {scaling_factor}")
+
+            import re
+            match = re.match(r'(\d+)([smhdwM])', current_interval)
+            if not match:
+                self.logger.error(f"Неправильний формат поточного інтервалу: {current_interval}")
+                return data
+
+            number, unit = match.groups()
+            number = int(number) * scaling_factor
+            target_interval = f"{number}{unit}"
+            self.logger.info(f"Обчислений цільовий інтервал: {target_interval}")
+
+        # Здійснюємо ресемплінг
+        self.logger.info(f"Виконується зміна інтервалу: {current_interval} -> {target_interval}")
+        resampled_data = self.resample_data(data, target_interval)
+
+        # Зберігаємо інформацію про трансформацію
+        self.original_data_map['auto_resample_info'] = {
+            'original_interval': current_interval,
+            'target_interval': target_interval,
+            'scaling_factor': scaling_factor,
+            'original_shape': data.shape,
+            'resampled_shape': resampled_data.shape
+        }
+
+        return resampled_data
+
+    def suggest_intervals(self, data: pd.DataFrame, max_suggestions: int = 5) -> list:
+
+        current_interval = self.detect_interval(data)
+        if not current_interval:
+            return []
+
+        import re
+        match = re.match(r'(\d+)([smhdwM])', current_interval)
+        if not match:
+            return []
+
+        number, unit = match.groups()
+        number = int(number)
+
+        # Стандартні множники для різних одиниць
+        standard_multipliers = {
+            's': [5, 10, 15, 30, 60],
+            'm': [5, 10, 15, 30, 60],
+            'h': [2, 3, 4, 6, 8, 12, 24],
+            'd': [2, 3, 5, 7, 10, 14, 30],
+            'w': [2, 3, 4],
+            'M': [2, 3, 6, 12]
+        }
+
+        multipliers = standard_multipliers.get(unit, [2, 3, 4, 5])
+
+        # Формуємо список рекомендацій
+        suggestions = []
+        for multiplier in multipliers:
+            new_value = number * multiplier
+
+            if unit == 's' and new_value >= 60:
+                suggestions.append(f"{new_value // 60}m")
+            elif unit == 'm' and new_value >= 60:
+                suggestions.append(f"{new_value // 60}h")
+            elif unit == 'h' and new_value >= 24:
+                suggestions.append(f"{new_value // 24}d")
+            elif unit == 'd' and new_value >= 7 and new_value % 7 == 0:
+                suggestions.append(f"{new_value // 7}w")
+            elif unit == 'd' and new_value >= 30:
+                suggestions.append(f"{new_value // 30}M")
+            else:
+                suggestions.append(f"{new_value}{unit}")
+
+        return suggestions[:max_suggestions]
+
     def _optimize_aggregation_dict(self, data: pd.DataFrame, store_column_map: bool = False) -> Dict:
         """
         Формує словник агрегацій на основі типу колонок і їх назв (уніфікована логіка).

@@ -4,7 +4,7 @@ from datetime import datetime
 from data.db import DatabaseManager
 from collections import defaultdict
 import re
-from utils.config import *
+from utils.config import CRYPTO_KEYWORDS
 
 class NewsStorage:
     """
@@ -20,7 +20,7 @@ class NewsStorage:
             db_manager: An instance of DatabaseManager for database operations
             logger: Optional logger for logging
         """
-        self.db_manager = DatabaseManager()
+        self.db_manager = db_manager
 
         # Configure logger
         if logger:
@@ -155,13 +155,25 @@ class NewsStorage:
                 self.logger.error(f"Could not get/create source or category for {news_item['title']}")
                 return None
 
-            # Prepare article data
+            # Safely extract values from news_item with proper fallbacks
+            scraped_at = news_item.get('scraped_at', datetime.now())
+            # Check if scraped_at is a string and convert if needed
+            if isinstance(scraped_at, str):
+                try:
+                    # Try to parse the string to datetime
+                    scraped_at = datetime.fromisoformat(scraped_at.replace('Z', '+00:00'))
+                except ValueError:
+                    # Fallback to current time if parsing fails
+                    scraped_at = datetime.now()
+                    self.logger.warning(f"Failed to parse scraped_at date for {news_item['title']}, using current time")
+
+            # Prepare article data with safe access to optional fields
             article_data = {
                 'title': news_item['title'],
                 'summary': news_item['summary'],
                 'link': news_item['link'],
                 'published_at': news_item['published_at'],
-                'scraped_at': news_item.get('scraped_at', datetime.now()),
+                'scraped_at': scraped_at,
                 'source_id': source_id,
                 'category_id': category_id,
                 'score': news_item.get('score'),
@@ -252,4 +264,3 @@ class NewsStorage:
 
         # Store the converted data
         return self.store_news_batch(news_dicts)
-

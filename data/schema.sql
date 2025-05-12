@@ -77,41 +77,6 @@ CREATE TABLE IF NOT EXISTS logs (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблиця для оброблених свічок BTC
-CREATE TABLE IF NOT EXISTS btc_klines_processed (
-    id SERIAL PRIMARY KEY,
-    timeframe TEXT NOT NULL,
-    open_time TIMESTAMP NOT NULL,
-
-    -- cleaned and normalized prices
-    open NUMERIC NOT NULL,
-    high NUMERIC NOT NULL,
-    low NUMERIC NOT NULL,
-    close NUMERIC NOT NULL,
-    volume NUMERIC NOT NULL,
-
-    -- engineered features
-    price_zscore NUMERIC,
-    volume_zscore NUMERIC,
-    volatility NUMERIC,
-    trend NUMERIC,
-
-    -- time features
-    hour INTEGER,
-    day_of_week INTEGER,
-    is_weekend BOOLEAN,
-    session TEXT, -- 'Asia', 'Europe', 'US', etc.
-
-    -- flags
-    is_anomaly BOOLEAN DEFAULT FALSE,
-    has_missing BOOLEAN DEFAULT FALSE,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, open_time)
-);
-
-CREATE INDEX IF NOT EXISTS idx_btc_klines_processed_time ON btc_klines_processed(timeframe, open_time);
-
 -- Таблиця для профілю об'єму BTC
 CREATE TABLE IF NOT EXISTS btc_volume_profile (
     id SERIAL PRIMARY KEY,
@@ -126,22 +91,6 @@ CREATE TABLE IF NOT EXISTS btc_volume_profile (
 );
 
 CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket);
-
--- Таблиця для логування обробки даних
-CREATE TABLE IF NOT EXISTS data_processing_log (
-    id SERIAL PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    data_type TEXT NOT NULL, -- 'klines', 'orderbook', 'volume_profile'
-    timeframe TEXT,
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NOT NULL,
-    status TEXT NOT NULL, -- 'success', 'failed'
-    steps TEXT, -- JSON список застосованих кроків: ["clean", "normalize", "fill", ...]
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-
 
 -- Таблиця для профілю об'єму ETH
 CREATE TABLE IF NOT EXISTS eth_volume_profile (
@@ -162,7 +111,7 @@ CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timefram
 CREATE TABLE IF NOT EXISTS sol_volume_profile (
     id SERIAL PRIMARY KEY,
     timeframe TEXT NOT NULL,
-    time_bucket TIMESTAMP NOT NULL, -- наприклад, кожна година або день
+    time_bucket TIMESTAMP NOT NULL,
     price_bin_start NUMERIC NOT NULL,
     price_bin_end NUMERIC NOT NULL,
     volume NUMERIC NOT NULL,
@@ -173,75 +122,6 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
 
 CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
 
--- Таблиця для оброблених свічок ETH
-CREATE TABLE IF NOT EXISTS eth_klines_processed (
-    id SERIAL PRIMARY KEY,
-    timeframe TEXT NOT NULL,
-    open_time TIMESTAMP NOT NULL,
-
-    -- cleaned and normalized prices
-    open NUMERIC NOT NULL,
-    high NUMERIC NOT NULL,
-    low NUMERIC NOT NULL,
-    close NUMERIC NOT NULL,
-    volume NUMERIC NOT NULL,
-
-    -- engineered features
-    price_zscore NUMERIC,
-    volume_zscore NUMERIC,
-    volatility NUMERIC,
-    trend NUMERIC,
-
-    -- time features
-    hour INTEGER,
-    day_of_week INTEGER,
-    is_weekend BOOLEAN,
-    session TEXT, -- 'Asia', 'Europe', 'US', etc.
-
-    -- flags
-    is_anomaly BOOLEAN DEFAULT FALSE,
-    has_missing BOOLEAN DEFAULT FALSE,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, open_time)
-);
-
-CREATE INDEX IF NOT EXISTS idx_eth_klines_processed_time ON eth_klines_processed(timeframe, open_time);
-
--- Таблиця для оброблених свічок SOL
-CREATE TABLE IF NOT EXISTS sol_klines_processed (
-    id SERIAL PRIMARY KEY,
-    timeframe TEXT NOT NULL,
-    open_time TIMESTAMP NOT NULL,
-
-    -- cleaned and normalized prices
-    open NUMERIC NOT NULL,
-    high NUMERIC NOT NULL,
-    low NUMERIC NOT NULL,
-    close NUMERIC NOT NULL,
-    volume NUMERIC NOT NULL,
-
-    -- engineered features
-    price_zscore NUMERIC,
-    volume_zscore NUMERIC,
-    volatility NUMERIC,
-    trend NUMERIC,
-
-    -- time features
-    hour INTEGER,
-    day_of_week INTEGER,
-    is_weekend BOOLEAN,
-    session TEXT, -- 'Asia', 'Europe', 'US', etc.
-
-    -- flags
-    is_anomaly BOOLEAN DEFAULT FALSE,
-    has_missing BOOLEAN DEFAULT FALSE,
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, open_time)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(timeframe, open_time);
 
 -- Таблиця для зберігання джерел новин
 CREATE TABLE IF NOT EXISTS news_sources (
