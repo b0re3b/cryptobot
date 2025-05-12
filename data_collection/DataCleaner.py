@@ -31,6 +31,7 @@ class DataCleaner:
         return logger
 
     def _fix_invalid_high_low(self, data: pd.DataFrame) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в _fix_invalid_high_low: {list(data.columns)}")
         """
         Виправляє некоректні співвідношення між high і low значеннями.
         Враховує особливість криптовалютних даних, де high та low можуть бути рівними.
@@ -79,17 +80,7 @@ class DataCleaner:
 
     def _remove_outliers(self, data: pd.DataFrame, std_dev: float = 3.0,
                          price_pct_threshold: float = 0.5) -> pd.DataFrame:
-        """
-        Видаляє аномальні значення, враховуючи високу волатильність криптовалютного ринку.
-
-        Args:
-            data: DataFrame з даними
-            std_dev: Множник для IQR при визначенні викидів
-            price_pct_threshold: Поріг для % зміни ціни як додаткова перевірка (50% за замовчуванням)
-
-        Returns:
-            DataFrame без аномальних значень
-        """
+        self.logger.info(f"Наявні колонки в _remove_outliers: {list(data.columns)}")
         self.logger.info("Видалення аномальних значень...")
         result = data.copy()
 
@@ -152,135 +143,165 @@ class DataCleaner:
         return result
 
     def _fix_invalid_values(self, data: pd.DataFrame, essential_cols: List[str]) -> pd.DataFrame:
-        """Виправляє неприпустимі значення: від'ємні ціни, нульові high/low та аномальні об'єми"""
+        # Створюємо копію даних для безпечної модифікації
         result = data.copy()
+        self.logger.info(f"Наявні колонки в _fix_invalid_values: {list(data.columns)}")
 
-        # Перевірка на від'ємні ціни
+        # Додаємо колонку для відстеження змін у даних
+        result['data_cleaning_flags'] = 'original'
+
+        def safe_replace_values(df: pd.DataFrame, column: str, mask: pd.Series, replacement_value) -> pd.DataFrame:
+            self.logger.info(f"Наявні колонки в safe_replace_values: {list(data.columns)}")
+
+            # Зберігаємо оригінальні значення для логування
+            original_values = df.loc[mask, column].copy()
+
+            # Виконуємо заміну
+            df.loc[mask, column] = replacement_value
+
+            # Логування змін
+            if len(original_values) > 0:
+                self.logger.warning(
+                    f"Modification in column '{column}': "
+                    f"Count={len(original_values)}, "
+                    f"Replacement Value={replacement_value}"
+                )
+
+                # Додаткове логування оригінальних значень при DEBUG рівні
+                if self.logger.isEnabledFor(logging.DEBUG):
+                    self.logger.debug(
+                        f"Original replaced values in '{column}': {original_values.tolist()[:10]}"
+                        f"{'...' if len(original_values) > 10 else ''}"
+                    )
+
+            return df
+
+        # Список колонок для перевірки цін
         price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in result.columns]
+
+        # Перевірка та виправлення від'ємних цін
         for col in price_cols:
+            # Знаходимо від'ємні значення
             negative_prices = result[col] < 0
+
             if negative_prices.any():
-                negative_count = negative_prices.sum()
-                self.logger.warning(f"Знайдено {negative_count} від'ємних значень у колонці {col}")
-
-                # Замість використання абсолютних значень, позначаємо ці дані як проблемні та заміняємо їх медіаною колонки
-                if result[col].median() > 0:  # Переконуємося, що медіана не є від'ємною або нульовою
-                    result.loc[negative_prices, col] = result[col].median()
-                    self.logger.info(
-                        f"Від'ємні значення у колонці {col} замінені на медіану колонки: {result[col].median()}")
+                # Вибираємо стратегію заміни
+                if result[col].median() > 0:
+                    # Використовуємо медіану якщо вона додатня
+                    replacement_value = result[col].median()
+                    replacement_method = 'median'
                 else:
-                    # Якщо медіана теж некоректна, використовуємо останнє коректне значення або невелике додатне число
-                    result.loc[negative_prices, col] = result[col].abs().mean() or 0.0001
-                    self.logger.info(
-                        f"Від'ємні значення у колонці {col} замінені на середнє абсолютних значень: {result[col].abs().mean() or 0.0001}")
+                    # Абсолютне середнє або мале додатнє число
+                    replacement_value = max(result[col].abs().mean(), 0.0001)
+                    replacement_method = 'absolute_mean'
 
-            # Перевірка на нульові значення high/low, що нетипово для криптовалют
-            zero_prices = result[col] == 0
-            if zero_prices.any() and col in ['high', 'low']:
-                zero_count = zero_prices.sum()
-                self.logger.warning(f"Знайдено {zero_count} нульових значень у колонці {col}")
+                # Безпечна заміна значень
+                result = safe_replace_values(result, col, negative_prices, replacement_value)
 
-                # Для high використовуємо максимум із open та close
-                if col == 'high':
-                    # Перевіряємо, що хоча б одне значення не нульове
-                    mask = (result.loc[zero_prices, 'open'] > 0) | (result.loc[zero_prices, 'close'] > 0)
-                    result.loc[zero_prices & mask, col] = result.loc[zero_prices & mask, ['open', 'close']].max(axis=1)
+                # Позначаємо змінені рядки
+                result.loc[negative_prices, 'data_cleaning_flags'] = f'negative_{col}_replaced_{replacement_method}'
 
-                    # Якщо обидва значення нульові, використовуємо медіану або мінімальне ненульове значення колонки
-                    still_zero = zero_prices & ~mask
+        # Перевірка та виправлення нульових цін для high/low
+        for col in ['high', 'low']:
+            if col in result.columns:
+                zero_prices = result[col] == 0
+
+                if zero_prices.any():
+                    # Намагаємося замінити на розумні значення з інших колонок
+                    if col == 'high':
+                        # Використовуємо максимум з open та close
+                        replacement_mask = (result.loc[zero_prices, 'open'] > 0) | (
+                                    result.loc[zero_prices, 'close'] > 0)
+                        replacement_values = result.loc[zero_prices & replacement_mask, ['open', 'close']].max(axis=1)
+                    elif col == 'low':
+                        # Використовуємо мінімум з open та close
+                        replacement_mask = (result.loc[zero_prices, 'open'] > 0) | (
+                                    result.loc[zero_prices, 'close'] > 0)
+                        replacement_values = result.loc[zero_prices & replacement_mask, ['open', 'close']].min(axis=1)
+
+                    # Безпечна заміна значень
+                    if not replacement_values.empty:
+                        result.loc[zero_prices & replacement_mask, col] = replacement_values
+                        result.loc[
+                            zero_prices & replacement_mask, 'data_cleaning_flags'] = f'zero_{col}_replaced_from_open_close'
+
+                    # Якщо залишилися нульові значення
+                    still_zero = result[col] == 0
                     if still_zero.any():
+                        # Використовуємо медіану або мінімальне додатне значення
                         if (result[col] > 0).any():
-                            result.loc[still_zero, col] = result[result[col] > 0][col].median()
+                            replacement_value = result[result[col] > 0][col].median()
                         else:
-                            result.loc[still_zero, col] = 0.0001  # Мінімальне додатне значення як запасний варіант
-                        self.logger.info(
-                            f"Нульові значення в колонці {col} з нульовими open/close замінені на медіану або мінімальне додатне значення")
+                            replacement_value = 0.0001
 
-                # Для low використовуємо мінімум із open та close
-                elif col == 'low':
-                    # Перевіряємо, що хоча б одне значення не нульове
-                    mask = (result.loc[zero_prices, 'open'] > 0) | (result.loc[zero_prices, 'close'] > 0)
-                    result.loc[zero_prices & mask, col] = result.loc[zero_prices & mask, ['open', 'close']].min(axis=1)
+                        result = safe_replace_values(result, col, still_zero, replacement_value)
+                        result.loc[still_zero, 'data_cleaning_flags'] = f'zero_{col}_replaced_median'
 
-                    # Якщо обидва значення нульові, використовуємо медіану або мінімальне ненульове значення колонки
-                    still_zero = zero_prices & ~mask
-                    if still_zero.any():
-                        if (result[col] > 0).any():
-                            result.loc[still_zero, col] = result[result[col] > 0][col].median()
-                        else:
-                            result.loc[still_zero, col] = 0.0001  # Мінімальне додатне значення як запасний варіант
-                        self.logger.info(
-                            f"Нульові значення в колонці {col} з нульовими open/close замінені на медіану або мінімальне додатне значення")
-
-                self.logger.info(f"Нульові значення у колонці {col} виправлені")
-
-        # Перевірка на від'ємні об'єми
+        # Перевірка та виправлення об'ємів
         if 'volume' in result.columns:
+            # Від'ємні об'єми
             negative_volumes = result['volume'] < 0
             if negative_volumes.any():
-                negative_count = negative_volumes.sum()
-                self.logger.warning(f"Знайдено {negative_count} від'ємних значень об'єму")
-
-                # Замінюємо від'ємні значення на медіану або невелике додатне значення
+                # Вибираємо стратегію заміни
                 if result['volume'].median() > 0:
-                    result.loc[negative_volumes, 'volume'] = result['volume'].median()
-                    self.logger.info(f"Від'ємні значення об'єму замінені на медіану: {result['volume'].median()}")
+                    replacement_value = result['volume'].median()
+                    replacement_method = 'median'
                 else:
-                    result.loc[negative_volumes, 'volume'] = result['volume'].abs().mean() or 0.01
-                    self.logger.info(
-                        f"Від'ємні значення об'єму замінені на середнє абсолютних значень: {result['volume'].abs().mean() or 0.01}")
+                    replacement_value = max(result['volume'].abs().mean(), 0.01)
+                    replacement_method = 'absolute_mean'
 
-            # Перевірка на нульові об'єми
+                # Безпечна заміна значень
+                result = safe_replace_values(result, 'volume', negative_volumes, replacement_value)
+                result.loc[negative_volumes, 'data_cleaning_flags'] = f'negative_volume_replaced_{replacement_method}'
+
+            # Нульові об'єми
             zero_volumes = result['volume'] == 0
             if zero_volumes.any():
-                zero_count = zero_volumes.sum()
-                self.logger.warning(f"Знайдено {zero_count} нульових значень об'єму")
-
-                # Замінюємо нульові значення мінімальним ненульовим об'ємом або невеликим додатним значенням
+                # Намагаємося замінити на мінімальний ненульовий об'єм
                 if (result['volume'] > 0).any():
-                    min_volume = result[result['volume'] > 0]['volume'].min()
-                    result.loc[zero_volumes, 'volume'] = min_volume
-                    self.logger.info(f"Нульові значення об'єму замінені на мінімальний ненульовий об'єм: {min_volume}")
+                    replacement_value = result[result['volume'] > 0]['volume'].min()
+                    replacement_method = 'min_nonzero'
                 else:
-                    result.loc[zero_volumes, 'volume'] = 0.01
-                    self.logger.info("Нульові значення об'єму замінені на 0.01")
+                    replacement_value = 0.01
+                    replacement_method = 'small_positive'
 
-            # Перевірка на аномально великі об'єми (можливі помилки даних)
-            if len(result) > 10:  # потрібно достатньо даних для розрахунку
+                # Безпечна заміна значень
+                result = safe_replace_values(result, 'volume', zero_volumes, replacement_value)
+                result.loc[zero_volumes, 'data_cleaning_flags'] = f'zero_volume_replaced_{replacement_method}'
+
+            # Перевірка аномально великих об'ємів
+            if len(result) > 10:
                 volume_mean = result['volume'].mean()
                 volume_std = result['volume'].std()
-                abnormal_volume = result['volume'] > (volume_mean + 10 * volume_std)  # 10 стандартних відхилень
+                abnormal_volume = result['volume'] > (volume_mean + 10 * volume_std)
 
                 if abnormal_volume.any():
-                    abnormal_count = abnormal_volume.sum()
-                    self.logger.warning(f"Знайдено {abnormal_count} аномально великих значень об'єму")
+                    # Логуємо аномальні об'єми, але не змінюємо
+                    abnormal_indexes = result.index[abnormal_volume].tolist()
+                    self.logger.warning(
+                        f"Detected {len(abnormal_indexes)} abnormal volume records. "
+                        f"Indexes: {abnormal_indexes[:10]}{'...' if len(abnormal_indexes) > 10 else ''}"
+                    )
+                    result.loc[abnormal_volume, 'data_cleaning_flags'] = 'abnormal_volume_detected'
 
-                    # Відмічаємо їх для додаткової перевірки, але не змінюємо автоматично
-                    # Криптовалютні ринки можуть мати легітимні великі скачки об'єму при значних подіях
-                    if self.logger.isEnabledFor(logging.DEBUG):
-                        abnormal_indexes = result.index[abnormal_volume].tolist()
-                        self.logger.debug(
-                            f"Індекси аномальних об'ємів: {abnormal_indexes[:10]}{'...' if len(abnormal_indexes) > 10 else ''}")
-
-        # Перевірка логічного відношення значень high/low/open/close
+        # Перевірка логічної послідовності цін
         if all(col in result.columns for col in ['high', 'low', 'open', 'close']):
-            # Перевіряємо, що high завжди найбільше значення
+            # Перевірка, що high завжди найбільше значення
             invalid_high = result['high'] < result[['open', 'close', 'low']].max(axis=1)
             if invalid_high.any():
-                self.logger.warning(f"Знайдено {invalid_high.sum()} записів, де high менше за open, close або low")
                 result.loc[invalid_high, 'high'] = result.loc[invalid_high, ['open', 'close', 'low']].max(axis=1)
-                self.logger.info("Виправлено невалідні значення high")
+                result.loc[invalid_high, 'data_cleaning_flags'] = 'invalid_high_corrected'
 
-            # Перевіряємо, що low завжди найменше значення
+            # Перевірка, що low завжди найменше значення
             invalid_low = result['low'] > result[['open', 'close']].min(axis=1)
             if invalid_low.any():
-                self.logger.warning(f"Знайдено {invalid_low.sum()} записів, де low більше за open або close")
                 result.loc[invalid_low, 'low'] = result.loc[invalid_low, ['open', 'close']].min(axis=1)
-                self.logger.info("Виправлено невалідні значення low")
+                result.loc[invalid_low, 'data_cleaning_flags'] = 'invalid_low_corrected'
 
         return result
 
     def add_crypto_specific_features(self, data: pd.DataFrame) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в add_crypto_specific_features: {list(data.columns)}")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для додавання крипто-специфічних ознак")
@@ -350,6 +371,7 @@ class DataCleaner:
                    add_sessions: bool = False,
                    add_crypto_features: bool = False,  # Новий параметр для крипто-специфічних ознак
                    crypto_volatility_tolerance: float = 0.5) -> pd.DataFrame:  # Параметр для врахування волатильності криптовалют
+        self.logger.info(f"Наявні колонки в clean_data: {list(data.columns)}")
 
         self.logger.info(f"Початок комплексного очищення даних для криптовалютних таймсерій")
 
@@ -493,6 +515,8 @@ class DataCleaner:
 
     def _validate_normalized_data(self, data: pd.DataFrame, essential_cols: List[str]) -> bool:
         """Перевіряє коректність нормалізованих даних"""
+        self.logger.info(f"Наявні колонки в _validate_normalized_data: {list(data.columns)}")
+
         # Перевірка на NaN
         for col in essential_cols:
             if col not in data.columns:
@@ -525,6 +549,7 @@ class DataCleaner:
         
     def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
                                 volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
+        self.logger.info(f"Наявні колонки в validate_data_integrity: {list(data.columns)}")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для перевірки цілісності")
@@ -583,6 +608,7 @@ class DataCleaner:
         return issues
 
     def _remove_duplicates(self, data: pd.DataFrame) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в _remove_duplicates: {list(data.columns)}")
 
         if not isinstance(data.index, pd.DatetimeIndex):
             return data
@@ -594,6 +620,7 @@ class DataCleaner:
 
         return data
     def _prepare_dataframe(self, data: pd.DataFrame) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в _prepare_dataframe: {list(data.columns)}")
 
         self.logger.info(f"Підготовка DataFrame: {data.shape[0]} рядків, {data.shape[1]} стовпців")
         result = data.copy()
@@ -628,6 +655,8 @@ class DataCleaner:
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               symbol: str = None, timeframe: str = None,
                               fetch_missing: bool = True) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в handle_missing_values: {list(data.columns)}")
+
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для обробки відсутніх значень")
             return data if data is not None else pd.DataFrame()
@@ -746,6 +775,7 @@ class DataCleaner:
 
     def _detect_missing_periods(self, data: pd.DataFrame, expected_diff: pd.Timedelta) -> List[
         Tuple[datetime, datetime]]:
+        self.logger.info(f"Наявні колонки в _detect_missing_periods: {list(data.columns)}")
 
         if not isinstance(data.index, pd.DatetimeIndex) or data.empty:
             return []
@@ -779,6 +809,8 @@ class DataCleaner:
     def _fetch_missing_data_from_binance(self, data: pd.DataFrame,
                                          missing_periods: List[Tuple[datetime, datetime]],
                                          symbol: str, interval: str) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в _fetch_missing_data_from_binance: {list(data.columns)}")
+
         if data is None or data.empty or not missing_periods:
             self.logger.warning("Отримано порожній DataFrame або немає missing_periods для заповнення даними")
             return pd.DataFrame()
@@ -867,6 +899,8 @@ class DataCleaner:
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
                        columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[
         pd.DataFrame, Optional[Dict]]:
+        self.logger.info(f"Наявні колонки в normalize_data: {list(data.columns)}")
+
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для нормалізації")
             return (data if data is not None else pd.DataFrame()), None
@@ -1067,6 +1101,7 @@ class DataCleaner:
 
     def _normalize_single_column_non_negative(self, df: pd.DataFrame, column: str, method: str,
                                               scaler_meta: Dict) -> pd.Series:
+
         """Нормалізує окрему колонку з використанням вказаного методу, гарантуючи невід'ємні значення."""
         from sklearn.impute import SimpleImputer
 
@@ -1134,6 +1169,8 @@ class DataCleaner:
 
     def add_time_features_safely(self, data: pd.DataFrame, cyclical: bool = True,
                                  add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в add_time_features_safely: {list(data.columns)}")
+
         """Додає часові ознаки безпечно, без перезапису існуючих колонок"""
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для додавання часових ознак")
@@ -1374,6 +1411,7 @@ class DataCleaner:
 
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в remove_duplicate_timestamps: {list(data.columns)}")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для обробки дублікатів")
@@ -1425,6 +1463,7 @@ class DataCleaner:
     def filter_by_time_range(self, data: pd.DataFrame,
                              start_time: Optional[Union[str, datetime]] = None,
                              end_time: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в filter_by_time_range: {list(data.columns)}")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для фільтрації")

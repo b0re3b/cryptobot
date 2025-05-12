@@ -5558,7 +5558,7 @@ class DatabaseManager:
             return None
 
     # ========== Методи для news_sources ==========
-    def save_source(self, source_name: str, base_url: str, is_active: bool = True) -> int:
+    def save_source(self, source_name: str, base_url: str, is_active: bool = True) -> Any | None:
         """Зберігає джерело новин і повертає його ID"""
         query = """
                 INSERT INTO news_sources (source_name, base_url, is_active)
@@ -5602,7 +5602,7 @@ class DatabaseManager:
 
     # ========== Методи для news_categories ==========
     def save_category(self, source_id: int, category_name: str, category_url_path: Optional[str] = None,
-                      is_active: bool = True) -> int:
+                      is_active: bool = True) -> Any | None:
         """Зберігає категорію новин і повертає її ID"""
         query = """
                 INSERT INTO news_categories (source_id, category_name, category_url_path, is_active)
@@ -5655,7 +5655,7 @@ class DatabaseManager:
                      category_id: Optional[int] = None, summary: Optional[str] = None,
                      content: Optional[str] = None, published_at: Optional[datetime] = None,
                      score: Optional[int] = None, upvote_ratio: Optional[float] = None,
-                     num_comments: Optional[int] = None) -> int:
+                     num_comments: Optional[int] = None) -> Any | None:
         """Зберігає новинну статтю і повертає її ID"""
         query = """
                 INSERT INTO news_articles (title, summary, content, link, source_id, category_id,
@@ -5723,7 +5723,7 @@ class DatabaseManager:
                                 positive_score: float, negative_score: float,
                                 neutral_score: float, sentiment_magnitude: float,
                                 sentiment_label: str, confidence: float,
-                                model_version: str) -> int:
+                                model_version: str) -> Any | None:
         """Зберігає аналіз настроїв для статті"""
         query = """
                 INSERT INTO news_sentiment_analysis (article_id, sentiment_score, positive_score,
@@ -5763,7 +5763,7 @@ class DatabaseManager:
         return None
 
     # ========== Методи для article_mentioned_coins ==========
-    def save_mentioned_coin(self, article_id: int, symbol: str, mention_count: int = 1) -> int:
+    def save_mentioned_coin(self, article_id: int, symbol: str, mention_count: int = 1) -> Any | None:
         """Зберігає згадку криптовалюти в статті"""
         query = """
                 INSERT INTO article_mentioned_coins (article_id, symbol, mention_count)
@@ -5802,7 +5802,7 @@ class DatabaseManager:
 
     # ========== Методи для news_topics ==========
     def save_topic(self, topic_name: str, is_trending: bool = False,
-                   importance_score: Optional[float] = None) -> int:
+                   importance_score: Optional[float] = None) -> Any | None:
         """Зберігає тему новин і повертає її ID"""
         query = """
                 INSERT INTO news_topics (topic_name, is_trending, importance_score)
@@ -5838,7 +5838,7 @@ class DatabaseManager:
         return None
 
     # ========== Методи для article_topics ==========
-    def save_article_topic(self, article_id: int, topic_id: int, weight: float) -> int:
+    def save_article_topic(self, article_id: int, topic_id: int, weight: float) -> Any | None:
         """Зберігає зв'язок статті з темою"""
         query = """
                 INSERT INTO article_topics (article_id, topic_id, weight)
@@ -5885,7 +5885,7 @@ class DatabaseManager:
     def save_news_sentiment_time_series(self, symbol: str, start_time: datetime,
                                    end_time: datetime, timeframe: str,
                                    sentiment_avg: float, news_count: int,
-                                   mentions_count: int) -> int:
+                                   mentions_count: int) -> Any | None:
         """Зберігає часовий ряд настроїв для криптовалюти"""
         query = """
                 INSERT INTO sentiment_time_series (symbol, start_time, end_time, timeframe,

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import logging
 import re
 import time
-import json
 from typing import List, Dict, Optional, Any, Callable
 from random import randint
 from dataclasses import dataclass
@@ -252,7 +251,7 @@ class NewsCollector:
         sentiment_score = None
         if self.sentiment_analyzer:
             text_to_analyze = f"{title} {summary}"
-            sentiment_score = self.NewsAnalyzer.analyze_sentiment(text_to_analyze)
+            sentiment_score = self.NewsAnalyzer.analyze_news_sentiment(text_to_analyze)
 
         # Get topics if topic models are available
         topics = None
@@ -649,7 +648,6 @@ class NewsCollector:
             'cryptobriefing': self.scrape_cryptobriefing,
             'cryptopanic': self.scrape_cryptopanic,
             'coinmarketcal': self.scrape_coinmarketcal,
-            'feedly': self.scrape_feedly,
             'newsnow': self.scrape_newsnow
         }
 

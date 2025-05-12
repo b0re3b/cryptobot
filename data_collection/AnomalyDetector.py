@@ -31,6 +31,8 @@ class AnomalyDetector:
     def _preprocess_data(self, data: pd.DataFrame, numeric_cols: List[str],
                          fill_method: str = 'median') -> pd.DataFrame:
         """Попередня обробка даних з врахуванням специфіки криптовалют."""
+        self.logger.info(f"Наявні колонки в _detect_robust_zscore_anomalies: {list(data.columns)}")
+        self.logger.info(f"Числові колонки для аналізу: {numeric_cols}")
         if data.empty or not numeric_cols:
             self.logger.warning("Порожні вхідні дані або відсутні числові колонки")
             return data
@@ -101,6 +103,8 @@ class AnomalyDetector:
                         threshold: float = 5.0, preprocess: bool = True,
                         fill_method: str = 'median', contamination: float = 0.05) -> Tuple[pd.DataFrame, List]:
         """Виявлення аномалій з використанням різних методів, оптимізовано для криптовалют."""
+        self.logger.info(f"Наявні колонки в detect_outliers: {list(data.columns)}")
+
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для виявлення аномалій")
             return pd.DataFrame(), []
@@ -226,6 +230,8 @@ class AnomalyDetector:
                                         threshold: float, anomalies: Dict[str, List],
                                         all_outlier_indices: set) -> None:
         """Виявлення аномалій за допомогою робастного Z-Score."""
+        self.logger.info(f"Наявні колонки в _detect_robust_zscore_anomalies: {list(data.columns)}")
+        self.logger.info(f"Числові колонки для аналізу: {numeric_cols}")
         # Відфільтруємо колонки з проблемами
         valid_cols = []
 
@@ -270,6 +276,8 @@ class AnomalyDetector:
                                      threshold: float, anomalies: Dict[str, List],
                                      all_outlier_indices: set) -> None:
         """Виявлення аномалій за методом IQR з адаптацією для криптовалют."""
+        self.logger.info(f"Наявні колонки в _detect_robust_iqr_anomalies: {list(data.columns)}")
+        self.logger.info(f"Числові колонки для аналізу: {numeric_cols}")
         for col in numeric_cols:
             if col not in data.columns:
                 continue
@@ -327,6 +335,8 @@ class AnomalyDetector:
                                            contamination: float, anomalies: Dict[str, List],
                                            all_outlier_indices: set) -> None:
         """Виявлення аномалій за допомогою Isolation Forest з оптимізацією для криптовалют."""
+        self.logger.info(f"Наявні колонки в _detect_isolation_forest_anomalies: {list(data.columns)}")
+        self.logger.info(f"Числові колонки для аналізу: {numeric_cols}")
         if not SKLEARN_AVAILABLE:
             self.logger.error("Для використання методу 'isolation_forest' необхідно встановити scikit-learn")
             return
@@ -405,6 +415,7 @@ class AnomalyDetector:
     def _detect_crypto_specific_anomalies(self, data: pd.DataFrame, threshold: float,
                                           anomalies: Dict[str, List], all_outlier_indices: set) -> None:
         """Спеціальний метод виявлення аномалій для криптовалютних даних."""
+        self.logger.info(f"Наявні колонки в _detect_crypto_specific_anomalies: {list(data.columns)}")
         # Перевірка наявності типових колонок для криптовалютних даних
         crypto_price_cols = [col for col in ['open', 'high', 'low', 'close'] if col in data.columns]
         volume_col = 'volume' if 'volume' in data.columns else None
@@ -608,6 +619,7 @@ class AnomalyDetector:
 
     def validate_datetime_index(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
         """Перевірка часового індексу на проблеми."""
+        self.logger.info(f"Наявні колонки в validate_datetime_index: {list(data.columns)}")
         if not isinstance(data.index, pd.DatetimeIndex):
             issues["not_datetime_index"] = True
             self.logger.warning("Індекс не є DatetimeIndex")
@@ -707,6 +719,7 @@ class AnomalyDetector:
     def validate_price_data(self, data: pd.DataFrame, price_jump_threshold: float,
                             issues: Dict[str, Any]) -> None:
         """Валідація цінових даних з урахуванням специфіки Binance (всі значення додатні)."""
+        self.logger.info(f"Наявні колонки в validate_price_data: {list(data.columns)}")
         # Створюємо копію для обробки
         processed_data = data.copy()
 
@@ -765,6 +778,7 @@ class AnomalyDetector:
     def validate_volume_data(self, data: pd.DataFrame, volume_anomaly_threshold: float,
                              issues: Dict[str, Any]) -> None:
         """Валідація даних об'єму з урахуванням специфіки Binance (всі значення додатні)."""
+        self.logger.info(f"Наявні колонки в validate_volume_data: {list(data.columns)}")
         # Створюємо копію для обробки
         processed_data = data.copy()
 
@@ -811,6 +825,7 @@ class AnomalyDetector:
 
     def validate_data_values(self, data: pd.DataFrame, issues: Dict[str, Any]) -> None:
         """Загальна валідація даних на відсутні та некоректні значення."""
+        self.logger.info(f"Наявні колонки в validate_data_values: {list(data.columns)}")
         # Перевірка на NaN значення
         na_counts = data.isna().sum()
         cols_with_na = na_counts[na_counts > 0].to_dict()
@@ -835,6 +850,7 @@ class AnomalyDetector:
                                  threshold: float = 3.0, preprocess: bool = True,
                                  fill_method: str = 'mean', contamination: float = 0.1) -> Tuple[pd.DataFrame, List]:
         """Виявлення аномалій з використанням різних методів."""
+        self.logger.info(f"Наявні колонки в detect_outliers_essemble: {list(data.columns)}")
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для виявлення аномалій")
             return pd.DataFrame(), []

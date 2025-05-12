@@ -20,7 +20,7 @@ class NewsStorage:
             db_manager: An instance of DatabaseManager for database operations
             logger: Optional logger for logging
         """
-        self.db_manager = db_manager
+        self.db_manager = DatabaseManager()
 
         # Configure logger
         if logger:

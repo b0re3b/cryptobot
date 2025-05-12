@@ -21,7 +21,7 @@ from transformers import (
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import LatentDirichletAllocation, NMF
 from utils.config import *
-
+from data.NewsManager import DatabaseManager
 # NLTK imports with proper error handling
 try:
     import nltk
@@ -116,7 +116,7 @@ class BERTNewsAnalyzer:
 
         self.logger = logger or logging.getLogger("BERTNewsAnalyzer")
         self.logger.setLevel(logging.INFO)
-        self.db_manager = db_manager
+        self.db_manager = DatabaseManager()
         self.CRYPTO_KEYWORDS = CRYPTO_KEYWORDS
         self.SENTIMENT_LEXICON = SENTIMENT_LEXICON
         self.CRITICAL_KEYWORDS = CRITICAL_KEYWORDS
@@ -242,17 +242,7 @@ class BERTNewsAnalyzer:
 
     def _get_bert_embeddings_batch(self, texts: List[str], max_length: int = 512,
                                    pooling_strategy: str = 'cls') -> np.ndarray:
-        """
-        Отримати вектори BERT для батчу текстів з ефективною обробкою.
 
-        Args:
-            texts: Список текстів для обробки
-            max_length: Максимальна довжина послідовності
-            pooling_strategy: Стратегія об'єднання токенів ('cls', 'mean', 'max')
-
-        Returns:
-            np.ndarray: Матриця з ембеддінгами для кожного тексту
-        """
         # Створюємо dataset і dataloader для ефективної обробки
         dataset = NewsDataset(texts, self.embedding_tokenizer, max_length)
         dataloader = DataLoader(dataset, batch_size=self.batch_size)
@@ -731,18 +721,7 @@ class BERTNewsAnalyzer:
                        n_topics: int = 10,
                        retrain: bool = False,
                        min_docs: int = 50) -> List[Union[Dict[str, Any], NewsItem]]:
-        """
-        Витягнення тем з новин з використанням LDA, NMF та K-Means кластеризації.
 
-        Args:
-            news_data: Список новин для аналізу
-            n_topics: Кількість тем для виділення
-            retrain: Перенавчати моделі, навіть якщо вони вже існують
-            min_docs: Мінімальна необхідна кількість документів для навчання моделей
-
-        Returns:
-            List[Union[Dict[str, Any], NewsItem]]: Список новин із витягнутими темами
-        """
         self.logger.info(f"Початок витягнення тем з {len(news_data)} новин")
 
         if len(news_data) < min_docs and self.vectorizer is None:

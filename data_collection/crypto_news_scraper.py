@@ -1,7 +1,7 @@
 import argparse
 import os
 from datetime import datetime
-import numpy as np
+import json
 
 from data.db import DatabaseManager
 from data_collection.NewsCollector import NewsCollector
@@ -32,13 +32,13 @@ class CryptoNewsScraper:
         self.collector = NewsCollector()
 
         # Ініціалізація бази даних
-        self.db_manager = DatabaseManager()
+        self.db_manager = db_connection or DatabaseManager()
 
         # Ініціалізація аналізатора новин
         self.analyzer = BERTNewsAnalyzer()
 
         # Ініціалізація сховища новин
-        self.storage = NewsStorage()
+        self.storage = NewsStorage(db_manager=self.db_manager)
 
         # Налаштування та кешування даних
         self._cached_news = []
@@ -58,34 +58,54 @@ class CryptoNewsScraper:
         """
         if sources is None:
             # Збір новин з усіх доступних джерел
-            news = self.collector.scrape_all_sources(days_back=days_back, limit_per_source=limit_per_source)
-        else:
             news = []
+            # Додаємо збір новин з кожного джерела з обмеженням
+            sources_list = [
+                "coindesk", "cointelegraph", "decrypt",
+                "cryptoslate", "theblock", "cryptobriefing",
+                "cryptopanic", "coinmarketcal", "feedly", "newsnow"
+            ]
+            for source in sources_list:
+                source_news = self._collect_news_from_source(source, days_back, limit_per_source)
+                news.extend(source_news)
+        else:
             # Збір новин з конкретних джерел
+            news = []
             for source in sources:
-                if source == "coindesk":
-                    news.extend(self.collector.scrape_coindesk(days_back=days_back, limit=limit_per_source))
-                elif source == "cointelegraph":
-                    news.extend(self.collector.scrape_cointelegraph(days_back=days_back, limit=limit_per_source))
-                elif source == "decrypt":
-                    news.extend(self.collector.scrape_decrypt(days_back=days_back, limit=limit_per_source))
-                elif source == "cryptoslate":
-                    news.extend(self.collector.scrape_cryptoslate(days_back=days_back, limit=limit_per_source))
-                elif source == "theblock":
-                    news.extend(self.collector.scrape_theblock(days_back=days_back, limit=limit_per_source))
-                elif source == "cryptobriefing":
-                    news.extend(self.collector.scrape_cryptobriefing(days_back=days_back, limit=limit_per_source))
-                elif source == "cryptopanic":
-                    news.extend(self.collector.scrape_cryptopanic(days_back=days_back, limit=limit_per_source))
-                elif source == "coinmarketcal":
-                    news.extend(self.collector.scrape_coinmarketcal(days_back=days_back, limit=limit_per_source))
-                elif source == "feedly":
-                    news.extend(self.collector.scrape_feedly(days_back=days_back, limit=limit_per_source))
-                elif source == "newsnow":
-                    news.extend(self.collector.scrape_newsnow(days_back=days_back, limit=limit_per_source))
+                source_news = self._collect_news_from_source(source, days_back, limit_per_source)
+                news.extend(source_news)
 
         self._cached_news = news
         return news
+
+    def _collect_news_from_source(self, source, days_back, categories):
+        """
+        Допоміжний метод для збору новин з конкретного джерела.
+
+        Args:
+            source: Назва джерела
+            days_back: За скільки днів назад збирати новини
+            limit: Максимальна кількість новин
+
+        Returns:
+            Список новин з джерела
+        """
+        method_map = {
+            "coindesk": self.collector.scrape_coindesk,
+            "cointelegraph": self.collector.scrape_cointelegraph,
+            "decrypt": self.collector.scrape_decrypt,
+            "cryptoslate": self.collector.scrape_cryptoslate,
+            "theblock": self.collector.scrape_theblock,
+            "cryptobriefing": self.collector.scrape_cryptobriefing,
+            "cryptopanic": self.collector.scrape_cryptopanic,
+            "coinmarketcal": self.collector.scrape_coinmarketcal,
+            "newsnow": self.collector.scrape_newsnow
+        }
+
+        scrape_method = method_map.get(source)
+        if scrape_method:
+            return scrape_method(days_back=days_back, categories=categories)
+        return []
 
     def analyze_news(self, news=None, keywords=None, coins=None, batch_size=16):
         """
@@ -110,7 +130,7 @@ class CryptoNewsScraper:
             news = self.analyzer.filter_by_keywords(news, keywords)
 
         # Виконання пакетного аналізу всіх новин
-        analysis_results = self.analyzer.analyze_news_batch(news, batch_size=batch_size)
+        analysis_results = self.analyzer.analyze_news_batch(news)
 
         # Якщо вказані конкретні монети, відфільтруємо результати
         if coins:
@@ -257,77 +277,54 @@ class CryptoNewsScraper:
         return clusters
 
     def run_full_pipeline(self, sources=None, days_back=1, keywords=None, coins=None,
-                          store_results=True, get_summary=True, analyze_clusters=True):
-        """
-        Виконує повний цикл збору, аналізу та зберігання новин.
+                              store_results=True, get_summary=True, analyze_clusters=True):
+            """
+            Виконує повний цикл збору, аналізу та зберігання новин.
 
-        Args:
-            sources: Список джерел для скрапінгу
-            days_back: За скільки днів назад збирати новини
-            keywords: Ключові слова для фільтрації
-            coins: Конкретні криптовалюти для фільтрації
-            store_results: Чи зберігати результати в базу даних
-            get_summary: Чи отримувати підсумки найважливіших новин
-            analyze_clusters: Чи аналізувати кластери пов'язаних новин
+            Args:
+                sources: Список джерел для скрапінгу
+                days_back: За скільки днів назад збирати новини
+                keywords: Ключові слова для фільтрації
+                coins: Конкретні криптовалюти для фільтрації
+                store_results: Чи зберігати результати в базу даних
+                get_summary: Чи отримувати підсумки найважливіших новин
+                analyze_clusters: Чи аналізувати кластери пов'язаних новин
 
-        Returns:
-            Словник з результатами роботи
-        """
-        # Збір новин
-        news = self.collect_news(sources=sources, days_back=days_back)
-        print(f"Зібрано {len(news)} новин з {len(set(item.get('source', '') for item in news))} джерел")
+            Returns:
+                Словник з результатами роботи
+            """
+            # Збір новин
+            news = self.collect_news(sources=sources, days_back=days_back)
+            print(f"Зібрано {len(news)} новин з {len(set(item.get('source', '') for item in news))} джерел")
 
-        # Аналіз новин
-        analysis = self.analyze_news(news=news, keywords=keywords, coins=coins)
-        print(f"Проаналізовано {len(analysis['individual_results'])} новин")
+            # Аналіз новин
+            analysis = self.analyze_news(news=news, keywords=keywords, coins=coins)
+            print(f"Проаналізовано {len(analysis['individual_results'])} новин")
 
-        results = {
-            'news_count': len(news),
-            'analysis': analysis
-        }
+            results = {
+                'news_count': len(news),
+                'analysis': analysis
+            }
 
-        # Зберігання результатів, якщо потрібно
-        if store_results:
-            stored_count = self.store_data(news=news, analysis_results=analysis['individual_results'])
-            results['stored_count'] = stored_count
-            print(f"Збережено {stored_count} новин у базу даних")
+            # Зберігання результатів, якщо потрібно
+            if store_results:
+                stored_count = self.store_data(news=news, analysis_results=analysis['individual_results'])
+                results['stored_count'] = stored_count
+                print(f"Збережено {stored_count} новин у базу даних")
 
-        # Отримання підсумків, якщо потрібно
-        if get_summary:
-            summaries = self.get_news_summary(news=news)
-            results['summaries'] = summaries
-            print(f"Створено {len(summaries)} підсумків найважливіших новин")
+            # Отримання підсумків, якщо потрібно
+            if get_summary:
+                summaries = self.get_news_summary(news=news)
+                results['summaries'] = summaries
+                print(f"Створено {len(summaries)} підсумків найважливіших новин")
 
-        # Аналіз кластерів, якщо потрібно
-        if analyze_clusters:
-            clusters = self.analyze_news_clusters()
-            results['clusters'] = clusters
-            print(f"Виявлено {len(clusters)} кластерів пов'язаних новин")
+            # Аналіз кластерів, якщо потрібно
+            if analyze_clusters:
+                clusters = self.analyze_news_clusters()
+                results['clusters'] = clusters
+                print(f"Виявлено {len(clusters)} кластерів пов'язаних новин")
 
-        return results
-
-    def _calculate_similarity(self, embedding1, embedding2):
-        """
-        Допоміжний метод для обчислення косинусної схожості між ембеддінгами.
-
-        Args:
-            embedding1: Перший ембеддінг
-            embedding2: Другий ембеддінг
-
-        Returns:
-            Значення косинусної схожості
-        """
-        # Нормалізуємо вектори
-        norm1 = np.linalg.norm(embedding1)
-        norm2 = np.linalg.norm(embedding2)
-
-        if norm1 == 0 or norm2 == 0:
-            return 0
-
-        # Обчислюємо косинусну схожість
-        return np.dot(embedding1, embedding2) / (norm1 * norm2)
-
-
+            return results
 def main():
     """
     Головна функція для запуску скрапера криптовалютних новин.
@@ -392,7 +389,7 @@ def main():
         use_proxies=args.use_proxies,
         user_agents=user_agents,
     )
-    print("Скрапер ініціалізовано")
+    print("Скрапер ініційовано")
 
     try:
         # Запуск повного циклу
@@ -413,7 +410,6 @@ def main():
 
         # Збереження результатів у JSON файл
         if 'summaries' in results and results['summaries']:
-            import json
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             summary_file = os.path.join(args.output_dir, f"news_summary_{timestamp}.json")
 
@@ -446,13 +442,12 @@ def main():
         traceback.print_exc()
 
     finally:
-        # Закриття з'єднання з базою даних
-        if 'db_connection' in locals() and db_connection:
+        # Закриття з'єднання з базою даних (якщо є метод)
+        if hasattr(db_connection, 'close'):
             db_connection.close()
             print("З'єднання з базою даних закрито")
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Завершено роботу скрапера")
-
 
 if __name__ == "__main__":
     main()

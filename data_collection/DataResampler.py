@@ -29,6 +29,7 @@ class DataResampler:
 
     def resample_data(self, data: pd.DataFrame, target_interval: str,
                       required_columns: List[str] = None) -> pd.DataFrame:
+        self.logger.info(f"Наявні колонки в resample_data: {list(data.columns)}")
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для ресемплінгу")
@@ -123,6 +124,7 @@ class DataResampler:
             return data
 
     def _create_aggregation_dict(self, data: pd.DataFrame) -> Dict:
+        self.logger.info(f"Наявні колонки в _create_aggregation_dict: {list(data.columns)}")
 
         agg_dict = {}
 
@@ -193,18 +195,7 @@ class DataResampler:
 
     def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto',
                              max_gap: int = 5, interpolate_prices: bool = True) -> pd.DataFrame:
-        """
-        Заповнює відсутні значення в DataFrame з часовими рядами фінансових даних.
 
-        Args:
-            df: Вхідний DataFrame з фінансовими даними
-            fill_method: Метод заповнення ('auto', 'ffill', 'zero', 'interpolate')
-            max_gap: Максимальний розмір проміжку для методів forward/backward fill
-            interpolate_prices: Чи використовувати інтерполяцію для цінових рядів
-
-        Returns:
-            DataFrame з заповненими пропущеними значеннями
-        """
         if df.empty:
             return df
 
@@ -450,7 +441,7 @@ class DataResampler:
 
     def make_stationary(self, data: pd.DataFrame, columns=None, method='diff',
                         order=1, seasonal_order=None) -> pd.DataFrame:
-
+        self.logger.info(f"Наявні колонки в make_stationary: {list(data.columns)}")
         if data.empty:
             self.logger.warning("make_stationary: Отримано порожній DataFrame")
             return data
@@ -615,7 +606,7 @@ class DataResampler:
     def check_stationarity(self, data: pd.DataFrame, column='close_diff', sample_size=10000,
                            parallel=True, confidence_level=0.05) -> dict:
 
-
+        self.logger.info(f"Наявні колонки в check_stationarity: {list(data.columns)}")
         from statsmodels.tsa.stattools import adfuller, kpss, acf, pacf
         import numpy as np
         import concurrent.futures
@@ -784,7 +775,7 @@ class DataResampler:
         return results
 
     def prepare_arima_data(self, data: pd.DataFrame, symbol: str, timeframe: str) -> pd.DataFrame:
-
+        self.logger.info(f"Наявні колонки в prepare_arima_data: {list(data.columns)}")
         if data.empty:
             self.logger.warning("prepare_arima_data: Отримано порожній DataFrame для підготовки ARIMA даних")
             return pd.DataFrame()
@@ -961,7 +952,7 @@ class DataResampler:
 
     def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str,
                           sequence_length: int = 60) -> pd.DataFrame:
-
+        self.logger.info(f"Наявні колонки в prepare_lstm_data: {list(data.columns)}")
 
         if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для підготовки LSTM даних")
