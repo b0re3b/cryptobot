@@ -1018,7 +1018,7 @@ class MarketDataProcessor:
         return result
 
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
-                            end_date: Optional[str] = None, save_results: bool = True) -> Dict[str, pd.DataFrame]:
+                            end_date: Optional[str] = None, save_results: bool = True) -> DataFrame | dict[Any, Any]:
 
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
@@ -1106,32 +1106,40 @@ class MarketDataProcessor:
         processed_data, outliers_info = self.detect_outliers(processed_data)
 
         # 8. Створення профілю об'єму
-        if not isinstance(processed_data, pd.DataFrame) or processed_data.empty:
-            self.logger.warning("Дані для створення профілю об'єму відсутні або мають неправильний формат")
-        else:
-            try:
-                # Виправлено: використання processed_data замість df
-                volume_profile = self.aggregate_volume_profile(
-                    data=processed_data,  # виправлено з df на processed_data
-                    bins=20,
-                    price_col='close',
-                    volume_col='volume',
-                    time_period='1W'  # переконуємося, що це строка
-                )
+        try:
+            # Перевірка колонок
+            if 'close' not in processed_data.columns or 'volume' not in processed_data.columns:
+                self.logger.error("Відсутні колонки 'close' або 'volume'")
+                return pd.DataFrame()
 
-                if not volume_profile.empty:
-                    results['volume_profile'] = volume_profile
+            # Перевірка індексу
+            if not isinstance(processed_data.index, pd.DatetimeIndex):
+                self.logger.error("Індекс не є DatetimeIndex")
+                return pd.DataFrame()
 
-                    if save_results:
-                        self.logger.info(f"Спроба збереження профілю об'єму: symbol={symbol}, timeframe={timeframe}")
+            # Логування для зневадження
+            self.logger.debug(f"Дані для профілю об'єму:\n{processed_data.head()}")
+            self.logger.debug(f"Колонки: {processed_data.columns}")
 
-                        success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
-                        if success:
-                            self.logger.info(f"Профіль об'єму для {symbol} {timeframe} успішно збережено")
-                        else:
-                            self.logger.error(f"Помилка збереження профілю об'єму для {symbol} {timeframe}")
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
+            # Виклик методу з правильними аргументами
+            volume_profile = self.aggregate_volume_profile(
+                data=processed_data,
+                bins=20,
+                price_col='close',  # Лапки додані
+                volume_col='volume',  # Лапки додані
+                time_period='1W'
+            )
+
+            if not volume_profile.empty:
+                results['volume_profile'] = volume_profile
+                if save_results:
+                    success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
+                    if success:
+                        self.logger.info("Профіль об'єму збережено")
+                    else:
+                        self.logger.error("Помилка збереження профілю об'єму")
+        except Exception as e:
+            self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
 
         # 9. Підготовка даних для моделей ARIMA і LSTM
         if timeframe in ['1m', '4h', '1d', '1w']:
@@ -1188,7 +1196,7 @@ class MarketDataProcessor:
                                         'sequence_id'] = f"{symbol}_{timeframe}_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}_{i}"
 
                             # Validate required fields
-                            required_fields = ['sequence_position', 'sequence_id', 'features', 'target']
+                            required_fields = ['sequence_position', 'sequence_id']
                             for record in lstm_data_points:
                                 missing = [f for f in required_fields if f not in record]
                                 if missing:
@@ -1350,11 +1358,11 @@ class MarketDataProcessor:
 
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
-    SYMBOLS = ['SOL']
+    SYMBOLS = ['BTC']
 
     # Визначення базових та похідних таймфреймів
-    BASE_TIMEFRAMES = ['1d']  # Таймфрейми, які зберігаються безпосередньо в БД
-    DERIVED_TIMEFRAMES = [ '1w']  # Таймфрейми, які потребують ресемплінгу
+    BASE_TIMEFRAMES = ['1h']  # Таймфрейми, які зберігаються безпосередньо в БД
+    DERIVED_TIMEFRAMES = ['4h']  # Таймфрейми, які потребують ресемплінгу
 
     processor = MarketDataProcessor(log_level=logging.INFO)
 

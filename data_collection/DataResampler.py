@@ -33,34 +33,39 @@ class DataResampler:
 
         return None
 
-    def _optimize_aggregation_dict(self, data: pd.DataFrame) -> Dict:
+    def _optimize_aggregation_dict(self, data: pd.DataFrame, store_column_map: bool = False) -> Dict:
         """
-        Оптимізована версія створення словника агрегацій з паралельною обробкою
+        Формує словник агрегацій на основі типу колонок і їх назв (уніфікована логіка).
         """
-        numeric_cols = data.select_dtypes(include=[np.number]).columns
         agg_dict = {}
-
-        # Базові пріоритетні колонки
-        priority_columns = {
-            'open': 'first', 'high': 'max', 'low': 'min',
-            'close': 'last', 'volume': 'sum'
-        }
-
-        # Додаткові специфічні колонки
-        crypto_specific_columns = {
-            'trades': 'sum', 'taker_buy_volume': 'sum',
-            'taker_sell_volume': 'sum', 'quote_volume': 'sum',
-            'vwap': 'mean', 'funding_rate': 'mean'
-        }
-
-        # Пошук колонок з використанням прискорених методів
         columns_lower_map = {col.lower(): col for col in data.columns}
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
 
-        # Додавання пріоритетних колонок
-        for base_col_lower, agg_method in {**priority_columns, **crypto_specific_columns}.items():
+        # Основні фінансові колонки
+        standard_aggs = {
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum',
+            'trades': 'sum',
+            'taker_buy_volume': 'sum',
+            'taker_sell_volume': 'sum',
+            'taker_buy_base_volume': 'sum',
+            'taker_buy_quote_volume': 'sum',
+            'quote_volume': 'sum',
+            'quote_asset_volume': 'sum',
+            'number_of_trades': 'sum',
+            'vwap': 'mean',
+            'funding_rate': 'mean',
+        }
+
+        for base_col_lower, agg_method in standard_aggs.items():
             if base_col_lower in columns_lower_map:
                 actual_col = columns_lower_map[base_col_lower]
                 agg_dict[actual_col] = agg_method
+                if store_column_map:
+                    self.original_data_map[f"{base_col_lower}_column"] = actual_col
 
         # Обробка решти числових колонок
         for col in numeric_cols:
@@ -68,12 +73,14 @@ class DataResampler:
                 col_lower = col.lower()
                 if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount', 'volume']):
                     agg_dict[col] = 'sum'
+                elif any(x in col_lower for x in ['id', 'code', 'identifier']):
+                    agg_dict[col] = 'last'
                 elif any(x in col_lower for x in ['price', 'rate', 'fee', 'vwap']):
                     agg_dict[col] = 'mean'
                 else:
-                    agg_dict[col] = 'last'
+                    agg_dict[col] = 'mean'
 
-        # Додавання не-числових колонок
+        # Обробка нечислових колонок
         non_numeric_cols = [col for col in data.columns if col not in numeric_cols]
         for col in non_numeric_cols:
             if col not in agg_dict:
@@ -181,75 +188,6 @@ class DataResampler:
             self.logger.error(f"Помилка при об'єднанні батчів: {str(e)}")
             return data
 
-    def _create_aggregation_dict(self, data: pd.DataFrame) -> Dict:
-        self.logger.info(f"Наявні колонки в _create_aggregation_dict: {list(data.columns)}")
-
-        agg_dict = {}
-
-        # Мапінг колонок до нижнього регістру для спрощення пошуку
-        columns_lower_map = {col.lower(): col for col in data.columns}
-
-        # Базові OHLCV колонки та їх методи агрегації
-        base_columns = {
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
-        }
-
-        # Додаткові специфічні колонки для криптовалютних даних
-        crypto_specific_columns = {
-            'trades': 'sum',  # Кількість угод
-            'taker_buy_volume': 'sum',  # Об'єм покупок taker
-            'taker_sell_volume': 'sum',  # Об'єм продажів taker
-            'taker_buy_base_volume': 'sum',  # Об'єм у базовій валюті покупок через taker
-            'taker_buy_quote_volume': 'sum',  # Об'єм у котированій валюті покупок через taker
-            'quote_volume': 'sum',  # Об'єм у котированій валюті
-            'quote_asset_volume': 'sum',  # Об'єм у котированій валюті (альтернативна назва)
-            'number_of_trades': 'sum',  # Кількість угод (альтернативна назва)
-            'vwap': 'mean',  # Volume Weighted Average Price
-            'funding_rate': 'mean'  # Funding Rate для ф'ючерсів
-        }
-
-        # Об'єднуємо базові і специфічні для криптовалют колонки
-        all_columns = {**base_columns, **crypto_specific_columns}
-
-        # Додаємо базові колонки зі словника (незалежно від регістру)
-        for base_col_lower, agg_method in all_columns.items():
-            if base_col_lower in columns_lower_map:
-                actual_col = columns_lower_map[base_col_lower]
-                agg_dict[actual_col] = agg_method
-                # Зберігаємо відображення для пізнішого доступу
-                self.original_data_map[f"{base_col_lower}_column"] = actual_col
-
-        # Обробка всіх числових колонок, які ще не додані
-        numeric_cols = data.select_dtypes(include=[np.number]).columns
-        for col in numeric_cols:
-            if col not in agg_dict:  # Якщо колонку ще не додано
-                col_lower = col.lower()
-                if any(x in col_lower for x in ['count', 'number', 'trades', 'qty', 'quantity', 'amount', 'volume']):
-                    agg_dict[col] = 'sum'
-                elif any(x in col_lower for x in ['id', 'code', 'identifier']):
-                    agg_dict[col] = 'last'  # Для ідентифікаторів беремо останнє значення
-                elif any(x in col_lower for x in ['price', 'rate', 'fee', 'vwap']):
-                    agg_dict[col] = 'mean'  # Для цін та ставок використовуємо середнє
-                else:
-                    agg_dict[col] = 'mean'  # Для всіх інших числових - середнє
-
-        # Обробка всіх не-числових колонок (категорійних, текстових тощо)
-        non_numeric_cols = [col for col in data.columns if col not in numeric_cols]
-        for col in non_numeric_cols:
-            if col not in agg_dict:
-                agg_dict[col] = 'last'  # За замовчуванням беремо останнє значення
-
-        # Перевірка, чи всі колонки включено
-        for col in data.columns:
-            if col not in agg_dict:
-                self.logger.warning(f"Колонка '{col}' має нестандартний тип і буде агрегована методом 'last'")
-                agg_dict[col] = 'last'
-
-        return agg_dict
 
     def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto',
                              max_gap: int = 5, interpolate_prices: bool = True) -> pd.DataFrame:
@@ -863,7 +801,6 @@ class DataResampler:
             symbol: str,
             timeframe: str
     ) -> pd.DataFrame:
-
         try:
             # Convert Dask DataFrame to pandas if necessary
             if hasattr(data, 'compute'):
@@ -886,11 +823,12 @@ class DataResampler:
                 return pd.DataFrame()
 
             # Create a copy to avoid modifying the original
-            result_df = pd.DataFrame(index=data.index)
+            result_df = pd.DataFrame(
+                index=data.index.reset_index(drop=True))  # Reset index to avoid duplicate open_time
 
             # Basic info
             result_df['timeframe'] = timeframe
-            result_df['open_time'] = data.index
+            result_df['open_time'] = data.index  # Store timestamp as a column
             result_df['original_close'] = data[close_column]
 
             # 2. Compute various stationary transformations
@@ -975,7 +913,7 @@ class DataResampler:
                     self.logger.warning("ARIMA model fitting failed")
 
                 self.logger.info(f"Prepared ARIMA data for {symbol} ({timeframe})")
-                return result_df
+                return result_df.reset_index(drop=True)  # Ensure no duplicate index/column
             else:
                 self.logger.warning(f"Insufficient data for stationarity tests for {symbol}")
                 return pd.DataFrame()
@@ -1026,7 +964,6 @@ class DataResampler:
             sequence_length: int = 60,
             target_horizons: list = [1, 5, 10]
     ) -> pd.DataFrame:
-
         try:
             self.logger.info(f"Preparing LSTM data for database storage: {symbol}, {timeframe}")
 
@@ -1093,24 +1030,9 @@ class DataResampler:
                 result_df[f'target_close_{horizon}'] = result_df['close'].shift(-horizon)
 
             # 5. Create sequence IDs and positions
-            # We'll create sequences with overlap, shifting by 1 each time
-            sequences = []
-
-            # Store the scaling parameters as JSON
-            import json
-            scaling_metadata = {
-                'feature_range': scaler.feature_range,
-                'data_min': scaler.data_min_.tolist(),
-                'data_max': scaler.data_max_.tolist(),
-                'columns': required_columns
-            }
-            scaling_json = json.dumps(scaling_metadata)
-
-            # Generate sequence data with IDs and positions
             valid_end_idx = len(result_df) - max(target_horizons)
 
             # Generate a reasonable number of sequences
-            # For large datasets, we might not want to create a sequence starting at every point
             step = 1
             if valid_end_idx > 10000:  # If we have a lot of data
                 step = valid_end_idx // 10000  # Limit to ~10K sequences
@@ -1131,30 +1053,35 @@ class DataResampler:
                             'open_time': result_df.index[idx],
 
                             # Scaled features
-                            'open_scaled': row['open_scaled'],
-                            'high_scaled': row['high_scaled'],
-                            'low_scaled': row['low_scaled'],
-                            'close_scaled': row['close_scaled'],
-                            'volume_scaled': row['volume_scaled'],
+                            'open_scaled': float(row['open_scaled']),
+                            'high_scaled': float(row['high_scaled']),
+                            'low_scaled': float(row['low_scaled']),
+                            'close_scaled': float(row['close_scaled']),
+                            'volume_scaled': float(row['volume_scaled']),
 
-                            # Cyclic time features
-                            'hour_sin': row['hour_sin'],
-                            'hour_cos': row['hour_cos'],
-                            'day_of_week_sin': row['day_of_week_sin'],
-                            'day_of_week_cos': row['day_of_week_cos'],
-                            'month_sin': row['month_sin'],
-                            'month_cos': row['month_cos'],
-                            'day_of_month_sin': row['day_of_month_sin'],
-                            'day_of_month_cos': row['day_of_month_cos'],
+                            # Time features
+                            'hour_sin': float(row['hour_sin']),
+                            'hour_cos': float(row['hour_cos']),
+                            'day_of_week_sin': float(row['day_of_week_sin']),
+                            'day_of_week_cos': float(row['day_of_week_cos']),
+                            'month_sin': float(row['month_sin']),
+                            'month_cos': float(row['month_cos']),
+                            'day_of_month_sin': float(row['day_of_month_sin']),
+                            'day_of_month_cos': float(row['day_of_month_cos']),
 
                             # Target values
-                            'target_close_1': result_df.iloc[idx + 1]['close'] if 1 in target_horizons else None,
-                            'target_close_5': result_df.iloc[idx + 5]['close'] if 5 in target_horizons else None,
-                            'target_close_10': result_df.iloc[idx + 10]['close'] if 10 in target_horizons else None,
+                            'target_close_1': float(row['target_close_1']) if 1 in target_horizons else None,
+                            'target_close_5': float(row['target_close_5']) if 5 in target_horizons else None,
+                            'target_close_10': float(row['target_close_10']) if 10 in target_horizons else None,
 
                             # Metadata
                             'sequence_length': sequence_length,
-                            'scaling_metadata': scaling_json
+                            'scaling_metadata': json.dumps({
+                                'feature_range': scaler.feature_range,
+                                'data_min': scaler.data_min_.tolist(),
+                                'data_max': scaler.data_max_.tolist(),
+                                'columns': required_columns
+                            })
                         })
 
             final_df = pd.DataFrame(sequence_data)
