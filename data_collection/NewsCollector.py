@@ -93,15 +93,16 @@ class NewsCollector:
         self.source_config = {
             'coindesk': {
                 'base_url': 'https://www.coindesk.com',
-                'default_categories': ["markets", "business", "policy", "tech"]
+                'default_categories': ["markets", "finance", "policy", "tech"]
             },
             'cointelegraph': {
                 'base_url': 'https://cointelegraph.com',
-                'default_categories': ["news", "markets", "features", "analysis"]
+                'default_categories': ["news", "markets", "technology", "features","deals" ,"business"]
             },
             'decrypt': {
                 'base_url': 'https://decrypt.co',
-                'default_categories': ["news", "analysis", "features", "learn"]
+                'default_categories': ["news","business","editors-picks","features","artificial-intelligence",
+                                       "cryptocurrencies","defi"]
             },
             'cryptoslate': {
                 'base_url': 'https://cryptoslate.com',
@@ -109,11 +110,11 @@ class NewsCollector:
             },
             'theblock': {
                 'base_url': 'https://www.theblock.co',
-                'default_categories': ["latest", "policy", "business", "markets"]
+                'default_categories': ["latest-crypto-news","crypto-ecosystems","policy", "deals", "markets"]
             },
             'cryptopanic': {
                 'base_url': 'https://cryptopanic.com',
-                'default_categories': ["news", "recent", "rising", "hot"]
+                'default_categories': ["top news", "recent", "rising", "hot!","price-analysis","events",]
             },
             'coinmarketcal': {
                 'base_url': 'https://coinmarketcal.com',
@@ -121,11 +122,12 @@ class NewsCollector:
             },
             'newsnow': {
                 'base_url': 'https://www.newsnow.co.uk',
-                'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum"]
+                'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum","donald trump","business"]
             },
             'cryptobriefing': {
                 'base_url': 'https://cryptobriefing.com',
-                'default_categories': ["news", "analysis", "insights", "reviews"]
+                'default_categories': ["news", "analysis", "insights", "reviews", "bitcoin", "ethereum", "defi", "ai",
+                                       "regulation"]
             }
         }
 
