@@ -869,6 +869,9 @@ class MarketDataProcessor:
 
 
     # --- Methods delegated to DataResampler ---
+    def auto_resample(self, data: pd.DataFrame, target_interval: str = None) -> pd.DataFrame:
+
+        return self.data_resampler.auto_resample(data, target_interval=target_interval)
 
     def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
 
@@ -927,7 +930,7 @@ class MarketDataProcessor:
 
                     # Підготовка і конвертація даних для збереження
                     profile_data = {
-                        'interval': str(timeframe),
+                        'timeframe': str(timeframe),
                         'time_bucket': time_bucket,
                         'price_bin_start': float(row.get('bin_lower', 0)),
                         'price_bin_end': float(row.get('bin_upper', 0)),
@@ -1065,7 +1068,8 @@ class MarketDataProcessor:
         return result
 
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
-                            end_date: Optional[str] = None, save_results: bool = True) -> DataFrame | dict[Any, Any]:
+                            end_date: Optional[str] = None, save_results: bool = True,
+                            create_volume_profile: bool = True) -> DataFrame | dict[Any, Any]:
 
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
@@ -1092,6 +1096,7 @@ class MarketDataProcessor:
                 return results
 
         elif timeframe in derived_timeframes:
+            # Визначаємо вихідний таймфрейм для ресемплінгу
             source_timeframe = None
             if timeframe == '4h':
                 source_timeframe = '1h'
@@ -1111,7 +1116,8 @@ class MarketDataProcessor:
                 self.logger.warning(f"Базові дані не знайдено для {symbol} {source_timeframe}")
                 return results
 
-            raw_data = self.resample_data(source_data, target_interval=timeframe)
+            # Використовуємо auto_resample замість resample_data
+            raw_data = self.auto_resample(source_data, target_interval=timeframe)
 
             if raw_data.empty:
                 self.logger.warning(f"Не вдалося створити дані для {symbol} {timeframe} через ресемплінг")
@@ -1152,41 +1158,42 @@ class MarketDataProcessor:
         # 6. Виявлення та обробка аномалій
         processed_data, outliers_info = self.detect_outliers(processed_data)
 
-        # 8. Створення профілю об'єму
-        try:
-            # Перевірка колонок
-            if 'close' not in processed_data.columns or 'volume' not in processed_data.columns:
-                self.logger.error("Відсутні колонки 'close' або 'volume'")
-                return pd.DataFrame()
+        # 8. Створення профілю об'єму лише для 1d та 1w таймфреймів, якщо потрібно
+        if create_volume_profile and timeframe in ['1d', '1w']:
+            try:
+                # Перевірка колонок
+                if 'close' not in processed_data.columns or 'volume' not in processed_data.columns:
+                    self.logger.error("Відсутні колонки 'close' або 'volume'")
+                    return results
 
-            # Перевірка індексу
-            if not isinstance(processed_data.index, pd.DatetimeIndex):
-                self.logger.error("Індекс не є DatetimeIndex")
-                return pd.DataFrame()
+                # Перевірка індексу
+                if not isinstance(processed_data.index, pd.DatetimeIndex):
+                    self.logger.error("Індекс не є DatetimeIndex")
+                    return results
 
-            # Логування для зневадження
-            self.logger.debug(f"Дані для профілю об'єму:\n{processed_data.head()}")
-            self.logger.debug(f"Колонки: {processed_data.columns}")
+                # Логування для зневадження
+                self.logger.debug(f"Дані для профілю об'єму:\n{processed_data.head()}")
+                self.logger.debug(f"Колонки: {processed_data.columns}")
 
-            # Виклик методу з правильними аргументами
-            volume_profile = self.aggregate_volume_profile(
-                data=processed_data,
-                bins=20,
-                price_col='close',  # Лапки додані
-                volume_col='volume',  # Лапки додані
-                time_period='1W'
-            )
+                # Виклик методу з правильними аргументами
+                volume_profile = self.aggregate_volume_profile(
+                    data=processed_data,
+                    bins=20,
+                    price_col='close',
+                    volume_col='volume',
+                    time_period='1W'
+                )
 
-            if not volume_profile.empty:
-                results['volume_profile'] = volume_profile
-                if save_results:
-                    success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
-                    if success:
-                        self.logger.info("Профіль об'єму збережено")
-                    else:
-                        self.logger.error("Помилка збереження профілю об'єму")
-        except Exception as e:
-            self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
+                if not volume_profile.empty:
+                    results['volume_profile'] = volume_profile
+                    if save_results:
+                        success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
+                        if success:
+                            self.logger.info("Профіль об'єму збережено")
+                        else:
+                            self.logger.error("Помилка збереження профілю об'єму")
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
 
         # 9. Підготовка даних для моделей ARIMA і LSTM
         if timeframe in ['1m', '4h', '1d', '1w']:
@@ -1405,30 +1412,50 @@ class MarketDataProcessor:
 
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
-    SYMBOLS = ['BTC']
+    SYMBOLS = ['SOL']
 
-    # Визначення базових та похідних таймфреймів
+    # Визначення всіх таймфреймів
+    ALL_TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
+
+    # Базові таймфрейми, які вже існують в базі даних
     BASE_TIMEFRAMES = ['1m', '1h', '1d']
+
+    # Похідні таймфрейми, які будуть створені через ресемплінг
     DERIVED_TIMEFRAMES = ['4h', '1w']
+
+    # Таймфрейми, для яких створюємо volume профіль
+    VOLUME_PROFILE_TIMEFRAMES = ['1d', '1w']
 
     processor = MarketDataProcessor(log_level=logging.INFO)
 
     # Спочатку обробляємо базові таймфрейми
     print("\n=== Обробка базових таймфреймів ===")
+
+    # Для використання volume профілю
+    volume_profiles = {}
+
     for symbol in SYMBOLS:
         for timeframe in BASE_TIMEFRAMES:
             print(f"\nОбробка {symbol} ({timeframe})...")
 
             try:
+                # Визначаємо, чи потрібно створювати volume профіль для цього таймфрейму
+                create_volume_profile = timeframe in VOLUME_PROFILE_TIMEFRAMES
+
                 results = processor.process_market_data(
                     symbol=symbol,
                     timeframe=timeframe,
-                    save_results=True
+                    save_results=True,
+                    create_volume_profile=create_volume_profile
                 )
 
                 if not results:
                     print(f"Не вдалося обробити дані для {symbol} {timeframe}")
                     continue
+
+                # Зберігаємо volume профіль для подальшого використання
+                if create_volume_profile and 'volume_profile' in results:
+                    volume_profiles[(symbol, timeframe)] = results['volume_profile']
 
                 # Print summary of results
                 for key, data in results.items():
@@ -1448,10 +1475,15 @@ def main():
             print(f"\nОбробка {symbol} ({timeframe})...")
 
             try:
+                # Визначаємо, чи потрібно створювати volume профіль для цього таймфрейму
+                create_volume_profile = timeframe in VOLUME_PROFILE_TIMEFRAMES and (symbol,
+                                                                                    timeframe) not in volume_profiles
+
                 results = processor.process_market_data(
                     symbol=symbol,
                     timeframe=timeframe,
-                    save_results=True
+                    save_results=True,
+                    create_volume_profile=create_volume_profile
                 )
 
                 if not results:

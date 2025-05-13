@@ -1,5 +1,4 @@
 import json
-
 import numpy as np
 import pandas as pd
 import dask.dataframe as dd
@@ -1170,11 +1169,38 @@ class DataResampler:
             # 5. Create sequence IDs and positions
             valid_end_idx = len(result_df) - max(target_horizons)
 
-            # Generate a reasonable number of sequences
-            step = 1
-            if valid_end_idx > 10000:  # If we have a lot of data
-                step = valid_end_idx // 10000  # Limit to ~10K sequences
-                self.logger.info(f"Large dataset detected, using step size: {step} for sequence generation")
+            # Define different overlap levels for each timeframe
+            timeframe_step_mapping = {
+                '1m': int(sequence_length * 0.2),  # 80% overlap for 1-minute data
+                '1h': int(sequence_length * 0.3),  # 70% overlap for 1-hour data
+                '4h': int(sequence_length * 0.4),  # 60% overlap for 4-hour data
+                '1d': int(sequence_length * 0.5),  # 50% overlap for daily data
+                '1w': int(sequence_length * 0.7),  # 30% overlap for weekly data
+            }
+
+            # Default step size for timeframes not explicitly defined
+            default_step = int(sequence_length * 0.2)  # 80% overlap by default
+
+            # Get step size based on timeframe
+            step = timeframe_step_mapping.get(timeframe, default_step)
+
+            # Ensure step is at least 1
+            step = max(1, step)
+
+            # Handle very large datasets by increasing step size further if needed
+            if 'h' in timeframe.lower() or 'd' in timeframe.lower() or 'w' in timeframe.lower():
+                if valid_end_idx > 20000:
+                    # If dataset is very large, we increase step to limit the number of sequences
+                    step = max(step, valid_end_idx // 20000)
+                    self.logger.info(
+                        f"Large dataset for {timeframe}, increased step size to {step} for sequence generation")
+            else:  # For minute timeframes
+                if valid_end_idx > 100000:
+                    step = max(step, valid_end_idx // 100000)
+                    self.logger.info(
+                        f"Large dataset for {timeframe}, increased step size to {step} for sequence generation")
+
+            self.logger.info(f"Using step size {step} for timeframe {timeframe} (sequence length: {sequence_length})")
 
             sequence_data = []
             for seq_id, start_idx in enumerate(range(0, valid_end_idx - sequence_length, step)):
@@ -1226,6 +1252,8 @@ class DataResampler:
 
             self.logger.info(f"Prepared {len(final_df)} rows of LSTM data for database storage")
             self.logger.info(f"Created {final_df['sequence_id'].nunique()} unique sequences")
+            overlap_percentage = 100 * (1 - (step / sequence_length))
+            self.logger.info(f"Using {overlap_percentage:.1f}% overlap for {timeframe} timeframe")
 
             # Store the scaler in cache for later use
             self.scalers[f'{symbol}_{timeframe}_lstm_scaler'] = scaler

@@ -44,7 +44,7 @@ class DataStorageManager:
 
                     # Підготовка і конвертація даних для збереження
                     profile_data = {
-                        'interval': str(timeframe),
+                        'timeframe': str(timeframe),
                         'time_bucket': time_bucket,
                         'price_bin_start': float(row.get('bin_lower', 0)),
                         'price_bin_end': float(row.get('bin_upper', 0)),
