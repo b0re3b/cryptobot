@@ -114,7 +114,7 @@ class DatabaseManager:
         # Таблиці для оброблених даних
         self._create_processed_tables()
         # Таблиці для профілів об'єму
-        self._create_volume_profile_tables()
+        # self._create_volume_profile_tables()
         # Таблиця для логування обробки даних
         self._create_data_processing_log_table()
 
@@ -298,54 +298,54 @@ class DatabaseManager:
 
         self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_klines_processed_time ON sol_klines_processed(timeframe, open_time)')
 
-    def _create_volume_profile_tables(self):
-        # Таблиці для профілів об'єму BTC
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS btc_volume_profile (
-            id SERIAL PRIMARY KEY,
-            timeframe TEXT NOT NULL,
-            time_bucket TIMESTAMP NOT NULL,
-            price_bin_start NUMERIC NOT NULL,
-            price_bin_end NUMERIC NOT NULL,
-            volume NUMERIC NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (timeframe, time_bucket, price_bin_start)
-        )
-        ''')
-
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket)')
-
-        # Таблиці для профілів об'єму ETH
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS eth_volume_profile (
-            id SERIAL PRIMARY KEY,
-            timeframe TEXT NOT NULL,
-            time_bucket TIMESTAMP NOT NULL,
-            price_bin_start NUMERIC NOT NULL,
-            price_bin_end NUMERIC NOT NULL,
-            volume NUMERIC NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (timeframe, time_bucket, price_bin_start)
-        )
-        ''')
-
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timeframe, time_bucket)')
-
-        # Таблиці для профілів об'єму SOL
-        self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sol_volume_profile (
-            id SERIAL PRIMARY KEY,
-            timeframe TEXT NOT NULL,
-            time_bucket TIMESTAMP NOT NULL,
-            price_bin_start NUMERIC NOT NULL,
-            price_bin_end NUMERIC NOT NULL,
-            volume NUMERIC NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE (timeframe, time_bucket, price_bin_start)
-        )
-        ''')
-
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket)')
+    # def _create_volume_profile_tables(self):
+    #     # Таблиці для профілів об'єму BTC
+    #     self.cursor.execute('''
+    #     CREATE TABLE IF NOT EXISTS btc_volume_profile (
+    #         id SERIAL PRIMARY KEY,
+    #         timeframe TEXT NOT NULL,
+    #         time_bucket TIMESTAMP NOT NULL,
+    #         price_bin_start NUMERIC NOT NULL,
+    #         price_bin_end NUMERIC NOT NULL,
+    #         volume NUMERIC NOT NULL,
+    #         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    #         UNIQUE (timeframe, time_bucket, price_bin_start)
+    #     )
+    #     ''')
+    #
+    #     self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket)')
+    #
+    #     # Таблиці для профілів об'єму ETH
+    #     self.cursor.execute('''
+    #     CREATE TABLE IF NOT EXISTS eth_volume_profile (
+    #         id SERIAL PRIMARY KEY,
+    #         timeframe TEXT NOT NULL,
+    #         time_bucket TIMESTAMP NOT NULL,
+    #         price_bin_start NUMERIC NOT NULL,
+    #         price_bin_end NUMERIC NOT NULL,
+    #         volume NUMERIC NOT NULL,
+    #         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    #         UNIQUE (timeframe, time_bucket, price_bin_start)
+    #     )
+    #     ''')
+    #
+    #     self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timeframe, time_bucket)')
+    #
+    #     # Таблиці для профілів об'єму SOL
+    #     self.cursor.execute('''
+    #     CREATE TABLE IF NOT EXISTS sol_volume_profile (
+    #         id SERIAL PRIMARY KEY,
+    #         timeframe TEXT NOT NULL,
+    #         time_bucket TIMESTAMP NOT NULL,
+    #         price_bin_start NUMERIC NOT NULL,
+    #         price_bin_end NUMERIC NOT NULL,
+    #         volume NUMERIC NOT NULL,
+    #         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    #         UNIQUE (timeframe, time_bucket, price_bin_start)
+    #     )
+    #     ''')
+    #
+    #     self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket)')
 
     def _create_data_processing_log_table(self):
         # Таблиця для логування обробки даних
@@ -550,59 +550,59 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def insert_volume_profile(self, symbol, profile_data):
-        """Додає запис профілю об'єму з перевіркою унікальності"""
-        table_name = f"{symbol.lower()}_volume_profile"
-        try:
-            self.cursor.execute(f'''
-            INSERT INTO {table_name} 
-            (timeframe, time_bucket, price_bin_start, price_bin_end, volume)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (timeframe, time_bucket, price_bin_start) DO NOTHING
-            ''', (
-                profile_data['timeframe'],
-                profile_data['time_bucket'],
-                profile_data['price_bin_start'],
-                profile_data['price_bin_end'],
-                profile_data['volume']
-            ))
-            self.conn.commit()
-            return True
-        except psycopg2.Error as e:
-            self.conn.rollback()
-            return False
-
-    def get_volume_profile(self, symbol, timeframe, time_bucket=None, start_time=None, end_time=None, limit=100):
-        """Отримує профіль об'єму для валюти"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return pd.DataFrame()
-
-        table_name = f"{symbol.lower()}_volume_profile"
-
-        query = f'''
-        SELECT * FROM {table_name}
-        WHERE timeframe = %s
-        '''
-        params = [timeframe]
-
-        if time_bucket:
-            query += ' AND time_bucket = %s'
-            params.append(time_bucket)
-
-        query += ' ORDER BY time_bucket DESC, price_bin_start ASC LIMIT %s'
-        params.append(limit)
-
-        try:
-            self.cursor.execute(query, params)
-            rows = self.cursor.fetchall()
-            if not rows:
-                return pd.DataFrame()
-            df = pd.DataFrame(rows)
-            return df
-        except psycopg2.Error as e:
-            print(f"Помилка отримання профілю об'єму для {symbol}: {e}")
-            return pd.DataFrame()
+    # def insert_volume_profile(self, symbol, profile_data):
+    #     """Додає запис профілю об'єму з перевіркою унікальності"""
+    #     table_name = f"{symbol.lower()}_volume_profile"
+    #     try:
+    #         self.cursor.execute(f'''
+    #         INSERT INTO {table_name}
+    #         (timeframe, time_bucket, price_bin_start, price_bin_end, volume)
+    #         VALUES (%s, %s, %s, %s, %s)
+    #         ON CONFLICT (timeframe, time_bucket, price_bin_start) DO NOTHING
+    #         ''', (
+    #             profile_data['timeframe'],
+    #             profile_data['time_bucket'],
+    #             profile_data['price_bin_start'],
+    #             profile_data['price_bin_end'],
+    #             profile_data['volume']
+    #         ))
+    #         self.conn.commit()
+    #         return True
+    #     except psycopg2.Error as e:
+    #         self.conn.rollback()
+    #         return False
+    #
+    # def get_volume_profile(self, symbol, timeframe, time_bucket=None, start_time=None, end_time=None, limit=100):
+    #     """Отримує профіль об'єму для валюти"""
+    #     if symbol.upper() not in self.supported_symbols:
+    #         print(f"Валюта {symbol} не підтримується")
+    #         return pd.DataFrame()
+    #
+    #     table_name = f"{symbol.lower()}_volume_profile"
+    #
+    #     query = f'''
+    #     SELECT * FROM {table_name}
+    #     WHERE timeframe = %s
+    #     '''
+    #     params = [timeframe]
+    #
+    #     if time_bucket:
+    #         query += ' AND time_bucket = %s'
+    #         params.append(time_bucket)
+    #
+    #     query += ' ORDER BY time_bucket DESC, price_bin_start ASC LIMIT %s'
+    #     params.append(limit)
+    #
+    #     try:
+    #         self.cursor.execute(query, params)
+    #         rows = self.cursor.fetchall()
+    #         if not rows:
+    #             return pd.DataFrame()
+    #         df = pd.DataFrame(rows)
+    #         return df
+    #     except psycopg2.Error as e:
+    #         print(f"Помилка отримання профілю об'єму для {symbol}: {e}")
+    #         return pd.DataFrame()
 
     def delete_old_data(self, symbol, table_type, days_to_keep=30):
         """Видаляє старі дані з бази даних"""

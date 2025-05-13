@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
     UNIQUE (timeframe, time_bucket, price_bin_start)
 );*/
 
-CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
+-- CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
 
 
 -- Таблиця для зберігання джерел новин
