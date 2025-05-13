@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS btc_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, time_bucket, price_bin_start,price_bin_end)
+    UNIQUE (timeframe, time_bucket, price_bin_start)
 );
 
 CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket);
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS eth_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, time_bucket, price_bin_start,price_bin_end)
+    UNIQUE (timeframe, time_bucket, price_bin_start)
 );
 
 CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timeframe, time_bucket);
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, time_bucket, price_bin_start,price_bin_end)
+    UNIQUE (timeframe, time_bucket, price_bin_start)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
@@ -824,8 +824,8 @@ CREATE TABLE IF NOT EXISTS btc_arima_data (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe)
-);
+    UNIQUE (timeframe, open_time)
+    );
 
 -- Similar tables for ETH and SOL
 CREATE TABLE IF NOT EXISTS eth_arima_data (
@@ -863,7 +863,7 @@ CREATE TABLE IF NOT EXISTS eth_arima_data (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe)
+    UNIQUE (timeframe, open_time)
 );
 CREATE TABLE IF NOT EXISTS sol_arima_data (
     id SERIAL PRIMARY KEY,
@@ -899,7 +899,7 @@ CREATE TABLE IF NOT EXISTS sol_arima_data (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe)
+    UNIQUE (timeframe, open_time)
 );
 CREATE INDEX IF NOT EXISTS idx_btc_arima_timeframe ON btc_arima_data(timeframe);
 CREATE INDEX IF NOT EXISTS idx_btc_arima_open_time ON btc_arima_data(open_time);

@@ -972,13 +972,27 @@ class MarketDataProcessor:
             self.logger.error(f"Критична помилка при збереженні профілю об'єму: {str(e)}")
             return False
 
-    def save_sol_lstm_sequence(self, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
+    def save_lstm_sequence(self, symbol: str, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
+        if symbol == 'BTC':
+            return self.data_storage.save_btc_lstm_sequence(data_points)
+        elif symbol == 'ETH':
+            return self.data_storage.save_eth_lstm_sequence(data_points)
+        elif symbol == 'SOL':
+            return self.data_storage.save_sol_lstm_sequence(data_points)
+        else:
+            self.logger.error(f"Непідтримуваний символ: {symbol}")
+            return []
 
-        return self.data_storage.save_sol_lstm_sequence(data_points)
-
-    def save_sol_arima_data(self, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
-
-        return self.data_storage.save_sol_arima_data(data_points)
+    def save_arima_data(self, symbol: str, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
+        if symbol == 'BTC':
+            return self.data_storage.save_btc_arima_data(data_points)
+        elif symbol == 'ETH':
+            return self.data_storage.save_eth_arima_data(data_points)
+        elif symbol == 'SOL':
+            return self.data_storage.save_sol_arima_data(data_points)
+        else:
+            self.logger.error(f"Непідтримуваний символ: {symbol}")
+            return []
 
     def load_lstm_sequence(self, symbol: str, timeframe: str, sequence_id: Optional[int] = None, **kwargs) -> List[
         Dict[str, Any]]:
@@ -1203,24 +1217,15 @@ class MarketDataProcessor:
 
                 if save_results:
                     try:
-                        # Convert DataFrame to list of dicts and ensure required fields exist
                         arima_data_points = arima_data.reset_index().to_dict('records')
 
-                        # Add missing required fields if they don't exist
                         for record in arima_data_points:
-                            if 'open_time' not in record:
-                                record['open_time'] = record.get('timestamp', record.get('index', pd.Timestamp.now()))
-                            if 'original_close' not in record:
-                                record['original_close'] = record.get('close', None)
+                            record['open_time'] = record.get('open_time', record.get('timestamp', record.get('index',
+                                                                                                             pd.Timestamp.now())))
+                            record['original_close'] = record.get('original_close', record.get('close', None))
 
-                        # Try specific method first, then fall back to general
-                        method_name = f"save_{symbol.lower()}_arima_data"
-                        if hasattr(self.data_storage, method_name):
-                            arima_ids = getattr(self.data_storage, method_name)(arima_data_points)
-                        else:
-                            arima_ids = self.data_storage.save_sol_arima_data(
-                                data_points=arima_data_points,
-                            )
+                        # Виклик уніфікованого методу
+                        arima_ids = self.save_arima_data(symbol, arima_data_points)
 
                         if arima_ids:
                             self.logger.info(f"ARIMA data saved for {symbol}, IDs: {arima_ids}")
@@ -1229,7 +1234,7 @@ class MarketDataProcessor:
                     except Exception as e:
                         self.logger.error(f"Error saving ARIMA data for {symbol}: {str(e)}")
 
-            # LSTM data preparation and saving
+            # LSTM
             try:
                 lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
                 if not lstm_df.empty:
@@ -1237,30 +1242,21 @@ class MarketDataProcessor:
 
                     if save_results:
                         try:
-                            # Convert DataFrame and add required fields
                             lstm_data_points = lstm_df.reset_index().to_dict('records')
 
-                            # Add sequence_position if missing (sequential numbering)
+                            timestamp_str = pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
                             for i, record in enumerate(lstm_data_points):
-                                if 'sequence_position' not in record:
-                                    record['sequence_position'] = i + 1  # 1-based indexing
-                                if 'sequence_id' not in record:
-                                    record[
-                                        'sequence_id'] = f"{symbol}_{timeframe}_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}_{i}"
+                                record.setdefault('sequence_position', i + 1)
+                                record.setdefault('sequence_id', f"{symbol}_{timeframe}_{timestamp_str}_{i}")
 
-                            # Validate required fields
                             required_fields = ['sequence_position', 'sequence_id']
                             for record in lstm_data_points:
                                 missing = [f for f in required_fields if f not in record]
                                 if missing:
                                     raise ValueError(f"Missing required fields: {missing}")
 
-                            # Save using appropriate method
-                            method_name = f"save_{symbol.lower()}_lstm_sequence"
-                            if hasattr(self.data_storage, method_name):
-                                sequence_ids = getattr(self.data_storage, method_name)(lstm_data_points)
-                            else:
-                                sequence_ids = self.data_storage.save_sol_lstm_sequence(lstm_data_points)
+                            # Виклик уніфікованого методу
+                            sequence_ids = self.save_lstm_sequence(symbol, lstm_data_points)
 
                             if sequence_ids:
                                 self.logger.info(f"Saved LSTM sequences for {symbol}, IDs: {sequence_ids}")
@@ -1414,10 +1410,10 @@ def main():
     SYMBOLS = ['SOL']
 
     # Визначення всіх таймфреймів
-    ALL_TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
+    ALL_TIMEFRAMES = ['1h', '4h', '1d', '1w']
 
     # Базові таймфрейми, які вже існують в базі даних
-    BASE_TIMEFRAMES = ['1m', '1h', '1d']
+    BASE_TIMEFRAMES = [ '1h', '1d']
 
     # Похідні таймфрейми, які будуть створені через ресемплінг
     DERIVED_TIMEFRAMES = ['4h', '1w']

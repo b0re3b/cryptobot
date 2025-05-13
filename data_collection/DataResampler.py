@@ -15,8 +15,9 @@ class DataResampler:
         self.original_data_map = {}
         self.chunk_size = chunk_size
         self.scaling_sample_size = scaling_sample_size
-        self.find_column = lru_cache(maxsize=128)(self._find_column_original)
+        self.find_column = self._find_column_original
         self.cache = {}
+
     def _find_column_original(self, df, column_name):
         """Знаходить колонку незалежно від регістру з обробкою конфліктів"""
         exact_match = [col for col in df.columns if col == column_name]
@@ -225,32 +226,46 @@ class DataResampler:
 
         return agg_dict
 
+    def convert_interval_to_pandas_format(self, timeframe: str) -> str:
+
+        if not timeframe or not isinstance(timeframe, str):
+            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
+
+        interval_map = {
+            's': 'S',  # секунди
+            'm': 'T',  # хвилини (в pandas використовується 'T' для хвилин)
+            'h': 'H',  # години
+            'd': 'D',  # дні
+            'w': 'W',  # тижні
+            'M': 'M',  # місяці
+        }
+
+        import re
+        match = re.match(r'(\d+)([smhdwM])', timeframe)
+        if not match:
+            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
+
+        number, unit = match.groups()
+
+        # Перевірка, чи число додатне
+        if int(number) <= 0:
+            raise ValueError(f"Інтервал повинен бути додатнім: {timeframe}")
+
+        # Перевірка, чи підтримується одиниця часу
+        if unit not in interval_map:
+            raise ValueError(f"Непідтримувана одиниця часу: {unit}")
+
+        # Конвертуємо у pandas формат
+        pandas_interval = f"{number}{interval_map[unit]}"
+        self.logger.info(f"Перетворено інтервал '{timeframe}' у pandas формат '{pandas_interval}'")
+
+        return pandas_interval
+
     def resample_data(self, data: pd.DataFrame, target_interval: str,
                       required_columns: List[str] = None,
                       auto_detect: bool = True,
                       check_interval_compatibility: bool = True) -> pd.DataFrame:
-        """
-        Розширена версія методу ресемплінгу з підтримкою великих обсягів даних
-        та автоматичним визначенням вхідного інтервалу.
 
-        Parameters:
-        -----------
-        data : pd.DataFrame
-            Вхідні дані з DatetimeIndex
-        target_interval : str
-            Цільовий інтервал (наприклад, '4h', '1w')
-        required_columns : List[str], optional
-            Список необхідних колонок
-        auto_detect : bool, default True
-            Чи автоматично визначати поточний інтервал і перевіряти сумісність
-        check_interval_compatibility : bool, default True
-            Чи перевіряти, що цільовий інтервал більший за поточний
-
-        Returns:
-        --------
-        pd.DataFrame
-            Ресемпльовані дані
-        """
         self.logger.info(f"Наявні колонки в resample_data: {list(data.columns)}")
 
         if data.empty:
@@ -267,7 +282,14 @@ class DataResampler:
         # Зберігаємо оригінальні дані
         self.original_data_map['original_data'] = data.copy()
 
+        # Записуємо початковий інтервал для перевірки
+        initial_index_diff = None
+        if len(data) > 1:
+            initial_index_diff = (data.index[1] - data.index[0]).total_seconds()
+            self.logger.info(f"Початковий інтервал в секундах: {initial_index_diff}")
+
         # Автоматичне визначення поточного інтервалу, якщо потрібно
+        current_interval = None
         if auto_detect:
             current_interval = self.detect_interval(data)
             if not current_interval:
@@ -323,13 +345,36 @@ class DataResampler:
         batch_size = self.chunk_size  # Використовуємо налаштування класу
         total_rows = len(data)
 
+        # Додаємо параметри для коректного закриття інтервалів
+        # Це критично важлива зміна для правильного ресемплінгу!
+        resample_params = {
+            'rule': pandas_interval,
+            'closed': 'left',  # Включаємо лівий край інтервалу
+            'label': 'left'  # Встановлюємо мітку на лівий край
+        }
+
         if total_rows <= batch_size:
             # Якщо дані менші за batch_size, обробляємо весь DataFrame
             try:
-                resampled = data.resample(pandas_interval).agg(agg_dict)
+                # ВИПРАВЛЕННЯ: передаємо параметри через словник для уникнення плутанини
+                resampled = data.resample(**resample_params).agg(agg_dict)
 
                 # Заповнення відсутніх значень з оптимізацією
                 resampled = self._fill_missing_values(resampled)
+
+                # ДОДАНО: Перевірка успішності ресемплінгу
+                if len(resampled) > 1:
+                    new_interval = (resampled.index[1] - resampled.index[0]).total_seconds()
+                    expected_interval = self.parse_interval(target_interval).total_seconds()
+                    self.logger.info(f"Новий інтервал в секундах: {new_interval}, очікуваний: {expected_interval}")
+
+                    # Перевіряємо приблизну відповідність (з допустимим відхиленням 5%)
+                    interval_ratio = abs(new_interval / expected_interval - 1)
+                    if interval_ratio > 0.05:  # 5% tolerance
+                        self.logger.warning(
+                            f"Ресемплінг міг відбутися неправильно! Отриманий інтервал {new_interval} сек. "
+                            f"відрізняється від очікуваного {expected_interval} сек. на {interval_ratio:.2%}"
+                        )
 
                 self.original_data_map['resampled_data'] = resampled.copy()
 
@@ -338,7 +383,10 @@ class DataResampler:
                     'original_interval': current_interval if auto_detect and current_interval else "unknown",
                     'target_interval': target_interval,
                     'original_shape': data.shape,
-                    'resampled_shape': resampled.shape
+                    'resampled_shape': resampled.shape,
+                    'initial_index_diff_seconds': initial_index_diff,
+                    'new_index_diff_seconds': (resampled.index[1] - resampled.index[0]).total_seconds() if len(
+                        resampled) > 1 else None
                 }
 
                 return resampled
@@ -353,8 +401,8 @@ class DataResampler:
             batch = data.iloc[start:end]
 
             try:
-                # Ресемплінг батчу
-                resampled_batch = batch.resample(pandas_interval).agg(agg_dict)
+                # Ресемплінг батчу з оновленими параметрами
+                resampled_batch = batch.resample(**resample_params).agg(agg_dict)
                 result_batches.append(resampled_batch)
             except Exception as e:
                 self.logger.error(f"Помилка при обробці батчу: {str(e)}")
@@ -367,6 +415,20 @@ class DataResampler:
             # Заповнення відсутніх значень
             resampled = self._fill_missing_values(resampled)
 
+            # ДОДАНО: Перевірка успішності ресемплінгу для batch-обробки
+            if len(resampled) > 1:
+                new_interval = (resampled.index[1] - resampled.index[0]).total_seconds()
+                expected_interval = self.parse_interval(target_interval).total_seconds()
+                self.logger.info(f"Новий інтервал в секундах: {new_interval}, очікуваний: {expected_interval}")
+
+                # Перевіряємо приблизну відповідність
+                interval_ratio = abs(new_interval / expected_interval - 1)
+                if interval_ratio > 0.05:  # 5% tolerance
+                    self.logger.warning(
+                        f"Batch-ресемплінг міг відбутися неправильно! Отриманий інтервал {new_interval} сек. "
+                        f"відрізняється від очікуваного {expected_interval} сек. на {interval_ratio:.2%}"
+                    )
+
             self.original_data_map['resampled_data'] = resampled.copy()
 
             # Зберігаємо інформацію про трансформацію
@@ -376,7 +438,10 @@ class DataResampler:
                 'original_shape': data.shape,
                 'resampled_shape': resampled.shape,
                 'batch_processing': True,
-                'batches_count': len(result_batches)
+                'batches_count': len(result_batches),
+                'initial_index_diff_seconds': initial_index_diff,
+                'new_index_diff_seconds': (resampled.index[1] - resampled.index[0]).total_seconds() if len(
+                    resampled) > 1 else None
             }
 
             self.logger.info(
@@ -386,7 +451,6 @@ class DataResampler:
         except Exception as e:
             self.logger.error(f"Помилка при об'єднанні батчів: {str(e)}")
             return data
-
 
     def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto',
                              max_gap: int = 5, interpolate_prices: bool = True) -> pd.DataFrame:
@@ -523,41 +587,6 @@ class DataResampler:
                     long_gaps[col] = long_gaps_count
 
         return df
-
-    def convert_interval_to_pandas_format(self, timeframe: str) -> str:
-
-        if not timeframe or not isinstance(timeframe, str):
-            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
-
-        interval_map = {
-            's': 'S',  # секунди
-            'm': 'T',  # хвилини (в pandas використовується 'T' для хвилин)
-            'h': 'H',  # години
-            'd': 'D',  # дні
-            'w': 'W',  # тижні
-            'M': 'M',  # місяці
-        }
-
-        import re
-        match = re.match(r'(\d+)([smhdwM])', timeframe)
-        if not match:
-            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
-
-        number, unit = match.groups()
-
-        # Перевірка, чи число додатне
-        if int(number) <= 0:
-            raise ValueError(f"Інтервал повинен бути додатнім: {timeframe}")
-
-        # Перевірка, чи підтримується одиниця часу
-        if unit not in interval_map:
-            raise ValueError(f"Непідтримувана одиниця часу: {unit}")
-
-        # Конвертуємо у pandas формат
-        pandas_interval = f"{number}{interval_map[unit]}"
-        self.logger.info(f"Перетворено інтервал '{timeframe}' у pandas формат '{pandas_interval}'")
-
-        return pandas_interval
 
     @lru_cache(maxsize=128)
     def _cached_convert_interval(self, timeframe: str) -> str:
