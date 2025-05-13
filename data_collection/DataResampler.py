@@ -266,14 +266,34 @@ class DataResampler:
                       auto_detect: bool = True,
                       check_interval_compatibility: bool = True) -> pd.DataFrame:
 
-        self.logger.info(f"Наявні колонки в resample_data: {list(data.columns)}")
+        self.logger.info(f"Початок ресемплінгу даних. Наявні колонки: {list(data.columns)}")
 
         if data.empty:
             self.logger.warning("Отримано порожній DataFrame для ресемплінгу")
             return data
 
+        # ДОДАНО: Детальна перевірка та корекція індексу
         if not isinstance(data.index, pd.DatetimeIndex):
-            raise ValueError("Дані повинні мати DatetimeIndex для ресемплінгу")
+            try:
+                self.logger.warning("Індекс не є DatetimeIndex. Спроба конвертації...")
+                data = data.copy()
+                data.index = pd.to_datetime(data.index)
+                self.logger.info("Індекс успішно конвертовано у DatetimeIndex")
+            except Exception as e:
+                self.logger.error(f"Не вдалося конвертувати індекс у DatetimeIndex: {str(e)}")
+                raise ValueError("Дані повинні мати DatetimeIndex для ресемплінгу")
+
+        # ДОДАНО: Перевірка та корекція порядку індексу
+        if not data.index.is_monotonic_increasing:
+            self.logger.warning("Індекс не відсортований. Сортуємо дані за часовим індексом.")
+            data = data.sort_index()
+
+        # ДОДАНО: Перевірка дублікатів у індексі
+        duplicated_indices = data.index.duplicated()
+        if duplicated_indices.any():
+            dup_count = duplicated_indices.sum()
+            self.logger.warning(f"Виявлено {dup_count} дублікатів у індексі. Видаляємо дублікати...")
+            data = data[~duplicated_indices]
 
         # Збереження списку оригінальних колонок
         original_columns = set(data.columns)
@@ -284,7 +304,16 @@ class DataResampler:
 
         # Записуємо початковий інтервал для перевірки
         initial_index_diff = None
-        if len(data) > 1:
+        initial_intervals = []
+        if len(data) > 10:  # Беремо кілька перших різниць для більшої надійності
+            for i in range(1, min(10, len(data))):
+                diff_seconds = (data.index[i] - data.index[i - 1]).total_seconds()
+                initial_intervals.append(diff_seconds)
+
+            initial_index_diff = sum(initial_intervals) / len(initial_intervals)
+            self.logger.info(f"Початковий середній інтервал в секундах: {initial_index_diff}")
+            self.logger.info(f"Перші кілька інтервалів: {initial_intervals}")
+        elif len(data) > 1:
             initial_index_diff = (data.index[1] - data.index[0]).total_seconds()
             self.logger.info(f"Початковий інтервал в секундах: {initial_index_diff}")
 
@@ -323,7 +352,7 @@ class DataResampler:
         ]
 
         if missing_cols:
-            self.logger.error(f"Відсутні необхідні колонки: {missing_cols}")
+            self.logger.warning(f"Відсутні необхідні колонки: {missing_cols}")
             if len(missing_cols) == len(required_columns):
                 self.logger.error("Неможливо виконати ресемплінг без необхідних колонок даних")
                 return data
@@ -334,46 +363,93 @@ class DataResampler:
         try:
             pandas_interval = self.convert_interval_to_pandas_format(target_interval)
             self.logger.info(f"Ресемплінг даних до інтервалу: {target_interval} (pandas формат: {pandas_interval})")
+
+            # ДОДАНО: Обчислення очікуваного інтервалу в секундах для подальшої перевірки
+            expected_interval_td = self.parse_interval(target_interval)
+            expected_interval_seconds = expected_interval_td.total_seconds()
+            self.logger.info(f"Очікуваний інтервал ресемплінгу: {expected_interval_seconds} сек.")
         except ValueError as e:
             self.logger.error(f"Неправильний формат інтервалу: {str(e)}")
+            return data
+
+        # ДОДАНО: Перевірка нульового інтервалу
+        if expected_interval_seconds <= 0:
+            self.logger.error(f"Очікуваний інтервал повинен бути додатнім: {expected_interval_seconds} сек.")
             return data
 
         # Оптимізована підготовка агрегацій
         agg_dict = self._optimize_aggregation_dict(data)
 
+        # ДОДАНО: Логування методів агрегації для діагностики
+        self.logger.info(f"Методи агрегації для колонок: {json.dumps({str(k): str(v) for k, v in agg_dict.items()})}")
+
         # Оптимізована обробка великих наборів даних
         batch_size = self.chunk_size  # Використовуємо налаштування класу
         total_rows = len(data)
 
-        # Додаємо параметри для коректного закриття інтервалів
-        # Це критично важлива зміна для правильного ресемплінгу!
+        # ЗМІНЕНО: Розширені параметри для точного контролю над ресемплінгом
         resample_params = {
             'rule': pandas_interval,
             'closed': 'left',  # Включаємо лівий край інтервалу
-            'label': 'left'  # Встановлюємо мітку на лівий край
+            'label': 'left',  # Встановлюємо мітку на лівий край
+            'origin': 'start',  # Початок відліку від першої точки даних
+            'offset': '0s'  # Зсув на початку відліку
         }
 
+        self.logger.info(f"Параметри ресемплінгу: {resample_params}")
+
+        # ДОДАНО: Збереження початкового часового діапазону для перевірки
+        orig_start = data.index.min()
+        orig_end = data.index.max()
+        self.logger.info(f"Діапазон вхідних даних: {orig_start} - {orig_end}")
+
+        # Стратегія обробки залежно від розміру даних
         if total_rows <= batch_size:
             # Якщо дані менші за batch_size, обробляємо весь DataFrame
             try:
-                # ВИПРАВЛЕННЯ: передаємо параметри через словник для уникнення плутанини
+                # ЗМІНЕНО: використовуємо розширені параметри
                 resampled = data.resample(**resample_params).agg(agg_dict)
+
+                # ДОДАНО: перевірка на пустий результат
+                if resampled.empty:
+                    self.logger.error("Ресемплінг призвів до порожнього DataFrame! Повертаємо оригінальні дані.")
+                    return data
 
                 # Заповнення відсутніх значень з оптимізацією
                 resampled = self._fill_missing_values(resampled)
 
-                # ДОДАНО: Перевірка успішності ресемплінгу
+                # ДОДАНО: детальніша перевірка результатів ресемплінгу
                 if len(resampled) > 1:
-                    new_interval = (resampled.index[1] - resampled.index[0]).total_seconds()
-                    expected_interval = self.parse_interval(target_interval).total_seconds()
-                    self.logger.info(f"Новий інтервал в секундах: {new_interval}, очікуваний: {expected_interval}")
+                    # Перевіряємо кілька інтервалів, а не лише перший
+                    interval_checks = []
+                    for i in range(1, min(10, len(resampled))):
+                        actual_interval = (resampled.index[i] - resampled.index[i - 1]).total_seconds()
+                        interval_checks.append(actual_interval)
 
-                    # Перевіряємо приблизну відповідність (з допустимим відхиленням 5%)
-                    interval_ratio = abs(new_interval / expected_interval - 1)
+                    avg_interval = sum(interval_checks) / len(interval_checks)
+                    self.logger.info(f"Перевірені інтервали після ресемплінгу: {interval_checks}")
+                    self.logger.info(
+                        f"Середній новий інтервал: {avg_interval}, очікуваний: {expected_interval_seconds}")
+
+                    # Перевіряємо приблизну відповідність із допустимим відхиленням 5%
+                    interval_ratio = abs(avg_interval / expected_interval_seconds - 1)
+
                     if interval_ratio > 0.05:  # 5% tolerance
+                        self.logger.error(
+                            f"УВАГА! Ресемплінг виконано з відхиленням від очікуваного інтервалу! "
+                            f"Отриманий середній інтервал {avg_interval:.2f} сек. "
+                            f"відрізняється від очікуваного {expected_interval_seconds:.2f} сек. на {interval_ratio:.2%}"
+                        )
+                    else:
+                        self.logger.info(f"Ресемплінг успішно виконано з правильним інтервалом "
+                                         f"(відхилення: {interval_ratio:.2%})")
+
+                    # ДОДАНО: перевірка розміру даних
+                    reduction_ratio = 1 - (len(resampled) / total_rows)
+                    if reduction_ratio < 0.01 and total_rows > 100:  # Майже немає змін у розмірі
                         self.logger.warning(
-                            f"Ресемплінг міг відбутися неправильно! Отриманий інтервал {new_interval} сек. "
-                            f"відрізняється від очікуваного {expected_interval} сек. на {interval_ratio:.2%}"
+                            f"Ресемплінг майже не змінив кількість рядків: {total_rows} -> {len(resampled)} "
+                            f"(зменшення лише на {reduction_ratio:.2%}). Можливо, проблема з параметрами ресемплінгу."
                         )
 
                 self.original_data_map['resampled_data'] = resampled.copy()
@@ -385,16 +461,30 @@ class DataResampler:
                     'original_shape': data.shape,
                     'resampled_shape': resampled.shape,
                     'initial_index_diff_seconds': initial_index_diff,
-                    'new_index_diff_seconds': (resampled.index[1] - resampled.index[0]).total_seconds() if len(
-                        resampled) > 1 else None
+                    'new_index_diff_seconds': avg_interval if len(interval_checks) > 0 else None,
+                    'reduction_ratio': reduction_ratio if len(resampled) > 0 else None
                 }
+
+                # ДОДАНО: додаткова перевірка часового діапазону
+                resampled_start = resampled.index.min()
+                resampled_end = resampled.index.max()
+                self.logger.info(f"Діапазон вихідних даних: {resampled_start} - {resampled_end}")
+
+                if resampled_start > orig_start or resampled_end < orig_end:
+                    self.logger.warning(
+                        f"Увага! Часовий діапазон змінився після ресемплінгу! "
+                        f"Можливо втрачено дані на початку або в кінці."
+                    )
 
                 return resampled
             except Exception as e:
                 self.logger.error(f"Помилка при ресемплінгу: {str(e)}")
+                import traceback
+                self.logger.error(f"Деталі помилки: {traceback.format_exc()}")
                 return data
 
         # Batch-обробка для великих наборів даних
+        self.logger.info(f"Застосовуємо батч-обробку для великого набору даних: {total_rows} рядків")
         result_batches = []
         for start in range(0, total_rows, batch_size):
             end = min(start + batch_size, total_rows)
@@ -403,30 +493,65 @@ class DataResampler:
             try:
                 # Ресемплінг батчу з оновленими параметрами
                 resampled_batch = batch.resample(**resample_params).agg(agg_dict)
-                result_batches.append(resampled_batch)
+
+                # Перевірка результату батчу
+                if not resampled_batch.empty:
+                    result_batches.append(resampled_batch)
+                else:
+                    self.logger.warning(f"Батч {start}-{end} дав порожній результат, пропускаємо")
+
             except Exception as e:
-                self.logger.error(f"Помилка при обробці батчу: {str(e)}")
+                self.logger.error(f"Помилка при обробці батчу {start}-{end}: {str(e)}")
                 continue
+
+        # Перевірка результатів
+        if not result_batches:
+            self.logger.error("Жоден батч не дав результатів. Повертаємо оригінальні дані.")
+            return data
 
         # Об'єднання результатів
         try:
-            resampled = pd.concat(result_batches, ignore_index=False)
+            # ЗМІНЕНО: використовуємо метод concat з правильними параметрами
+            resampled = pd.concat(result_batches, ignore_index=False, verify_integrity=True)
+
+            # ДОДАНО: перевірка і видалення можливих дублікатів після конкатенації
+            if resampled.index.duplicated().any():
+                self.logger.warning("Виявлено дублікати після об'єднання батчів, видаляємо...")
+                resampled = resampled[~resampled.index.duplicated(keep='first')]
 
             # Заповнення відсутніх значень
             resampled = self._fill_missing_values(resampled)
 
-            # ДОДАНО: Перевірка успішності ресемплінгу для batch-обробки
+            # ДОДАНО: перевірка успішності ресемплінгу для batch-обробки
             if len(resampled) > 1:
-                new_interval = (resampled.index[1] - resampled.index[0]).total_seconds()
-                expected_interval = self.parse_interval(target_interval).total_seconds()
-                self.logger.info(f"Новий інтервал в секундах: {new_interval}, очікуваний: {expected_interval}")
+                interval_checks = []
+                for i in range(1, min(10, len(resampled))):
+                    actual_interval = (resampled.index[i] - resampled.index[i - 1]).total_seconds()
+                    interval_checks.append(actual_interval)
+
+                avg_interval = sum(interval_checks) / len(interval_checks)
+                self.logger.info(f"Перевірені інтервали після batch-ресемплінгу: {interval_checks}")
+                self.logger.info(f"Середній новий інтервал: {avg_interval}, очікуваний: {expected_interval_seconds}")
 
                 # Перевіряємо приблизну відповідність
-                interval_ratio = abs(new_interval / expected_interval - 1)
+                interval_ratio = abs(avg_interval / expected_interval_seconds - 1)
+
                 if interval_ratio > 0.05:  # 5% tolerance
+                    self.logger.error(
+                        f"УВАГА! Batch-ресемплінг виконано з відхиленням від очікуваного інтервалу! "
+                        f"Отриманий середній інтервал {avg_interval:.2f} сек. "
+                        f"відрізняється від очікуваного {expected_interval_seconds:.2f} сек. на {interval_ratio:.2%}"
+                    )
+                else:
+                    self.logger.info(f"Batch-ресемплінг успішно виконано з правильним інтервалом "
+                                     f"(відхилення: {interval_ratio:.2%})")
+
+                # ДОДАНО: перевірка розміру даних
+                reduction_ratio = 1 - (len(resampled) / total_rows)
+                if reduction_ratio < 0.01 and total_rows > 100:  # Майже немає змін у розмірі
                     self.logger.warning(
-                        f"Batch-ресемплінг міг відбутися неправильно! Отриманий інтервал {new_interval} сек. "
-                        f"відрізняється від очікуваного {expected_interval} сек. на {interval_ratio:.2%}"
+                        f"Batch-ресемплінг майже не змінив кількість рядків: {total_rows} -> {len(resampled)} "
+                        f"(зменшення лише на {reduction_ratio:.2%}). Можливо, проблема з параметрами ресемплінгу."
                     )
 
             self.original_data_map['resampled_data'] = resampled.copy()
@@ -440,9 +565,20 @@ class DataResampler:
                 'batch_processing': True,
                 'batches_count': len(result_batches),
                 'initial_index_diff_seconds': initial_index_diff,
-                'new_index_diff_seconds': (resampled.index[1] - resampled.index[0]).total_seconds() if len(
-                    resampled) > 1 else None
+                'new_index_diff_seconds': avg_interval if 'avg_interval' in locals() else None,
+                'reduction_ratio': reduction_ratio if 'reduction_ratio' in locals() else None
             }
+
+            # ДОДАНО: додаткова перевірка часового діапазону при batch-обробці
+            resampled_start = resampled.index.min()
+            resampled_end = resampled.index.max()
+            self.logger.info(f"Діапазон вихідних даних після batch-обробки: {resampled_start} - {resampled_end}")
+
+            if resampled_start > orig_start or resampled_end < orig_end:
+                self.logger.warning(
+                    f"Увага! Часовий діапазон змінився після batch-ресемплінгу! "
+                    f"Можливо втрачено дані на початку або в кінці."
+                )
 
             self.logger.info(
                 f"Ресемплінг успішно завершено: {resampled.shape[0]} рядків, {len(resampled.columns)} колонок")
@@ -450,7 +586,51 @@ class DataResampler:
 
         except Exception as e:
             self.logger.error(f"Помилка при об'єднанні батчів: {str(e)}")
+            import traceback
+            self.logger.error(f"Деталі помилки: {traceback.format_exc()}")
             return data
+
+    def verify_resampling(self, original_data: pd.DataFrame, resampled_data: pd.DataFrame,
+                          target_interval: str) -> bool:
+        """Перевіряє, чи був ресемплінг виконаний правильно"""
+
+        if len(resampled_data) <= 1:
+            self.logger.warning("Недостатньо даних для перевірки ресемплінгу")
+            return False
+
+        # 1. Перевірка зміни кількості рядків
+        orig_rows = len(original_data)
+        new_rows = len(resampled_data)
+
+        if orig_rows == new_rows:
+            self.logger.warning(f"Кількість рядків не змінилася: {orig_rows}. Ресемплінг може бути неправильним.")
+        else:
+            self.logger.info(f"Зміна кількості рядків: {orig_rows} -> {new_rows}")
+
+        # 2. Перевірка інтервалу
+        expected_td = self.parse_interval(target_interval)
+        expected_seconds = expected_td.total_seconds()
+
+        actual_intervals = []
+        for i in range(1, min(10, len(resampled_data))):
+            actual_seconds = (resampled_data.index[i] - resampled_data.index[i - 1]).total_seconds()
+            actual_intervals.append(actual_seconds)
+
+        avg_actual = sum(actual_intervals) / len(actual_intervals)
+
+        self.logger.info(f"Очікуваний інтервал: {expected_seconds} сек.")
+        self.logger.info(f"Фактичний середній інтервал: {avg_actual} сек.")
+        self.logger.info(f"Перші інтервали: {actual_intervals}")
+
+        # Перевірка з допуском 5%
+        is_correct = abs(avg_actual - expected_seconds) <= expected_seconds * 0.05
+
+        if not is_correct:
+            self.logger.error(f"Ресемплінг виконано неправильно! Різниця: {abs(avg_actual - expected_seconds)} сек.")
+        else:
+            self.logger.info("Ресемплінг виконано правильно!")
+
+        return is_correct
 
     def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto',
                              max_gap: int = 5, interpolate_prices: bool = True) -> pd.DataFrame:

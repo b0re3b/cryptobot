@@ -3276,7 +3276,6 @@ class DatabaseManager:
                 return result is not None
 
     def save_eth_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
-
         inserted_ids = []
 
         with self.conn.cursor() as cursor:
@@ -3284,18 +3283,29 @@ class DatabaseManager:
                 query = """
                         INSERT INTO eth_lstm_data (timeframe, sequence_id, sequence_position, open_time, \
                                                    open_scaled, high_scaled, low_scaled, close_scaled, volume_scaled, \
+                                                   volume_change_scaled, volume_rolling_mean_scaled, \
+                                                   volume_rolling_std_scaled, volume_spike_scaled, \
                                                    hour_sin, hour_cos, day_of_week_sin, day_of_week_cos, \
                                                    month_sin, month_cos, day_of_month_sin, day_of_month_cos, \
                                                    target_close_1, target_close_5, target_close_10, \
-                                                   sequence_length, scaling_metadata) \
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (timeframe, sequence_id, sequence_position) 
-                DO \
+                                                   sequence_length, scaling_metadata)
+                        VALUES (%s, %s, %s, %s, \
+                                %s, %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, \
+                                %s, %s) ON CONFLICT (timeframe, sequence_id, sequence_position) DO \
                         UPDATE SET
                             open_scaled = EXCLUDED.open_scaled, \
                             high_scaled = EXCLUDED.high_scaled, \
                             low_scaled = EXCLUDED.low_scaled, \
                             close_scaled = EXCLUDED.close_scaled, \
                             volume_scaled = EXCLUDED.volume_scaled, \
+                            volume_change_scaled = EXCLUDED.volume_change_scaled, \
+                            volume_rolling_mean_scaled = EXCLUDED.volume_rolling_mean_scaled, \
+                            volume_rolling_std_scaled = EXCLUDED.volume_rolling_std_scaled, \
+                            volume_spike_scaled = EXCLUDED.volume_spike_scaled, \
                             hour_sin = EXCLUDED.hour_sin, \
                             hour_cos = EXCLUDED.hour_cos, \
                             day_of_week_sin = EXCLUDED.day_of_week_sin, \
@@ -3310,7 +3320,7 @@ class DatabaseManager:
                             sequence_length = EXCLUDED.sequence_length, \
                             scaling_metadata = EXCLUDED.scaling_metadata, \
                             updated_at = CURRENT_TIMESTAMP \
-                            RETURNING id \
+                            RETURNING id; \
                         """
 
                 cursor.execute(query, (
@@ -3323,6 +3333,10 @@ class DatabaseManager:
                     point['low_scaled'],
                     point['close_scaled'],
                     point['volume_scaled'],
+                    point.get('volume_change_scaled'),
+                    point.get('volume_rolling_mean_scaled'),
+                    point.get('volume_rolling_std_scaled'),
+                    point.get('volume_spike_scaled'),
                     point.get('hour_sin'),
                     point.get('hour_cos'),
                     point.get('day_of_week_sin'),
@@ -3625,76 +3639,88 @@ class DatabaseManager:
             return result[0] if result else 0
 
     def save_btc_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
+        inserted_ids = []
 
-            inserted_ids = []
+        with self.conn.cursor() as cursor:
+            for point in data_points:
+                query = """
+                        INSERT INTO btc_lstm_data (timeframe, sequence_id, sequence_position, open_time, \
+                                                   open_scaled, high_scaled, low_scaled, close_scaled, volume_scaled, \
+                                                   volume_change_scaled, volume_rolling_mean_scaled, \
+                                                   volume_rolling_std_scaled, volume_spike_scaled, \
+                                                   hour_sin, hour_cos, day_of_week_sin, day_of_week_cos, \
+                                                   month_sin, month_cos, day_of_month_sin, day_of_month_cos, \
+                                                   target_close_1, target_close_5, target_close_10, \
+                                                   sequence_length, scaling_metadata)
+                        VALUES (%s, %s, %s, %s, \
+                                %s, %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, \
+                                %s, %s) ON CONFLICT (timeframe, sequence_id, sequence_position) DO \
+                        UPDATE SET
+                            open_scaled = EXCLUDED.open_scaled, \
+                            high_scaled = EXCLUDED.high_scaled, \
+                            low_scaled = EXCLUDED.low_scaled, \
+                            close_scaled = EXCLUDED.close_scaled, \
+                            volume_scaled = EXCLUDED.volume_scaled, \
+                            volume_change_scaled = EXCLUDED.volume_change_scaled, \
+                            volume_rolling_mean_scaled = EXCLUDED.volume_rolling_mean_scaled, \
+                            volume_rolling_std_scaled = EXCLUDED.volume_rolling_std_scaled, \
+                            volume_spike_scaled = EXCLUDED.volume_spike_scaled, \
+                            hour_sin = EXCLUDED.hour_sin, \
+                            hour_cos = EXCLUDED.hour_cos, \
+                            day_of_week_sin = EXCLUDED.day_of_week_sin, \
+                            day_of_week_cos = EXCLUDED.day_of_week_cos, \
+                            month_sin = EXCLUDED.month_sin, \
+                            month_cos = EXCLUDED.month_cos, \
+                            day_of_month_sin = EXCLUDED.day_of_month_sin, \
+                            day_of_month_cos = EXCLUDED.day_of_month_cos, \
+                            target_close_1 = EXCLUDED.target_close_1, \
+                            target_close_5 = EXCLUDED.target_close_5, \
+                            target_close_10 = EXCLUDED.target_close_10, \
+                            sequence_length = EXCLUDED.sequence_length, \
+                            scaling_metadata = EXCLUDED.scaling_metadata, \
+                            updated_at = CURRENT_TIMESTAMP \
+                            RETURNING id; \
+                        """
 
-            with self.conn.cursor() as cursor:
-                for point in data_points:
-                    query = """
-                            INSERT INTO btc_lstm_data (timeframe, sequence_id, sequence_position, open_time, \
-                                                       open_scaled, high_scaled, low_scaled, close_scaled, \
-                                                       volume_scaled, \
-                                                       hour_sin, hour_cos, day_of_week_sin, day_of_week_cos, \
-                                                       month_sin, month_cos, day_of_month_sin, day_of_month_cos, \
-                                                       target_close_1, target_close_5, target_close_10, \
-                                                       sequence_length, scaling_metadata) \
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
-                                    %s) ON CONFLICT (timeframe, sequence_id, sequence_position) 
-                    DO \
-                            UPDATE SET
-                                open_scaled = EXCLUDED.open_scaled, \
-                                high_scaled = EXCLUDED.high_scaled, \
-                                low_scaled = EXCLUDED.low_scaled, \
-                                close_scaled = EXCLUDED.close_scaled, \
-                                volume_scaled = EXCLUDED.volume_scaled, \
-                                hour_sin = EXCLUDED.hour_sin, \
-                                hour_cos = EXCLUDED.hour_cos, \
-                                day_of_week_sin = EXCLUDED.day_of_week_sin, \
-                                day_of_week_cos = EXCLUDED.day_of_week_cos, \
-                                month_sin = EXCLUDED.month_sin, \
-                                month_cos = EXCLUDED.month_cos, \
-                                day_of_month_sin = EXCLUDED.day_of_month_sin, \
-                                day_of_month_cos = EXCLUDED.day_of_month_cos, \
-                                target_close_1 = EXCLUDED.target_close_1, \
-                                target_close_5 = EXCLUDED.target_close_5, \
-                                target_close_10 = EXCLUDED.target_close_10, \
-                                sequence_length = EXCLUDED.sequence_length, \
-                                scaling_metadata = EXCLUDED.scaling_metadata, \
-                                updated_at = CURRENT_TIMESTAMP \
-                                RETURNING id \
-                            """
+                cursor.execute(query, (
+                    point['timeframe'],
+                    point['sequence_id'],
+                    point['sequence_position'],
+                    point['open_time'],
+                    point['open_scaled'],
+                    point['high_scaled'],
+                    point['low_scaled'],
+                    point['close_scaled'],
+                    point['volume_scaled'],
+                    point.get('volume_change_scaled'),
+                    point.get('volume_rolling_mean_scaled'),
+                    point.get('volume_rolling_std_scaled'),
+                    point.get('volume_spike_scaled'),
+                    point.get('hour_sin'),
+                    point.get('hour_cos'),
+                    point.get('day_of_week_sin'),
+                    point.get('day_of_week_cos'),
+                    point.get('month_sin'),
+                    point.get('month_cos'),
+                    point.get('day_of_month_sin'),
+                    point.get('day_of_month_cos'),
+                    point.get('target_close_1'),
+                    point.get('target_close_5'),
+                    point.get('target_close_10'),
+                    point.get('sequence_length'),
+                    json.dumps(point['scaling_metadata']) if isinstance(point.get('scaling_metadata'),
+                                                                        dict) else point.get('scaling_metadata')
+                ))
 
-                    cursor.execute(query, (
-                        point['timeframe'],
-                        point['sequence_id'],
-                        point['sequence_position'],
-                        point['open_time'],
-                        point['open_scaled'],
-                        point['high_scaled'],
-                        point['low_scaled'],
-                        point['close_scaled'],
-                        point['volume_scaled'],
-                        point.get('hour_sin'),
-                        point.get('hour_cos'),
-                        point.get('day_of_week_sin'),
-                        point.get('day_of_week_cos'),
-                        point.get('month_sin'),
-                        point.get('month_cos'),
-                        point.get('day_of_month_sin'),
-                        point.get('day_of_month_cos'),
-                        point.get('target_close_1'),
-                        point.get('target_close_5'),
-                        point.get('target_close_10'),
-                        point.get('sequence_length'),
-                        json.dumps(point['scaling_metadata']) if isinstance(point.get('scaling_metadata'),
-                                                                            dict) else point.get('scaling_metadata')
-                    ))
+                inserted_id = cursor.fetchone()[0]
+                inserted_ids.append(inserted_id)
 
-                    inserted_id = cursor.fetchone()[0]
-                    inserted_ids.append(inserted_id)
-
-            self.conn.commit()
-            return inserted_ids
+        self.conn.commit()
+        return inserted_ids
 
     def get_btc_lstm_sequence(self, timeframe: str, sequence_id: int) -> List[Dict[str, Any]]:
         with self.conn.cursor() as cursor:
@@ -3868,7 +3894,6 @@ class DatabaseManager:
                 return result[0] if result else 0
 
     def save_sol_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
-
         inserted_ids = []
 
         with self.conn.cursor() as cursor:
@@ -3876,18 +3901,29 @@ class DatabaseManager:
                 query = """
                         INSERT INTO sol_lstm_data (timeframe, sequence_id, sequence_position, open_time, \
                                                    open_scaled, high_scaled, low_scaled, close_scaled, volume_scaled, \
+                                                   volume_change_scaled, volume_rolling_mean_scaled, \
+                                                   volume_rolling_std_scaled, volume_spike_scaled, \
                                                    hour_sin, hour_cos, day_of_week_sin, day_of_week_cos, \
                                                    month_sin, month_cos, day_of_month_sin, day_of_month_cos, \
                                                    target_close_1, target_close_5, target_close_10, \
-                                                   sequence_length, scaling_metadata) \
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (timeframe, sequence_id, sequence_position) 
-                DO \
+                                                   sequence_length, scaling_metadata)
+                        VALUES (%s, %s, %s, %s, \
+                                %s, %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, %s, \
+                                %s, %s, %s, \
+                                %s, %s) ON CONFLICT (timeframe, sequence_id, sequence_position) DO \
                         UPDATE SET
                             open_scaled = EXCLUDED.open_scaled, \
                             high_scaled = EXCLUDED.high_scaled, \
                             low_scaled = EXCLUDED.low_scaled, \
                             close_scaled = EXCLUDED.close_scaled, \
                             volume_scaled = EXCLUDED.volume_scaled, \
+                            volume_change_scaled = EXCLUDED.volume_change_scaled, \
+                            volume_rolling_mean_scaled = EXCLUDED.volume_rolling_mean_scaled, \
+                            volume_rolling_std_scaled = EXCLUDED.volume_rolling_std_scaled, \
+                            volume_spike_scaled = EXCLUDED.volume_spike_scaled, \
                             hour_sin = EXCLUDED.hour_sin, \
                             hour_cos = EXCLUDED.hour_cos, \
                             day_of_week_sin = EXCLUDED.day_of_week_sin, \
@@ -3902,7 +3938,7 @@ class DatabaseManager:
                             sequence_length = EXCLUDED.sequence_length, \
                             scaling_metadata = EXCLUDED.scaling_metadata, \
                             updated_at = CURRENT_TIMESTAMP \
-                            RETURNING id \
+                            RETURNING id; \
                         """
 
                 cursor.execute(query, (
@@ -3915,6 +3951,10 @@ class DatabaseManager:
                     point['low_scaled'],
                     point['close_scaled'],
                     point['volume_scaled'],
+                    point.get('volume_change_scaled'),
+                    point.get('volume_rolling_mean_scaled'),
+                    point.get('volume_rolling_std_scaled'),
+                    point.get('volume_spike_scaled'),
                     point.get('hour_sin'),
                     point.get('hour_cos'),
                     point.get('day_of_week_sin'),

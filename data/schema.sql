@@ -693,7 +693,10 @@ CREATE TABLE IF NOT EXISTS btc_lstm_data (
     month_cos NUMERIC,
     day_of_month_sin NUMERIC,
     day_of_month_cos NUMERIC,
-
+    volume_change_scaled NUMERIC,
+    volume_rolling_mean_scaled NUMERIC,
+    volume_rolling_std_scaled NUMERIC,
+    volume_spike_scaled NUMERIC,
 
 
     -- Target values (future prices for different horizons)
@@ -734,7 +737,10 @@ CREATE TABLE IF NOT EXISTS eth_lstm_data (
     month_cos NUMERIC,
     day_of_month_sin NUMERIC,
     day_of_month_cos NUMERIC,
-
+    volume_change_scaled NUMERIC,
+    volume_rolling_mean_scaled NUMERIC,
+    volume_rolling_std_scaled NUMERIC,
+    volume_spike_scaled NUMERIC,
 
 
     -- Target values (future prices for different horizons)
@@ -773,7 +779,10 @@ CREATE TABLE IF NOT EXISTS sol_lstm_data (
     month_cos NUMERIC,
     day_of_month_sin NUMERIC,
     day_of_month_cos NUMERIC,
-
+    volume_change_scaled NUMERIC,
+    volume_rolling_mean_scaled NUMERIC,
+    volume_rolling_std_scaled NUMERIC,
+    volume_spike_scaled NUMERIC,
 
 
     -- Target values (future prices for different horizons)
@@ -808,6 +817,11 @@ CREATE TABLE IF NOT EXISTS btc_arima_data (
     close_seasonal_diff NUMERIC,
     close_combo_diff NUMERIC,
 
+    original_volume NUMERIC NOT NULL,
+    volume_diff NUMERIC,
+    volume_log NUMERIC,
+    volume_pct_change NUMERIC,
+    volume_seasonal_diff NUMERIC,
 
     -- Stationarity test results
     adf_pvalue NUMERIC,
@@ -847,6 +861,11 @@ CREATE TABLE IF NOT EXISTS eth_arima_data (
     close_seasonal_diff NUMERIC,
     close_combo_diff NUMERIC,
 
+    original_volume NUMERIC NOT NULL,
+    volume_diff NUMERIC,
+    volume_log NUMERIC,
+    volume_pct_change NUMERIC,
+    volume_seasonal_diff NUMERIC,
 
     -- Stationarity test results
     adf_pvalue NUMERIC,
@@ -883,6 +902,12 @@ CREATE TABLE IF NOT EXISTS sol_arima_data (
     -- Seasonal differencing
     close_seasonal_diff NUMERIC,
     close_combo_diff NUMERIC,
+
+    original_volume NUMERIC NOT NULL,
+    volume_diff NUMERIC,
+    volume_log NUMERIC,
+    volume_pct_change NUMERIC,
+    volume_seasonal_diff NUMERIC,
 
     -- Stationarity test results
     adf_pvalue NUMERIC,

@@ -51,9 +51,7 @@ class MarketDataProcessor:
         self.supported_symbols = self.db_manager.supported_symbols
         self.logger.info(f"Підтримувані символи: {', '.join(self.supported_symbols)}")
 
-        # Ініціалізація кешу результатів
-        self.cache_enabled = True
-        self._result_cache = {}
+
 
         self.ready = True
         self.filtered_data = None
@@ -517,201 +515,6 @@ class MarketDataProcessor:
         return self._create_volume_profile(working_data, bins, price_col, volume_col)
 
 
-    def merge_datasets(self, datasets: List[pd.DataFrame],
-                       merge_on: str = 'timestamp',
-                       chunk_size: Optional[int] = None) -> pd.DataFrame:
-
-        global cache_key
-        if not datasets:
-            self.logger.warning("Порожній список наборів даних для об'єднання")
-            return pd.DataFrame()
-
-        if len(datasets) == 1:
-            return datasets[0].copy()
-
-        # Використовуємо власний chunk_size або значення з класу
-        if chunk_size is None:
-            chunk_size = self.chunk_size
-
-        # Визначення загального розміру даних для вибору стратегії
-        total_rows = sum(len(df) for df in datasets if df is not None and not df.empty)
-        total_cols = sum(len(df.columns) for df in datasets if df is not None and not df.empty)
-
-        self.logger.info(f"Початок об'єднання {len(datasets)} наборів даних "
-                         f"(всього ~{total_rows} рядків, ~{total_cols} колонок)")
-
-        # Перевірка чи потрібна обробка чанками
-        needs_chunking = total_rows > chunk_size
-
-        # Генеруємо кеш-ключ для збереження результату
-        if self.cache_enabled:
-            cache_key = f"merge_datasets_{hash(tuple([id(df) for df in datasets]))}"
-            if cache_key in self._result_cache:
-                self.logger.info(f"Повернення кешованого результату об'єднання наборів даних")
-                return self._result_cache[cache_key].copy()
-
-        # Попередня перевірка структури даних для оптимізації
-        all_have_merge_on = all(merge_on in df.columns or
-                                (isinstance(df.index, pd.Index) and df.index.name == merge_on)
-                                for df in datasets if df is not None and not df.empty)
-
-        if not all_have_merge_on:
-            if merge_on == 'timestamp':
-                self.logger.info("Перевірка, чи всі DataFrame мають DatetimeIndex")
-
-                # Використання генератора замість циклу
-                all_have_datetime_index = all(isinstance(df.index, pd.DatetimeIndex)
-                                              for df in datasets if df is not None and not df.empty)
-
-                if all_have_datetime_index:
-                    # Векторизоване перейменування індексів
-                    for df in datasets:
-                        if df is not None and not df.empty and df.index.name is None:
-                            df.index.name = 'timestamp'
-
-                    all_have_merge_on = True
-
-            if not all_have_merge_on:
-                self.logger.error(f"Не всі набори даних містять '{merge_on}' для об'єднання")
-                return pd.DataFrame()
-
-        # Якщо потрібна обробка по чанках і дані великі
-        if needs_chunking:
-            return self._merge_datasets_in_chunks(datasets, merge_on, chunk_size)
-
-        # Стандартна обробка для менших наборів даних
-        try:
-            # Підготовка даних - векторизовані операції
-            datasets_copy = []
-
-            for i, df in enumerate(datasets):
-                if df is None or df.empty:
-                    continue
-
-                df_copy = df.copy()
-
-                # Встановлюємо merge_on як індекс, якщо потрібно
-                if merge_on in df_copy.columns:
-                    df_copy.set_index(merge_on, inplace=True)
-                    self.logger.debug(f"DataFrame {i} перетворено: колонка '{merge_on}' стала індексом")
-                elif df_copy.index.name != merge_on:
-                    df_copy.index.name = merge_on
-                    self.logger.debug(f"DataFrame {i}: індекс перейменовано на '{merge_on}'")
-
-                datasets_copy.append(df_copy)
-
-            if not datasets_copy:
-                self.logger.warning("Після підготовки не залишилось даних для об'єднання")
-                return pd.DataFrame()
-
-            # Об'єднання даних ефективним способом
-            result = datasets_copy[0]
-            columns_count = len(result.columns)
-
-            # Створюємо словники для перейменування заздалегідь
-            renaming_actions = []
-
-            for i, df in enumerate(datasets_copy[1:], 2):
-                # Векторизоване виявлення дублікатів колонок
-                duplicate_cols = np.intersect1d(result.columns, df.columns)
-
-                if len(duplicate_cols) > 0:
-                    # Створюємо словник перейменування для всіх дублікатів одразу
-                    rename_dict = {col: f"{col}_{i}" for col in duplicate_cols}
-                    renaming_actions.append((i, df, rename_dict))
-                else:
-                    renaming_actions.append((i, df, {}))
-
-            # Виконуємо перейменування та об'єднання
-            for i, df, rename_dict in renaming_actions:
-                if rename_dict:
-                    self.logger.debug(f"Перейменування {len(rename_dict)} колонок у DataFrame {i}")
-                    df = df.rename(columns=rename_dict)
-
-                # Векторизоване об'єднання
-                result = result.join(df, how='outer')
-                columns_count += len(df.columns)
-
-            duplicate_columns = columns_count - len(result.columns)
-            self.logger.info(f"Об'єднання завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
-            self.logger.info(f"З {columns_count} вхідних колонок, {duplicate_columns} були дублікатами")
-
-
-            # Кешування результату, якщо увімкнено
-            if self.cache_enabled:
-                self._result_cache[cache_key] = result.copy()
-
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Помилка при об'єднанні наборів даних: {str(e)}")
-            self.logger.error(traceback.format_exc())
-            return pd.DataFrame()
-
-    def _merge_datasets_in_chunks(self, datasets: List[pd.DataFrame],
-                                  merge_on: str,
-                                  chunk_size: int) -> pd.DataFrame:
-
-        self.logger.info(f"Об'єднання наборів даних по чанках (розмір чанка: {chunk_size})")
-
-        # Підготовка даних - встановлення індексу
-        prepared_datasets = []
-        for i, df in enumerate(datasets):
-            if df is None or df.empty:
-                continue
-
-            df_copy = df.copy()
-
-            if merge_on in df_copy.columns:
-                df_copy.set_index(merge_on, inplace=True)
-            elif df_copy.index.name != merge_on:
-                df_copy.index.name = merge_on
-
-            prepared_datasets.append(df_copy)
-
-        if not prepared_datasets:
-            return pd.DataFrame()
-
-        # Визначення загального індексу для чанкування
-        all_indices = pd.Index([])
-        for df in prepared_datasets:
-            all_indices = all_indices.union(df.index)
-        all_indices = all_indices.sort_values()
-
-        # Розбиття на чанки
-        chunks = []
-        for i in range(0, len(all_indices), chunk_size):
-            chunk_indices = all_indices[i:i + chunk_size]
-            chunk_results = []
-
-            self.logger.debug(f"Обробка чанка {i // chunk_size + 1}/{(len(all_indices) - 1) // chunk_size + 1}")
-
-            for j, df in enumerate(prepared_datasets):
-                # Вибір тільки рядків, що входять у поточний чанк
-                chunk_df = df[df.index.isin(chunk_indices)]
-                if not chunk_df.empty:
-                    chunk_results.append(chunk_df)
-
-            # Рекурсивний виклик для обробки чанка (без чанкування)
-            if chunk_results:
-                merged_chunk = self.merge_datasets(chunk_results, merge_on=merge_on, chunk_size=None)
-                if not merged_chunk.empty:
-                    chunks.append(merged_chunk)
-
-            # Очищення пам'яті після обробки чанка
-            gc.collect()
-
-        # Об'єднання всіх чанків
-        if not chunks:
-            return pd.DataFrame()
-
-        try:
-            result = pd.concat(chunks)
-            return result
-        except Exception as e:
-            self.logger.error(f"Помилка при об'єднанні чанків: {str(e)}")
-            return pd.DataFrame()
-
     # --- Methods delegated to DataCleaner ---
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
@@ -781,9 +584,18 @@ class MarketDataProcessor:
 
         return self.data_resampler.auto_resample(data, target_interval=target_interval)
 
-    def resample_data(self, data: pd.DataFrame, target_interval: str) -> pd.DataFrame:
+    def resample_data(self, data: pd.DataFrame, target_interval: str,
+                      required_columns: List[str] = None,
+                      auto_detect: bool = True,
+                      check_interval_compatibility: bool = True) -> pd.DataFrame:
 
-        return self.data_resampler.resample_data(data, target_interval=target_interval)
+        return self.data_resampler.resample_data(
+            data=data,
+            target_interval=target_interval,
+            required_columns=required_columns,
+            auto_detect=auto_detect,
+            check_interval_compatibility=check_interval_compatibility
+        )
 
     def make_stationary(self, data: pd.DataFrame, method: str = 'diff') -> pd.DataFrame:
 
@@ -1079,7 +891,8 @@ class MarketDataProcessor:
 
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
                             end_date: Optional[str] = None, save_results: bool = True,
-                            create_volume_profile: bool = True) -> DataFrame | dict[Any, Any]:
+                            create_volume_profile: bool = True, auto_detect=None,
+                            check_interval_compatibility=None) -> DataFrame | dict[Any, Any]:
 
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
@@ -1150,8 +963,8 @@ class MarketDataProcessor:
             self.logger.info(f"Завантажено {len(source_data)} рядків базових даних для ресемплінгу")
 
             # Виконуємо ресемплінг до цільового таймфрейму
-            resampling_start_time = time()
-            raw_data = self.resample_data(source_data, target_interval=timeframe)
+            raw_data = self.resample_data(source_data, target_interval=timeframe,auto_detect=auto_detect,
+            check_interval_compatibility=check_interval_compatibility)
 
             self.logger.info(f"Ресемплінг до {timeframe} виконано ")
 
