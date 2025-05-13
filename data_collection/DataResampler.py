@@ -226,9 +226,30 @@ class DataResampler:
         return agg_dict
 
     def resample_data(self, data: pd.DataFrame, target_interval: str,
-                      required_columns: List[str] = None) -> pd.DataFrame:
+                      required_columns: List[str] = None,
+                      auto_detect: bool = True,
+                      check_interval_compatibility: bool = True) -> pd.DataFrame:
         """
-        Оптимізована версія методу ресемплінгу з підтримкою великих обсягів даних
+        Розширена версія методу ресемплінгу з підтримкою великих обсягів даних
+        та автоматичним визначенням вхідного інтервалу.
+
+        Parameters:
+        -----------
+        data : pd.DataFrame
+            Вхідні дані з DatetimeIndex
+        target_interval : str
+            Цільовий інтервал (наприклад, '4h', '1w')
+        required_columns : List[str], optional
+            Список необхідних колонок
+        auto_detect : bool, default True
+            Чи автоматично визначати поточний інтервал і перевіряти сумісність
+        check_interval_compatibility : bool, default True
+            Чи перевіряти, що цільовий інтервал більший за поточний
+
+        Returns:
+        --------
+        pd.DataFrame
+            Ресемпльовані дані
         """
         self.logger.info(f"Наявні колонки в resample_data: {list(data.columns)}")
 
@@ -245,6 +266,28 @@ class DataResampler:
 
         # Зберігаємо оригінальні дані
         self.original_data_map['original_data'] = data.copy()
+
+        # Автоматичне визначення поточного інтервалу, якщо потрібно
+        if auto_detect:
+            current_interval = self.detect_interval(data)
+            if not current_interval:
+                self.logger.warning("Не вдалося визначити поточний інтервал даних, продовжуємо без перевірок")
+            else:
+                self.logger.info(f"Визначено поточний інтервал даних: {current_interval}")
+
+                # Перевірка сумісності інтервалів, якщо потрібно
+                if check_interval_compatibility and current_interval:
+                    try:
+                        current_timedelta = self.parse_interval(current_interval)
+                        target_timedelta = self.parse_interval(target_interval)
+
+                        if target_timedelta < current_timedelta:
+                            self.logger.warning(
+                                f"Цільовий інтервал '{target_interval}' менший за поточний '{current_interval}'. "
+                                f"Ресемплінг до менших інтервалів може призвести до втрати інформації."
+                            )
+                    except Exception as e:
+                        self.logger.error(f"Помилка при перевірці сумісності інтервалів: {str(e)}")
 
         # Перевірка необхідних колонок
         if required_columns is None:
@@ -277,7 +320,7 @@ class DataResampler:
         agg_dict = self._optimize_aggregation_dict(data)
 
         # Оптимізована обробка великих наборів даних
-        batch_size = 500_000  # Налаштуйте під ваші обмеження пам'яті
+        batch_size = self.chunk_size  # Використовуємо налаштування класу
         total_rows = len(data)
 
         if total_rows <= batch_size:
@@ -289,6 +332,15 @@ class DataResampler:
                 resampled = self._fill_missing_values(resampled)
 
                 self.original_data_map['resampled_data'] = resampled.copy()
+
+                # Зберігаємо інформацію про трансформацію
+                self.original_data_map['resample_info'] = {
+                    'original_interval': current_interval if auto_detect and current_interval else "unknown",
+                    'target_interval': target_interval,
+                    'original_shape': data.shape,
+                    'resampled_shape': resampled.shape
+                }
+
                 return resampled
             except Exception as e:
                 self.logger.error(f"Помилка при ресемплінгу: {str(e)}")
@@ -316,6 +368,16 @@ class DataResampler:
             resampled = self._fill_missing_values(resampled)
 
             self.original_data_map['resampled_data'] = resampled.copy()
+
+            # Зберігаємо інформацію про трансформацію
+            self.original_data_map['resample_info'] = {
+                'original_interval': current_interval if auto_detect and current_interval else "unknown",
+                'target_interval': target_interval,
+                'original_shape': data.shape,
+                'resampled_shape': resampled.shape,
+                'batch_processing': True,
+                'batches_count': len(result_batches)
+            }
 
             self.logger.info(
                 f"Ресемплінг успішно завершено: {resampled.shape[0]} рядків, {len(resampled.columns)} колонок")
@@ -634,6 +696,17 @@ class DataResampler:
             self.original_data_map[col_key] = df[col].copy()
             self.logger.info(f"make_stationary: Збережено оригінальні дані для колонки '{col}'")
 
+            # Перевірка на наявність нескінченних значень
+            if np.isinf(df[col]).any():
+                self.logger.warning(
+                    f"make_stationary: Колонка {col} містить нескінченні значення, які будуть замінені на NaN")
+                df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+
+            # Перевірка на константні значення
+            if df[col].nunique() <= 1:
+                self.logger.warning(
+                    f"make_stationary: Колонка {col} містить константні значення, що може призвести до проблем")
+
             # Базове диференціювання
             if method == 'diff' or method == 'all':
                 diff_col = f'{col}_diff'
@@ -656,28 +729,59 @@ class DataResampler:
                     result_df[combo_diff_col] = df[col].diff(seasonal_order).diff()
                     self.logger.info(f"make_stationary: Створено колонку {combo_diff_col}")
 
-            # Логарифмічне перетворення
+            # Логарифмічне перетворення - покращена обробка нульових та від'ємних значень
             if method == 'log' or method == 'all':
-                # Перевірка на відсутність нульових чи від'ємних значень
-                if (df[col] > 0).all():
-                    log_col = f'{col}_log'
-                    result_df[log_col] = np.log(df[col])
-                    self.logger.info(f"make_stationary: Створено колонку {log_col}")
+                # Створюємо копію даних для логарифмічної трансформації
+                log_series = df[col].copy()
 
-                    # Логарифм + диференціювання
-                    log_diff_col = f'{col}_log_diff'
-                    result_df[log_diff_col] = result_df[log_col].diff(order)
-                    self.logger.info(f"make_stationary: Створено колонку {log_diff_col}")
-                else:
+                # Перевірка на наявність нульових або від'ємних значень
+                if (log_series <= 0).any():
                     self.logger.warning(
                         f"make_stationary: Колонка {col} містить нульові або від'ємні значення. "
-                        f"Логарифмічне перетворення пропущено.")
+                        f"Застосовуємо зсув перед логарифмічним перетворенням.")
 
-            # Відсоткова зміна
+                    # Знаходимо мінімальне значення для обчислення зсуву
+                    min_val = log_series.min()
+
+                    # Якщо мінімальне значення <= 0, додаємо зсув
+                    if min_val <= 0:
+                        # Зсув: мінімальне значення + 1 (щоб уникнути нуля)
+                        shift = abs(min_val) + 1 if min_val < 0 else 1
+                        log_series = log_series + shift
+                        self.logger.info(
+                            f"make_stationary: Застосовано зсув {shift} для логарифмічного перетворення колонки {col}")
+
+                # Застосовуємо логарифм
+                log_col = f'{col}_log'
+                result_df[log_col] = np.log(log_series)
+                self.logger.info(f"make_stationary: Створено колонку {log_col}")
+
+                # Логарифм + диференціювання
+                log_diff_col = f'{col}_log_diff'
+                result_df[log_diff_col] = result_df[log_col].diff(order)
+                self.logger.info(f"make_stationary: Створено колонку {log_diff_col}")
+
+            # Відсоткова зміна - покращена обробка
             if method == 'pct_change' or method == 'all':
                 pct_col = f'{col}_pct'
+                # Перевірка на наявність послідовних нулів, які викликають NaN при pct_change
+                zeros_count = (df[col] == 0).sum()
+                if zeros_count > 0:
+                    self.logger.warning(f"make_stationary: Колонка {col} містить {zeros_count} нульових значень, "
+                                        f"що може призвести до NaN у відсотковій зміні")
+
+                # Обчислюємо відсоткову зміну
                 result_df[pct_col] = df[col].pct_change(order)
                 self.logger.info(f"make_stationary: Створено колонку {pct_col}")
+
+                # Для volume можемо спробувати альтернативний підхід якщо є багато нулів
+                if col.lower() == 'volume' and zeros_count > len(df) * 0.1:  # якщо > 10% нулів
+                    # Додаємо альтернативну версію з малим значенням замість нуля
+                    pct_col_safe = f'{col}_pct_safe'
+                    # Заміняємо нулі на малі значення перед обчисленням відсоткової зміни
+                    safe_series = df[col].replace(0, 0.000001)
+                    result_df[pct_col_safe] = safe_series.pct_change(order)
+                    self.logger.info(f"make_stationary: Створено колонку {pct_col_safe} з безпечною заміною нулів")
 
             # Додаємо різницю між high та low (волатильність) якщо це колонка close
             high_col = self.find_column(df, 'high')
@@ -692,15 +796,38 @@ class DataResampler:
                 # Виправлення: перевірка на ділення на нуль
                 mask = df[col] != 0  # Створюємо маску для ненульових значень
                 result_df[high_low_range_pct_col] = np.nan  # Ініціалізуємо колонку як NaN
-                # Застосовуємо ділення тільки там, де знаменник не дорівнює нулю
-                result_df.loc[mask, high_low_range_pct_col] = result_df.loc[mask, high_low_range_col] / df.loc[mask, col]
-                self.logger.info(f"make_stationary: Створено колонку {high_low_range_pct_col}")
-                self.logger.warning(f"make_stationary: Значення, де {col} = 0, замінені на NaN в {high_low_range_pct_col}")
 
-            # Для об'єму додаємо логарифм, що часто корисно для криптовалют
-            if col.lower() == 'volume' and (df[col] > 0).all():
+                # Застосовуємо ділення тільки там, де знаменник не дорівнює нулю
+                if mask.any():  # Перевіряємо, що є ненульові значення
+                    result_df.loc[mask, high_low_range_pct_col] = result_df.loc[mask, high_low_range_col] / df.loc[
+                        mask, col]
+                    self.logger.info(f"make_stationary: Створено колонку {high_low_range_pct_col}")
+
+                    # Рахуємо скільки значень були замінені на NaN
+                    na_count = (~mask).sum()
+                    if na_count > 0:
+                        self.logger.warning(
+                            f"make_stationary: {na_count} значень, де {col} = 0, замінені на NaN в {high_low_range_pct_col}")
+                else:
+                    self.logger.warning(
+                        f"make_stationary: Всі значення у колонці {col} дорівнюють 0, колонка {high_low_range_pct_col} буде містити лише NaN")
+
+            # Для об'єму додаємо логарифм з покращеною обробкою нулів
+            if col.lower() == 'volume':
+                vol_series = df[col].copy()
+
+                # Перевірка на нульові значення
+                if (vol_series == 0).any():
+                    zeros_count = (vol_series == 0).sum()
+                    self.logger.warning(f"make_stationary: Колонка {col} містить {zeros_count} нульових значень")
+
+                    # Додаємо малу константу до всіх значень для уникнення log(0)
+                    vol_series = vol_series + 0.000001
+                    self.logger.info(
+                        f"make_stationary: Додано малу константу до колонки {col} для логарифмічного перетворення")
+
                 vol_log_col = f'{col}_log'
-                result_df[vol_log_col] = np.log(df[col])
+                result_df[vol_log_col] = np.log(vol_series)
                 self.logger.info(f"make_stationary: Створено колонку {vol_log_col}")
 
                 vol_log_diff_col = f'{col}_log_diff'
@@ -719,12 +846,29 @@ class DataResampler:
             # Для збереження розмірності даних
             for col in result_df.columns:
                 if result_df[col].isna().any():
+                    na_count_col = result_df[col].isna().sum()
+                    na_pct = na_count_col / len(result_df) * 100
+                    self.logger.info(
+                        f"make_stationary: Колонка {col} містить {na_count_col} NaN значень ({na_pct:.2f}%)")
+
                     if col.endswith(('_diff', '_diff2', '_seasonal_diff', '_combo_diff', '_log_diff', '_pct')):
                         # Для диференційованих даних заповнюємо NaN нулями
                         result_df[col] = result_df[col].fillna(0)
+                        self.logger.info(f"make_stationary: NaN в {col} замінені на 0")
                     elif col.endswith('_log'):
                         # Для логарифмічних даних використовуємо ffill/bfill
+                        # Спочатку перевіряємо скільки NaN послідовно
+                        max_consecutive_na = result_df[col].isna().astype(int).groupby(
+                            result_df[col].notna().astype(int).cumsum()).sum().max()
+
+                        if max_consecutive_na > len(result_df) * 0.1:  # Якщо є довгі послідовності NaN
+                            self.logger.warning(f"make_stationary: В колонці {col} виявлено довгі послідовності NaN "
+                                                f"({max_consecutive_na} значень), що може вплинути на стаціонарність")
+
+                        # Заповнюємо ffill потім bfill для крайніх випадків
                         result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
+                        self.logger.info(f"make_stationary: NaN в {col} замінені методами ffill/bfill")
+
                     elif col == 'high_low_range_pct':  # Додаємо особливу обробку для high_low_range_pct
                         # Для high_low_range_pct заповнюємо NaN середнім значенням або нулем
                         if result_df[col].notna().any():  # Якщо є хоч якісь не-NaN значення
@@ -734,6 +878,21 @@ class DataResampler:
                         else:
                             result_df[col] = result_df[col].fillna(0)
                             self.logger.info(f"make_stationary: NaN в {col} замінені на 0")
+                    else:
+                        # Для інших колонок, використовуємо інтерполяцію, якщо це можливо
+                        try:
+                            prev_na = result_df[col].isna().sum()
+                            result_df[col] = result_df[col].interpolate(method='linear').fillna(method='ffill').fillna(
+                                method='bfill')
+                            after_na = result_df[col].isna().sum()
+                            self.logger.info(
+                                f"make_stationary: {prev_na - after_na} NaN в {col} замінені інтерполяцією")
+                        except Exception as e:
+                            # Якщо інтерполяція не вдалася, використовуємо просту заміну
+                            result_df[col] = result_df[col].fillna(
+                                result_df[col].median() if result_df[col].notna().any() else 0)
+                            self.logger.warning(f"make_stationary: Помилка при інтерполяції {col}: {str(e)}, "
+                                                f"використано медіану або 0")
 
             # Перевіряємо, чи всі NaN були замінені
             remaining_na = result_df.isna().sum().sum()
@@ -754,10 +913,23 @@ class DataResampler:
 
                 result_df = cleaned_df
 
+        # Перевірка на нескінченні значення після обробки
+        if np.isinf(result_df.values).any():
+            self.logger.warning("make_stationary: Виявлено нескінченні значення у результаті. Замінюємо на NaN.")
+            result_df = result_df.replace([np.inf, -np.inf], np.nan)
+            result_df = result_df.fillna(method='ffill').fillna(method='bfill')
+
         # Зберігаємо фінальний результат для подальшого використання
         self.original_data_map['stationary_result'] = result_df.copy()
+
+        # Додаємо інформацію про стаціонарність для логування
+        stationary_cols = []
+        for col in result_df.columns:
+            if col.endswith(('_diff', '_diff2', '_seasonal_diff', '_combo_diff', '_log_diff', '_pct')):
+                stationary_cols.append(col)
+
         self.logger.info(f"make_stationary: Створено стаціонарні дані з {len(result_df)} рядками та "
-                         f"{len(result_df.columns)} колонками")
+                         f"{len(result_df.columns)} колонками. Стаціонарні колонки: {stationary_cols}")
 
         return result_df
 
@@ -785,10 +957,40 @@ class DataResampler:
             self.logger.error(error_msg)
             return {'error': error_msg, 'is_stationary': False}
 
+        # Розширена перевірка даних перед аналізом
+        data_series = data[column_to_use].copy()
+
+        # Перевірка на нескінченні значення
+        inf_count = np.isinf(data_series).sum()
+        if inf_count > 0:
+            self.logger.warning(f"check_stationarity: Виявлено {inf_count} нескінченних значень. Замінюємо на NaN.")
+            data_series = data_series.replace([np.inf, -np.inf], np.nan)
+
         # Перевірка на відсутні значення
-        clean_data = data[column_to_use].dropna()
-        if len(clean_data) < 2:
-            error_msg = f"check_stationarity: Недостатньо даних для перевірки стаціонарності після видалення NaN значень"
+        na_count = data_series.isna().sum()
+        if na_count > 0:
+            self.logger.warning(f"check_stationarity: Виявлено {na_count} NaN значень. Видаляємо їx.")
+
+        # Очищення даних від NaN
+        clean_data = data_series.dropna()
+
+        if len(clean_data) < 10:  # Потрібно більше точок для надійних тестів
+            error_msg = f"check_stationarity: Недостатньо даних для перевірки стаціонарності після видалення NaN значень. Залишилося точок: {len(clean_data)}"
+            self.logger.error(error_msg)
+            return {'error': error_msg, 'is_stationary': False}
+
+        # Перевірка на константне значення або близьке до константного
+        unique_values = clean_data.nunique()
+        if unique_values <= 1:
+            error_msg = f"check_stationarity: Дані в колонці '{column_to_use}' є константою. Такі дані не можуть бути стаціонарними."
+            self.logger.error(error_msg)
+            return {'error': error_msg, 'is_stationary': False}
+
+        # Перевірка на дуже малу варіацію
+        std_dev = clean_data.std()
+        mean_val = clean_data.mean()
+        if std_dev == 0 or (std_dev / abs(mean_val) < 1e-6 and mean_val != 0):
+            error_msg = f"check_stationarity: Дані в колонці '{column_to_use}' мають дуже малу варіацію (std={std_dev}, mean={mean_val})."
             self.logger.error(error_msg)
             return {'error': error_msg, 'is_stationary': False}
 
@@ -805,36 +1007,89 @@ class DataResampler:
         else:
             sampled_data = clean_data.copy()
 
+        # Додаткова перевірка даних у вибірці
+        if sampled_data.var() == 0:
+            error_msg = f"check_stationarity: Дані у вибірці не мають варіації (константа)."
+            self.logger.error(error_msg)
+            return {'error': error_msg, 'is_stationary': False}
+
         # Функції для виконання тестів
         def run_adf_test():
             try:
                 # Використовуємо менше лагів для прискорення
+                # Формула для автоматичного визначення максимальної кількості лагів
                 max_lags = min(int(np.ceil(12 * (len(sampled_data) / 100) ** (1 / 4))), 20)
-                adf_result = adfuller(sampled_data, maxlag=max_lags)
-                return {
-                    'test_statistic': adf_result[0],
-                    'p-value': adf_result[1],
-                    'is_stationary': adf_result[1] < confidence_level,
-                    'critical_values': adf_result[4],
-                    'used_lags': max_lags
-                }
+
+                # Додаємо обробку помилок у випадку збою тесту
+                try:
+                    adf_result = adfuller(sampled_data, maxlag=max_lags)
+                    return {
+                        'test_statistic': adf_result[0],
+                        'p-value': adf_result[1],
+                        'is_stationary': adf_result[1] < confidence_level,
+                        'critical_values': adf_result[4],
+                        'used_lags': max_lags
+                    }
+                except Exception as e:
+                    # Якщо перша спроба не вдалася, спробуємо використати менше лагів
+                    self.logger.warning(
+                        f"ADF тест з {max_lags} лагами не вдався: {str(e)}. Спробуємо з меншою кількістю лагів.")
+
+                    # Зменшуємо кількість лагів і пробуємо знову
+                    reduced_lags = max(1, max_lags // 2)
+                    adf_result = adfuller(sampled_data, maxlag=reduced_lags)
+                    return {
+                        'test_statistic': adf_result[0],
+                        'p-value': adf_result[1],
+                        'is_stationary': adf_result[1] < confidence_level,
+                        'critical_values': adf_result[4],
+                        'used_lags': reduced_lags,
+                        'warning': f"Використано зменшену кількість лагів: {reduced_lags}"
+                    }
+
             except Exception as e:
-                return {'error': f"Помилка при виконанні ADF тесту: {str(e)}", 'is_stationary': False}
+                return {
+                    'error': f"Помилка при виконанні ADF тесту: {str(e)}",
+                    'is_stationary': False
+                }
 
         def run_kpss_test():
             try:
                 # Використовуємо менше лагів для прискорення
+                # Формула для автоматичного визначення максимальної кількості лагів
                 max_lags = min(int(np.ceil(12 * (len(sampled_data) / 100) ** (1 / 4))), 20)
-                kpss_result = kpss(sampled_data, nlags=max_lags)
-                return {
-                    'test_statistic': kpss_result[0],
-                    'p-value': kpss_result[1],
-                    'is_stationary': kpss_result[1] > confidence_level,
-                    'critical_values': kpss_result[3],
-                    'used_lags': max_lags
-                }
+
+                try:
+                    kpss_result = kpss(sampled_data, nlags=max_lags)
+                    return {
+                        'test_statistic': kpss_result[0],
+                        'p-value': kpss_result[1],
+                        'is_stationary': kpss_result[1] > confidence_level,
+                        'critical_values': kpss_result[3],
+                        'used_lags': max_lags
+                    }
+                except Exception as e:
+                    # Якщо перша спроба не вдалася, спробуємо використати менше лагів
+                    self.logger.warning(
+                        f"KPSS тест з {max_lags} лагами не вдався: {str(e)}. Спробуємо з меншою кількістю лагів.")
+
+                    # Зменшуємо кількість лагів і пробуємо знову
+                    reduced_lags = max(1, max_lags // 2)
+                    kpss_result = kpss(sampled_data, nlags=reduced_lags)
+                    return {
+                        'test_statistic': kpss_result[0],
+                        'p-value': kpss_result[1],
+                        'is_stationary': kpss_result[1] > confidence_level,
+                        'critical_values': kpss_result[3],
+                        'used_lags': reduced_lags,
+                        'warning': f"Використано зменшену кількість лагів: {reduced_lags}"
+                    }
+
             except Exception as e:
-                return {'error': f"Помилка при виконанні KPSS тесту: {str(e)}", 'is_stationary': False}
+                return {
+                    'error': f"Помилка при виконанні KPSS тесту: {str(e)}",
+                    'is_stationary': True  # За замовчуванням вважаємо стаціонарним, якщо KPSS не може бути виконаний
+                }
 
         def run_acf_pacf_analysis():
             try:
@@ -845,218 +1100,576 @@ class DataResampler:
                     # Для ACF/PACF використовуємо ще меншу вибірку
                     step = max(1, len(sampled_data) // 2000)
                     acf_pacf_sample = sampled_data.iloc[::step].copy()
-                    self.logger.info(f"ACF/PACF: Використовуємо зменшену вибірку {len(acf_pacf_sample)} точок")
+                    self.logger.info(
+                        f"ACF/PACF: Використовуємо зменшену вибірку {len(acf_pacf_sample)} точок (крок {step})")
 
-                # Обмежуємо максимальну кількість лагів
-                max_lags = min(40, int(len(acf_pacf_sample) * 0.1))
+                # Визначаємо кількість лагів для аналізу (не більше 50 або 25% від розміру вибірки)
+                nlags = min(50, len(acf_pacf_sample) // 4)
+                nlags = max(10, nlags)  # Але не менше 10
 
-                # Використовуємо fft=False для менших вибірок, щоб зменшити споживання пам'яті
-                use_fft = len(acf_pacf_sample) > 1000
+                # Обчислюємо ACF і PACF
+                acf_values = acf(acf_pacf_sample, nlags=nlags, fft=True)
+                pacf_values = pacf(acf_pacf_sample, nlags=nlags, method='ols')
 
-                acf_values = acf(acf_pacf_sample, nlags=max_lags, fft=use_fft)
-                pacf_values = pacf(acf_pacf_sample, nlags=max_lags, method="ywm")  # метод Юла-Уокера - швидший
+                # Аналіз отриманих значень ACF/PACF
+                acf_decays = np.all(np.abs(acf_values[1:]) < np.abs(acf_values[:-1]))
+                significant_pacf = np.sum(np.abs(pacf_values[1:]) > 1.96 / np.sqrt(len(acf_pacf_sample)))
 
-                # Знаходження значимих лагів (з 95% довірчим інтервалом)
-                n = len(acf_pacf_sample)
-                confidence_interval = 1.96 / np.sqrt(n)
-
-                significant_acf_lags = [i for i, v in enumerate(acf_values) if abs(v) > confidence_interval and i > 0]
-                significant_pacf_lags = [i for i, v in enumerate(pacf_values) if abs(v) > confidence_interval and i > 0]
-
-                # Якщо немає значимих лагів, використовуємо лаг 1
-                suggested_p = min(significant_pacf_lags) if significant_pacf_lags else 1
-                suggested_q = min(significant_acf_lags) if significant_acf_lags else 1
+                # Оцінка стаціонарності на основі ACF/PACF
+                is_stationary_acf = acf_decays and (significant_pacf < nlags // 3)
 
                 return {
-                    'significant_acf_lags': significant_acf_lags[:5],  # обмежуємо вивід для економії пам'яті
-                    'significant_pacf_lags': significant_pacf_lags[:5],
-                    'suggested_p': suggested_p,
-                    'suggested_q': suggested_q,
+                    'acf_decays': acf_decays,
+                    'significant_pacf_count': significant_pacf,
+                    'is_stationary': is_stationary_acf,
+                    'nlags_used': nlags,
                     'sample_size': len(acf_pacf_sample)
                 }
             except Exception as e:
-                return {'error': f"Помилка при розрахунку ACF/PACF: {str(e)}"}
-
-        # Виконання тестів - паралельно або послідовно
-        if parallel and data_size > 5000:
-            self.logger.info("check_stationarity: Використовуємо паралельну обробку для тестів")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                futures = {
-                    'adf_test': executor.submit(run_adf_test),
-                    'kpss_test': executor.submit(run_kpss_test),
-                    'acf_pacf': executor.submit(run_acf_pacf_analysis)
+                return {
+                    'error': f"Помилка при виконанні ACF/PACF аналізу: {str(e)}",
+                    'is_stationary': None  # Недостатньо інформації для визначення стаціонарності
                 }
 
-                for key, future in futures.items():
-                    try:
-                        results[key] = future.result()
-                        if key == 'adf_test':
-                            self.logger.info(
-                                f"check_stationarity: ADF тест завершено, p-value={results[key].get('p-value', 'N/A')}")
-                        elif key == 'kpss_test':
-                            self.logger.info(
-                                f"check_stationarity: KPSS тест завершено, p-value={results[key].get('p-value', 'N/A')}")
-                    except Exception as e:
-                        results[key] = {'error': f"Помилка при виконанні {key}: {str(e)}"}
-                        self.logger.error(f"check_stationarity: {results[key]['error']}")
-        else:
-            # Послідовне виконання
+        # Виконання тестів
+        if parallel:
+            try:
+                # Паралельне виконання тестів для прискорення
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = {
+                        'adf': executor.submit(run_adf_test),
+                        'kpss': executor.submit(run_kpss_test),
+                        'acf_pacf': executor.submit(run_acf_pacf_analysis)
+                    }
+
+                    # Збір результатів
+                    for name, future in futures.items():
+                        try:
+                            results[name] = future.result()
+                        except Exception as e:
+                            results[name] = {
+                                'error': f"Помилка при виконанні {name} тесту: {str(e)}",
+                                'is_stationary': None
+                            }
+            except Exception as e:
+                self.logger.error(f"Помилка при паралельному виконанні тестів: {str(e)}")
+                # Якщо паралельне виконання не вдалося, спробуємо послідовно
+                parallel = False
+
+        # Послідовне виконання тестів, якщо паралельне не вдалося або не запитано
+        if not parallel:
             self.logger.info("check_stationarity: Виконуємо тести послідовно")
-            results['adf_test'] = run_adf_test()
-            if 'p-value' in results['adf_test']:
-                self.logger.info(
-                    f"check_stationarity: ADF тест завершено, p-value={results['adf_test']['p-value']:.4f}")
-
-            results['kpss_test'] = run_kpss_test()
-            if 'p-value' in results['kpss_test']:
-                self.logger.info(
-                    f"check_stationarity: KPSS тест завершено, p-value={results['kpss_test']['p-value']:.4f}")
-
+            results['adf'] = run_adf_test()
+            results['kpss'] = run_kpss_test()
             results['acf_pacf'] = run_acf_pacf_analysis()
-            if 'suggested_p' in results['acf_pacf']:
-                self.logger.info(
-                    f"check_stationarity: ACF/PACF аналіз завершено, p={results['acf_pacf']['suggested_p']}, q={results['acf_pacf']['suggested_q']}")
 
-        # Загальний висновок про стаціонарність
-        adf_stationary = results.get('adf_test', {}).get('is_stationary', False)
-        kpss_stationary = results.get('kpss_test', {}).get('is_stationary', True)
+        # Аналіз узгодженості результатів тестів
+        adf_stationary = results.get('adf', {}).get('is_stationary', False)
+        kpss_stationary = results.get('kpss', {}).get('is_stationary', True)
+        acf_pacf_stationary = results.get('acf_pacf', {}).get('is_stationary', None)
 
-        results['is_stationary'] = adf_stationary and kpss_stationary
-        results['sample_info'] = {
-            'original_size': data_size,
-            'sample_size': len(sampled_data),
-            'sampling_rate': f"1/{data_size // len(sampled_data)}" if data_size > len(sampled_data) else "1/1"
+        self.logger.info(f"check_stationarity: Результати тестів: "
+                         f"ADF: {'Стаціонарний' if adf_stationary else 'Нестаціонарний'}, "
+                         f"KPSS: {'Стаціонарний' if kpss_stationary else 'Нестаціонарний'}, "
+                         f"ACF/PACF: {'Стаціонарний' if acf_pacf_stationary == True else 'Нестаціонарний' if acf_pacf_stationary == False else 'Невизначено'}")
+
+        # Визначення загального висновку про стаціонарність
+        # Класифікуємо ряд як стаціонарний, якщо обидва основні тести (ADF і KPSS) узгоджуються
+        # або якщо ADF показує стаціонарність і ACF/PACF підтверджує
+        if adf_stationary and kpss_stationary:
+            is_stationary = True
+            confidence = "висока"
+        elif not adf_stationary and not kpss_stationary:
+            is_stationary = False
+            confidence = "висока"
+        elif adf_stationary and acf_pacf_stationary:
+            is_stationary = True
+            confidence = "середня"
+        elif not adf_stationary and acf_pacf_stationary is False:
+            is_stationary = False
+            confidence = "середня"
+        else:
+            # Якщо тести не узгоджуються, віддаємо перевагу ADF, але з низькою впевненістю
+            is_stationary = adf_stationary
+            confidence = "низька"
+
+        # Формування підсумкового результату
+        final_result = {
+            'is_stationary': is_stationary,
+            'confidence': confidence,
+            'column': column_to_use,
+            'tests': results,
+            'data_size': data_size,
+            'sample_size': len(sampled_data)
         }
 
-        self.logger.info(f"check_stationarity: Загальний висновок про стаціонарність: {results['is_stationary']}")
+        # Додаємо статистичні характеристики даних
+        final_result['stats'] = {
+            'mean': float(clean_data.mean()),
+            'std': float(clean_data.std()),
+            'min': float(clean_data.min()),
+            'max': float(clean_data.max()),
+            'unique_values': int(unique_values)
+        }
 
-        return results
+        # Логування висновку
+        self.logger.info(
+            f"check_stationarity: Висновок - ряд '{column_to_use}' {'є стаціонарним' if is_stationary else 'не є стаціонарним'} "
+            f"з {confidence} впевненістю.")
+
+        return final_result
 
     def prepare_arima_data(
             self,
             data: pd.DataFrame | dd.DataFrame,
             symbol: str,
-            timeframe: str
+            timeframe: str,
+            sample_size: int = 10000,
+            parallel: bool = True
     ) -> pd.DataFrame:
+        """
+        Підготовка даних для ARIMA моделювання з покращеною обробкою стаціонарності.
+
+        :param data: DataFrame з часовими рядами
+        :param symbol: Символ інструменту
+        :param timeframe: Часовий інтервал даних
+        :param sample_size: Максимальний розмір вибірки для тестів стаціонарності
+        :param parallel: Використовувати паралельне виконання для тестів
+        :return: DataFrame з підготовленими даними і результатами тестів
+        """
         try:
-            # Convert Dask DataFrame to pandas if necessary
+            self.logger.info(f"prepare_arima_data: Початок підготовки даних для {symbol} ({timeframe})")
+
+            # Конвертація Dask DataFrame у pandas при необхідності
             if hasattr(data, 'compute'):
+                self.logger.info("prepare_arima_data: Конвертація Dask DataFrame у pandas DataFrame")
                 data = data.compute()
 
-            # Ensure we have datetime index
+            if data.empty:
+                self.logger.error("prepare_arima_data: Отримано порожній DataFrame")
+                return pd.DataFrame()
+
+            # Забезпечення наявності DatetimeIndex
             if not isinstance(data.index, pd.DatetimeIndex):
                 if 'open_time' in data.columns:
+                    self.logger.info("prepare_arima_data: Встановлення 'open_time' як індекс")
                     data.set_index('open_time', inplace=True)
                 else:
-                    self.logger.error("No datetime index or open_time column found")
+                    self.logger.error("prepare_arima_data: Не знайдено індекс datetime або колонку open_time")
                     return pd.DataFrame()
 
-            # 1. Select close price column
+            # 1. Знаходження колонки з цінами закриття
             close_columns = ['close', 'price', 'last', 'last_price']
             close_column = next((col for col in close_columns if col in data.columns), None)
 
             if not close_column:
-                self.logger.error("No close price column found")
+                close_column = next((col for col in data.columns if 'close' in col.lower()), None)
+
+            if not close_column:
+                self.logger.error("prepare_arima_data: Не знайдено колонку з цінами закриття")
                 return pd.DataFrame()
 
-            # Create a copy to avoid modifying the original
-            # Виправлений рядок: створюємо DataFrame з правильним індексом замість reset_index
-            result_df = pd.DataFrame(index=pd.RangeIndex(len(data.index)))
+            self.logger.info(f"prepare_arima_data: Використовуємо колонку '{close_column}' як ціну закриття")
 
-            # Basic info
+            # Створення копії для результатів
+            result_df = pd.DataFrame(index=data.index)
+
+            # Базова інформація
             result_df['timeframe'] = timeframe
-            result_df['open_time'] = data.index  # Store timestamp as a column
             result_df['original_close'] = data[close_column]
 
-            # 2. Compute various stationary transformations
-            # First difference
-            result_df['close_diff'] = data[close_column].diff()
+            # Перевірка на нескінченні значення
+            if np.isinf(result_df['original_close']).any():
+                inf_count = np.isinf(result_df['original_close']).sum()
+                self.logger.warning(f"prepare_arima_data: Виявлено {inf_count} нескінченних значень. Замінюємо на NaN.")
+                result_df['original_close'] = result_df['original_close'].replace([np.inf, -np.inf], np.nan)
 
-            # Second difference
+            # Перевірка на відсутні значення
+            na_count = result_df['original_close'].isna().sum()
+            if na_count > 0:
+                self.logger.warning(f"prepare_arima_data: Виявлено {na_count} NaN значень.")
+                # Застосовуємо інтерполяцію для заповнення пропусків
+                result_df['original_close'] = result_df['original_close'].interpolate(method='linear').fillna(
+                    method='ffill').fillna(method='bfill')
+
+                remaining_na = result_df['original_close'].isna().sum()
+                if remaining_na > 0:
+                    self.logger.warning(
+                        f"prepare_arima_data: Після інтерполяції залишилось {remaining_na} NaN значень.")
+
+            # 2. Розширений набір трансформацій для забезпечення стаціонарності
+
+            # Базові диференціювання
+            result_df['close_diff'] = result_df['original_close'].diff()
             result_df['close_diff2'] = result_df['close_diff'].diff()
 
-            # Log transformation
-            result_df['close_log'] = np.log(data[close_column])
+            # Логарифмічне перетворення з обробкою нульових та від'ємних значень
+            close_series = result_df['original_close'].copy()
 
-            # Log difference (log return)
+            # Перевірка на наявність нульових або від'ємних значень
+            if (close_series <= 0).any():
+                zeros_count = (close_series <= 0).sum()
+                self.logger.warning(
+                    f"prepare_arima_data: Виявлено {zeros_count} нульових або від'ємних значень. "
+                    f"Застосовуємо зсув перед логарифмічним перетворенням.")
+
+                # Зсув для безпечного логарифмування
+                min_val = close_series.min()
+                shift = abs(min_val) + 1 if min_val <= 0 else 1
+                close_series = close_series + shift
+                self.logger.info(f"prepare_arima_data: Застосовано зсув {shift} для логарифмічного перетворення")
+
+            result_df['close_log'] = np.log(close_series)
             result_df['close_log_diff'] = result_df['close_log'].diff()
 
-            # Percentage change
-            result_df['close_pct_change'] = data[close_column].pct_change()
+            # Відсоткова зміна
+            result_df['close_pct_change'] = result_df['original_close'].pct_change()
 
-            # Seasonal differencing (assuming daily data with weekly seasonality)
+            # Визначення сезонного періоду і сезонне диференціювання
             season_period = self._determine_seasonal_period(timeframe)
-            result_df['close_seasonal_diff'] = data[close_column].diff(season_period)
-
-            # Combined differencing (first difference + seasonal)
+            result_df['close_seasonal_diff'] = result_df['original_close'].diff(season_period)
             result_df['close_combo_diff'] = result_df['close_seasonal_diff'].diff()
 
-            # 3. Perform stationarity tests on log returns (most commonly used transformation)
-            log_returns = result_df['close_log_diff'].dropna()
+            # Додаємо обробку для високо-низько діапазону, якщо дані доступні
+            high_col = self.find_column(data, 'high')
+            low_col = self.find_column(data, 'low')
 
-            if len(log_returns) > 10:
-                # Augmented Dickey-Fuller test
-                adf_result = adfuller(log_returns)
-                result_df['adf_pvalue'] = adf_result[1]
+            if high_col and low_col:
+                self.logger.info(
+                    f"prepare_arima_data: Знайдено колонки '{high_col}' та '{low_col}', обчислюємо діапазон")
+                result_df['high_low_range'] = data[high_col] - data[low_col]
 
-                # KPSS test
+                # Волатильність як відсоток від ціни
+                mask = result_df['original_close'] != 0
+                result_df['high_low_range_pct'] = np.nan
+
+                # Застосовуємо ділення тільки там, де знаменник не дорівнює нулю
+                if mask.any():
+                    result_df.loc[mask, 'high_low_range_pct'] = result_df.loc[mask, 'high_low_range'] / result_df.loc[
+                        mask, 'original_close']
+
+                na_count = (~mask).sum()
+                if na_count > 0:
+                    self.logger.warning(
+                        f"prepare_arima_data: {na_count} значень у high_low_range_pct замінені на NaN через ділення на нуль")
+
+            # Обробка об'єму, якщо доступний
+            volume_col = self.find_column(data, 'volume')
+            if volume_col:
+                self.logger.info(f"prepare_arima_data: Знайдено колонку '{volume_col}', додаємо трансформації об'єму")
+
+                vol_series = data[volume_col].copy()
+                result_df['original_volume'] = vol_series
+
+                # Перевірка на нульові значення
+                if (vol_series == 0).any():
+                    zeros_count = (vol_series == 0).sum()
+                    self.logger.warning(
+                        f"prepare_arima_data: Колонка '{volume_col}' містить {zeros_count} нульових значень")
+
+                    # Додаємо малу константу для уникнення log(0)
+                    vol_series = vol_series + 0.000001
+
+                result_df['volume_log'] = np.log(vol_series)
+                result_df['volume_diff'] = vol_series.diff()
+                result_df['volume_log_diff'] = result_df['volume_log'].diff()
+                result_df['volume_pct_change'] = vol_series.pct_change()
+
+            # Заповнення NA у всіх нових колонках
+            for col in result_df.columns:
+                if col not in ['timeframe']:
+                    na_count = result_df[col].isna().sum()
+                    if na_count > 0:
+                        if col.endswith(('_diff', '_diff2', '_seasonal_diff', '_combo_diff', '_log_diff', '_pct',
+                                         '_pct_change')):
+                            # Для диференційованих даних заповнюємо NaN нулями
+                            result_df[col] = result_df[col].fillna(0)
+                        else:
+                            # Для інших використовуємо інтерполяцію/ffill/bfill
+                            result_df[col] = result_df[col].interpolate(method='linear').fillna(method='ffill').fillna(
+                                method='bfill')
+
+            # 3. Виконання тестів стаціонарності з покращеною реалізацією
+            from statsmodels.tsa.stattools import adfuller, kpss
+            import concurrent.futures
+
+            # Визначаємо набір колонок для тестування стаціонарності
+            stationary_columns = [
+                'close_diff', 'close_diff2', 'close_log_diff', 'close_pct_change',
+                'close_seasonal_diff', 'close_combo_diff'
+            ]
+
+            # Додаємо колонки з об'ємом, якщо вони існують
+            volume_cols = [col for col in result_df.columns if col.startswith('volume_') and col != 'original_volume']
+            if volume_cols:
+                stationary_columns.extend(volume_cols)
+
+            # Функції для тестів стаціонарності
+            def run_adf_test(data_series):
                 try:
-                    from statsmodels.tsa.stattools import kpss
-                    kpss_result = kpss(log_returns)
-                    result_df['kpss_pvalue'] = kpss_result[1]
-                except:
-                    result_df['kpss_pvalue'] = None
-                    self.logger.warning("KPSS test failed, consider installing statsmodels")
+                    # Вибірка і очищення даних
+                    clean_series = data_series.dropna()
+                    if len(clean_series) < 10:
+                        return {'error': 'Недостатньо даних', 'is_stationary': None}
 
-                # Determine stationarity based on both tests
-                result_df['is_stationary'] = (
-                        (result_df['adf_pvalue'] <= 0.05) &
-                        ((result_df['kpss_pvalue'] > 0.05) if 'kpss_pvalue' in result_df else True)
-                )
+                    # Використання вибірки для великих наборів даних
+                    if len(clean_series) > sample_size:
+                        step = max(1, len(clean_series) // sample_size)
+                        sampled_series = clean_series.iloc[::step]
+                    else:
+                        sampled_series = clean_series
 
-                # 4. Calculate ACF/PACF for model configuration
+                    # Формула для автоматичного визначення кількості лагів
+                    max_lags = min(int(np.ceil(12 * (len(sampled_series) / 100) ** (1 / 4))), 20)
+
+                    # Виконання тесту
+                    try:
+                        adf_result = adfuller(sampled_series, maxlag=max_lags)
+                        return {
+                            'test_statistic': adf_result[0],
+                            'p-value': adf_result[1],
+                            'is_stationary': adf_result[1] < 0.05,
+                            'critical_values': adf_result[4],
+                        }
+                    except Exception as e:
+                        # Спроба з меншою кількістю лагів
+                        reduced_lags = max(1, max_lags // 2)
+                        adf_result = adfuller(sampled_series, maxlag=reduced_lags)
+                        return {
+                            'test_statistic': adf_result[0],
+                            'p-value': adf_result[1],
+                            'is_stationary': adf_result[1] < 0.05,
+                            'critical_values': adf_result[4],
+                            'warning': f"Використано зменшену кількість лагів: {reduced_lags}"
+                        }
+                except Exception as e:
+                    return {'error': f"Помилка ADF тесту: {str(e)}", 'is_stationary': None}
+
+            def run_kpss_test(data_series):
                 try:
-                    from statsmodels.tsa.stattools import acf, pacf
-                    acf_values = acf(log_returns, nlags=20)
-                    pacf_values = pacf(log_returns, nlags=20)
+                    # Вибірка і очищення даних
+                    clean_series = data_series.dropna()
+                    if len(clean_series) < 10:
+                        return {'error': 'Недостатньо даних', 'is_stationary': None}
 
-                    # Find significant lags (using 95% confidence interval)
-                    significant_lags = []
-                    confidence_level = 1.96 / np.sqrt(len(log_returns))
+                    # Використання вибірки для великих наборів даних
+                    if len(clean_series) > sample_size:
+                        step = max(1, len(clean_series) // sample_size)
+                        sampled_series = clean_series.iloc[::step]
+                    else:
+                        sampled_series = clean_series
 
-                    for i, (acf_val, pacf_val) in enumerate(zip(acf_values, pacf_values)):
-                        if i > 0 and (abs(acf_val) > confidence_level or abs(pacf_val) > confidence_level):
-                            significant_lags.append(i)
+                    # Формула для автоматичного визначення кількості лагів
+                    max_lags = min(int(np.ceil(12 * (len(sampled_series) / 100) ** (1 / 4))), 20)
 
-                    result_df['significant_lags'] = json.dumps(significant_lags)
-                except:
-                    result_df['significant_lags'] = '[]'
-                    self.logger.warning("ACF/PACF calculation failed")
+                    # Виконання тесту
+                    try:
+                        kpss_result = kpss(sampled_series, nlags=max_lags)
+                        return {
+                            'test_statistic': kpss_result[0],
+                            'p-value': kpss_result[1],
+                            'is_stationary': kpss_result[1] > 0.05,
+                            'critical_values': kpss_result[3],
+                        }
+                    except Exception as e:
+                        # Спроба з меншою кількістю лагів
+                        reduced_lags = max(1, max_lags // 2)
+                        kpss_result = kpss(sampled_series, nlags=reduced_lags)
+                        return {
+                            'test_statistic': kpss_result[0],
+                            'p-value': kpss_result[1],
+                            'is_stationary': kpss_result[1] > 0.05,
+                            'critical_values': kpss_result[3],
+                            'warning': f"Використано зменшену кількість лагів: {reduced_lags}"
+                        }
+                except Exception as e:
+                    return {'error': f"Помилка KPSS тесту: {str(e)}", 'is_stationary': True}
 
-                # 5. Fit a basic ARIMA model to get additional metrics
+            # Словник для зберігання результатів тестів
+            stationarity_results = {}
+
+            # Виконання тестів для кожної колонки (паралельно або послідовно)
+            if parallel:
                 try:
-                    from statsmodels.tsa.arima.model import ARIMA
-                    # Use a simple ARIMA(1,1,1) as default
-                    model = ARIMA(data[close_column], order=(1, 1, 1))
-                    model_fit = model.fit()
+                    self.logger.info("prepare_arima_data: Виконуємо тести стаціонарності паралельно")
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(stationary_columns))) as executor:
+                        futures = {}
 
-                    result_df['residual_variance'] = model_fit.resid.var()
-                    result_df['aic_score'] = model_fit.aic
-                    result_df['bic_score'] = model_fit.bic
-                except:
-                    result_df['residual_variance'] = None
-                    result_df['aic_score'] = None
-                    result_df['bic_score'] = None
-                    self.logger.warning("ARIMA model fitting failed")
+                        # Створюємо завдання для виконання тестів
+                        for col in stationary_columns:
+                            if col in result_df.columns:
+                                futures[f"{col}_adf"] = executor.submit(run_adf_test, result_df[col])
+                                futures[f"{col}_kpss"] = executor.submit(run_kpss_test, result_df[col])
 
-                self.logger.info(f"Prepared ARIMA data for {symbol} ({timeframe})")
-                return result_df.reset_index(drop=True)  # Ensure no duplicate index/column
+                        # Збираємо результати
+                        for future_key, future in futures.items():
+                            col, test_type = future_key.rsplit('_', 1)
+                            if col not in stationarity_results:
+                                stationarity_results[col] = {}
+                            stationarity_results[col][test_type] = future.result()
+                except Exception as e:
+                    self.logger.error(f"Помилка при паралельному виконанні тестів: {str(e)}")
+                    parallel = False
+
+            # Послідовне виконання, якщо паралельне не вдалося
+            if not parallel:
+                self.logger.info("prepare_arima_data: Виконуємо тести стаціонарності послідовно")
+                for col in stationary_columns:
+                    if col in result_df.columns:
+                        stationarity_results[col] = {
+                            'adf': run_adf_test(result_df[col]),
+                            'kpss': run_kpss_test(result_df[col])
+                        }
+
+            # Аналіз результатів і визначення найкращої трансформації
+            best_transformation = None
+            best_confidence = "низька"
+            best_p_value = 1.0
+
+            for col, tests in stationarity_results.items():
+                adf_stationary = tests.get('adf', {}).get('is_stationary', False)
+                adf_p_value = tests.get('adf', {}).get('p-value', 1.0)
+                kpss_stationary = tests.get('kpss', {}).get('is_stationary', True)
+
+                # Визначення рівня впевненості в стаціонарності
+                if adf_stationary and kpss_stationary:
+                    confidence = "висока"
+                elif not adf_stationary and not kpss_stationary:
+                    confidence = "низька"  # Обидва тести показують нестаціонарність
+                else:
+                    confidence = "середня"
+
+                # Зберігаємо результат у DataFrame
+                result_df[f"{col}_adf_stationary"] = adf_stationary
+                result_df[f"{col}_adf_pvalue"] = adf_p_value
+                result_df[f"{col}_kpss_stationary"] = kpss_stationary
+                result_df[f"{col}_confidence"] = confidence
+
+                self.logger.info(f"prepare_arima_data: Колонка {col}: "
+                                 f"ADF {'стаціонарна' if adf_stationary else 'нестаціонарна'} (p={adf_p_value:.5f}), "
+                                 f"KPSS {'стаціонарна' if kpss_stationary else 'нестаціонарна'}, "
+                                 f"Впевненість: {confidence}")
+
+                # Визначення найкращої трансформації (пріоритет: висока впевненість і низьке p-значення ADF)
+                if adf_stationary:
+                    confidence_priority = {"висока": 3, "середня": 2, "низька": 1}
+                    current_priority = confidence_priority.get(confidence, 0)
+                    best_priority = confidence_priority.get(best_confidence, 0)
+
+                    if (current_priority > best_priority) or (
+                            current_priority == best_priority and adf_p_value < best_p_value):
+                        best_transformation = col
+                        best_confidence = confidence
+                        best_p_value = adf_p_value
+
+            # Додаємо інформацію про найкращу трансформацію
+            if best_transformation:
+                result_df['best_transformation'] = best_transformation
+                result_df['best_confidence'] = best_confidence
+                result_df['best_adf_pvalue'] = best_p_value
+                self.logger.info(f"prepare_arima_data: Найкраща трансформація: {best_transformation} "
+                                 f"(впевненість: {best_confidence}, adf_p={best_p_value:.5f})")
             else:
-                self.logger.warning(f"Insufficient data for stationarity tests for {symbol}")
-                return pd.DataFrame()
+                result_df['best_transformation'] = 'close_diff'  # За замовчуванням
+                result_df['best_confidence'] = 'невизначена'
+                result_df['best_adf_pvalue'] = None
+                self.logger.warning(
+                    "prepare_arima_data: Не знайдено стаціонарних трансформацій, використовуємо close_diff за замовчуванням")
+
+            # 4. Обчислення ACF/PACF для визначення параметрів моделі
+            try:
+                from statsmodels.tsa.stattools import acf, pacf
+
+                # Використовуємо найкращу трансформацію або close_diff за замовчуванням
+                series_for_acf = result_df.get(best_transformation, result_df['close_diff']).dropna()
+
+                # Вибірка для великих наборів даних
+                if len(series_for_acf) > 2000:
+                    step = max(1, len(series_for_acf) // 2000)
+                    series_for_acf = series_for_acf.iloc[::step]
+                    self.logger.info(f"prepare_arima_data: ACF/PACF використовує вибірку з {len(series_for_acf)} точок")
+
+                # Визначення кількості лагів
+                nlags = min(50, len(series_for_acf) // 4)
+                nlags = max(10, nlags)  # Але не менше 10
+
+                # Обчислення ACF і PACF
+                acf_values = acf(series_for_acf, nlags=nlags, fft=True)
+                pacf_values = pacf(series_for_acf, nlags=nlags, method='ols')
+
+                # Знаходження значущих лагів
+                significant_lags_acf = []
+                significant_lags_pacf = []
+                confidence_level = 1.96 / np.sqrt(len(series_for_acf))
+
+                for i in range(1, len(acf_values)):
+                    if abs(acf_values[i]) > confidence_level:
+                        significant_lags_acf.append(i)
+                    if abs(pacf_values[i]) > confidence_level:
+                        significant_lags_pacf.append(i)
+
+                # Визначення параметрів ARIMA
+                # p: кількість значущих PACF лагів
+                # d: порядок диференціювання
+                # q: кількість значущих ACF лагів
+
+                # Визначення d на основі трансформації
+                if best_transformation in ['close_diff', 'close_log_diff', 'close_pct_change', 'volume_diff',
+                                           'volume_log_diff', 'volume_pct_change']:
+                    d = 1
+                elif best_transformation in ['close_diff2']:
+                    d = 2
+                else:
+                    d = 1  # За замовчуванням
+
+                # Визначення p і q
+                p = min(len(significant_lags_pacf), 5) if significant_lags_pacf else 0
+                q = min(len(significant_lags_acf), 5) if significant_lags_acf else 0
+
+                # Забезпечення мінімальних значень
+                p = max(p, 1)
+                q = max(q, 1)
+
+                # Зберігаємо результати
+                result_df['suggested_p'] = p
+                result_df['suggested_d'] = d
+                result_df['suggested_q'] = q
+                result_df['significant_lags_acf'] = str(significant_lags_acf)
+                result_df['significant_lags_pacf'] = str(significant_lags_pacf)
+
+                self.logger.info(f"prepare_arima_data: Рекомендовані параметри ARIMA: ({p},{d},{q})")
+
+                # Визначення сезонних параметрів
+                if season_period > 1:
+                    # Спрощений підхід для сезонних параметрів
+                    result_df['suggested_seasonal_p'] = 1
+                    result_df['suggested_seasonal_d'] = 1
+                    result_df['suggested_seasonal_q'] = 1
+                    result_df['suggested_seasonal_period'] = season_period
+
+                    self.logger.info(
+                        f"prepare_arima_data: Рекомендовані сезонні параметри: ({1},{1},{1})_{season_period}")
+            except Exception as e:
+                self.logger.error(f"Помилка при обчисленні ACF/PACF: {str(e)}")
+                result_df['suggested_p'] = 1
+                result_df['suggested_d'] = 1
+                result_df['suggested_q'] = 1
+
+            # 5. Додаткові метрики та інформація
+            result_df['data_points'] = len(data)
+            result_df['preparation_timestamp'] = pd.Timestamp.now()
+
+            # Збереження в оригінальній карті даних
+            self.original_data_map['arima_prepared_data'] = result_df.copy()
+
+            self.logger.info(f"prepare_arima_data: Завершено підготовку даних для {symbol} ({timeframe})")
+
+            return result_df
 
         except Exception as e:
-            self.logger.error(f"Error preparing ARIMA data: {e}")
+            self.logger.error(f"Помилка при підготовці даних для ARIMA: {str(e)}")
+            import traceback
+            self.logger.error(f"Деталі помилки: {traceback.format_exc()}")
             return pd.DataFrame()
 
     def _determine_seasonal_period(self, timeframe: str) -> int:

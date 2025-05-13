@@ -1116,8 +1116,7 @@ class MarketDataProcessor:
                 self.logger.warning(f"Базові дані не знайдено для {symbol} {source_timeframe}")
                 return results
 
-            # Використовуємо auto_resample замість resample_data
-            raw_data = self.auto_resample(source_data, target_interval=timeframe)
+            raw_data = self.resample_data(source_data, target_interval=timeframe)
 
             if raw_data.empty:
                 self.logger.warning(f"Не вдалося створити дані для {symbol} {timeframe} через ресемплінг")

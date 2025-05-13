@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS btc_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, time_bucket, price_bin_start)
+    UNIQUE (timeframe, time_bucket, price_bin_start,price_bin_end)
 );
 
 CREATE INDEX IF NOT EXISTS idx_btc_volume_profile ON btc_volume_profile(timeframe, time_bucket);
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS eth_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, time_bucket, price_bin_start)
+    UNIQUE (timeframe, time_bucket, price_bin_start,price_bin_end)
 );
 
 CREATE INDEX IF NOT EXISTS idx_eth_volume_profile ON eth_volume_profile(timeframe, time_bucket);
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
     volume NUMERIC NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (timeframe, time_bucket, price_bin_start)
+    UNIQUE (timeframe, time_bucket, price_bin_start,price_bin_end)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
