@@ -4,7 +4,7 @@ import json
 import logging
 import joblib
 from datetime import datetime, timedelta
-from typing import Dict, List, Union, Any, Optional, Tuple
+from typing import Dict, List, Union, Any
 import numpy as np
 from sklearn.cluster import KMeans
 import torch
@@ -22,7 +22,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import LatentDirichletAllocation, NMF
 from utils.config import *
 from data.NewsManager import DatabaseManager
-# NLTK imports with proper error handling
 try:
     import nltk
     from nltk.tokenize import word_tokenize
@@ -51,7 +50,6 @@ except ImportError:
 
 
 class NewsItem:
-    """Клас для представлення елемента новин з усіма атрибутами для аналізу."""
 
     def __init__(self, title=None, url=None, source=None, published_at=None, author=None,
                  content=None, summary=None, categories=None, tags=None, sentiment_score=None,
@@ -240,7 +238,7 @@ class BERTNewsAnalyzer:
             return_tensors="pt"
         ).to(self.device)
 
-    def _get_bert_embeddings_batch(self, texts: List[str], max_length: int = 512,
+    def _get_bert_embeddings_batch(self, texts: List[str], max_length: int = 2048,
                                    pooling_strategy: str = 'cls') -> np.ndarray:
 
         # Створюємо dataset і dataloader для ефективної обробки
@@ -286,7 +284,7 @@ class BERTNewsAnalyzer:
         # Об'єднуємо всі батчі в одну матрицю
         return np.vstack(all_embeddings)
 
-    def _get_bert_embeddings(self, text: str, max_length: int = 512,
+    def _get_bert_embeddings(self, text: str, max_length: int = 2048,
                              pooling_strategy: str = 'cls') -> np.ndarray:
         """Отримати вектори BERT для одного тексту."""
         # Для одного тексту використовуємо батчовий метод
@@ -315,7 +313,7 @@ class BERTNewsAnalyzer:
                 text_to_analyze = self._get_text_to_analyze(news)
 
                 # Обмеження довжини тексту для BERT
-                max_length = 512
+                max_length = 2048
                 if len(text_to_analyze) > max_length * 3:
                     # Аналізуємо заголовок та початок контенту
                     if isinstance(news, NewsItem):
@@ -388,14 +386,17 @@ class BERTNewsAnalyzer:
                         sentiment_data = self._lexicon_based_sentiment(text)
 
                         # Додаємо результат
-                        if isinstance(news, NewsItem):
-                            news.sentiment_score = sentiment_data['score']
-                            news.sentiment_label = sentiment_data['label']
-                            analyzed_news.append(news)
-                        else:
-                            news_copy = news.copy()
-                            news_copy['sentiment'] = sentiment_data
-                            analyzed_news.append(news_copy)
+                        text = batch_texts[idx]
+                        if isinstance(news, (NewsItem, dict)):
+                            sentiment_data = self._lexicon_based_sentiment(text)
+                            if isinstance(news, NewsItem):
+                                news.sentiment_score = sentiment_data['score']
+                                news.sentiment_label = sentiment_data['label']
+                                analyzed_news.append(news)
+                            else:  # it's a dict
+                                news_copy = news.copy()
+                                news_copy['sentiment'] = sentiment_data
+                                analyzed_news.append(news_copy)
                     except Exception as e:
                         self.logger.error(f"Помилка при аналізі окремої новини: {e}")
                         # Додаємо новину з нейтральним настроєм

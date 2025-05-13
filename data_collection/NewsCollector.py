@@ -89,20 +89,19 @@ class NewsCollector:
         ]
         self.headers = {'User-Agent': self.user_agents[0]}
 
-        # Source configuration
+        # Source configuration - Updated with current URL structures as of May 2025
         self.source_config = {
             'coindesk': {
                 'base_url': 'https://www.coindesk.com',
-                'default_categories': ["markets", "finance", "policy", "tech"]
+                'default_categories': ["markets", "business", "policy", "tech"]
             },
             'cointelegraph': {
                 'base_url': 'https://cointelegraph.com',
-                'default_categories': ["news", "markets", "technology", "features","deals" ,"business"]
+                'default_categories': ["news", "altcoins", "bitcoin", "ethereum", "defi"]
             },
             'decrypt': {
                 'base_url': 'https://decrypt.co',
-                'default_categories': ["news","business","editors-picks","features","artificial-intelligence",
-                                       "cryptocurrencies","defi"]
+                'default_categories': ["news", "business", "technology", "defi", "artificial-intelligence"]
             },
             'cryptoslate': {
                 'base_url': 'https://cryptoslate.com',
@@ -110,11 +109,11 @@ class NewsCollector:
             },
             'theblock': {
                 'base_url': 'https://www.theblock.co',
-                'default_categories': ["latest-crypto-news","crypto-ecosystems","policy", "deals", "markets"]
+                'default_categories': ["news", "crypto-ecosystems", "policy", "deals", "markets"]
             },
             'cryptopanic': {
                 'base_url': 'https://cryptopanic.com',
-                'default_categories': ["top news", "recent", "rising", "hot!","price-analysis","events",]
+                'default_categories': ["top news", "recent", "rising", "hot!", "price-analysis", "events"]
             },
             'coinmarketcal': {
                 'base_url': 'https://coinmarketcal.com',
@@ -122,7 +121,7 @@ class NewsCollector:
             },
             'newsnow': {
                 'base_url': 'https://www.newsnow.co.uk',
-                'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum","donald trump","business"]
+                'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum", "donald-trump", "business"]
             },
             'cryptobriefing': {
                 'base_url': 'https://cryptobriefing.com',
@@ -294,7 +293,8 @@ class NewsCollector:
                 continue_scraping = True
 
                 while continue_scraping and page <= self.max_pages:
-                    url = f"{base_url}/{category}/?page={page}"
+                    # Updated URL format
+                    url = f"{base_url}/categories/{category}?page={page}"
                     response = self._make_request(url)
 
                     if not response:
@@ -302,7 +302,8 @@ class NewsCollector:
                         continue
 
                     soup = BeautifulSoup(response.text, 'html.parser')
-                    articles = soup.select('article.article-cardstyles__CardWrapper-sc-5xitv1-0')
+                    # Updated selector for articles based on current CoinDesk structure
+                    articles = soup.select('div.article-card')
 
                     if not articles:
                         continue_scraping = False
@@ -324,16 +325,20 @@ class NewsCollector:
                                 break
 
                             # Get title and link
-                            title_elem = article.select_one('h6')
+                            title_elem = article.select_one('h4.heading, h5.heading')
                             if not title_elem:
                                 continue
 
                             title = title_elem.text.strip()
-                            link_elem = article.select_one('a')
-                            link = base_url + link_elem['href'] if link_elem else None
+                            link_elem = article.select_one('a.article-card-link')
+                            link = link_elem['href'] if link_elem else None
+
+                            # Handle relative URLs
+                            if link and not link.startswith('http'):
+                                link = base_url + link
 
                             # Get summary
-                            summary_elem = article.select_one('p.typography__StyledTypography-sc-owin6q-0')
+                            summary_elem = article.select_one('p.desc')
                             summary = summary_elem.text.strip() if summary_elem else ""
 
                             # Create news item
@@ -381,7 +386,11 @@ class NewsCollector:
                 continue_scraping = True
 
                 while continue_scraping and page <= self.max_pages:
+                    # Updated URL format
                     url = f"{base_url}/{category}?page={page}"
+                    if category == "news":
+                        url = f"{base_url}?page={page}"  # News is at the root URL
+
                     response = self._make_request(url)
 
                     if not response:
@@ -389,7 +398,8 @@ class NewsCollector:
                         continue
 
                     soup = BeautifulSoup(response.text, 'html.parser')
-                    articles = soup.select('article.post-card-inline')
+                    # Updated selector based on current Cointelegraph structure
+                    articles = soup.select('article.post-card')
 
                     if not articles:
                         continue_scraping = False
@@ -398,7 +408,10 @@ class NewsCollector:
                     for article in articles:
                         try:
                             # Get publication date
-                            date_elem = article.select_one('time.post-card-inline__date')
+                            date_elem = article.select_one('time.post-card__date')
+                            if not date_elem:
+                                date_elem = article.select_one('time')
+
                             if not date_elem or not date_elem.get('datetime'):
                                 continue
 
@@ -411,16 +424,20 @@ class NewsCollector:
                                 break
 
                             # Get title and link
-                            title_elem = article.select_one('span.post-card-inline__title')
+                            title_elem = article.select_one('span.post-card__title, h2.post-card__title')
                             if not title_elem:
                                 continue
 
                             title = title_elem.text.strip()
-                            link_elem = article.select_one('a.post-card-inline__title-link')
-                            link = base_url + link_elem['href'] if link_elem else None
+                            link_elem = article.select_one('a.post-card__title-link, a.post-card__link')
+                            link = link_elem['href'] if link_elem else None
+
+                            # Handle relative URLs
+                            if link and not link.startswith('http'):
+                                link = base_url + link
 
                             # Get summary
-                            summary_elem = article.select_one('p.post-card-inline__text')
+                            summary_elem = article.select_one('p.post-card__text, .post-card__content-text')
                             summary = summary_elem.text.strip() if summary_elem else ""
 
                             # Create news item
@@ -562,17 +579,20 @@ class NewsCollector:
             categories = self.source_config['decrypt']['default_categories']
 
         def url_formatter(base_url, category, page):
-            return f"{base_url}/{category}/page/{page}"
+            # Updated URL format for Decrypt
+            if category == "news":
+                return f"{base_url}/{page}"  # Main news page
+            return f"{base_url}/categories/{category}/page/{page}"
 
         return self._scrape_source_with_config(
             source='decrypt',
             days_back=days_back,
             categories=categories,
-            article_selector='article.cardV2',
-            title_selector='h3.cardV2__title',
-            link_selector='a.cardV2__wrap',
-            date_selector='time.cardV2__date',
-            summary_selector='p.cardV2__description',
+            article_selector='article.article-card, div.post-card',
+            title_selector='h3.article-title, h2.post-title',
+            link_selector='a.article-link, a.post-link',
+            date_selector='time.article-date, span.post-date',
+            summary_selector='p.article-description, div.post-excerpt',
             url_formatter=url_formatter
         )
 
@@ -603,6 +623,9 @@ class NewsCollector:
             categories = self.source_config['theblock']['default_categories']
 
         def url_formatter(base_url, category, page):
+            # Updated URL format for The Block
+            if category == "news":
+                return f"{base_url}/latest-crypto-news?page={page}"
             return f"{base_url}/{category}?page={page}"
 
         return self._scrape_source_with_config(

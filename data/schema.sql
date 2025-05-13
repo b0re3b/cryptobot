@@ -682,7 +682,7 @@ CREATE TABLE IF NOT EXISTS btc_lstm_data (
     high_scaled NUMERIC NOT NULL,
     low_scaled NUMERIC NOT NULL,
     close_scaled NUMERIC NOT NULL,
-    volume_scaled NUMERIC NOT NULL,
+    volume_scaled NUMERIC,
 
     -- Time features (cyclic encoding)
     hour_sin NUMERIC,
@@ -726,7 +726,7 @@ CREATE TABLE IF NOT EXISTS eth_lstm_data (
     high_scaled NUMERIC NOT NULL,
     low_scaled NUMERIC NOT NULL,
     close_scaled NUMERIC NOT NULL,
-    volume_scaled NUMERIC NOT NULL,
+    volume_scaled NUMERIC,
 
     -- Time features (cyclic encoding)
     hour_sin NUMERIC,
@@ -768,7 +768,7 @@ CREATE TABLE IF NOT EXISTS sol_lstm_data (
     high_scaled NUMERIC NOT NULL,
     low_scaled NUMERIC NOT NULL,
     close_scaled NUMERIC NOT NULL,
-    volume_scaled NUMERIC NOT NULL,
+    volume_scaled NUMERIC ,
 
     -- Time features (cyclic encoding)
     hour_sin NUMERIC,
@@ -817,7 +817,7 @@ CREATE TABLE IF NOT EXISTS btc_arima_data (
     close_seasonal_diff NUMERIC,
     close_combo_diff NUMERIC,
 
-    original_volume NUMERIC NOT NULL,
+    original_volume NUMERIC,
     volume_diff NUMERIC,
     volume_log NUMERIC,
     volume_pct_change NUMERIC,
@@ -861,7 +861,7 @@ CREATE TABLE IF NOT EXISTS eth_arima_data (
     close_seasonal_diff NUMERIC,
     close_combo_diff NUMERIC,
 
-    original_volume NUMERIC NOT NULL,
+    original_volume NUMERIC,
     volume_diff NUMERIC,
     volume_log NUMERIC,
     volume_pct_change NUMERIC,
@@ -903,7 +903,7 @@ CREATE TABLE IF NOT EXISTS sol_arima_data (
     close_seasonal_diff NUMERIC,
     close_combo_diff NUMERIC,
 
-    original_volume NUMERIC NOT NULL,
+    original_volume NUMERIC,
     volume_diff NUMERIC,
     volume_log NUMERIC,
     volume_pct_change NUMERIC,

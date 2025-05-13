@@ -330,14 +330,273 @@ class MarketDataProcessor:
                       required_columns: List[str] = None,
                       auto_detect: bool = True,
                       check_interval_compatibility: bool = True) -> pd.DataFrame:
+        """
+        Resample time series data to a target interval.
 
-        return self.data_resampler.resample_data(
-            data=data,
-            target_interval=target_interval,
-            required_columns=required_columns,
-            auto_detect=auto_detect,
-            check_interval_compatibility=check_interval_compatibility
-        )
+        Args:
+            data: Input DataFrame with DatetimeIndex
+            target_interval: Target interval for resampling ('1m', '4h', '1d', '1w', etc.)
+            required_columns: List of columns that must be present in data
+            auto_detect: Whether to automatically detect the source interval
+            check_interval_compatibility: Whether to check compatibility between source and target intervals
+
+        Returns:
+            DataFrame with resampled data
+        """
+        if data is None or data.empty:
+            self.logger.error("Порожній DataFrame для ресемплінгу")
+            return pd.DataFrame()
+
+        # Ensure we have a datetime index
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс не є DatetimeIndex. Спроба конвертації.")
+            try:
+                # Look for time-related columns if the index isn't datetime
+                time_cols = data.columns[
+                    data.columns.str.lower().str.contains('|'.join(['time', 'date', 'timestamp']))]
+
+                if len(time_cols) > 0:
+                    data = data.set_index(time_cols[0])
+                    data.index = pd.to_datetime(data.index)
+                else:
+                    self.logger.error("Неможливо конвертувати до DatetimeIndex: не знайдено часову колонку")
+                    return pd.DataFrame()
+            except Exception as e:
+                self.logger.error(f"Помилка при конвертації індексу: {str(e)}")
+                return pd.DataFrame()
+
+        # Ensure target_interval is valid
+        if not self._validate_timeframe(target_interval):
+            self.logger.error(f"Невірний цільовий таймфрейм: {target_interval}")
+            return pd.DataFrame()
+
+        # Validate required columns
+        if required_columns is None:
+            # Default columns for OHLCV data
+            required_columns = ['open', 'high', 'low', 'close', 'volume']
+
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        if missing_columns:
+            self.logger.error(f"Відсутні необхідні колонки: {', '.join(missing_columns)}")
+            return pd.DataFrame()
+
+        # Detect source interval if auto_detect is True
+        source_interval = None
+        if auto_detect:
+            # Try to infer frequency from the data
+            try:
+                inferred_freq = pd.infer_freq(data.index)
+                if inferred_freq:
+                    self.logger.info(f"Визначено частоту: {inferred_freq}")
+                    source_interval = self._pandas_freq_to_timeframe(inferred_freq)
+                else:
+                    # If can't infer, calculate the median time difference
+                    time_diffs = data.index.to_series().diff().dropna()
+                    if not time_diffs.empty:
+                        median_diff = time_diffs.median()
+                        seconds = median_diff.total_seconds()
+
+                        # Map seconds to timeframes
+                        if seconds <= 60:
+                            source_interval = '1m'
+                        elif 3500 <= seconds <= 3700:  # ~1 hour
+                            source_interval = '1h'
+                        elif 14000 <= seconds <= 15000:  # ~4 hours
+                            source_interval = '4h'
+                        elif 85000 <= seconds <= 87000:  # ~1 day
+                            source_interval = '1d'
+                        elif 600000 <= seconds <= 610000:  # ~1 week
+                            source_interval = '1w'
+                        else:
+                            self.logger.warning(f"Невідомий інтервал: {seconds} секунд")
+
+                self.logger.info(f"Визначено вихідний таймфрейм: {source_interval}")
+            except Exception as e:
+                self.logger.error(f"Помилка при визначенні вихідного таймфрейму: {str(e)}")
+
+        # Check compatibility between source and target intervals
+        if check_interval_compatibility and source_interval:
+            if not self._is_compatible_timeframe(source_interval, target_interval):
+                self.logger.error(
+                    f"Несумісні таймфрейми: {source_interval} -> {target_interval}. Рекомендовані: 1m->5m, 1h->4h, 1d->1w")
+                return pd.DataFrame()
+
+        # Map timeframe to pandas resampling rule
+        resampling_rule = self._timeframe_to_pandas_rule(target_interval)
+        if not resampling_rule:
+            self.logger.error(f"Неможливо конвертувати таймфрейм {target_interval} у правило ресемплінгу pandas")
+            return pd.DataFrame()
+
+        self.logger.info(f"Початок ресемплінгу з правилом: {resampling_rule}")
+
+        try:
+            # Make a copy to avoid modifying the original data
+            df = data.copy()
+
+            # Ensure the index is sorted
+            if not df.index.is_monotonic_increasing:
+                df = df.sort_index()
+
+            # Define aggregation functions for OHLCV data
+            agg_dict = {
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            }
+
+            # Add aggregation rules for additional columns if they exist
+            for col in df.columns:
+                if col not in agg_dict:
+                    # Try to determine column type and set appropriate aggregation
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        if 'volume' in col.lower() or 'amount' in col.lower() or 'qty' in col.lower():
+                            agg_dict[col] = 'sum'
+                        elif 'price' in col.lower() or 'rate' in col.lower():
+                            agg_dict[col] = 'mean'
+                        else:
+                            # Default for numeric columns
+                            agg_dict[col] = 'mean'
+                    else:
+                        # Default for non-numeric columns
+                        agg_dict[col] = 'last'
+
+            # Filter agg_dict to only include columns that are actually in the DataFrame
+            agg_dict = {col: agg for col, agg in agg_dict.items() if col in df.columns}
+
+            # Handle specific cases for optimal resampling
+            if target_interval == '4h' and source_interval == '1h':
+                # For 1h to 4h, we need to ensure proper alignment to 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+                # Calculate the offset to ensure alignment
+                first_timestamp = df.index[0]
+                hours_offset = first_timestamp.hour % 4
+                if hours_offset > 0:
+                    offset = f"{4 - hours_offset}H"
+                    self.logger.info(f"Застосовуємо зміщення {offset} для правильного вирівнювання 4-годинних свічок")
+                    resampler = df.resample(rule=resampling_rule, offset=offset)
+                else:
+                    resampler = df.resample(rule=resampling_rule)
+            elif target_interval == '1w' and source_interval == '1d':
+                # For 1d to 1w, align to Monday (start of week)
+                resampler = df.resample(rule=resampling_rule, label='left')
+            else:
+                # Default resampling
+                resampler = df.resample(rule=resampling_rule)
+
+            resampled = resampler.agg(agg_dict)
+
+            # Handle missing values that might arise during resampling
+            numeric_cols = resampled.select_dtypes(include=[np.number]).columns
+            resampled[numeric_cols] = resampled[numeric_cols].interpolate(method='linear', limit=3)
+
+            # Fill any remaining NaN values
+            resampled = resampled.fillna(method='ffill')
+
+            # Final check for NaN values
+            na_count = resampled.isna().sum().sum()
+            if na_count > 0:
+                self.logger.warning(f"Після ресемплінгу залишилося {na_count} відсутніх значень")
+
+            self.logger.info(f"Ресемплінг завершено: {len(data)} рядків -> {len(resampled)} рядків")
+            return resampled
+
+        except Exception as e:
+            self.logger.error(f"Помилка при ресемплінгу: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return pd.DataFrame()
+
+    def _pandas_freq_to_timeframe(self, freq: str) -> Optional[str]:
+        """Convert pandas frequency string to timeframe notation"""
+        if not freq:
+            return None
+
+        freq = freq.upper().lstrip('-')  # <-- ось ключове виправлення
+
+        # Далі йде вже існуюча логіка
+        if freq == 'T' or freq == 'MIN':
+            return '1m'
+        elif freq == 'H':
+            return '1h'
+        elif freq == '4H':
+            return '4h'
+        elif freq == 'D':
+            return '1d'
+        elif freq == 'W':
+            return '1w'
+        elif freq.endswith('MIN') or freq.endswith('T'):
+            try:
+                minutes = int(freq.rstrip('MINT'))
+                return f"{minutes}m"
+            except ValueError:
+                return None
+        elif freq.endswith('H'):
+            try:
+                hours = int(freq.rstrip('H'))
+                return f"{hours}h"
+            except ValueError:
+                return None
+        elif freq.endswith('D'):
+            try:
+                days = int(freq.rstrip('D'))
+                return f"{days}d"
+            except ValueError:
+                return None
+        elif freq.endswith('W'):
+            try:
+                weeks = int(freq.rstrip('W'))
+                return f"{weeks}w"
+            except ValueError:
+                return None
+
+        return None
+
+    def _timeframe_to_pandas_rule(self, timeframe: str) -> Optional[str]:
+        """Convert timeframe notation to pandas resampling rule"""
+        if not timeframe:
+            return None
+
+        timeframe = timeframe.lower()
+
+        # Extract number and unit
+        if len(timeframe) < 2:
+            return None
+
+        try:
+            number = int(timeframe[:-1])
+            unit = timeframe[-1]
+
+            if unit == 'm':
+                return f"{number}min"
+            elif unit == 'h':
+                return f"{number}H"
+            elif unit == 'd':
+                return f"{number}D"
+            elif unit == 'w':
+                return f"{number}W"
+            else:
+                return None
+        except ValueError:
+            return None
+
+    def _is_compatible_timeframe(self, source: str, target: str) -> bool:
+        """Check if source and target timeframes are compatible for resampling"""
+        # Define compatible paths
+        compatible_paths = {
+            '1m': ['5m', '15m', '30m', '1h', '4h', '1d'],
+            '5m': ['15m', '30m', '1h', '4h', '1d'],
+            '15m': ['30m', '1h', '4h', '1d'],
+            '30m': ['1h', '4h', '1d'],
+            '1h': ['4h', '1d', '1w'],
+            '4h': ['1d', '1w'],
+            '1d': ['1w']
+        }
+
+        if source not in compatible_paths:
+            return False
+
+        return target in compatible_paths[source]
 
     def make_stationary(self, data: pd.DataFrame, method: str = 'diff') -> pd.DataFrame:
 
@@ -587,7 +846,7 @@ class MarketDataProcessor:
 
         # Визначення базових та похідних таймфреймів
         base_timeframes = ['1m', '1h', '1d']
-        derived_timeframes = ['4h', '1w']
+        target_interval = ['4h', '1w']
 
         # 1. Завантаження даних
 
@@ -609,7 +868,7 @@ class MarketDataProcessor:
 
             self.logger.info(f"Завантажено {len(raw_data)} рядків для {symbol} ({timeframe})")
 
-        elif timeframe in derived_timeframes:
+        elif timeframe in target_interval:
             # Для похідних таймфреймів визначаємо вихідний таймфрейм для ресемплінгу
             source_timeframe = self._get_source_timeframe(timeframe)
             if not source_timeframe:
