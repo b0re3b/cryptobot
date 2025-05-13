@@ -387,7 +387,7 @@ class DatabaseManager:
             close_time = EXCLUDED.close_time,
             quote_asset_volume = EXCLUDED.quote_asset_volume,
             number_of_trades = EXCLUDED.number_of_trades,
-            taker_buy_base_volume = EXCLUDED.taker_buy_base_volume,btc_volume_profile
+            taker_buy_base_volume = EXCLUDED.taker_buy_base_volume,
             taker_buy_quote_volume = EXCLUDED.taker_buy_quote_volume,
             is_closed = EXCLUDED.is_closed
             ''', (
@@ -551,21 +551,14 @@ class DatabaseManager:
             return False
 
     def insert_volume_profile(self, symbol, profile_data):
-        """Додає запис профілю об'єму до відповідної таблиці"""
-        if symbol.upper() not in self.supported_symbols:
-            print(f"Валюта {symbol} не підтримується")
-            return False
-
+        """Додає запис профілю об'єму з перевіркою унікальності"""
         table_name = f"{symbol.lower()}_volume_profile"
-
         try:
             self.cursor.execute(f'''
             INSERT INTO {table_name} 
             (timeframe, time_bucket, price_bin_start, price_bin_end, volume)
             VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (timeframe, time_bucket, price_bin_start) DO UPDATE SET
-            price_bin_end = EXCLUDED.price_bin_end,
-            volume = EXCLUDED.volume
+            ON CONFLICT (timeframe, time_bucket, price_bin_start) DO NOTHING
             ''', (
                 profile_data['timeframe'],
                 profile_data['time_bucket'],
@@ -576,7 +569,6 @@ class DatabaseManager:
             self.conn.commit()
             return True
         except psycopg2.Error as e:
-            print(f"Помилка додавання запису профілю об'єму для {symbol}: {e}")
             self.conn.rollback()
             return False
 

@@ -588,30 +588,6 @@ class DataResampler:
 
         return df
 
-    @lru_cache(maxsize=128)
-    def _cached_convert_interval(self, timeframe: str) -> str:
-        """
-        Кешована версія конвертації інтервалу з підтримкою різних форматів
-        """
-        import re
-        interval_map = {
-            's': 'S', 'm': 'T', 'h': 'H',
-            'd': 'D', 'w': 'W', 'M': 'M'
-        }
-
-        match = re.match(r'(\d+)([smhdwM])', timeframe)
-        if not match:
-            raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
-
-        number, unit = match.groups()
-
-        if int(number) <= 0:
-            raise ValueError(f"Інтервал повинен бути додатнім: {timeframe}")
-
-        if unit not in interval_map:
-            raise ValueError(f"Непідтримувана одиниця часу: {unit}")
-
-        return f"{number}{interval_map[unit]}"
 
     def parse_interval(self, timeframe: str) -> pd.Timedelta:
 

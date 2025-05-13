@@ -2,14 +2,13 @@ import traceback
 import pandas as pd
 import numpy as np
 import logging
-from typing import List, Dict, Optional, Tuple, Any, Callable
+from typing import List, Dict, Optional, Tuple, Any
 import multiprocessing as mp
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-import os
+from concurrent.futures import ThreadPoolExecutor
 import gc
-import psutil
+from datetime import datetime, time
 
-from pandas import DataFrame, Series
+from pandas import DataFrame
 
 from data_collection.AnomalyDetector import AnomalyDetector
 from data_collection.DataCleaner import DataCleaner
@@ -19,21 +18,29 @@ from data.db import DatabaseManager
 
 
 class MarketDataProcessor:
-    """
-    Клас для обробки ринкових даних з оптимізаціями для швидкості та ефективності пам'яті.
-    """
+
+    VALID_TIMEFRAMES = ['1m','1h', '4h', '1d', '1w']
+    BASE_TIMEFRAMES = ['1m', '1h', '1d']
+    DERIVED_TIMEFRAMES = ['4h', '1w']
+    VOLUME_PROFILE_TIMEFRAMES = ['1d', '1w']
 
     def __init__(self, log_level=logging.INFO, use_multiprocessing=True, chunk_size=100000):
-
+        # Налаштування логування
         self.log_level = log_level
-        logging.basicConfig(level=self.log_level)
+        logging.basicConfig(
+            level=self.log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Ініціалізація класу...")
+        self.logger.info("Ініціалізація MarketDataProcessor...")
 
         # Налаштування оптимізацій
         self.use_multiprocessing = use_multiprocessing
         self.chunk_size = chunk_size
         self.num_workers = max(1, mp.cpu_count() - 1)  # Залишаємо один потік вільним
+        self.logger.info(
+            f"Налаштування: use_multiprocessing={use_multiprocessing}, chunk_size={chunk_size}, workers={self.num_workers}")
 
         # Ініціалізація залежних класів
         self.data_cleaner = DataCleaner(logger=self.logger)
@@ -42,108 +49,53 @@ class MarketDataProcessor:
         self.anomaly_detector = AnomalyDetector(logger=self.logger)
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
+        self.logger.info(f"Підтримувані символи: {', '.join(self.supported_symbols)}")
+
+        # Ініціалізація кешу результатів
+        self.cache_enabled = True
+        self._result_cache = {}
 
         self.ready = True
         self.filtered_data = None
         self.orderbook_statistics = None
+        self.logger.info("MarketDataProcessor успішно ініціалізовано")
 
-    def _get_memory_usage(self):
-        """Отримати поточне використання пам'яті."""
-        process = psutil.Process(os.getpid())
-        return process.memory_info().rss / 1024 / 1024  # MB
+    def _validate_timeframe(self, timeframe: str) -> bool:
+        if timeframe not in self.VALID_TIMEFRAMES:
+            self.logger.error(
+                f"Невірний таймфрейм: {timeframe}. Допустимі таймфрейми: {', '.join(self.VALID_TIMEFRAMES)}")
+            return False
+        return True
 
-    def _log_memory_usage(self, message=""):
-        """Логувати поточне використання пам'яті."""
-        memory_mb = self._get_memory_usage()
-        self.logger.info(f"{message} Використання пам'яті: {memory_mb:.2f} MB")
+    def _get_source_timeframe(self, target_timeframe: str) -> Optional[str]:
+        if target_timeframe not in self.DERIVED_TIMEFRAMES:
+            return None
 
-    def _process_in_chunks(self, data: pd.DataFrame,
-                           process_func: Callable,
-                           **kwargs) -> pd.DataFrame:
+        # Визначаємо оптимальний вихідний таймфрейм
+        if target_timeframe in ['5m', '15m', '30m']:
+            return '1m'
+        elif target_timeframe == '4h':
+            return '1h'
+        elif target_timeframe == '1w':
+            return '1d'
 
-        if data is None or data.empty:
-            return data
+        return None
 
-        # Якщо дані менші за розмір чанка, обробляємо цілим
-        if len(data) <= self.chunk_size:
-            return process_func(data, **kwargs)
+    def _validate_datetime_format(self, date_str: Optional[str]) -> bool:
+        if date_str is None:
+            return True
 
-        self.logger.info(f"Обробка даних по чанкам: {len(data)} рядків, розмір чанка {self.chunk_size}")
-        self._log_memory_usage("До обробки по чанкам:")
-
-        chunks = []
-        chunk_indices = list(range(0, len(data), self.chunk_size))
-
-        for i, start_idx in enumerate(chunk_indices):
-            end_idx = min(start_idx + self.chunk_size, len(data))
-            chunk = data.iloc[start_idx:end_idx].copy()
-
-            self.logger.debug(f"Обробка чанка {i + 1}/{len(chunk_indices)}: рядки {start_idx}-{end_idx}")
-
-            try:
-                processed_chunk = process_func(chunk, **kwargs)
-                if processed_chunk is not None and not processed_chunk.empty:
-                    chunks.append(processed_chunk)
-            except Exception as e:
-                self.logger.error(f"Помилка при обробці чанка {i + 1}: {str(e)}")
-
-            # Явно очищуємо пам'ять
-            del chunk
-            gc.collect()
-
-        if not chunks:
-            return pd.DataFrame()
-
-        # Об'єднуємо результати
         try:
-            result = pd.concat(chunks, axis=0)
-            self._log_memory_usage("Після обробки по чанкам:")
-            return result
-        except Exception as e:
-            self.logger.error(f"Помилка при об'єднанні результатів: {str(e)}")
-            return pd.DataFrame()
-
-    def _parallel_process(self, data_list: List[pd.DataFrame],
-                          func: Callable,
-                          **kwargs) -> List[pd.DataFrame]:
-
-        if not self.use_multiprocessing or len(data_list) <= 1:
-            return [func(df, **kwargs) for df in data_list]
-
-        self.logger.info(f"Паралельна обробка {len(data_list)} наборів даних на {self.num_workers} ядрах")
-
-        def _process_one(df_idx_pair):
-            idx, df = df_idx_pair
+            datetime.strptime(date_str, '%Y-%m-%d')
+            return True
+        except ValueError:
             try:
-                if df is None or df.empty:
-                    return idx, pd.DataFrame()
-                result = func(df, **kwargs)
-                return idx, result
-            except Exception as e:
-                self.logger.error(f"Помилка в паралельній обробці #{idx}: {str(e)}")
-                return idx, pd.DataFrame()
-
-        # Створення списку індекс-датафрейм пар для збереження порядку
-        indexed_data = list(enumerate(data_list))
-
-        # Вибір типу виконавця в залежності від операції
-        # ProcessPoolExecutor для CPU-bound операцій, ThreadPoolExecutor для I/O-bound
-        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
-            results = list(executor.map(_process_one, indexed_data))
-
-        # Відновлення оригінального порядку результатів
-        sorted_results = sorted(results, key=lambda x: x[0])
-        return [result for _, result in sorted_results]
-
-    def _get_data(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
-        return self.load_data(
-            data_source='database',
-            symbol=symbol,
-            timeframe=timeframe,
-            data_type='candles',
-            start_date=start_date,
-            end_date=end_date
-        )
+                datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                return True
+            except ValueError:
+                self.logger.error(
+                    f"Невірний формат дати: {date_str}. Використовуйте 'YYYY-MM-DD' або 'YYYY-MM-DD HH:MM:SS'")
+                return False
 
     def align_time_series(self, data_list: List[pd.DataFrame],
                           reference_index: int = 0) -> List[pd.DataFrame]:
@@ -156,7 +108,6 @@ class MarketDataProcessor:
             self.logger.error(f"Невірний reference_index: {reference_index}. Має бути від 0 до {len(data_list) - 1}")
             reference_index = 0
 
-        # Підготовка DataFrames - векторизована обробка
         processed_data_list = []
 
         for i, df in enumerate(data_list):
@@ -189,19 +140,16 @@ class MarketDataProcessor:
                     processed_data_list.append(pd.DataFrame())
                     continue
 
-            # Сортування за часовим індексом, якщо потрібно
             if not df_copy.index.is_monotonic_increasing:
                 df_copy = df_copy.sort_index()
 
             processed_data_list.append(df_copy)
 
-        # Перевірка еталонного DataFrame
         reference_df = processed_data_list[reference_index]
         if reference_df is None or reference_df.empty:
             self.logger.error("Еталонний DataFrame є порожнім")
             return processed_data_list
 
-        # Векторизований пошук спільного часового діапазону
         all_start_times = pd.Series([df.index.min() for df in processed_data_list if not df.empty])
         all_end_times = pd.Series([df.index.max() for df in processed_data_list if not df.empty])
 
@@ -218,14 +166,11 @@ class MarketDataProcessor:
             self.logger.error("Немає спільного часового діапазону між DataFrame")
             return processed_data_list
 
-        # Створення спільної часової сітки
         try:
-            # Спроба визначити частоту еталонного DataFrame
             reference_freq = pd.infer_freq(reference_df.index)
 
             if not reference_freq:
                 self.logger.warning("Не вдалося визначити частоту reference DataFrame. Визначення вручну.")
-                # Векторизований розрахунок медіанної різниці часових міток
                 time_diffs = reference_df.index.to_series().diff().dropna()
                 if not time_diffs.empty:
                     median_diff = time_diffs.median()
@@ -250,8 +195,7 @@ class MarketDataProcessor:
                     self.logger.error("Не вдалося визначити частоту. Повертаємо оригінальні DataFrame")
                     return processed_data_list
 
-            # Створення нового індексу з використанням визначеної частоти
-            # Векторизована фільтрація для reference_subset
+
             reference_subset = reference_df[(reference_df.index >= common_start) & (reference_df.index <= common_end)]
             common_index = reference_subset.index
 
@@ -272,26 +216,20 @@ class MarketDataProcessor:
 
                 # Якщо це еталонний DataFrame
                 if i == reference_index:
-                    # Використовуємо оригінальний індекс, обмежений спільним діапазоном
-                    # Векторизована фільтрація
+
                     df_aligned = df[(df.index >= common_start) & (df.index <= common_end)]
-                    # Перевірка, чи потрібно перестворити індекс з визначеною частотою
                     if len(df_aligned.index) != len(common_index):
                         self.logger.debug(f"Перестворення індексу для еталонного DataFrame {i}")
                         df_aligned = df_aligned.reindex(common_index)
                 else:
-                    # Для інших DataFrame - вирівнюємо до спільного індексу
                     df_aligned = df.reindex(common_index)
 
                 # Векторизована інтерполяція числових даних
                 numeric_cols = df_aligned.select_dtypes(include=[np.number]).columns
                 if len(numeric_cols) > 0:
-                    # Інтерполяція всіх числових колонок одразу
                     df_aligned[numeric_cols] = df_aligned[numeric_cols].interpolate(method='time')
-                    # Заповнення NaN, що залишились
                     df_aligned[numeric_cols] = df_aligned[numeric_cols].fillna(method='ffill').fillna(method='bfill')
 
-                # Перевірка та звіт про відсутні значення
                 missing_values = df_aligned.isna().sum().sum()
                 if missing_values > 0:
                     self.logger.warning(
@@ -323,94 +261,43 @@ class MarketDataProcessor:
             self.logger.error(traceback.format_exc())
             return processed_data_list
 
-    def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 20,
-                                 price_col: str = 'close', volume_col: str = 'volume',
-                                 time_period: Optional[str] = None) -> pd.DataFrame:
-
-        # Валідація вхідних даних
-        if data is None or data.empty:
-            self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
-            return pd.DataFrame()
-
-        # Перевірка наявності необхідних колонок
-        required_cols = [price_col, volume_col]
-        missing_cols = [col for col in required_cols if col not in data.columns]
-        if missing_cols:
-            self.logger.error(f"Відсутні необхідні колонки: {', '.join(missing_cols)}")
-            return pd.DataFrame()
-
-        # Валідація типів даних для запобігання помилок
-        if not pd.api.types.is_numeric_dtype(data[price_col]):
-            self.logger.error(f"Колонка '{price_col}' має бути числового типу")
-            return pd.DataFrame()
-
-        if not pd.api.types.is_numeric_dtype(data[volume_col]):
-            self.logger.error(f"Колонка '{volume_col}' має бути числового типу")
-            return pd.DataFrame()
-
-        self.logger.info(f"Створення профілю об'єму з {bins} ціновими рівнями")
-
-        # Копія даних для запобігання змін у вхідному DataFrame
-        working_data = data.copy()
-
-        # Перевірка можливості створення часового профілю
-        if time_period:
-            # Безпечна перевірка та конвертація часового індексу
-            try:
-                if not isinstance(working_data.index, pd.DatetimeIndex):
-                    self.logger.warning("Індекс не є DatetimeIndex. Спроба конвертації...")
-                    # Пошук часових колонок
-                    time_cols = [col for col in working_data.columns if any(
-                        time_str in col.lower() for time_str in ['time', 'date', 'timestamp'])]
-
-                    if time_cols:
-                        # Конвертація часової колонки в DatetimeIndex
-                        working_data[time_cols[0]] = pd.to_datetime(working_data[time_cols[0]], errors='coerce')
-                        working_data.set_index(time_cols[0], inplace=True)
-                        # Видалення рядків з невалідними датами
-                        working_data = working_data[working_data.index.notna()]
-
-                # Локалізація часового індексу для коректного групування
-                if working_data.index.tz is None:
-                    working_data.index = working_data.index.tz_localize('UTC', ambiguous='NaT',
-                                                                        nonexistent='shift_forward')
-                    working_data = working_data[~working_data.index.isna()]
-
-                # Групування по часовому періоду з обробкою помилок
-                period_groups = working_data.groupby(pd.Grouper(freq=time_period, dropna=True))
-
-                result_dfs = []
-                for period, group in period_groups:
-                    if group.empty or len(group) < 2:
-                        continue
-
-                    period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
-                    if not period_profile.empty:
-                        period_profile['period'] = period
-                        result_dfs.append(period_profile)
-
-                if result_dfs:
-                    result = pd.concat(result_dfs)
-                    # Перетворення та сортування результату
-                    if 'period' in result.columns and not result['period'].isna().any():
-                        result['period'] = pd.to_datetime(result['period'])
-                        result = result.sort_values('period')
-                    return result
-                else:
-                    self.logger.warning("Не вдалося створити часовий профіль. Створюємо загальний профіль...")
-
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні часового профілю: {str(e)}")
-                self.logger.info("Спроба створення загального профілю...")
-
-        # Створення загального профілю об'єму
-        return self._create_volume_profile(working_data, bins, price_col, volume_col)
-
     def _create_volume_profile(self, data: pd.DataFrame, bins: int,
                                price_col: str, volume_col: str) -> pd.DataFrame:
-        """Створює профіль об'єму для заданого DataFrame"""
-
         try:
+            # Перевірка наявності необхідних колонок
+            if price_col not in data.columns:
+                self.logger.error(f"Колонка ціни '{price_col}' відсутня в даних")
+                return pd.DataFrame()
+
+            if volume_col not in data.columns:
+                self.logger.error(f"Колонка об'єму '{volume_col}' відсутня в даних")
+                return pd.DataFrame()
+
+            # Перевірка типів даних
+            if not pd.api.types.is_numeric_dtype(data[price_col]):
+                self.logger.error(f"Колонка '{price_col}' має бути числового типу")
+                return pd.DataFrame()
+
+            if not pd.api.types.is_numeric_dtype(data[volume_col]):
+                self.logger.error(f"Колонка '{volume_col}' має бути числового типу")
+                return pd.DataFrame()
+
+            # Перевірка на NaN або нульові значення
+            null_prices = data[price_col].isna().sum()
+            null_volumes = data[volume_col].isna().sum()
+
+            if null_prices > 0:
+                self.logger.warning(f"Знайдено {null_prices} null значень у колонці '{price_col}'")
+                data = data.dropna(subset=[price_col])
+
+            if null_volumes > 0:
+                self.logger.warning(f"Знайдено {null_volumes} null значень у колонці '{volume_col}'")
+                data = data.dropna(subset=[volume_col])
+
+            if data.empty:
+                self.logger.error("Після видалення null значень DataFrame порожній")
+                return pd.DataFrame()
+
             # Перевірка валідності цінового діапазону
             price_min = data[price_col].min()
             price_max = data[price_col].max()
@@ -442,7 +329,6 @@ class MarketDataProcessor:
 
             bin_labels = np.arange(effective_bins)
             data = data.copy()
-
             # Безпечне створення бінів з обробкою крайніх випадків
             try:
                 data['price_bin'] = pd.cut(
@@ -513,6 +399,124 @@ class MarketDataProcessor:
             self.logger.error(f"Критична помилка при створенні профілю об'єму: {str(e)}")
             return pd.DataFrame()
 
+    def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 20,
+                                 price_col: str = 'close', volume_col: str = 'volume',
+                                 time_period: Optional[str] = None) -> pd.DataFrame:
+        # Add this validation at the start
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.error("Input data must have DatetimeIndex")
+            return pd.DataFrame()
+
+        # Валідація вхідних даних
+        if data is None or data.empty:
+            self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
+            return pd.DataFrame()
+
+        # Перевірка наявності необхідних колонок
+        required_cols = [price_col, volume_col]
+        missing_cols = [col for col in required_cols if col not in data.columns]
+        if missing_cols:
+            self.logger.error(f"Відсутні необхідні колонки: {', '.join(missing_cols)}")
+            return pd.DataFrame()
+
+        # Валідація типів даних для запобігання помилок
+        if not pd.api.types.is_numeric_dtype(data[price_col]):
+            self.logger.error(f"Колонка '{price_col}' має бути числового типу")
+            return pd.DataFrame()
+
+        if not pd.api.types.is_numeric_dtype(data[volume_col]):
+            self.logger.error(f"Колонка '{volume_col}' має бути числового типу")
+            return pd.DataFrame()
+
+        self.logger.info(f"Створення профілю об'єму з {bins} ціновими рівнями")
+
+        # Копія даних для запобігання змін у вхідному DataFrame
+        working_data = data.copy()
+
+        # Перевірка можливості створення часового профілю
+        if time_period:
+            # Безпечна перевірка та конвертація часового індексу
+            try:
+                if not isinstance(working_data.index, pd.DatetimeIndex):
+                    self.logger.warning("Індекс не є DatetimeIndex. Спроба конвертації...")
+                    # Пошук часових колонок
+                    time_cols = [col for col in working_data.columns if any(
+                        time_str in col.lower() for time_str in ['time', 'date', 'timestamp'])]
+
+                    if time_cols:
+                        # Конвертація часової колонки в DatetimeIndex
+                        working_data[time_cols[0]] = pd.to_datetime(working_data[time_cols[0]], errors='coerce')
+                        working_data.set_index(time_cols[0], inplace=True)
+                        # Видалення рядків з невалідними датами
+                        working_data = working_data[working_data.index.notna()]
+                    else:
+                        self.logger.error("Не знайдено часової колонки для конвертації в DatetimeIndex")
+                        return pd.DataFrame()
+
+                # Перевірка, чи є дані в DataFrame після конвертації
+                if working_data.empty:
+                    self.logger.error("Дані порожні після конвертації до DatetimeIndex")
+                    return pd.DataFrame()
+
+                # Локалізація часового індексу для коректного групування
+                if working_data.index.tz is None:
+                    working_data.index = working_data.index.tz_localize('Europe/Kiev', ambiguous='NaT',
+                                                                        nonexistent='shift_forward')
+                    working_data = working_data[~working_data.index.isna()]
+
+                # Перевірка, чи є дані в DataFrame після локалізації
+                if working_data.empty:
+                    self.logger.error("Дані порожні після локалізації часового індексу")
+                    return pd.DataFrame()
+
+                # Перевірка правильності time_period формату
+                try:
+                    # Проста перевірка на валідність частоти для pandas
+                    test_range = pd.date_range(
+                        start=working_data.index.min(),
+                        periods=2,
+                        freq=time_period
+                    )
+                    self.logger.info(f"Використання часового періоду: {time_period}")
+                except Exception as e:
+                    self.logger.error(f"Невірний часовий період '{time_period}': {str(e)}")
+                    self.logger.info("Спроба створення загального профілю...")
+                    return self._create_volume_profile(working_data, bins, price_col, volume_col)
+
+                # Групування по часовому періоду з обробкою помилок
+                period_groups = working_data.groupby(pd.Grouper(freq=time_period, dropna=True))
+
+                result_dfs = []
+                for period, group in period_groups:
+                    if group.empty or len(group) < 2:
+                        continue
+
+                    period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
+                    if not period_profile.empty:
+                        period_profile['period'] = period
+                        result_dfs.append(period_profile)
+
+                if result_dfs:
+                    result = pd.concat(result_dfs)
+                    # Перетворення та сортування результату
+                    if 'period' in result.columns and not result['period'].isna().any():
+                        result['period'] = pd.to_datetime(result['period'])
+                        result = result.sort_values('period')
+
+                    self.logger.info(f"Створено часовий профіль об'єму з {len(result)} записами")
+                    return result
+                else:
+                    self.logger.warning("Не вдалося створити часовий профіль. Створюємо загальний профіль...")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні часового профілю: {str(e)}")
+                self.logger.info("Спроба створення загального профілю...")
+
+        # Створення загального профілю об'єму
+        self.logger.info("Створення загального профілю об'єму...")
+        return self._create_volume_profile(working_data, bins, price_col, volume_col)
+
+
     def merge_datasets(self, datasets: List[pd.DataFrame],
                        merge_on: str = 'timestamp',
                        chunk_size: Optional[int] = None) -> pd.DataFrame:
@@ -535,7 +539,6 @@ class MarketDataProcessor:
 
         self.logger.info(f"Початок об'єднання {len(datasets)} наборів даних "
                          f"(всього ~{total_rows} рядків, ~{total_cols} колонок)")
-        self._log_memory_usage("До об'єднання наборів даних:")
 
         # Перевірка чи потрібна обробка чанками
         needs_chunking = total_rows > chunk_size
@@ -633,7 +636,6 @@ class MarketDataProcessor:
             self.logger.info(f"Об'єднання завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
             self.logger.info(f"З {columns_count} вхідних колонок, {duplicate_columns} були дублікатами")
 
-            self._log_memory_usage("Після об'єднання наборів даних:")
 
             # Кешування результату, якщо увімкнено
             if self.cache_enabled:
@@ -710,98 +712,6 @@ class MarketDataProcessor:
             self.logger.error(f"Помилка при об'єднанні чанків: {str(e)}")
             return pd.DataFrame()
 
-    # Додавання утилітних методів для кешування та управління пам'яттю
-    def clear_cache(self):
-        """Очищує всі внутрішні кеші."""
-        self._result_cache.clear()
-        self.memory.clear()
-        gc.collect()
-        self.logger.info("Кеш очищено")
-        self._log_memory_usage("Після очищення кешу:")
-
-    def optimize_memory(self, data: pd.DataFrame) -> pd.DataFrame:
-
-        if data is None or data.empty:
-            return data
-
-        start_mem = data.memory_usage(deep=True).sum() / 1024 ** 2
-        self.logger.debug(f"Початковий розмір DataFrame: {start_mem:.2f} MB")
-
-        # Копіювання для запобігання зміни оригіналу
-        result = data.copy()
-
-        # Оптимізація числових колонок
-        numerics = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64']
-        for col in result.select_dtypes(include=numerics).columns:
-            col_dtype = result[col].dtype
-
-            # Цілі числа
-            if np.issubdtype(col_dtype, np.integer):
-                c_min = result[col].min()
-                c_max = result[col].max()
-
-                # Визначення оптимального цілочисельного типу на основі діапазону
-                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
-                    result[col] = result[col].astype(np.int8)
-                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
-                    result[col] = result[col].astype(np.int16)
-                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
-                    result[col] = result[col].astype(np.int32)
-                else:
-                    result[col] = result[col].astype(np.int64)
-
-            # Числа з плаваючою точкою
-            elif np.issubdtype(col_dtype, np.floating):
-                # Перетворення в float32, якщо не призводить до втрати точності
-                # Для фінансових даних часто потрібна висока точність, тому перевіряємо різницю
-                f32_col = result[col].astype(np.float32)
-                if (result[col] - f32_col).abs().max() < 1e-6:
-                    result[col] = f32_col
-
-        # Оптимізація категоріальних колонок
-        for col in result.select_dtypes(include=['object']).columns:
-            num_unique = result[col].nunique()
-            num_total = len(result[col])
-
-            # Якщо колонка має невелику кількість унікальних значень відносно загальної кількості
-            if num_unique / num_total < 0.5:  # менше 50% унікальних значень
-                result[col] = result[col].astype('category')
-
-        end_mem = result.memory_usage(deep=True).sum() / 1024 ** 2
-        savings = (1 - end_mem / start_mem) * 100
-        self.logger.info(f"Оптимізований розмір DataFrame: {end_mem:.2f} MB, економія: {savings:.1f}%")
-
-        return result
-
-    def parallel_apply(self, data: pd.DataFrame, func: Callable,
-                       column: Optional[str] = None,
-                       axis: int = 0) -> Series | DataFrame:
-
-        if data is None or data.empty:
-            return pd.Series() if column else pd.DataFrame()
-
-        # Визначення обробника даних
-        if column is not None:
-            data_to_process = data[column]
-        else:
-            data_to_process = data
-
-        # Розділення даних на частини для паралельної обробки
-        splits = np.array_split(data_to_process, self.num_workers)
-
-        # Функція для обробки однієї частини
-        def process_chunk(chunk):
-            return chunk.apply(func, axis=axis)
-
-        # Паралельне застосування
-        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
-            results = list(executor.map(process_chunk, splits))
-
-        # Об'єднання результатів
-        if isinstance(results[0], pd.Series):
-            return pd.concat(results)
-        else:
-            return pd.concat(results)
     # --- Methods delegated to DataCleaner ---
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
@@ -843,7 +753,7 @@ class MarketDataProcessor:
             **kwargs
         )
 
-    def add_time_features_safely(self, data: pd.DataFrame, tz: str = 'UTC') -> pd.DataFrame:
+    def add_time_features_safely(self, data: pd.DataFrame, tz: str = 'Europe/Kiev') -> pd.DataFrame:
 
         return self.data_cleaner.add_time_features_safely(data, tz=tz)
 
@@ -856,7 +766,6 @@ class MarketDataProcessor:
         return self.data_cleaner.validate_data_integrity(data)
 
     # --- Methods delegated to AnomalyDetector ---
-
     def detect_outliers(self, data: pd.DataFrame, method: str = 'iqr',
                         threshold: float = 1.5, **kwargs) -> tuple[DataFrame, list]:
 
@@ -866,7 +775,6 @@ class MarketDataProcessor:
             threshold=threshold,
             **kwargs
         )
-
 
     # --- Methods delegated to DataResampler ---
     def auto_resample(self, data: pd.DataFrame, target_interval: str = None) -> pd.DataFrame:
@@ -1020,17 +928,26 @@ class MarketDataProcessor:
             self.logger.error(f"Непідтримуваний символ: {symbol}")
             return []
 
-
-
     def preprocess_pipeline(self, data: pd.DataFrame,
                             steps: Optional[List[Dict]] = None,
                             symbol: Optional[str] = None,
                             interval: Optional[str] = None) -> pd.DataFrame:
 
-        if data.empty:
+        if data is None or data.empty:
             self.logger.warning("Отримано порожній DataFrame для обробки в конвеєрі")
-            return data
+            return pd.DataFrame()
 
+        # Перевірка наявності основних колонок для свічок
+        expected_columns = ['open', 'high', 'low', 'close']
+        missing_columns = [col for col in expected_columns if col not in data.columns]
+        if missing_columns:
+            self.logger.warning(f"Відсутні необхідні колонки: {', '.join(missing_columns)}")
+
+        # Перевірка таймфрейму, якщо вказано
+        if interval and not self._validate_timeframe(interval):
+            self.logger.warning(f"Невірний таймфрейм: {interval}. Обробка продовжується з застереженням.")
+
+        # Встановлення типових кроків обробки, якщо не вказано
         if steps is None:
             steps = [
                 {'name': 'remove_duplicate_timestamps', 'params': {}},
@@ -1041,12 +958,27 @@ class MarketDataProcessor:
                 }}
             ]
 
-        self.logger.info(f"Початок виконання конвеєра обробки даних з {len(steps)} кроками")
+        self.logger.info(f"Початок виконання конвеєра обробки даних для {'символу ' + symbol if symbol else 'даних'} "
+                         f"({'таймфрейм ' + interval if interval else 'без вказаного таймфрейму'}) "
+                         f"з {len(steps)} кроками")
+
+        # Зберігаємо початкові розміри даних для порівняння
+        initial_rows = len(data)
+        initial_cols = len(data.columns)
+        self.logger.info(f"Початкові дані: {initial_rows} рядків, {initial_cols} колонок")
+
+        # Перевірка індексу
+        if not isinstance(data.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс не є DatetimeIndex. Можливі проблеми з часовими операціями.")
+
         result = data.copy()
 
+        # Виконання кожного кроку конвеєра
         for step_idx, step in enumerate(steps, 1):
             step_name = step.get('name')
             step_params = step.get('params', {})
+
+            start_time = time()  # Додаємо вимірювання часу виконання
 
             if not hasattr(self, step_name):
                 self.logger.warning(f"Крок {step_idx}: Метод '{step_name}' не існує. Пропускаємо.")
@@ -1056,28 +988,92 @@ class MarketDataProcessor:
                 self.logger.info(f"Крок {step_idx}: Виконання '{step_name}' з параметрами {step_params}")
                 method = getattr(self, step_name)
 
+                # Зберігаємо розмір даних перед виконанням кроку
+                before_rows = len(result)
+                before_cols = len(result.columns)
+
                 # Додаємо symbol та interval якщо метод підтримує їх
                 if step_name == 'handle_missing_values':
                     step_params['symbol'] = symbol
                     step_params['timeframe'] = interval
 
+                # Для методів, які повертають кортеж (результат, додаткова інформація)
                 if step_name in ['normalize_data', 'detect_outliers', 'detect_zscore_outliers',
                                  'detect_iqr_outliers', 'detect_isolation_forest_outliers',
                                  'validate_data_integrity', 'detect_outliers_essemble']:
-                    result, _ = method(result, **step_params)
+                    result, additional_info = method(result, **step_params)
+                    # Логування додаткової інформації, якщо вона є
+                    if additional_info and isinstance(additional_info, dict):
+                        self.logger.debug(f"Додаткова інформація з кроку '{step_name}': ")
                 else:
                     result = method(result, **step_params)
 
+                # Перевірка результату
+                if result is None or result.empty:
+                    self.logger.error(f"Крок {step_idx}: '{step_name}' повернув порожні дані. Зупинка конвеєра.")
+                    return pd.DataFrame()
+
+                # Аналіз змін після кроку
+                after_rows = len(result)
+                after_cols = len(result.columns)
+                rows_diff = after_rows - before_rows
+                cols_diff = after_cols - before_cols
+
+
+                # Логування з інформацією про зміни
                 self.logger.info(
-                    f"Крок {step_idx}: '{step_name}' завершено. Результат: {len(result)} рядків, {len(result.columns)} колонок")
+                    f"Рядків: {before_rows} → {after_rows} ({rows_diff:+d}), "
+                    f"Колонок: {before_cols} → {after_cols} ({cols_diff:+d})"
+                )
+
+                # Додаткова перевірка на значні зміни в даних
+                if abs(rows_diff) > before_rows * 0.3:  # Якщо зміна більше 30%
+                    self.logger.warning(
+                        f"Крок {step_idx}: '{step_name}' призвів до значної зміни кількості рядків: {rows_diff:+d} ({rows_diff / before_rows * 100:.1f}%)"
+                    )
 
             except Exception as e:
                 self.logger.error(f"Помилка на кроці {step_idx}: '{step_name}': {str(e)}")
                 self.logger.error(traceback.format_exc())
+                # Продовжуємо виконання конвеєра, незважаючи на помилку в одному кроці
+
+        # Перевірка цілісності індексу після всіх перетворень
+        if not isinstance(result.index, pd.DatetimeIndex):
+            self.logger.warning("Після обробки індекс не є DatetimeIndex. Спроба конвертації...")
+            try:
+                result.index = pd.to_datetime(result.index)
+            except Exception as e:
+                self.logger.error(f"Не вдалося конвертувати індекс: {str(e)}")
+
+        # Перевірка сортування індексу
+        if not result.index.is_monotonic_increasing:
+            self.logger.warning("Індекс не відсортований. Сортуємо за часом...")
+            result = result.sort_index()
+
+        # Перевірка на дублікати індексу
+        duplicates = result.index.duplicated().sum()
+        if duplicates > 0:
+            self.logger.warning(
+                f"Знайдено {duplicates} дублікатів у індексі. Рекомендується викликати remove_duplicate_timestamps.")
+
+        # Перевірка на пропуски
+        na_count = result.isna().sum().sum()
+        if na_count > 0:
+            na_percent = na_count / (result.shape[0] * result.shape[1]) * 100
+            self.logger.warning(f"В даних залишилось {na_count} пропущених значень ({na_percent:.2f}%).")
+
+        # Підсумок
+        final_rows = len(result)
+        final_cols = len(result.columns)
+        rows_diff = final_rows - initial_rows
+        cols_diff = final_cols - initial_cols
 
         self.logger.info(
-            f"Конвеєр обробки даних завершено. Початково: {len(data)} рядків, {len(data.columns)} колонок. "
-            f"Результат: {len(result)} рядків, {len(result.columns)} колонок.")
+            f"Конвеєр обробки даних завершено. "
+            f"Початково: {initial_rows} рядків, {initial_cols} колонок. "
+            f"Результат: {final_rows} рядків, {final_cols} колонок. "
+            f"Зміна: {rows_diff:+d} рядків, {cols_diff:+d} колонок."
+        )
 
         return result
 
@@ -1088,8 +1084,20 @@ class MarketDataProcessor:
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
 
+        # Перевірка символу
         if symbol not in self.supported_symbols:
-            self.logger.error(f"Символ {symbol} не підтримується")
+            self.logger.error(f"Символ {symbol} не підтримується. Підтримуються: {', '.join(self.supported_symbols)}")
+            return results
+
+        # Перевірка таймфрейму
+        if not self._validate_timeframe(timeframe):
+            self.logger.error(
+                f"Таймфрейм {timeframe} не підтримується. Підтримуються: {', '.join(self.VALID_TIMEFRAMES)}")
+            return results
+
+        # Перевірка формату дат
+        if not self._validate_datetime_format(start_date) or not self._validate_datetime_format(end_date):
+            self.logger.error(f"Невірний формат дати. Використовуйте 'YYYY-MM-DD' або 'YYYY-MM-DD HH:MM:SS'")
             return results
 
         # Визначення базових та похідних таймфреймів
@@ -1097,7 +1105,10 @@ class MarketDataProcessor:
         derived_timeframes = ['4h', '1w']
 
         # 1. Завантаження даних
+
         if timeframe in base_timeframes:
+            # Для базових таймфреймів завантажуємо дані з БД
+            self.logger.info(f"Завантаження базових даних для {symbol} ({timeframe})")
             raw_data = self.load_data(
                 data_source='database',
                 symbol=symbol,
@@ -1105,20 +1116,24 @@ class MarketDataProcessor:
                 data_type='candles'
             )
 
-            if raw_data.empty:
+            self.logger.info(f"Завантаження даних виконано ")
+
+            if raw_data is None or raw_data.empty:
                 self.logger.warning(f"Дані не знайдено для {symbol} {timeframe}")
                 return results
 
+            self.logger.info(f"Завантажено {len(raw_data)} рядків для {symbol} ({timeframe})")
+
         elif timeframe in derived_timeframes:
-            # Визначаємо вихідний таймфрейм для ресемплінгу
-            source_timeframe = None
-            if timeframe == '4h':
-                source_timeframe = '1h'
-            elif timeframe == '1w':
-                source_timeframe = '1d'
+            # Для похідних таймфреймів визначаємо вихідний таймфрейм для ресемплінгу
+            source_timeframe = self._get_source_timeframe(timeframe)
+            if not source_timeframe:
+                self.logger.error(f"Не вдалося визначити вихідний таймфрейм для {timeframe}")
+                return results
 
             self.logger.info(f"Створення {timeframe} даних через ресемплінг з {source_timeframe}")
 
+            # Завантажуємо дані вихідного таймфрейму
             source_data = self.load_data(
                 data_source='database',
                 symbol=symbol,
@@ -1126,29 +1141,50 @@ class MarketDataProcessor:
                 data_type='candles'
             )
 
-            if source_data.empty:
+            self.logger.info(f"Завантаження даних виконано")
+
+            if source_data is None or source_data.empty:
                 self.logger.warning(f"Базові дані не знайдено для {symbol} {source_timeframe}")
                 return results
 
+            self.logger.info(f"Завантажено {len(source_data)} рядків базових даних для ресемплінгу")
+
+            # Виконуємо ресемплінг до цільового таймфрейму
+            resampling_start_time = time()
             raw_data = self.resample_data(source_data, target_interval=timeframe)
 
-            if raw_data.empty:
+            self.logger.info(f"Ресемплінг до {timeframe} виконано ")
+
+            if raw_data is None or raw_data.empty:
                 self.logger.warning(f"Не вдалося створити дані для {symbol} {timeframe} через ресемплінг")
                 return results
+
+            self.logger.info(f"Після ресемплінгу отримано {len(raw_data)} рядків для {symbol} ({timeframe})")
         else:
             self.logger.error(f"Непідтримуваний таймфрейм: {timeframe}")
             return results
 
+        # Зберігаємо сирі дані в результаті
         results['raw_data'] = raw_data
+
+        # Перевірка формату сирих даних
 
         # 2. Фільтрація за часовим діапазоном
         if start_date or end_date:
+            self.logger.info(f"Фільтрація даних за періодом: {start_date or 'початок'} - {end_date or 'кінець'}")
+            before_filter_rows = len(raw_data)
             raw_data = self.filter_by_time_range(raw_data, start_time=start_date, end_time=end_date)
-            if raw_data.empty:
+            after_filter_rows = len(raw_data)
+
+            self.logger.info(
+                f"Відфільтровано {before_filter_rows - after_filter_rows} рядків. Залишилось {after_filter_rows} рядків.")
+
+            if raw_data is None or raw_data.empty:
                 self.logger.warning(f"Після фільтрації за часом дані відсутні")
                 return results
 
         # 3. Обробка відсутніх значень
+        self.logger.info(f"Обробка відсутніх значень")
         filled_data = self.handle_missing_values(
             raw_data,
             symbol=symbol,
@@ -1156,67 +1192,88 @@ class MarketDataProcessor:
             fetch_missing=True
         )
 
+        self.logger.info(f"Обробка відсутніх значень виконана ")
+
+        if filled_data is None or filled_data.empty:
+            self.logger.warning(f"Після обробки відсутніх значень дані порожні")
+            return results
+
         # 4. Повна обробка через конвеєр
+        self.logger.info(f"Запуск повного конвеєра обробки")
         processed_data = self.preprocess_pipeline(filled_data, symbol=symbol, interval=timeframe)
 
-        if processed_data.empty:
+        self.logger.info(f"Конвеєр обробки виконано ")
+
+        if processed_data is None or processed_data.empty:
             self.logger.warning(f"Після обробки даних результат порожній")
             return results
 
         results['processed_data'] = processed_data
 
         # 5. Додавання часових ознак
-        processed_data = self.add_time_features_safely(processed_data, tz='UTC')
+        self.logger.info(f"Додавання часових ознак")
+        processed_data = self.add_time_features_safely(processed_data, tz='Europe/Kiev')
+
+        self.logger.info(f"Додавання часових ознак виконано ")
 
         # 6. Виявлення та обробка аномалій
+        self.logger.info(f"Виявлення аномалій")
         processed_data, outliers_info = self.detect_outliers(processed_data)
 
-        # 8. Створення профілю об'єму лише для 1d та 1w таймфреймів, якщо потрібно
-        if create_volume_profile and timeframe in ['1d', '1w']:
+        self.logger.info(f"Виявлення аномалій виконано ")
+
+
+        # 7. Створення профілю об'єму лише для 1d та 1w таймфреймів, якщо потрібно
+        volume_profile_allowed_timeframes = ['1d', '1w']
+        if create_volume_profile and timeframe in volume_profile_allowed_timeframes:
+            self.logger.info(f"Створення профілю об'єму для {symbol} ({timeframe})")
+
             try:
-                # Перевірка колонок
-                if 'close' not in processed_data.columns or 'volume' not in processed_data.columns:
-                    self.logger.error("Відсутні колонки 'close' або 'volume'")
-                    return results
+                    # Виклик методу з правильними аргументами
+                    volume_profile = self.aggregate_volume_profile(
+                        data=processed_data,
+                        bins=20,
+                        price_col='close',
+                        volume_col='volume',
+                        time_period='1W'
+                    )
 
-                # Перевірка індексу
-                if not isinstance(processed_data.index, pd.DatetimeIndex):
-                    self.logger.error("Індекс не є DatetimeIndex")
-                    return results
+                    self.logger.info(f"Створення профілю об'єму виконано ")
 
-                # Логування для зневадження
-                self.logger.debug(f"Дані для профілю об'єму:\n{processed_data.head()}")
-                self.logger.debug(f"Колонки: {processed_data.columns}")
+                    if volume_profile is not None and not volume_profile.empty:
+                        self.logger.info(f"Створено профіль об'єму з {len(volume_profile)} записами")
+                        results['volume_profile'] = volume_profile
 
-                # Виклик методу з правильними аргументами
-                volume_profile = self.aggregate_volume_profile(
-                    data=processed_data,
-                    bins=20,
-                    price_col='close',
-                    volume_col='volume',
-                    time_period='1W'
-                )
+                        if save_results:
+                            self.logger.info(f"Збереження профілю об'єму в БД")
+                            success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
 
-                if not volume_profile.empty:
-                    results['volume_profile'] = volume_profile
-                    if save_results:
-                        success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
-                        if success:
-                            self.logger.info("Профіль об'єму збережено")
-                        else:
-                            self.logger.error("Помилка збереження профілю об'єму")
+                            if success:
+                                self.logger.info(f"Профіль об'єму збережено ")
+                            else:
+                                self.logger.error(f"Помилка збереження профілю об'єму")
+                    else:
+                        self.logger.warning(f"Отримано порожній профіль об'єму")
+
             except Exception as e:
                 self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
+                self.logger.error(traceback.format_exc())
 
-        # 9. Підготовка даних для моделей ARIMA і LSTM
-        if timeframe in ['1m', '4h', '1d', '1w']:
+        # 8. Підготовка даних для моделей ARIMA і LSTM
+        model_data_timeframes = ['1m', '4h', '1d', '1w']
+        if timeframe in model_data_timeframes:
             # ARIMA
+            self.logger.info(f"Підготовка даних для ARIMA моделі")
             arima_data = self.prepare_arima_data(processed_data, symbol=symbol, timeframe=timeframe)
-            if not arima_data.empty:
+
+
+            if arima_data is not None and not arima_data.empty:
                 results['arima_data'] = arima_data
+                self.logger.info(f"Підготовлено {len(arima_data)} записів ARIMA даних")
 
                 if save_results:
                     try:
+                        self.logger.info(f"Збереження ARIMA даних")
                         arima_data_points = arima_data.reset_index().to_dict('records')
 
                         for record in arima_data_points:
@@ -1228,20 +1285,28 @@ class MarketDataProcessor:
                         arima_ids = self.save_arima_data(symbol, arima_data_points)
 
                         if arima_ids:
-                            self.logger.info(f"ARIMA data saved for {symbol}, IDs: {arima_ids}")
+                            self.logger.info(f"ARIMA дані збережено")
                         else:
-                            self.logger.warning(f"Failed to save ARIMA data for {symbol}")
+                            self.logger.warning(f"Не вдалося зберегти ARIMA дані для {symbol}")
                     except Exception as e:
-                        self.logger.error(f"Error saving ARIMA data for {symbol}: {str(e)}")
+                        self.logger.error(f"Помилка збереження ARIMA даних для {symbol}: {str(e)}")
+                        self.logger.error(traceback.format_exc())
+            else:
+                self.logger.warning(f"Не вдалося підготувати ARIMA дані")
 
             # LSTM
             try:
+                self.logger.info(f"Підготовка даних для LSTM моделі")
                 lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
-                if not lstm_df.empty:
+
+
+                if lstm_df is not None and not lstm_df.empty:
                     results['lstm_data'] = lstm_df
+                    self.logger.info(f"Підготовлено {len(lstm_df)} записів LSTM даних")
 
                     if save_results:
                         try:
+                            self.logger.info(f"Збереження LSTM даних")
                             lstm_data_points = lstm_df.reset_index().to_dict('records')
 
                             timestamp_str = pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
@@ -1253,21 +1318,28 @@ class MarketDataProcessor:
                             for record in lstm_data_points:
                                 missing = [f for f in required_fields if f not in record]
                                 if missing:
-                                    raise ValueError(f"Missing required fields: {missing}")
+                                    raise ValueError(f"Відсутні обов'язкові поля: {missing}")
 
                             # Виклик уніфікованого методу
                             sequence_ids = self.save_lstm_sequence(symbol, lstm_data_points)
 
                             if sequence_ids:
-                                self.logger.info(f"Saved LSTM sequences for {symbol}, IDs: {sequence_ids}")
+                                self.logger.info(
+                                    f"LSTM послідовності збережено ")
                             else:
-                                self.logger.warning(f"Failed to save LSTM sequences for {symbol}")
+                                self.logger.warning(f"Не вдалося зберегти LSTM послідовності для {symbol}")
                         except Exception as e:
-                            self.logger.error(f"Error saving LSTM sequences for {symbol}: {str(e)}")
-            except Exception as e:
-                self.logger.error(f"Error preparing LSTM data: {str(e)}")
+                            self.logger.error(f"Помилка збереження LSTM послідовностей для {symbol}: {str(e)}")
+                            self.logger.error(traceback.format_exc())
+                else:
+                    self.logger.warning(f"Не вдалося підготувати LSTM дані")
 
-        self.logger.info(f"Комплексна обробка даних для {symbol} ({timeframe}) завершена успішно")
+            except Exception as e:
+                self.logger.error(f"Помилка підготовки LSTM даних: {str(e)}")
+                self.logger.error(traceback.format_exc())
+
+        self.logger.info(
+            f"Комплексна обробка даних для {symbol} ({timeframe}) завершена ")
         return results
 
     def validate_market_data(self, data: pd.DataFrame) -> Tuple[bool, Dict]:
@@ -1404,7 +1476,6 @@ class MarketDataProcessor:
 
         return result
 
-
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
     SYMBOLS = ['SOL']
@@ -1416,7 +1487,7 @@ def main():
     BASE_TIMEFRAMES = [ '1h', '1d']
 
     # Похідні таймфрейми, які будуть створені через ресемплінг
-    DERIVED_TIMEFRAMES = ['4h', '1w']
+    target_interval = ['4h', '1w']
 
     # Таймфрейми, для яких створюємо volume профіль
     VOLUME_PROFILE_TIMEFRAMES = ['1d', '1w']
@@ -1466,7 +1537,7 @@ def main():
     # Після обробки базових таймфреймів обробляємо похідні
     print("\n=== Обробка похідних таймфреймів ===")
     for symbol in SYMBOLS:
-        for timeframe in DERIVED_TIMEFRAMES:
+        for timeframe in target_interval:
             print(f"\nОбробка {symbol} ({timeframe})...")
 
             try:
