@@ -70,9 +70,7 @@ class MarketDataProcessor:
             return None
 
         # Визначаємо оптимальний вихідний таймфрейм
-        if target_timeframe in ['5m', '15m', '30m']:
-            return '1m'
-        elif target_timeframe == '4h':
+        if target_timeframe == '4h':
             return '1h'
         elif target_timeframe == '1w':
             return '1d'
@@ -259,262 +257,6 @@ class MarketDataProcessor:
             self.logger.error(traceback.format_exc())
             return processed_data_list
 
-    def _create_volume_profile(self, data: pd.DataFrame, bins: int,
-                               price_col: str, volume_col: str) -> pd.DataFrame:
-        try:
-            # Перевірка наявності необхідних колонок
-            if price_col not in data.columns:
-                self.logger.error(f"Колонка ціни '{price_col}' відсутня в даних")
-                return pd.DataFrame()
-
-            if volume_col not in data.columns:
-                self.logger.error(f"Колонка об'єму '{volume_col}' відсутня в даних")
-                return pd.DataFrame()
-
-            # Перевірка типів даних
-            if not pd.api.types.is_numeric_dtype(data[price_col]):
-                self.logger.error(f"Колонка '{price_col}' має бути числового типу")
-                return pd.DataFrame()
-
-            if not pd.api.types.is_numeric_dtype(data[volume_col]):
-                self.logger.error(f"Колонка '{volume_col}' має бути числового типу")
-                return pd.DataFrame()
-
-            # Перевірка на NaN або нульові значення
-            null_prices = data[price_col].isna().sum()
-            null_volumes = data[volume_col].isna().sum()
-
-            if null_prices > 0:
-                self.logger.warning(f"Знайдено {null_prices} null значень у колонці '{price_col}'")
-                data = data.dropna(subset=[price_col])
-
-            if null_volumes > 0:
-                self.logger.warning(f"Знайдено {null_volumes} null значень у колонці '{volume_col}'")
-                data = data.dropna(subset=[volume_col])
-
-            if data.empty:
-                self.logger.error("Після видалення null значень DataFrame порожній")
-                return pd.DataFrame()
-
-            # Перевірка валідності цінового діапазону
-            price_min = data[price_col].min()
-            price_max = data[price_col].max()
-
-            # Додаємо захист від однакових або близьких цін
-            price_range = price_max - price_min
-            if np.isclose(price_range, 0) or price_range < 1e-10:
-                # Створюємо штучний діапазон для запобігання помилок
-                price_mean = data[price_col].mean()
-                price_min = price_mean * 0.99  # на 1% менше
-                price_max = price_mean * 1.01  # на 1% більше
-                price_range = price_max - price_min
-                self.logger.warning(
-                    f"Діапазон цін занадто малий. Створено штучний діапазон: {price_min:.4f} - {price_max:.4f}")
-
-            # Обчислення ефективної кількості бінів із захистом від помилок
-            min_bin_width = max(price_range * 0.001, 1e-8)  # мінімальна ширина біну з нижньою межею
-            effective_bins = max(min(bins, int(price_range / min_bin_width)), 2)
-
-            if effective_bins < 2:
-                self.logger.warning(f"Неможливо створити профіль об'єму. Встановлено мінімум 2 біни.")
-                effective_bins = 2
-
-            self.logger.info(f"Створення профілю об'єму з {effective_bins} ціновими рівнями")
-
-            # Створення бінів з урахуванням діапазону
-            bin_edges = np.linspace(price_min, price_max, effective_bins + 1)
-            bin_width = (price_max - price_min) / effective_bins
-
-            bin_labels = np.arange(effective_bins)
-            data = data.copy()
-            # Безпечне створення бінів з обробкою крайніх випадків
-            try:
-                data['price_bin'] = pd.cut(
-                    data[price_col],
-                    bins=bin_edges,
-                    labels=bin_labels,
-                    include_lowest=True
-                )
-            except Exception as e:
-                self.logger.error(f"Помилка створення цінових бінів: {str(e)}")
-                # Альтернативний підхід у разі помилки - квантилі
-                data['price_bin'] = pd.qcut(
-                    data[price_col],
-                    q=effective_bins,
-                    labels=bin_labels,
-                    duplicates='drop'
-                )
-
-            # Групування з обробкою помилок
-            try:
-                volume_profile = data.groupby('price_bin', observed=True).agg({
-                    volume_col: 'sum',
-                    price_col: ['count', 'min', 'max']
-                })
-
-                if volume_profile.empty:
-                    self.logger.warning("Отримано порожній профіль об'єму після групування")
-                    return pd.DataFrame()
-
-                # Перейменування колонок
-                volume_profile.columns = [f'{col[0]}_{col[1]}' if col[1] else col[0] for col in volume_profile.columns]
-                volume_profile = volume_profile.rename(columns={
-                    f'{volume_col}_sum': 'volume',
-                    f'{price_col}_count': 'count',
-                    f'{price_col}_min': 'price_min',
-                    f'{price_col}_max': 'price_max'
-                })
-
-                # Безпечний розрахунок відсотків об'єму
-                total_volume = volume_profile['volume'].sum()
-                volume_profile['volume_percent'] = np.where(
-                    np.isclose(total_volume, 0),  # Захист від ділення на нуль
-                    0,
-                    (volume_profile['volume'] / total_volume * 100).round(2)
-                )
-
-                # Розрахунок середньої ціни
-                volume_profile['price_mid'] = (volume_profile['price_min'] + volume_profile['price_max']) / 2
-
-                # Створення меж бінів
-                volume_profile['bin_lower'] = [bin_edges[i] for i in volume_profile.index]
-                volume_profile['bin_upper'] = [bin_edges[i + 1] for i in volume_profile.index]
-
-                # Скидання індексу та сортування
-                volume_profile = volume_profile.reset_index()
-                volume_profile = volume_profile.sort_values('price_bin', ascending=False)
-
-                if 'price_bin' in volume_profile.columns:
-                    volume_profile = volume_profile.drop('price_bin', axis=1)
-
-                return volume_profile
-
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
-                return pd.DataFrame()
-
-        except Exception as e:
-            self.logger.error(f"Критична помилка при створенні профілю об'єму: {str(e)}")
-            return pd.DataFrame()
-
-    def aggregate_volume_profile(self, data: pd.DataFrame, bins: int = 20,
-                                 price_col: str = 'close', volume_col: str = 'volume',
-                                 time_period: Optional[str] = None) -> pd.DataFrame:
-        # Add this validation at the start
-        if not isinstance(data.index, pd.DatetimeIndex):
-            self.logger.error("Input data must have DatetimeIndex")
-            return pd.DataFrame()
-
-        # Валідація вхідних даних
-        if data is None or data.empty:
-            self.logger.warning("Отримано порожній DataFrame для профілю об'єму")
-            return pd.DataFrame()
-
-        # Перевірка наявності необхідних колонок
-        required_cols = [price_col, volume_col]
-        missing_cols = [col for col in required_cols if col not in data.columns]
-        if missing_cols:
-            self.logger.error(f"Відсутні необхідні колонки: {', '.join(missing_cols)}")
-            return pd.DataFrame()
-
-        # Валідація типів даних для запобігання помилок
-        if not pd.api.types.is_numeric_dtype(data[price_col]):
-            self.logger.error(f"Колонка '{price_col}' має бути числового типу")
-            return pd.DataFrame()
-
-        if not pd.api.types.is_numeric_dtype(data[volume_col]):
-            self.logger.error(f"Колонка '{volume_col}' має бути числового типу")
-            return pd.DataFrame()
-
-        self.logger.info(f"Створення профілю об'єму з {bins} ціновими рівнями")
-
-        # Копія даних для запобігання змін у вхідному DataFrame
-        working_data = data.copy()
-
-        # Перевірка можливості створення часового профілю
-        if time_period:
-            # Безпечна перевірка та конвертація часового індексу
-            try:
-                if not isinstance(working_data.index, pd.DatetimeIndex):
-                    self.logger.warning("Індекс не є DatetimeIndex. Спроба конвертації...")
-                    # Пошук часових колонок
-                    time_cols = [col for col in working_data.columns if any(
-                        time_str in col.lower() for time_str in ['time', 'date', 'timestamp'])]
-
-                    if time_cols:
-                        # Конвертація часової колонки в DatetimeIndex
-                        working_data[time_cols[0]] = pd.to_datetime(working_data[time_cols[0]], errors='coerce')
-                        working_data.set_index(time_cols[0], inplace=True)
-                        # Видалення рядків з невалідними датами
-                        working_data = working_data[working_data.index.notna()]
-                    else:
-                        self.logger.error("Не знайдено часової колонки для конвертації в DatetimeIndex")
-                        return pd.DataFrame()
-
-                # Перевірка, чи є дані в DataFrame після конвертації
-                if working_data.empty:
-                    self.logger.error("Дані порожні після конвертації до DatetimeIndex")
-                    return pd.DataFrame()
-
-                # Локалізація часового індексу для коректного групування
-                if working_data.index.tz is None:
-                    working_data.index = working_data.index.tz_localize('Europe/Kiev', ambiguous='NaT',
-                                                                        nonexistent='shift_forward')
-                    working_data = working_data[~working_data.index.isna()]
-
-                # Перевірка, чи є дані в DataFrame після локалізації
-                if working_data.empty:
-                    self.logger.error("Дані порожні після локалізації часового індексу")
-                    return pd.DataFrame()
-
-                # Перевірка правильності time_period формату
-                try:
-                    # Проста перевірка на валідність частоти для pandas
-                    test_range = pd.date_range(
-                        start=working_data.index.min(),
-                        periods=2,
-                        freq=time_period
-                    )
-                    self.logger.info(f"Використання часового періоду: {time_period}")
-                except Exception as e:
-                    self.logger.error(f"Невірний часовий період '{time_period}': {str(e)}")
-                    self.logger.info("Спроба створення загального профілю...")
-                    return self._create_volume_profile(working_data, bins, price_col, volume_col)
-
-                # Групування по часовому періоду з обробкою помилок
-                period_groups = working_data.groupby(pd.Grouper(freq=time_period, dropna=True))
-
-                result_dfs = []
-                for period, group in period_groups:
-                    if group.empty or len(group) < 2:
-                        continue
-
-                    period_profile = self._create_volume_profile(group, bins, price_col, volume_col)
-                    if not period_profile.empty:
-                        period_profile['period'] = period
-                        result_dfs.append(period_profile)
-
-                if result_dfs:
-                    result = pd.concat(result_dfs)
-                    # Перетворення та сортування результату
-                    if 'period' in result.columns and not result['period'].isna().any():
-                        result['period'] = pd.to_datetime(result['period'])
-                        result = result.sort_values('period')
-
-                    self.logger.info(f"Створено часовий профіль об'єму з {len(result)} записами")
-                    return result
-                else:
-                    self.logger.warning("Не вдалося створити часовий профіль. Створюємо загальний профіль...")
-
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні часового профілю: {str(e)}")
-                self.logger.info("Спроба створення загального профілю...")
-
-        # Створення загального профілю об'єму
-        self.logger.info("Створення загального профілю об'єму...")
-        return self._create_volume_profile(working_data, bins, price_col, volume_col)
-
-
     # --- Methods delegated to DataCleaner ---
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
@@ -621,76 +363,6 @@ class MarketDataProcessor:
             **kwargs
         )
 
-    def save_volume_profile_to_db(self, data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
-        """Зберігає профіль об'єму в базу даних"""
-
-        if data is None or data.empty:
-            self.logger.warning("Спроба зберегти порожній профіль об'єму")
-            return False
-
-        try:
-            saved_count = 0
-            error_count = 0
-
-            for _, row in data.iterrows():
-                try:
-                    # Визначення часового сегменту
-                    time_bucket = None
-                    if 'period' in row and pd.notna(row['period']):
-                        time_bucket = row['period']
-                    elif isinstance(row.name, pd.Timestamp):
-                        time_bucket = row.name
-                    else:
-                        # Використовуємо поточний час як запасний варіант
-                        time_bucket = pd.Timestamp.now()
-
-                    # Гарантуємо, що time_bucket є Timestamp об'єктом
-                    if not isinstance(time_bucket, pd.Timestamp):
-                        time_bucket = pd.to_datetime(time_bucket)
-
-                    # Підготовка і конвертація даних для збереження
-                    profile_data = {
-                        'timeframe': str(timeframe),
-                        'time_bucket': time_bucket,
-                        'price_bin_start': float(row.get('bin_lower', 0)),
-                        'price_bin_end': float(row.get('bin_upper', 0)),
-                        'volume': float(row.get('volume', 0)),
-                        'count': int(row.get('count', 0)) if 'count' in row else None,
-                        'volume_percent': float(row.get('volume_percent', 0)) if 'volume_percent' in row else None
-                    }
-
-                    # Безпечна конвертація numpy типів
-                    for key, value in profile_data.items():
-                        if isinstance(value, np.generic):
-                            if np.issubdtype(value.dtype, np.integer):
-                                profile_data[key] = int(value)
-                            elif np.issubdtype(value.dtype, np.floating):
-                                profile_data[key] = float(value)
-                            else:
-                                profile_data[key] = value.item()
-
-                    # Видалення None значень для запобігання помилок БД
-                    profile_data = {k: v for k, v in profile_data.items() if v is not None}
-
-                    # Збереження в БД
-                    self.db_manager.insert_volume_profile(symbol, profile_data)
-                    saved_count += 1
-
-                except Exception as e:
-                    error_count += 1
-                    self.logger.error(f"Помилка при збереженні запису профілю об'єму: {str(e)}")
-                    # Продовжуємо зберігати інші записи
-                    continue
-
-            success_rate = saved_count / (saved_count + error_count) if (saved_count + error_count) > 0 else 0
-            self.logger.info(
-                f"Збережено {saved_count} записів профілю об'єму, помилок: {error_count}, успішність: {success_rate:.1%}")
-
-            return success_rate > 0.5  # Повертаємо True, якщо збережено більше половини записів
-
-        except Exception as e:
-            self.logger.error(f"Критична помилка при збереженні профілю об'єму: {str(e)}")
-            return False
 
     def save_lstm_sequence(self, symbol: str, data_points: List[Dict[str, Any]], **kwargs) -> List[int]:
         if symbol == 'BTC':
@@ -891,8 +563,8 @@ class MarketDataProcessor:
 
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
                             end_date: Optional[str] = None, save_results: bool = True,
-                            create_volume_profile: bool = True, auto_detect=None,
-                            check_interval_compatibility=None) -> DataFrame | dict[Any, Any]:
+                            auto_detect: bool = True,
+                            check_interval_compatibility: bool = True) -> DataFrame | dict[Any, Any]:
 
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
@@ -1035,44 +707,7 @@ class MarketDataProcessor:
 
         self.logger.info(f"Виявлення аномалій виконано ")
 
-
-        # 7. Створення профілю об'єму лише для 1d та 1w таймфреймів, якщо потрібно
-        volume_profile_allowed_timeframes = ['1d', '1w']
-        if create_volume_profile and timeframe in volume_profile_allowed_timeframes:
-            self.logger.info(f"Створення профілю об'єму для {symbol} ({timeframe})")
-
-            try:
-                    # Виклик методу з правильними аргументами
-                    volume_profile = self.aggregate_volume_profile(
-                        data=processed_data,
-                        bins=20,
-                        price_col='close',
-                        volume_col='volume',
-                        time_period='1W'
-                    )
-
-                    self.logger.info(f"Створення профілю об'єму виконано ")
-
-                    if volume_profile is not None and not volume_profile.empty:
-                        self.logger.info(f"Створено профіль об'єму з {len(volume_profile)} записами")
-                        results['volume_profile'] = volume_profile
-
-                        if save_results:
-                            self.logger.info(f"Збереження профілю об'єму в БД")
-                            success = self.save_volume_profile_to_db(volume_profile, symbol, timeframe)
-
-                            if success:
-                                self.logger.info(f"Профіль об'єму збережено ")
-                            else:
-                                self.logger.error(f"Помилка збереження профілю об'єму")
-                    else:
-                        self.logger.warning(f"Отримано порожній профіль об'єму")
-
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні профілю об'єму: {str(e)}")
-                self.logger.error(traceback.format_exc())
-
-        # 8. Підготовка даних для моделей ARIMA і LSTM
+        # 7. Підготовка даних для моделей ARIMA і LSTM
         model_data_timeframes = ['1m', '4h', '1d', '1w']
         if timeframe in model_data_timeframes:
             # ARIMA
@@ -1289,54 +924,47 @@ class MarketDataProcessor:
 
         return result
 
+
 def main():
     EU_TIMEZONE = 'Europe/Kiev'
-    SYMBOLS = ['SOL']
+    SYMBOLS = ['ETH']
 
-    # Визначення всіх таймфреймів
+    # Всі таймфрейми
     ALL_TIMEFRAMES = ['1h', '4h', '1d', '1w']
 
     # Базові таймфрейми, які вже існують в базі даних
-    BASE_TIMEFRAMES = [ '1h', '1d']
+    BASE_TIMEFRAMES = ['1h', '1d']
 
     # Похідні таймфрейми, які будуть створені через ресемплінг
-    target_interval = ['4h', '1w']
+    DERIVED_TIMEFRAMES = ['4h', '1w']
 
-    # Таймфрейми, для яких створюємо volume профіль
-    VOLUME_PROFILE_TIMEFRAMES = ['1d', '1w']
-
+    # Ініціалізація процесора
     processor = MarketDataProcessor(log_level=logging.INFO)
+
+    # Словник для зберігання результатів обробки
+    processed_results = {}
 
     # Спочатку обробляємо базові таймфрейми
     print("\n=== Обробка базових таймфреймів ===")
-
-    # Для використання volume профілю
-    volume_profiles = {}
-
     for symbol in SYMBOLS:
         for timeframe in BASE_TIMEFRAMES:
             print(f"\nОбробка {symbol} ({timeframe})...")
 
             try:
-                # Визначаємо, чи потрібно створювати volume профіль для цього таймфрейму
-                create_volume_profile = timeframe in VOLUME_PROFILE_TIMEFRAMES
-
                 results = processor.process_market_data(
                     symbol=symbol,
                     timeframe=timeframe,
                     save_results=True,
-                    create_volume_profile=create_volume_profile
                 )
 
                 if not results:
                     print(f"Не вдалося обробити дані для {symbol} {timeframe}")
                     continue
 
-                # Зберігаємо volume профіль для подальшого використання
-                if create_volume_profile and 'volume_profile' in results:
-                    volume_profiles[(symbol, timeframe)] = results['volume_profile']
+                # Зберігаємо результати для можливого використання при похідних таймфреймах
+                processed_results[f"{symbol}_{timeframe}"] = results
 
-                # Print summary of results
+                # Виводимо підсумок результатів
                 for key, data in results.items():
                     if isinstance(data, pd.DataFrame) and not data.empty:
                         print(f" - {key}: {len(data)} рядків, {len(data.columns)} колонок")
@@ -1350,26 +978,34 @@ def main():
     # Після обробки базових таймфреймів обробляємо похідні
     print("\n=== Обробка похідних таймфреймів ===")
     for symbol in SYMBOLS:
-        for timeframe in target_interval:
+        for timeframe in DERIVED_TIMEFRAMES:
             print(f"\nОбробка {symbol} ({timeframe})...")
 
-            try:
-                # Визначаємо, чи потрібно створювати volume профіль для цього таймфрейму
-                create_volume_profile = timeframe in VOLUME_PROFILE_TIMEFRAMES and (symbol,
-                                                                                    timeframe) not in volume_profiles
+            source_timeframe = None
+            if timeframe == '4h':
+                source_timeframe = '1h'
+            elif timeframe == '1w':
+                source_timeframe = '1d'
 
+            print(f"Буде використано ресемплінг із {source_timeframe} до {timeframe}")
+
+            try:
                 results = processor.process_market_data(
                     symbol=symbol,
                     timeframe=timeframe,
                     save_results=True,
-                    create_volume_profile=create_volume_profile
+                    auto_detect=True,
+                    check_interval_compatibility=True
                 )
 
                 if not results:
                     print(f"Не вдалося обробити дані для {symbol} {timeframe}")
                     continue
 
-                # Print summary of results
+                # Зберігаємо результати
+                processed_results[f"{symbol}_{timeframe}"] = results
+
+                # Виводимо підсумок результатів
                 for key, data in results.items():
                     if isinstance(data, pd.DataFrame) and not data.empty:
                         print(f" - {key}: {len(data)} рядків, {len(data.columns)} колонок")

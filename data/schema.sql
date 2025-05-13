@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS logs (
     component TEXT NOT NULL, -- 'BinanceClient', 'WebSocket', etc.
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
+/*
 -- Таблиця для профілю об'єму BTC
 CREATE TABLE IF NOT EXISTS btc_volume_profile (
     id SERIAL PRIMARY KEY,
@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (timeframe, time_bucket, price_bin_start)
-);
+);*/
 
 CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
 

@@ -1412,16 +1412,7 @@ class DataResampler:
             sample_size: int = 10000,
             parallel: bool = True
     ) -> pd.DataFrame:
-        """
-        Підготовка даних для ARIMA моделювання з покращеною обробкою стаціонарності.
 
-        :param data: DataFrame з часовими рядами
-        :param symbol: Символ інструменту
-        :param timeframe: Часовий інтервал даних
-        :param sample_size: Максимальний розмір вибірки для тестів стаціонарності
-        :param parallel: Використовувати паралельне виконання для тестів
-        :return: DataFrame з підготовленими даними і результатами тестів
-        """
         try:
             self.logger.info(f"prepare_arima_data: Початок підготовки даних для {symbol} ({timeframe})")
 
@@ -1538,10 +1529,11 @@ class DataResampler:
                     self.logger.warning(
                         f"prepare_arima_data: {na_count} значень у high_low_range_pct замінені на NaN через ділення на нуль")
 
-            # Обробка об'єму, якщо доступний
+            # Розширена обробка об'єму
             volume_col = self.find_column(data, 'volume')
             if volume_col:
-                self.logger.info(f"prepare_arima_data: Знайдено колонку '{volume_col}', додаємо трансформації об'єму")
+                self.logger.info(
+                    f"prepare_arima_data: Знайдено колонку '{volume_col}', додаємо розширені трансформації об'єму")
 
                 vol_series = data[volume_col].copy()
                 result_df['original_volume'] = vol_series
@@ -1553,12 +1545,24 @@ class DataResampler:
                         f"prepare_arima_data: Колонка '{volume_col}' містить {zeros_count} нульових значень")
 
                     # Додаємо малу константу для уникнення log(0)
-                    vol_series = vol_series + 0.000001
+                    vol_series = vol_series.replace(0, 0.000001)
 
+                # Основні трансформації об'єму
                 result_df['volume_log'] = np.log(vol_series)
                 result_df['volume_diff'] = vol_series.diff()
                 result_df['volume_log_diff'] = result_df['volume_log'].diff()
                 result_df['volume_pct_change'] = vol_series.pct_change()
+
+                # Додаємо сезонну різницю для об'єму
+                result_df['volume_seasonal_diff'] = vol_series.diff(season_period)
+
+                # Додаткові трансформації для об'єму
+                # Відносна зміна об'єму (об'єм / середній об'єм за період)
+                window_size = min(20, len(vol_series) // 10) if len(vol_series) > 20 else 5
+                result_df['volume_relative'] = vol_series / vol_series.rolling(window=window_size).mean()
+
+                # Логарифм відносної зміни
+                result_df['volume_relative_log'] = np.log(result_df['volume_relative'].replace(0, 0.000001))
 
             # Заповнення NA у всіх нових колонках
             for col in result_df.columns:
@@ -1566,7 +1570,7 @@ class DataResampler:
                     na_count = result_df[col].isna().sum()
                     if na_count > 0:
                         if col.endswith(('_diff', '_diff2', '_seasonal_diff', '_combo_diff', '_log_diff', '_pct',
-                                         '_pct_change')):
+                                         '_pct_change', '_relative', '_relative_log')):
                             # Для диференційованих даних заповнюємо NaN нулями
                             result_df[col] = result_df[col].fillna(0)
                         else:
@@ -1577,6 +1581,7 @@ class DataResampler:
             # 3. Виконання тестів стаціонарності з покращеною реалізацією
             from statsmodels.tsa.stattools import adfuller, kpss
             import concurrent.futures
+            import json
 
             # Визначаємо набір колонок для тестування стаціонарності
             stationary_columns = [
@@ -1711,28 +1716,39 @@ class DataResampler:
             best_confidence = "низька"
             best_p_value = 1.0
 
+            # Зберігаємо загальні результати тестів для БД
+            result_df['adf_pvalue'] = None
+            result_df['kpss_pvalue'] = None
+            result_df['is_stationary'] = False
+
             for col, tests in stationarity_results.items():
                 adf_stationary = tests.get('adf', {}).get('is_stationary', False)
                 adf_p_value = tests.get('adf', {}).get('p-value', 1.0)
                 kpss_stationary = tests.get('kpss', {}).get('is_stationary', True)
+                kpss_p_value = tests.get('kpss', {}).get('p-value', 1.0)
 
                 # Визначення рівня впевненості в стаціонарності
                 if adf_stationary and kpss_stationary:
                     confidence = "висока"
+                    is_stationary = True
                 elif not adf_stationary and not kpss_stationary:
                     confidence = "низька"  # Обидва тести показують нестаціонарність
+                    is_stationary = False
                 else:
                     confidence = "середня"
+                    is_stationary = adf_stationary  # Пріоритет ADF тесту
 
                 # Зберігаємо результат у DataFrame
                 result_df[f"{col}_adf_stationary"] = adf_stationary
                 result_df[f"{col}_adf_pvalue"] = adf_p_value
                 result_df[f"{col}_kpss_stationary"] = kpss_stationary
+                result_df[f"{col}_kpss_pvalue"] = kpss_p_value
                 result_df[f"{col}_confidence"] = confidence
+                result_df[f"{col}_is_stationary"] = is_stationary
 
                 self.logger.info(f"prepare_arima_data: Колонка {col}: "
                                  f"ADF {'стаціонарна' if adf_stationary else 'нестаціонарна'} (p={adf_p_value:.5f}), "
-                                 f"KPSS {'стаціонарна' if kpss_stationary else 'нестаціонарна'}, "
+                                 f"KPSS {'стаціонарна' if kpss_stationary else 'нестаціонарна'} (p={kpss_p_value:.5f}), "
                                  f"Впевненість: {confidence}")
 
                 # Визначення найкращої трансформації (пріоритет: висока впевненість і низьке p-значення ADF)
@@ -1752,6 +1768,12 @@ class DataResampler:
                 result_df['best_transformation'] = best_transformation
                 result_df['best_confidence'] = best_confidence
                 result_df['best_adf_pvalue'] = best_p_value
+
+                # Зберігаємо значення для БД з найкращої трансформації
+                result_df['adf_pvalue'] = result_df[f"{best_transformation}_adf_pvalue"]
+                result_df['kpss_pvalue'] = result_df[f"{best_transformation}_kpss_pvalue"]
+                result_df['is_stationary'] = result_df[f"{best_transformation}_is_stationary"]
+
                 self.logger.info(f"prepare_arima_data: Найкраща трансформація: {best_transformation} "
                                  f"(впевненість: {best_confidence}, adf_p={best_p_value:.5f})")
             else:
@@ -1792,6 +1814,13 @@ class DataResampler:
                         significant_lags_acf.append(i)
                     if abs(pacf_values[i]) > confidence_level:
                         significant_lags_pacf.append(i)
+
+                # Зберігаємо всі значущі лаги в JSON форматі для БД
+                significant_lags = {
+                    'acf': significant_lags_acf,
+                    'pacf': significant_lags_pacf
+                }
+                result_df['significant_lags'] = json.dumps(significant_lags)
 
                 # Визначення параметрів ARIMA
                 # p: кількість значущих PACF лагів
@@ -1839,8 +1868,14 @@ class DataResampler:
                 result_df['suggested_p'] = 1
                 result_df['suggested_d'] = 1
                 result_df['suggested_q'] = 1
+                result_df['significant_lags'] = '{"acf":[], "pacf":[]}'
 
-            # 5. Додаткові метрики та інформація
+            # 5. Додаткові метрики, які необхідні для БД
+            result_df['residual_variance'] = None  # Буде заповнено після підгонки моделі
+            result_df['aic_score'] = None  # Буде заповнено після підгонки моделі
+            result_df['bic_score'] = None  # Буде заповнено після підгонки моделі
+
+            # Додавання додаткової інформації
             result_df['data_points'] = len(data)
             result_df['preparation_timestamp'] = pd.Timestamp.now()
 
@@ -1858,13 +1893,7 @@ class DataResampler:
             return pd.DataFrame()
 
     def _determine_seasonal_period(self, timeframe: str) -> int:
-            """
-            Determine the appropriate seasonal period based on timeframe.
 
-            :param timeframe: Trading timeframe string (e.g., '1d', '1h', '15m')
-            :return: Integer representing the seasonal period
-            """
-            # Extract the numeric part and unit from timeframe
             import re
             match = re.match(r'(\d+)([a-zA-Z]+)', timeframe)
             if not match:
@@ -1938,33 +1967,52 @@ class DataResampler:
             # 2. Add time features from the create_time_features method
             df = self.create_time_features(df)
 
-            # 3. Scale the features
+            # 3. Calculate additional volume features
+            # Volume change (percent change)
+            df['volume_change'] = df['volume'].pct_change(1)
+
+            # Volume rolling mean (5 periods)
+            df['volume_rolling_mean'] = df['volume'].rolling(window=5).mean()
+
+            # Volume rolling standard deviation (5 periods)
+            df['volume_rolling_std'] = df['volume'].rolling(window=5).std()
+
+            # Volume spike (ratio of current volume to rolling mean)
+            df['volume_spike'] = df['volume'] / df['volume_rolling_mean']
+
+            # Fill NaN values with 0 for the calculated features
+            volume_features = ['volume_change', 'volume_rolling_mean', 'volume_rolling_std', 'volume_spike']
+            df[volume_features] = df[volume_features].fillna(0)
+
+            # 4. Scale the features
             scaler = MinMaxScaler(feature_range=(0, 1))
 
             # Select a sample for fitting the scaler if the dataset is very large
+            features_to_scale = required_columns + volume_features
+
             if len(df) > self.scaling_sample_size:
                 sample_indices = np.random.choice(df.index, size=self.scaling_sample_size, replace=False)
-                sample_df = df.loc[sample_indices, required_columns]
+                sample_df = df.loc[sample_indices, features_to_scale]
                 scaler.fit(sample_df)
             else:
-                scaler.fit(df[required_columns])
+                scaler.fit(df[features_to_scale])
 
             # Scale the required columns
-            scaled_data = scaler.transform(df[required_columns])
+            scaled_data = scaler.transform(df[features_to_scale])
             scaled_df = pd.DataFrame(
                 scaled_data,
-                columns=[f"{col}_scaled" for col in required_columns],
+                columns=[f"{col}_scaled" for col in features_to_scale],
                 index=df.index
             )
 
             # Combine with original DataFrame
             result_df = pd.concat([df, scaled_df], axis=1)
 
-            # 4. Create target values for different horizons
+            # 5. Create target values for different horizons
             for horizon in target_horizons:
                 result_df[f'target_close_{horizon}'] = result_df['close'].shift(-horizon)
 
-            # 5. Create sequence IDs and positions
+            # 6. Create sequence IDs and positions
             valid_end_idx = len(result_df) - max(target_horizons)
 
             # Define different overlap levels for each timeframe
@@ -2021,6 +2069,12 @@ class DataResampler:
                             'close_scaled': float(row['close_scaled']),
                             'volume_scaled': float(row['volume_scaled']),
 
+                            # Added volume features
+                            'volume_change_scaled': float(row['volume_change_scaled']),
+                            'volume_rolling_mean_scaled': float(row['volume_rolling_mean_scaled']),
+                            'volume_rolling_std_scaled': float(row['volume_rolling_std_scaled']),
+                            'volume_spike_scaled': float(row['volume_spike_scaled']),
+
                             # Time features
                             'hour_sin': float(row['hour_sin']),
                             'hour_cos': float(row['hour_cos']),
@@ -2042,7 +2096,7 @@ class DataResampler:
                                 'feature_range': scaler.feature_range,
                                 'data_min': scaler.data_min_.tolist(),
                                 'data_max': scaler.data_max_.tolist(),
-                                'columns': required_columns
+                                'columns': features_to_scale
                             })
                         })
 
