@@ -1531,6 +1531,8 @@ class DataResampler:
 
             # Розширена обробка об'єму
             volume_col = self.find_column(data, 'volume')
+            # Розширена обробка об'єму
+            volume_col = self.find_column(data, 'volume')
             if volume_col:
                 self.logger.info(
                     f"prepare_arima_data: Знайдено колонку '{volume_col}', додаємо розширені трансформації об'єму")
@@ -1563,7 +1565,11 @@ class DataResampler:
 
                 # Логарифм відносної зміни
                 result_df['volume_relative_log'] = np.log(result_df['volume_relative'].replace(0, 0.000001))
-
+            else:
+                # Якщо колонка об'єму не знайдена, встановлюємо значення за замовчуванням для уникнення SQL помилок
+                self.logger.warning(
+                    "prepare_arima_data: Колонка об'єму не знайдена. Встановлюємо значення за замовчуванням.")
+                result_df['original_volume'] = 0.0  # або інше відповідне значення за замовчуванням
             # Заповнення NA у всіх нових колонках
             for col in result_df.columns:
                 if col not in ['timeframe']:
@@ -2082,7 +2088,8 @@ class DataResampler:
                     for pos in range(sequence_length):
                         idx = start_idx + pos
                         self._add_sequence_data_point(sequence_data, result_df, idx, seq_id, pos,
-                                                      timeframe, sequence_length, target_horizons)
+                                                      timeframe, sequence_length, target_horizons,
+                                                      scaler, features_to_scale)  # Pass scaler and features_to_scale
 
             elif method == 'systematic_sample':
                 # Систематична вибірка з певним інтервалом
@@ -2098,7 +2105,8 @@ class DataResampler:
                     for pos in range(sequence_length):
                         idx = start_idx + pos
                         self._add_sequence_data_point(sequence_data, result_df, idx, seq_id, pos,
-                                                      timeframe, sequence_length, target_horizons)
+                                                      timeframe, sequence_length, target_horizons,
+                                                      scaler, features_to_scale)  # Pass scaler and features_to_scale
                     seq_id += 1
 
             elif method == 'no_overlap':
@@ -2111,7 +2119,8 @@ class DataResampler:
                     for pos in range(sequence_length):
                         idx = start_idx + pos
                         self._add_sequence_data_point(sequence_data, result_df, idx, seq_id, pos,
-                                                      timeframe, sequence_length, target_horizons)
+                                                      timeframe, sequence_length, target_horizons,
+                                                      scaler, features_to_scale)  # Pass scaler and features_to_scale
                     seq_id += 1
 
             elif method == 'weekly_anchored':
@@ -2130,7 +2139,8 @@ class DataResampler:
                     for pos in range(sequence_length):
                         idx = start_idx + pos
                         self._add_sequence_data_point(sequence_data, result_df, idx, seq_id, pos,
-                                                      timeframe, sequence_length, target_horizons)
+                                                      timeframe, sequence_length, target_horizons,
+                                                      scaler, features_to_scale)  # Pass scaler and features_to_scale
 
             elif method == 'monthly_anchored':
                 # Прив'язка до початку місяця з вибором певної кількості точок
@@ -2164,7 +2174,9 @@ class DataResampler:
                             for pos in range(sequence_length):
                                 idx = start_idx + pos
                                 self._add_sequence_data_point(sequence_data, result_df, idx, seq_id, pos,
-                                                              timeframe, sequence_length, target_horizons)
+                                                              timeframe, sequence_length, target_horizons,
+                                                              scaler,
+                                                              features_to_scale)  # Pass scaler and features_to_scale
                             seq_id += 1
             else:
                 # За замовчуванням - використовуємо фіксований крок
@@ -2175,7 +2187,8 @@ class DataResampler:
                     for pos in range(sequence_length):
                         idx = start_idx + pos
                         self._add_sequence_data_point(sequence_data, result_df, idx, seq_id, pos,
-                                                      timeframe, sequence_length, target_horizons)
+                                                      timeframe, sequence_length, target_horizons,
+                                                      scaler, features_to_scale)  # Pass scaler and features_to_scale
                     seq_id += 1
 
             final_df = pd.DataFrame(sequence_data)
@@ -2196,7 +2209,8 @@ class DataResampler:
             return pd.DataFrame()
 
     def _add_sequence_data_point(self, sequence_data, result_df, idx, seq_id, pos,
-                                 timeframe, sequence_length, target_horizons):
+                                 timeframe, sequence_length, target_horizons,
+                                 scaler, features_to_scale):  # Added scaler and features_to_scale parameters
         """
         Допоміжний метод для додавання точки даних послідовності
         """

@@ -285,9 +285,7 @@ INSERT INTO news_sources (source_name, base_url) VALUES
 ('theblock', 'https://www.theblock.co'),
 ('cryptopanic', 'https://cryptopanic.com'),
 ('coinmarketcal', 'https://coinmarketcal.com'),
-('feedly', 'https://feedly.com'),
-('newsnow', 'https://www.newsnow.co.uk'),
-('reddit', 'https://www.reddit.com')
+('newsnow', 'https://www.newsnow.co.uk')
 ON CONFLICT (source_name) DO NOTHING;
 
 -- Початкове заповнення таблиці news_categories
