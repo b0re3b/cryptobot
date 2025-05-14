@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from data.db import DatabaseManager
 
 class CryptoCycles:
@@ -59,7 +58,7 @@ class CryptoCycles:
 
     def load_processed_data(self, symbol: str, timeframe: str,
                             start_date: Optional[str] = None,
-                            end_date: Optional[str] = None) -> pd.DataFrame:
+                            end_date: Optional[str] = None) -> dict[Any, Any] | None | Any:
 
         cache_key = f"{symbol}_{timeframe}_{start_date}_{end_date}"
 
@@ -72,7 +71,6 @@ class CryptoCycles:
             timeframe=timeframe,
             start_date=start_date,
             end_date=end_date,
-            connection=self.db_connection
         )
 
         # Cache for future use
@@ -1981,19 +1979,7 @@ class CryptoCycles:
         return anomalies
 
     def get_significant_events_for_symbol(self, symbol: str) -> List:
-        """
-        Get the list of significant events for a specific cryptocurrency.
 
-        Parameters:
-        -----------
-        symbol : str
-            Cryptocurrency symbol ('BTC', 'ETH', 'SOL', etc.)
-
-        Returns:
-        --------
-        List
-            List of significant events for the specified symbol.
-        """
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
         return self.symbol_events_map.get(symbol, [])
 
@@ -2564,108 +2550,7 @@ class CryptoCycles:
 
         return turning_points
 
-    def plot_cycle_comparison(self, processed_data: pd.DataFrame,
-                              symbol: str,
-                              cycle_type: str = 'auto',
-                              normalize: bool = True,
-                              save_path: Optional[str] = None) -> None:
 
-        # Determine which type of cycle to use
-        if cycle_type == 'auto':
-            symbol_clean = symbol.upper().replace('USDT', '').replace('USD', '')
-            if symbol_clean == 'BTC':
-                cycle_type = 'halving'
-            elif symbol_clean == 'ETH':
-                cycle_type = 'network_upgrade'
-            elif symbol_clean == 'SOL':
-                cycle_type = 'ecosystem_event'
-            else:
-                cycle_type = 'bull_bear'
-
-        # Extract cycles based on cycle_type
-        if cycle_type == 'halving' and symbol.upper().startswith('BTC'):
-            # Add halving cycle features
-            df_with_cycles = self.calculate_btc_halving_cycle_features(processed_data)
-            cycle_column = 'cycle_number'
-            title = f"Bitcoin Halving Cycles Comparison for {symbol}"
-        elif cycle_type == 'bull_bear':
-            # Add bull/bear cycle features
-            df_with_cycles = self.identify_bull_bear_cycles(processed_data)
-            cycle_column = 'cycle_id'
-            title = f"Bull/Bear Market Cycles Comparison for {symbol}"
-        elif cycle_type == 'network_upgrade' and symbol.upper().startswith('ETH'):
-            # Add ETH network upgrade cycle features
-            df_with_cycles = self.calculate_eth_event_cycle_features(processed_data)
-            cycle_column = 'upgrade_cycle'
-            title = f"Ethereum Network Upgrade Cycles Comparison for {symbol}"
-        elif cycle_type == 'ecosystem_event' and symbol.upper().startswith('SOL'):
-            # Add SOL ecosystem event cycle features
-            df_with_cycles = self.calculate_sol_event_cycle_features(processed_data)
-            cycle_column = 'event_cycle'
-            title = f"Solana Ecosystem Event Cycles Comparison for {symbol}"
-        else:
-            # Fallback to bull/bear cycles
-            df_with_cycles = self.identify_bull_bear_cycles(processed_data)
-            cycle_column = 'cycle_id'
-            title = f"Market Cycles Comparison for {symbol}"
-
-        # Get unique cycles
-        cycles = df_with_cycles[cycle_column].unique()
-
-        if len(cycles) <= 1:
-            print(f"Not enough cycle data available for {symbol} with cycle type '{cycle_type}'.")
-            return
-
-        # Prepare the plot
-        plt.figure(figsize=(14, 8))
-
-        # Get the current cycle (last cycle)
-        current_cycle = cycles[-1]
-
-        # Plot each historical cycle
-        for cycle in cycles:
-            cycle_data = df_with_cycles[df_with_cycles[cycle_column] == cycle].copy()
-
-            if len(cycle_data) < 5:  # Skip cycles with insufficient data
-                continue
-
-            # Reset index for each cycle to start at 0
-            cycle_data = cycle_data.reset_index()
-            x_values = range(len(cycle_data))
-
-            # Normalize prices if requested
-            if normalize:
-                # Normalize close prices to start at 100 for each cycle
-                first_price = cycle_data['close'].iloc[0]
-                y_values = cycle_data['close'] / first_price * 100
-                ylabel = 'Normalized Price (First day = 100)'
-            else:
-                y_values = cycle_data['close']
-                ylabel = 'Price'
-
-            # Plot with different styling for current vs. historical cycles
-            if cycle == current_cycle:
-                plt.plot(x_values, y_values, linewidth=3, color='red',
-                         label=f'Current Cycle (#{cycle})')
-            else:
-                plt.plot(x_values, y_values, linewidth=1, alpha=0.7,
-                         label=f'Cycle #{cycle}')
-
-        # Add chart details
-        plt.title(title)
-        plt.xlabel('Days since cycle start')
-        plt.ylabel(ylabel)
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.legend()
-
-        # Save the plot if a path is provided
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"Plot saved to {save_path}")
-
-        # Show the plot
-        plt.tight_layout()
-        plt.show()
 
     def analyze_token_correlations(self, symbols: List[str],
                                    timeframe: str = '1d',
