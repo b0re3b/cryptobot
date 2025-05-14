@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from data.db import DatabaseManager
@@ -6,11 +7,69 @@ from collections import defaultdict
 import re
 from utils.config import CRYPTO_KEYWORDS
 
+@dataclass
+class NewsItem:
+    title: str
+    summary: str
+    link: str
+    source: str
+    category: str
+    published_at: datetime
+    scraped_at: datetime
+    score: Optional[int] = None
+    upvote_ratio: Optional[float] = None
+    num_comments: Optional[int] = None
+    sentiment_score: Optional[float] = None
+    topics: Optional[List[str]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert NewsItem to dictionary format"""
+        return {
+            'title': self.title,
+            'summary': self.summary,
+            'link': self.link,
+            'source': self.source,
+            'category': self.category,
+            'published_at': self.published_at.isoformat(),
+            'scraped_at': self.scraped_at.isoformat(),
+            'score': self.score,
+            'upvote_ratio': self.upvote_ratio,
+            'num_comments': self.num_comments,
+            'sentiment_score': self.sentiment_score,
+            'topics': self.topics
+        }
 class NewsStorage:
-    """
-    Class for storing crypto news data in the database using the provided DatabaseManager methods.
-    Works with the data collected by NewsCollector class.
-    """
+    @dataclass
+    class NewsItem:
+        title: str
+        summary: str
+        link: str
+        source: str
+        category: str
+        published_at: datetime
+        scraped_at: datetime
+        score: Optional[int] = None
+        upvote_ratio: Optional[float] = None
+        num_comments: Optional[int] = None
+        sentiment_score: Optional[float] = None
+        topics: Optional[List[str]] = None
+
+        def to_dict(self) -> Dict[str, Any]:
+            """Convert NewsItem to dictionary format"""
+            return {
+                'title': self.title,
+                'summary': self.summary,
+                'link': self.link,
+                'source': self.source,
+                'category': self.category,
+                'published_at': self.published_at.isoformat(),
+                'scraped_at': self.scraped_at.isoformat(),
+                'score': self.score,
+                'upvote_ratio': self.upvote_ratio,
+                'num_comments': self.num_comments,
+                'sentiment_score': self.sentiment_score,
+                'topics': self.topics
+            }
 
     def __init__(self, db_manager: DatabaseManager, logger: Optional[logging.Logger] = None):
         """

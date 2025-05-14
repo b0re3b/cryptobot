@@ -4,11 +4,34 @@ from datetime import datetime, timedelta
 import logging
 import re
 import time
-from typing import List, Dict, Optional, Any, Callable
-from random import randint
+import json
+from typing import List, Dict, Optional, Any, Callable, Tuple
+from random import randint, choice
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 from models.NewsAnalyzer import BERTNewsAnalyzer
+
+# Для обробки JavaScript-генерованого контенту
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException, WebDriverException
+
+    SELENIUM_AVAILABLE = True
+except ImportError:
+    SELENIUM_AVAILABLE = False
+
+# Для обробки CAPTCHA (якщо використовуватиметься)
+try:
+    import anticaptchaofficial
+    from anticaptchaofficial.recaptchav2proxyless import recaptchaV2Proxyless
+
+    ANTICAPTCHA_AVAILABLE = True
+except ImportError:
+    ANTICAPTCHA_AVAILABLE = False
 
 
 @dataclass
@@ -46,7 +69,7 @@ class NewsItem:
 
 class NewsCollector:
     """
-    A class for collecting cryptocurrency news from various online sources.
+    Покращений колектор новин криптовалют з різних онлайн-джерел.
     """
 
     def __init__(self,
@@ -56,7 +79,9 @@ class NewsCollector:
                  db_manager=None,
                  max_pages: int = 5,
                  max_workers: int = 5,
-                 topic_model_dir: str = './models'):
+                 topic_model_dir: str = './models',
+                 anticaptcha_key: str = None,
+                 use_headless_browser: bool = False):
 
         self.news_sources = news_sources or [
             'coindesk', 'cointelegraph', 'decrypt', 'cryptoslate',
@@ -69,166 +94,482 @@ class NewsCollector:
         self.max_workers = max_workers
         self.topic_model_dir = topic_model_dir
         self.NewsAnalyzer = BERTNewsAnalyzer()
-        # Configure logger
+        self.anticaptcha_key = anticaptcha_key
+        self.use_headless_browser = use_headless_browser
+        self.webdriver = None
+
+        # Налаштування логгера з більш детальною інформацією
         if logger:
             self.logger = logger
         else:
             self.logger = logging.getLogger('crypto_news_scraper')
-            self.logger.setLevel(logging.INFO)
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.DEBUG)  # Змінено на DEBUG для більш детального логування
 
-        # Headers for HTTP requests with rotation capability
+            # Налаштування виведення в консоль
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            console_handler.setFormatter(console_formatter)
+            self.logger.addHandler(console_handler)
+
+            # Налаштування виведення в файл для детального логування
+            try:
+                file_handler = logging.FileHandler('crypto_news_scraper_detailed.log')
+                file_handler.setLevel(logging.DEBUG)
+                file_formatter = logging.Formatter(
+                    '%(asctime)s - %(name)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s')
+                file_handler.setFormatter(file_formatter)
+                self.logger.addHandler(file_handler)
+            except Exception as e:
+                print(f"Не вдалося створити файл журналу: {e}")
+
+        # Заголовки для HTTP-запитів з можливістю ротації
         self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0.0.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
         ]
-        self.headers = {'User-Agent': self.user_agents[0]}
 
-        # Source configuration - Updated with current URL structures as of May 2025
+        # Розширені заголовки для кращої імітації браузера
+        self.headers = {
+            'User-Agent': self.user_agents[0],
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
+        }
+
+        # Конфігурація джерел - оновлено до актуальних структур URL станом на травень 2025
         self.source_config = {
             'coindesk': {
                 'base_url': 'https://www.coindesk.com',
-                'default_categories': ["markets", "business", "policy", "tech"]
+                'default_categories': ["markets", "business", "policy", "tech"],
+                'selectors': {
+                    'article': 'div.article-card, div.card-title-block',
+                    'title': 'h4.heading, h5.heading, h2.typography-h4',
+                    'link': 'a.card-title-link, a.article-card-link, a[href*="/articles/"]',
+                    'date': 'time, time.typography-body-small',
+                    'summary': 'p.desc, div.card-description, div.content-text'
+                },
+                'js_rendering_required': False
             },
             'cointelegraph': {
                 'base_url': 'https://cointelegraph.com',
-                'default_categories': ["news", "altcoins", "bitcoin", "ethereum", "defi"]
+                'default_categories': ["news", "altcoins", "bitcoin", "ethereum", "defi"],
+                'selectors': {
+                    'article': 'article.post-card, article.post-card-inline',
+                    'title': 'span.post-card__title, h2.post-card__title',
+                    'link': 'a.post-card__title-link, a.post-card__link',
+                    'date': 'time.post-card__date, time',
+                    'summary': 'p.post-card__text, .post-card__content-text'
+                },
+                'js_rendering_required': True
             },
             'decrypt': {
                 'base_url': 'https://decrypt.co',
-                'default_categories': ["news", "business", "technology", "defi", "artificial-intelligence"]
+                'default_categories': ["news", "business", "technology", "defi", "artificial-intelligence"],
+                'selectors': {
+                    'article': 'article.article-card, div.post-card, div[data-testid="articleCard"]',
+                    'title': 'h3.article-title, h2.post-title, h3[data-testid="article-title"]',
+                    'link': 'a.article-link, a.post-link, a[data-testid="article-link"]',
+                    'date': 'time.article-date, span.post-date, time[data-testid="article-date"]',
+                    'summary': 'p.article-description, div.post-excerpt, p[data-testid="article-excerpt"]'
+                },
+                'js_rendering_required': True
             },
             'cryptoslate': {
                 'base_url': 'https://cryptoslate.com',
-                'default_categories': ["news", "bitcoin", "ethereum", "defi"]
+                'default_categories': ["news", "bitcoin", "ethereum", "defi"],
+                'selectors': {
+                    'article': 'article.post-card, div.article-item',
+                    'title': 'h3.post-card__title, h2.article-title',
+                    'link': 'a.post-card__link, a.article-link',
+                    'date': 'time.post-card__date, span.article-date',
+                    'summary': 'p.post-card__excerpt, div.article-excerpt'
+                },
+                'js_rendering_required': False
             },
             'theblock': {
                 'base_url': 'https://www.theblock.co',
-                'default_categories': ["news", "crypto-ecosystems", "policy", "deals", "markets"]
+                'default_categories': ["news", "crypto-ecosystems", "policy", "deals", "markets"],
+                'selectors': {
+                    'article': 'div.post-card, article.post-item',
+                    'title': 'h2.post-card__headline, h3.post-title',
+                    'link': 'a.post-card__inner, a.post-link',
+                    'date': 'time.post-card__timestamp, span.post-date',
+                    'summary': 'p.post-card__description, div.post-excerpt'
+                },
+                'js_rendering_required': True
             },
             'cryptopanic': {
                 'base_url': 'https://cryptopanic.com',
-                'default_categories': ["top news", "recent", "rising", "hot!", "price-analysis", "events"]
+                'default_categories': ["top news", "recent", "rising", "hot!", "price-analysis", "events"],
+                'selectors': {
+                    'article': 'div.news-item, article.news-card',
+                    'title': 'div.news-item-title a, h3.news-title',
+                    'link': 'div.news-item-title a, a.news-link',
+                    'date': 'div.news-item-footer time, span.news-date',
+                    'summary': 'div.news-item-text, p.news-excerpt'
+                },
+                'js_rendering_required': True
             },
             'coinmarketcal': {
                 'base_url': 'https://coinmarketcal.com',
-                'default_categories': ["events", "upcoming", "ongoing", "recent"]
+                'default_categories': ["events", "upcoming", "ongoing", "recent"],
+                'selectors': {
+                    'article': 'tr.row-event, div.event-item',
+                    'title': 'td.title-event a, h3.event-title',
+                    'link': 'td.title-event a, a.event-link',
+                    'date': 'td.date-event time, span.event-date',
+                    'summary': 'td.description-event, p.event-description'
+                },
+                'js_rendering_required': False
             },
             'newsnow': {
                 'base_url': 'https://www.newsnow.co.uk',
-                'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum", "donald-trump", "business"]
+                'default_categories': ["crypto", "cryptocurrency", "bitcoin", "ethereum", "donald-trump", "business"],
+                'selectors': {
+                    'article': 'div.article, article.news-item',
+                    'title': 'a.article-link span.title, h3.news-title',
+                    'link': 'a.article-link, a.news-link',
+                    'date': 'span.time, span.news-date',
+                    'summary': 'span.text-summary, p.news-excerpt'
+                },
+                'js_rendering_required': False
             },
             'cryptobriefing': {
                 'base_url': 'https://cryptobriefing.com',
                 'default_categories': ["news", "analysis", "insights", "reviews", "bitcoin", "ethereum", "defi", "ai",
-                                       "regulation"]
+                                       "regulation"],
+                'selectors': {
+                    'article': 'article.post, div.article-card',
+                    'title': 'h2.entry-title, h3.article-title',
+                    'link': 'a.post-link, a.article-link',
+                    'date': 'time.entry-date, span.article-date',
+                    'summary': 'div.entry-content p, p.article-excerpt'
+                },
+                'js_rendering_required': False
             }
         }
 
-        # Initialize caches
+        # Ініціалізація кешів
         self._cache = {}
 
-        # Initialize topic modeling components
+        # Ініціалізація компонентів тематичного моделювання
         self.vectorizer = None
         self.lda_model = None
         self.nmf_model = None
         self.kmeans_model = None
         self.topic_words = {}
 
-        # Proxy configuration (can be extended)
+        # Конфігурація проксі
         self.proxies = None
 
+        # Лічильники для відстеження успішності скрапінгу
+        self.request_stats = {
+            'total': 0,
+            'success': 0,
+            'failed': 0,
+            'status_codes': {},
+            'captcha_encountered': 0,
+            'js_rendering_required': 0
+        }
+
+        # Ініціалізація webdriver за потреби
+        if use_headless_browser:
+            self._init_webdriver()
+
+    def __del__(self):
+        """Закриття webdriver при видаленні об'єкта"""
+        if self.webdriver:
+            try:
+                self.webdriver.quit()
+            except Exception as e:
+                self.logger.warning(f"Помилка при закритті webdriver: {e}")
+
+    def _init_webdriver(self):
+        """Ініціалізація Selenium webdriver для обробки JavaScript-генерованого контенту"""
+        if SELENIUM_AVAILABLE and self.use_headless_browser:
+            try:
+                options = Options()
+                options.add_argument('--headless')
+                options.add_argument('--no-sandbox')
+                options.add_argument('--disable-dev-shm-usage')
+                options.add_argument('--disable-gpu')
+                options.add_argument(f'user-agent={choice(self.user_agents)}')
+                options.add_argument('--window-size=1920,1080')
+
+                self.webdriver = webdriver.Chrome(options=options)
+                self.logger.info("Selenium webdriver успішно ініціалізовано")
+            except Exception as e:
+                self.logger.error(f"Не вдалося ініціалізувати webdriver: {e}")
+                self.webdriver = None
+        else:
+            if not SELENIUM_AVAILABLE:
+                self.logger.warning("Selenium не встановлено. JavaScript-обробка буде недоступна.")
+            self.webdriver = None
+
     def _rotate_user_agent(self):
-        """Rotate the user agent to avoid detection"""
-        self.headers['User-Agent'] = self.user_agents[randint(0, len(self.user_agents) - 1)]
+        """Ротація user agent для уникнення виявлення"""
+        self.headers['User-Agent'] = choice(self.user_agents)
+        self.logger.debug(f"User-Agent змінено на: {self.headers['User-Agent']}")
 
     def _make_request(self, url: str, retries: int = 3, backoff_factor: float = 0.3) -> Optional[requests.Response]:
-        """Make an HTTP request with retry logic and user agent rotation"""
+        """Виконання HTTP-запиту з логікою повторних спроб та ротацією user agent"""
         self._rotate_user_agent()
+        self.request_stats['total'] += 1
+
+        self.logger.debug(f"Виконання запиту до {url} (спроба 1 з {retries})")
 
         for i in range(retries):
             try:
+                start_time = time.time()
                 response = requests.get(
                     url,
                     headers=self.headers,
-                    timeout=10,
+                    timeout=15,  # Збільшено таймаут
                     proxies=self.proxies
                 )
+                elapsed_time = time.time() - start_time
+
+                # Логування статус-коду та часу виконання
+                self.logger.debug(
+                    f"Отримано відповідь від {url}: HTTP {response.status_code}, час: {elapsed_time:.2f} сек")
+
+                # Оновлення статистики
+                status_code = str(response.status_code)
+                if status_code in self.request_stats['status_codes']:
+                    self.request_stats['status_codes'][status_code] += 1
+                else:
+                    self.request_stats['status_codes'][status_code] = 1
+
                 if response.status_code == 200:
+                    self.request_stats['success'] += 1
+
+                    # Перевірка на наявність CAPTCHA в контенті
+                    if 'captcha' in response.text.lower() or 'recaptcha' in response.text.lower():
+                        self.logger.warning(f"Виявлено CAPTCHA на {url}")
+                        self.request_stats['captcha_encountered'] += 1
+                        if ANTICAPTCHA_AVAILABLE and self.anticaptcha_key:
+                            solved = self._solve_captcha(url)
+                            if solved:
+                                # Повторний запит після розв'язання CAPTCHA
+                                return self._make_request(url, retries=1)
+                        else:
+                            self.logger.warning("AntiCaptcha не доступна або ключ не налаштовано")
+
+                    # Перевірка на потребу рендерингу JavaScript
+                    if '<div id="__next">' in response.text and len(response.text) < 15000:
+                        self.logger.warning(f"Можливо, потрібен рендеринг JavaScript для {url}")
+                        self.request_stats['js_rendering_required'] += 1
+
                     return response
                 elif response.status_code in [403, 429]:
-                    self.logger.warning(f"Received {response.status_code} status code from {url}. Waiting...")
-                    time.sleep((backoff_factor * (2 ** i)) + randint(1, 3))
-                    self._rotate_user_agent()  # Rotate user agent after each failure
+                    self.logger.warning(f"Отримано статус-код {response.status_code} від {url}. Очікування...")
+                    delay = (backoff_factor * (2 ** i)) + randint(2, 5)
+                    self.logger.debug(f"Очікування {delay:.2f} секунд перед наступною спробою")
+                    time.sleep(delay)
+                    self._rotate_user_agent()  # Ротація user agent після кожної невдачі
+                elif response.status_code in [500, 502, 503, 504]:
+                    self.logger.warning(f"Серверна помилка {response.status_code} від {url}. Очікування...")
+                    delay = (backoff_factor * (2 ** i)) + randint(3, 8)
+                    self.logger.debug(f"Очікування {delay:.2f} секунд перед наступною спробою")
+                    time.sleep(delay)
                 else:
-                    self.logger.error(f"Error requesting {url}: HTTP {response.status_code}")
+                    self.logger.error(f"Помилка запиту до {url}: HTTP {response.status_code}")
+                    self.request_stats['failed'] += 1
                     return None
             except requests.exceptions.RequestException as e:
-                self.logger.error(f"Connection error requesting {url}: {e}")
-                time.sleep((backoff_factor * (2 ** i)) + randint(1, 3))
+                self.logger.error(f"Помилка з'єднання при запиті до {url}: {str(e)[:200]}")
+                delay = (backoff_factor * (2 ** i)) + randint(1, 3)
+                self.logger.debug(f"Очікування {delay:.2f} секунд перед наступною спробою")
+                time.sleep(delay)
+                self.request_stats['failed'] += 1
 
+            if i < retries - 1:
+                self.logger.debug(f"Виконання запиту до {url} (спроба {i + 2} з {retries})")
+
+        self.request_stats['failed'] += 1
         return None
 
+    def _solve_captcha(self, url: str) -> bool:
+        """Використання сервісу AntiCaptcha для розв'язання CAPTCHA"""
+        if not ANTICAPTCHA_AVAILABLE or not self.anticaptcha_key:
+            return False
+
+        try:
+            self.logger.info(f"Спроба розв'язати CAPTCHA на {url}")
+
+            # Ініціалізація розв'язувача reCAPTCHA v2
+            solver = recaptchaV2Proxyless()
+            solver.set_verbose(1)
+            solver.set_key(self.anticaptcha_key)
+            solver.set_website_url(url)
+
+            # Необхідно визначити sitekey, цей код потрібно налаштувати під конкретні сайти
+            # Зазвичай sitekey можна знайти в HTML-коді, шукаючи "data-sitekey"
+            response = requests.get(url, headers=self.headers)
+            match = re.search(r'data-sitekey="([^"]+)"', response.text)
+            if not match:
+                self.logger.warning(f"Не знайдено sitekey для CAPTCHA на {url}")
+                return False
+
+            sitekey = match.group(1)
+            solver.set_website_key(sitekey)
+
+            # Розв'язання CAPTCHA
+            self.logger.info("Очікування розв'язання CAPTCHA...")
+            g_response = solver.solve_and_return_solution()
+
+            if g_response != 0:
+                self.logger.info("CAPTCHA успішно розв'язано")
+                # Тут можна додати код для відправки розв'язаної CAPTCHA на сайт
+                return True
+            else:
+                self.logger.error(f"Помилка розв'язання CAPTCHA: {solver.error_code}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Помилка під час розв'язання CAPTCHA: {e}")
+            return False
+
+    def _fetch_page_with_javascript(self, url: str,
+                                    article_selector: str,
+                                    wait_time: int = 10) -> Optional[str]:
+        """Отримання сторінки з рендерингом JavaScript за допомогою Selenium"""
+        if not self.webdriver:
+            self.logger.warning("Webdriver не ініціалізовано для рендерингу JavaScript")
+            return None
+
+        try:
+            self.logger.info(f"Завантаження сторінки з JS-рендерингом: {url}")
+            self.webdriver.get(url)
+
+            # Очікування завантаження контенту
+            try:
+                WebDriverWait(self.webdriver, wait_time).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, article_selector))
+                )
+                self.logger.debug(f"Сторінка завантажена, елементи {article_selector} знайдено")
+            except TimeoutException:
+                self.logger.warning(f"Таймаут при очікуванні елементів {article_selector} на {url}")
+
+            # Додаткова затримка для повного завантаження
+            time.sleep(2)
+
+            # Прокрутка для завантаження lazy-loaded контенту
+            self.webdriver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+            time.sleep(1)
+            self.webdriver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+
+            # Отримання HTML
+            page_source = self.webdriver.page_source
+            self.logger.debug(f"Отримано HTML-контент з JS-рендерингом, розмір: {len(page_source)} байт")
+            return page_source
+
+        except WebDriverException as e:
+            self.logger.error(f"Помилка Selenium при завантаженні {url}: {e}")
+            return None
+        except Exception as e:
+            self.logger.error(f"Загальна помилка при завантаженні {url} з JS-рендерингом: {e}")
+            return None
+
     def set_proxies(self, http_proxy: str = None, https_proxy: str = None):
-        """Set proxies for making requests"""
+        """Налаштування проксі для виконання запитів"""
         if http_proxy or https_proxy:
             self.proxies = {
                 'http': http_proxy,
                 'https': https_proxy or http_proxy
             }
-            self.logger.info("Proxy configuration set")
+            self.logger.info(f"Налаштування проксі встановлено: HTTP: {http_proxy}, HTTPS: {https_proxy or http_proxy}")
         else:
             self.proxies = None
-            self.logger.info("Proxy configuration cleared")
+            self.logger.info("Налаштування проксі скинуто")
+
+        # Вивід поточного IP для перевірки
+        try:
+            ip_check_url = "https://api.ipify.org?format=json"
+            response = requests.get(ip_check_url, proxies=self.proxies, timeout=10)
+            if response.status_code == 200:
+                ip_data = response.json()
+                self.logger.info(f"Поточна IP-адреса для запитів: {ip_data.get('ip', 'невідомо')}")
+        except Exception as e:
+            self.logger.warning(f"Не вдалося перевірити поточну IP-адресу: {e}")
 
     def _parse_relative_date(self, date_text: str) -> Optional[datetime]:
-        """Parse relative date strings like '2 hours ago' into datetime objects"""
+        """Перетворення відносних рядків дати типу '2 години тому' в об'єкти datetime"""
+        self.logger.debug(f"Парсинг відносної дати: '{date_text}'")
         try:
-            if 'hours ago' in date_text or 'hour ago' in date_text:
-                hours = int(re.search(r'(\d+)', date_text).group(1))
-                return datetime.now() - timedelta(hours=hours)
-            elif 'days ago' in date_text or 'day ago' in date_text:
-                days = int(re.search(r'(\d+)', date_text).group(1))
-                return datetime.now() - timedelta(days=days)
-            elif 'minutes ago' in date_text or 'minute ago' in date_text:
-                minutes = int(re.search(r'(\d+)', date_text).group(1))
-                return datetime.now() - timedelta(minutes=minutes)
-            elif 'weeks ago' in date_text or 'week ago' in date_text:
-                weeks = int(re.search(r'(\d+)', date_text).group(1))
-                return datetime.now() - timedelta(weeks=weeks)
-            elif 'months ago' in date_text or 'month ago' in date_text:
-                months = int(re.search(r'(\d+)', date_text).group(1))
-                # Approximate month as 30 days
-                return datetime.now() - timedelta(days=30 * months)
-            elif 'yesterday' in date_text.lower():
-                return datetime.now() - timedelta(days=1)
-            elif 'today' in date_text.lower():
-                return datetime.now()
-            else:
-                # Try various date formats
-                for fmt in [
-                    '%B %d, %Y', '%Y-%m-%d', '%d %B %Y', '%d/%m/%Y', '%m/%d/%Y',
-                    '%b %d, %Y', '%d %b %Y', '%Y/%m/%d', '%d-%m-%Y', '%m-%d-%Y',
-                    '%B %d %Y', '%d %B %Y', '%b %d %Y', '%d %b %Y',
-                    # Add time formats
-                    '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S'
-                ]:
-                    try:
-                        return datetime.strptime(date_text, fmt)
-                    except ValueError:
-                        continue
+            date_text = date_text.lower().strip()
 
-                # If all parsing attempts fail, log a warning and return current time
-                self.logger.warning(f"Could not parse date string: '{date_text}'")
+            # Шаблони для пошуку відносних дат
+            patterns = [
+                (r'(\d+)\s*hours?\s*ago', lambda x: datetime.now() - timedelta(hours=int(x))),
+                (r'(\d+)\s*hour\s*ago', lambda x: datetime.now() - timedelta(hours=int(x))),
+                (r'(\d+)\s*hrs?\s*ago', lambda x: datetime.now() - timedelta(hours=int(x))),
+                (r'(\d+)\s*days?\s*ago', lambda x: datetime.now() - timedelta(days=int(x))),
+                (r'(\d+)\s*day\s*ago', lambda x: datetime.now() - timedelta(days=int(x))),
+                (r'(\d+)\s*minutes?\s*ago', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*minute\s*ago', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*mins?\s*ago', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*min\s*ago', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*seconds?\s*ago', lambda x: datetime.now() - timedelta(seconds=int(x))),
+                (r'(\d+)\s*weeks?\s*ago', lambda x: datetime.now() - timedelta(weeks=int(x))),
+                (r'(\d+)\s*week\s*ago', lambda x: datetime.now() - timedelta(weeks=int(x))),
+                (r'(\d+)\s*months?\s*ago', lambda x: datetime.now() - timedelta(days=30 * int(x))),
+                (r'(\d+)\s*month\s*ago', lambda x: datetime.now() - timedelta(days=30 * int(x))),
+
+                # Українські шаблони
+                (r'(\d+)\s*годин[и]?\s*тому', lambda x: datetime.now() - timedelta(hours=int(x))),
+                (r'(\d+)\s*година\s*тому', lambda x: datetime.now() - timedelta(hours=int(x))),
+                (r'(\d+)\s*год\s*тому', lambda x: datetime.now() - timedelta(hours=int(x))),
+                (r'(\d+)\s*дні[в]?\s*тому', lambda x: datetime.now() - timedelta(days=int(x))),
+                (r'(\d+)\s*день\s*тому', lambda x: datetime.now() - timedelta(days=int(x))),
+                (r'(\d+)\s*хвилин[и]?\s*тому', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*хвилина\s*тому', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*хв\s*тому', lambda x: datetime.now() - timedelta(minutes=int(x))),
+                (r'(\d+)\s*секунд[и]?\s*тому', lambda x: datetime.now() - timedelta(seconds=int(x))),
+                (r'(\d+)\s*тижні[в]?\s*тому', lambda x: datetime.now() - timedelta(weeks=int(x))),
+                (r'(\d+)\s*тиждень\s*тому', lambda x: datetime.now() - timedelta(weeks=int(x))),
+                (r'(\d+)\s*місяці[в]?\s*тому', lambda x: datetime.now() - timedelta(days=30 * int(x))),
+                (r'(\d+)\s*місяць\s*тому', lambda x: datetime.now() - timedelta(days=30 * int(x)))
+            ]
+
+            # Спеціальні випадки
+            if 'yesterday' in date_text or 'вчора' in date_text:
+                return datetime.now() - timedelta(days=1)
+            elif 'today' in date_text or 'сьогодні' in date_text or 'just now' in date_text or 'щойно' in date_text or 'moments ago' in date_text:
                 return datetime.now()
+            elif 'last week' in date_text or 'минулого тижня' in date_text:
+                return datetime.now() - timedelta(weeks=1)
+            elif 'last month' in date_text or 'минулого місяця' in date_text:
+                return datetime.now() - timedelta(days=30)
+
+            # Перевірка шаблонів
+            for pattern, time_func in patterns:
+                match = re.search(pattern, date_text)
+                if match:
+                    value = match.group(1)
+                    return time_func(value)
+
+            # Якщо не знайдено шаблон
+            self.logger.warning(f"Не вдалося розпізнати відносну дату: '{date_text}'")
+            return None
         except Exception as e:
-            self.logger.error(f"Error parsing date string '{date_text}': {e}")
-            return datetime.now()
+            self.logger.error(f"Помилка при обробці відносної дати '{date_text}': {e}")
+            return None
 
     def _create_news_item(self,
                           title: str,
@@ -294,7 +635,7 @@ class NewsCollector:
 
                 while continue_scraping and page <= self.max_pages:
                     # Updated URL format
-                    url = f"{base_url}/categories/{category}?page={page}"
+                    url = f"{base_url}/{category}?page={page}"
                     response = self._make_request(url)
 
                     if not response:
@@ -579,10 +920,19 @@ class NewsCollector:
             categories = self.source_config['decrypt']['default_categories']
 
         def url_formatter(base_url, category, page):
-            # Updated URL format for Decrypt
+            # Updated URL format for Decrypt (2025) - Based on actual URL structure
             if category == "news":
-                return f"{base_url}/{page}"  # Main news page
-            return f"{base_url}/categories/{category}/page/{page}"
+                return f"{base_url}/news/cryptocurrencies?page={page}"  # Main crypto news
+            elif category == "business":
+                return f"{base_url}/news/business?page={page}"  # Business news
+            elif category == "technology":
+                return f"{base_url}/news/technology?page={page}"  # Technology news
+            elif category == "defi":
+                return f"{base_url}/news/defi?page={page}"  # DeFi news
+            elif category == "artificial-intelligence":
+                return f"{base_url}/news/artificial-intelligence?page={page}"  # AI news
+            else:
+                return f"{base_url}/news/{category}?page={page}"  # Generic subcategory format
 
         return self._scrape_source_with_config(
             source='decrypt',

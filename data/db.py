@@ -880,6 +880,7 @@ class DatabaseManager:
             print(f"Помилка отримання категорій новин: {e}")
             return pd.DataFrame()
     def insert_news_article(self, article_data):
+
         try:
             self.cursor.execute('''
                 INSERT INTO news_articles 
