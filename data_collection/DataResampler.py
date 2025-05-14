@@ -1933,711 +1933,670 @@ class DataResampler:
             return 7
 
     def prepare_lstm_data(
-        self,
-        data: pd.DataFrame | dd.DataFrame,
-        symbol: str,
-        timeframe: str,
-        sequence_length: int = 60,
-        target_horizons: list = [1, 5, 10]
-) -> pd.DataFrame:
-    try:
-        self.logger.info(f"Preparing LSTM data for database storage: {symbol}, {timeframe}")
+            self,
+            data: pd.DataFrame | dd.DataFrame,
+            symbol: str,
+            timeframe: str,
+            sequence_length: int = 60,
+            target_horizons: list = [1, 5, 10]
+    ) -> pd.DataFrame:
+        try:
+            self.logger.info(f"Підготовка даних LSTM для збереження в базі даних: {symbol}, {timeframe}")
 
-        # Convert Dask DataFrame to pandas if necessary
-        if hasattr(data, 'compute'):
-            data = data.compute()
+            # Конвертуємо Dask DataFrame в pandas, якщо необхідно
+            if hasattr(data, 'compute'):
+                data = data.compute()
 
-        if data.empty:
-            self.logger.warning("Empty DataFrame provided")
-            return pd.DataFrame()
+            if data.empty:
+                self.logger.warning("Надано порожній DataFrame")
+                return pd.DataFrame()
 
-        # Ensure we have a DatetimeIndex
-        if not isinstance(data.index, pd.DatetimeIndex):
-            self.logger.error("Data must have a DatetimeIndex")
-            return pd.DataFrame()
+            # Переконуємось, що маємо DatetimeIndex
+            if not isinstance(data.index, pd.DatetimeIndex):
+                self.logger.error("Дані повинні мати DatetimeIndex")
+                return pd.DataFrame()
 
-        # ВАЖЛИВЕ ВИПРАВЛЕННЯ: Переконаймося, що дані відсортовані за часом
-        data = data.sort_index()
+            # ВАЖЛИВЕ ВИПРАВЛЕННЯ: Переконаймося, що дані відсортовані за часом
+            data = data.sort_index()
 
-        # 1. Select required feature columns
-        required_columns = ['open', 'high', 'low', 'close', 'volume']
+            # 1. Вибираємо необхідні колонки ознак
+            required_columns = ['open', 'high', 'low', 'close', 'volume']
 
-        # Check for missing columns (case-insensitive)
-        data_columns_lower = {col.lower(): col for col in data.columns}
-        missing_cols = [col for col in required_columns if col.lower() not in data_columns_lower]
+            # Перевіряємо відсутні колонки (без врахування регістру)
+            data_columns_lower = {col.lower(): col for col in data.columns}
+            missing_cols = [col for col in required_columns if col.lower() not in data_columns_lower]
 
-        if missing_cols:
-            self.logger.error(f"Missing required columns: {missing_cols}")
-            return pd.DataFrame()
+            if missing_cols:
+                self.logger.error(f"Відсутні необхідні колонки: {missing_cols}")
+                return pd.DataFrame()
 
-        # Map to actual column names in the DataFrame
-        feature_mapping = {col: data_columns_lower[col.lower()] for col in required_columns}
+            # Відображення на фактичні імена колонок в DataFrame
+            feature_mapping = {col: data_columns_lower[col.lower()] for col in required_columns}
 
-        # Create a copy with standardized column names
-        df = data.copy()
-        for std_name, actual_name in feature_mapping.items():
-            if std_name != actual_name:
-                df[std_name] = df[actual_name]
+            # Створюємо копію зі стандартизованими іменами колонок
+            df = data.copy()
+            for std_name, actual_name in feature_mapping.items():
+                if std_name != actual_name:
+                    df[std_name] = df[actual_name]
 
-        # 2. Add time features from the create_time_features method
-        df = self.create_time_features(df)
+            # 2. Додаємо часові ознаки з методу create_time_features
+            df = self.create_time_features(df)
 
-        # 3. Calculate additional volume features
-        # Volume change (percent change)
-        df['volume_change'] = df['volume'].pct_change(1)
+            # 3. Розраховуємо додаткові ознаки об'єму
+            # Зміна об'єму (у відсотках)
+            df['volume_change'] = df['volume'].pct_change(1)
 
-        # Volume rolling mean (5 periods)
-        df['volume_rolling_mean'] = df['volume'].rolling(window=5).mean()
+            # Ковзне середнє об'єму (5 періодів)
+            df['volume_rolling_mean'] = df['volume'].rolling(window=5).mean()
 
-        # Volume rolling standard deviation (5 periods)
-        df['volume_rolling_std'] = df['volume'].rolling(window=5).std()
+            # Ковзне стандартне відхилення об'єму (5 періодів)
+            df['volume_rolling_std'] = df['volume'].rolling(window=5).std()
 
-        # Volume spike (ratio of current volume to rolling mean)
-        df['volume_spike'] = df['volume'] / df['volume_rolling_mean']
+            # Стрибок об'єму (співвідношення поточного об'єму до ковзного середнього)
+            df['volume_spike'] = df['volume'] / df['volume_rolling_mean']
 
-        # Fill NaN values with 0 for the calculated features
-        volume_features = ['volume_change', 'volume_rolling_mean', 'volume_rolling_std', 'volume_spike']
-        df[volume_features] = df[volume_features].fillna(0)
+            # Заповнюємо значення NaN нулями для розрахованих ознак
+            volume_features = ['volume_change', 'volume_rolling_mean', 'volume_rolling_std', 'volume_spike']
+            df[volume_features] = df[volume_features].fillna(0)
 
-        # 4. Scale the features
-        scaler = MinMaxScaler(feature_range=(0, 1))
+            # 4. Масштабуємо ознаки
+            scaler = MinMaxScaler(feature_range=(0, 1))
 
-        # Select a sample for fitting the scaler if the dataset is very large
-        features_to_scale = required_columns + volume_features
+            # Вибираємо вибірку для налаштування скейлера, якщо набір даних дуже великий
+            features_to_scale = required_columns + volume_features
 
-        # Адаптивна стратегія для вибірки даних для скейлера залежно від таймфрейму
-        scaling_samples = {
-            '1m': 25000,  # Для 1m беремо більше зразків через високу варіативність
-            '5m': 20000,
-            '15m': 15000,
-            '30m': 10000,
-            '1h': 8000,
-            '4h': 5000,
-            '1d': 2500,
-            '1w': 1000
-        }
-
-        scaling_sample_size = scaling_samples.get(timeframe, self.scaling_sample_size)
-
-        if len(df) > scaling_sample_size:
-            # Використовуємо стратифіковану вибірку для кращого представлення різних періодів
-            time_periods = pd.qcut(np.arange(len(df)), 10, duplicates='drop')
-            stratified_indices = []
-
-            for period in time_periods.unique():
-                period_indices = np.where(time_periods == period)[0]
-                samples_per_period = min(len(period_indices), scaling_sample_size // 10)
-                period_sample = np.random.choice(period_indices, size=samples_per_period, replace=False)
-                stratified_indices.extend(period_sample)
-
-            sample_df = df.iloc[stratified_indices][features_to_scale]
-            scaler.fit(sample_df)
-        else:
-            scaler.fit(df[features_to_scale])
-
-        # Scale the required columns
-        scaled_data = scaler.transform(df[features_to_scale])
-        scaled_df = pd.DataFrame(
-            scaled_data,
-            columns=[f"{col}_scaled" for col in features_to_scale],
-            index=df.index
-        )
-
-        # Combine with original DataFrame
-        result_df = pd.concat([df, scaled_df], axis=1)
-
-        # 5. Create target values for different horizons
-        for horizon in target_horizons:
-            result_df[f'target_close_{horizon}'] = result_df['close'].shift(-horizon)
-
-        # 6. Create sequence IDs and positions
-        valid_end_idx = len(result_df) - max(target_horizons)
-
-        # Визначаємо загальний розмір даних і адаптуємо параметри відповідно
-        total_data_points = len(result_df)
-
-        # Updated timeframe configuration with explicit Monday anchoring for weekly data
-        timeframe_config = {
-            '1m': {
-                'method': 'random_sample',
-                'sample_rate': self._adaptive_sample_rate(total_data_points, 0.001, 0.05, 500000),
-                'min_gap': max(10, sequence_length // 20)  # Dynamic minimum gap
-            },
-            '5m': {
-                'method': 'random_sample',
-                'sample_rate': self._adaptive_sample_rate(total_data_points, 0.005, 0.1, 200000),
-                'min_gap': max(8, sequence_length // 15)
-            },
-            '15m': {
-                'method': 'systematic_sample',
-                'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.02, 0.2, 100000),
-                'offset': 3
-            },
-            '30m': {
-                'method': 'systematic_sample',
-                'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.05, 0.3, 50000),
-                'offset': 2
-            },
-            '1h': {
-                'method': 'systematic_sample',
-                'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.1, 0.4, 20000),
-                'offset': 2
-            },
-            '4h': {
-                'method': 'no_overlap',
-                'extra_gap': max(1, int(sequence_length * 0.1))  # 10% of sequence length
-            },
-            '1d': {
-                'method': 'weekly_anchored',
-                'anchor_day': 0,  # Monday ONLY (Fixed)
-                'additional_days': [2, 4]  # Additionally Wednesday and Friday
-            },
-            '1w': {
-                'method': 'weekly_anchored',  # Changed from monthly_anchored to weekly_anchored for better control
-                'anchor_day': 0,  # Monday ONLY (Fixed)
-                'additional_days': []  # No additional days for weekly data - pure Monday sequences
+            # Адаптивна стратегія для вибірки даних для скейлера залежно від таймфрейму
+            scaling_samples = {
+                '1m': 25000,  # Для 1m беремо більше зразків через високу варіативність
+                '5m': 20000,
+                '15m': 15000,
+                '30m': 10000,
+                '1h': 8000,
+                '4h': 5000,
+                '1d': 2500,
+                '1w': 1000
             }
-        }
 
-        # За замовчуванням використовуємо метод без перекриття
-        default_config = {
-            'method': 'no_overlap',
-            'extra_gap': sequence_length // 5  # 20% від довжини послідовності
-        }
+            scaling_sample_size = scaling_samples.get(timeframe, self.scaling_sample_size)
 
-        # Отримуємо конфігурацію для даного часового інтервалу
-        config = timeframe_config.get(timeframe, default_config)
-        method = config.get('method')
+            if len(df) > scaling_sample_size:
+                # Використовуємо стратифіковану вибірку для кращого представлення різних періодів
+                time_periods = pd.qcut(np.arange(len(df)), 10, duplicates='drop')
+                stratified_indices = []
 
-        sequence_data = []
+                for period in time_periods.unique():
+                    period_indices = np.where(time_periods == period)[0]
+                    samples_per_period = min(len(period_indices), scaling_sample_size // 10)
+                    period_sample = np.random.choice(period_indices, size=samples_per_period, replace=False)
+                    stratified_indices.extend(period_sample)
 
-        self.logger.info(
-            f"Using sequence generation method '{method}' for timeframe {timeframe} with {total_data_points} data points")
-
-        # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Відстежуємо всі створені послідовності за датою початку
-        sequence_start_times = {}
-
-        # Генерація послідовностей в залежності від методу
-        if method == 'random_sample':
-            # Випадковий відбір з мінімальними проміжками
-            sample_rate = config.get('sample_rate', 0.1)
-            min_gap = config.get('min_gap', 1)
-
-            # Логуємо актуальні параметри
-            self.logger.info(f"Random sample with rate: {sample_rate}, min_gap: {min_gap}")
-
-            # Визначаємо всі допустимі початкові індекси
-            valid_start_indices = list(range(0, valid_end_idx - sequence_length))
-
-            # Кількість послідовностей для відбору
-            target_sequences = int(len(valid_start_indices) * sample_rate)
-            target_sequences = min(target_sequences, 10000)  # Обмежуємо максимальну кількість послідовностей
-
-            self.logger.info(f"Target sequences to create: {target_sequences}")
-
-            # Відбираємо початкові точки з мінімальним проміжком
-            # Використовуємо більш ефективний алгоритм для великих обсягів даних
-            if len(valid_start_indices) > 100000:
-                # Для дуже великих датасетів використовуємо стратифікований підхід
-                selected_indices = []
-                # Розбиваємо весь період на підперіоди і відбираємо з кожного
-                period_size = len(valid_start_indices) // 20  # 20 підперіодів
-
-                for period_start in range(0, len(valid_start_indices), period_size):
-                    period_end = min(period_start + period_size, len(valid_start_indices))
-                    period_indices = valid_start_indices[period_start:period_end]
-
-                    # Кількість послідовностей для цього підперіоду
-                    period_target = max(1, int(target_sequences * (period_end - period_start) / len(
-                        valid_start_indices)))
-
-                    # Відбираємо індекси для цього підперіоду
-                    period_selected = []
-                    max_attempts = period_target * 10  # Обмеження спроб
-                    attempts = 0
-
-                    while len(period_selected) < period_target and attempts < max_attempts and period_indices:
-                        idx = np.random.choice(period_indices)
-                        period_selected.append(idx)
-
-                        # Видаляємо близькі індекси
-                        period_indices = [i for i in period_indices if abs(i - idx) > min_gap]
-                        attempts += 1
-
-                    selected_indices.extend(period_selected)
+                sample_df = df.iloc[stratified_indices][features_to_scale]
+                scaler.fit(sample_df)
             else:
-                # Для менших датасетів використовуємо звичайний алгоритм
-                selected_indices = []
-                max_attempts = target_sequences * 10
-                attempts = 0
+                scaler.fit(df[features_to_scale])
 
-                while len(selected_indices) < target_sequences and attempts < max_attempts and valid_start_indices:
-                    idx = np.random.choice(valid_start_indices)
-                    selected_indices.append(idx)
+            # Масштабуємо необхідні колонки
+            scaled_data = scaler.transform(df[features_to_scale])
+            scaled_df = pd.DataFrame(
+                scaled_data,
+                columns=[f"{col}_scaled" for col in features_to_scale],
+                index=df.index
+            )
 
-                    # Видаляємо всі індекси в радіусі min_gap
-                    valid_start_indices = [i for i in valid_start_indices if abs(i - idx) > min_gap]
-                    attempts += 1
+            # Об'єднуємо з оригінальним DataFrame
+            result_df = pd.concat([df, scaled_df], axis=1)
 
-            # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
-            selected_indices = sorted(selected_indices)
+            # 5. Створюємо цільові значення для різних горизонтів
+            for horizon in target_horizons:
+                result_df[f'target_close_{horizon}'] = result_df['close'].shift(-horizon)
 
-            # Генеруємо послідовності з відібраних початкових точок
-            self.logger.info(f"Actually selected {len(selected_indices)} sequence starting points")
+            # 6. Створюємо ідентифікатори послідовностей та позиції
+            valid_end_idx = len(result_df) - max(target_horizons)
 
-            # ВИПРАВЛЕННЯ: Створюємо на основі часу початку, а не індексу послідовності
-            seq_counter = 0
-            for start_idx in selected_indices:
-                start_time = result_df.index[start_idx]
+            # Визначаємо загальний розмір даних і адаптуємо параметри відповідно
+            total_data_points = len(result_df)
 
-                # Перевіряємо, чи можемо створити повну послідовність
-                if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(target_horizons) > len(result_df):
-                    continue
+            # Оновлена конфігурація таймфрейму з явною прив'язкою до понеділка для тижневих даних
+            timeframe_config = {
+                '1m': {
+                    'method': 'random_sample',
+                    'sample_rate': self._adaptive_sample_rate(total_data_points, 0.001, 0.05, 500000),
+                    'min_gap': max(10, sequence_length // 20)  # Динамічний мінімальний проміжок
+                },
+                '5m': {
+                    'method': 'random_sample',
+                    'sample_rate': self._adaptive_sample_rate(total_data_points, 0.005, 0.1, 200000),
+                    'min_gap': max(8, sequence_length // 15)
+                },
+                '15m': {
+                    'method': 'systematic_sample',
+                    'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.02, 0.2, 100000),
+                    'offset': 3
+                },
+                '30m': {
+                    'method': 'systematic_sample',
+                    'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.05, 0.3, 50000),
+                    'offset': 2
+                },
+                '1h': {
+                    'method': 'systematic_sample',
+                    'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.1, 0.4, 20000),
+                    'offset': 2
+                },
+                '4h': {
+                    'method': 'no_overlap',
+                    'extra_gap': max(1, int(sequence_length * 0.1))  # 10% довжини послідовності
+                },
+                '1d': {
+                    'method': 'weekly_anchored',
+                    'anchor_day': 0,  # Тільки понеділок (фіксовано)
+                    'additional_days': [2, 4]  # Додатково середа та п'ятниця
+                },
+                '1w': {
+                    'method': 'weekly_anchored',  # Змінено з monthly_anchored на weekly_anchored для кращого контролю
+                    'anchor_day': 0,  # Тільки понеділок (фіксовано)
+                    'additional_days': []  # Без додаткових днів для тижневих даних - тільки послідовності з понеділка
+                }
+            }
 
-                # Зберігаємо часову мітку початку для перевірки
-                sequence_start_times[seq_counter] = start_time
+            # За замовчуванням використовуємо метод без перекриття
+            default_config = {
+                'method': 'no_overlap',
+                'extra_gap': sequence_length // 5  # 20% від довжини послідовності
+            }
 
-                # Зберігаємо послідовності окремо для кожного seq_id
-                sequence_points = []
-                for pos in range(sequence_length):
-                    idx = start_idx + pos
-                    if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
-                        sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
-                                                                        timeframe, sequence_length,
-                                                                        target_horizons,
-                                                                        scaler, features_to_scale)
-                        sequence_points.append(sequence_point)
+            # Отримуємо конфігурацію для даного часового інтервалу
+            config = timeframe_config.get(timeframe, default_config)
+            method = config.get('method')
 
-                # Додаємо послідовність тільки якщо вона повна
-                if len(sequence_points) == sequence_length:
-                    sequence_data.extend(sequence_points)
-                    seq_counter += 1
-
-        elif method == 'systematic_sample':
-            # Систематична вибірка з певним інтервалом
-            sampling_fraction = config.get('sampling_fraction', 0.2)
-            offset = config.get('offset', 0)
-
-            self.logger.info(f"Systematic sampling with fraction: {sampling_fraction}, offset: {offset}")
-
-            # Розрахунок кроку для систематичної вибірки
-            total_possible = valid_end_idx - sequence_length
-            step = max(1, int(1 / sampling_fraction))
-
-            # Адаптивне коригування кроку для дуже великих датасетів
-            if total_possible > 500000:
-                step = max(step, total_possible // 5000)  # Обмежуємо максимальну кількість послідовностей
-
-            self.logger.info(f"Using step size: {step} for systematic sampling")
-
-            seq_counter = 0
-            # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
-            for start_idx in range(offset, total_possible, step):
-                start_time = result_df.index[start_idx]
-
-                # Перевіряємо, чи можемо створити повну послідовність
-                if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(target_horizons) > len(result_df):
-                    continue
-
-                # Зберігаємо часову мітку початку для перевірки
-                sequence_start_times[seq_counter] = start_time
-
-                # Зберігаємо послідовності окремо для кожного seq_id
-                sequence_points = []
-                for pos in range(sequence_length):
-                    idx = start_idx + pos
-                    if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
-                        sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
-                                                                        timeframe, sequence_length,
-                                                                        target_horizons,
-                                                                        scaler, features_to_scale)
-                        sequence_points.append(sequence_point)
-
-                # Додаємо послідовність тільки якщо вона повна
-                if len(sequence_points) == sequence_length:
-                    sequence_data.extend(sequence_points)
-                    seq_counter += 1
-
-        elif method == 'no_overlap':
-            # Послідовності без перекриття з додатковим проміжком
-            extra_gap = config.get('extra_gap', 0)
-            step = sequence_length + extra_gap
-
-            self.logger.info(f"No overlap with extra gap: {extra_gap}, total step: {step}")
-
-            seq_counter = 0
-            # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
-            for start_idx in range(0, valid_end_idx - sequence_length, step):
-                start_time = result_df.index[start_idx]
-
-                # Перевіряємо, чи можемо створити повну послідовність
-                if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(target_horizons) > len(result_df):
-                    continue
-
-                # Зберігаємо часову мітку початку для перевірки
-                sequence_start_times[seq_counter] = start_time
-
-                # Зберігаємо послідовності окремо для кожного seq_id
-                sequence_points = []
-                for pos in range(sequence_length):
-                    idx = start_idx + pos
-                    if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
-                        sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
-                                                                       timeframe, sequence_length,
-                                                                       target_horizons,
-                                                                       scaler, features_to_scale)
-                        sequence_points.append(sequence_point)
-
-                # Додаємо послідовність тільки якщо вона повна
-                if len(sequence_points) == sequence_length:
-                    sequence_data.extend(sequence_points)
-                    seq_counter += 1
-
-        elif method == 'weekly_anchored':
-            # Fix: Always use Monday (0) as the primary anchor day for weeks
-            anchor_day = 0  # 0=Monday ALWAYS
-            # Use additional days only if explicitly configured
-            additional_days = config.get('additional_days', [])
-            anchor_days = [anchor_day] + additional_days
+            sequence_data = []
 
             self.logger.info(
-                f"Weekly anchored to days: {anchor_days}, ensuring Monday is always the primary anchor")
+                f"Використовується метод генерації послідовностей '{method}' для таймфрейму {timeframe} з {total_data_points} точками даних"
+            )
 
-            # Find all dates that match anchor days
-            anchor_dates = []
+            # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Відстежуємо всі створені послідовності за датою початку
+            sequence_start_times = {}
 
-            # First, find all Mondays to ensure proper week anchoring
-            monday_indices = []
+            # Генерація послідовностей в залежності від методу
+            if method == 'random_sample':
+                # Випадковий відбір з мінімальними проміжками
+                sample_rate = config.get('sample_rate', 0.1)
+                min_gap = config.get('min_gap', 1)
 
-            for i in range(len(result_df)):
-                dt = result_df.index[i].to_pydatetime()
-                if dt.weekday() == 0 and i + sequence_length <= valid_end_idx:  # 0 = Monday
-                    monday_indices.append(i)
+                # Логуємо актуальні параметри
+                self.logger.info(f"Випадкова вибірка з частотою: {sample_rate}, мінімальний проміжок: {min_gap}")
 
-            self.logger.info(f"Found {len(monday_indices)} Mondays for weekly anchoring")
+                # Визначаємо всі допустимі початкові індекси
+                valid_start_indices = list(range(0, valid_end_idx - sequence_length))
 
-            # Add all Monday indices first to anchor_dates
-            anchor_dates.extend(monday_indices)
+                # Кількість послідовностей для відбору
+                target_sequences = int(len(valid_start_indices) * sample_rate)
+                target_sequences = min(target_sequences, 10000)  # Обмежуємо максимальну кількість послідовностей
 
-            # Then add other additional days if specified
-            if additional_days:
-                for day in additional_days:
-                    for i in range(len(result_df)):
-                        dt = result_df.index[i].to_pydatetime()
-                        if dt.weekday() == day and i + sequence_length <= valid_end_idx:
-                            anchor_dates.append(i)
+                self.logger.info(f"Цільова кількість послідовностей для створення: {target_sequences}")
 
-            # IMPORTANT FIX - Sort indices to maintain chronological order
-            anchor_dates = sorted(anchor_dates)
+                # Відбираємо початкові точки з мінімальним проміжком
+                # Використовуємо більш ефективний алгоритм для великих обсягів даних
+                if len(valid_start_indices) > 100000:
+                    # Для дуже великих датасетів використовуємо стратифікований підхід
+                    selected_indices = []
+                    # Розбиваємо весь період на підперіоди і відбираємо з кожного
+                    period_size = len(valid_start_indices) // 20  # 20 підперіодів
 
-            self.logger.info(f"Found total of {len(anchor_dates)} anchor dates for weekly anchoring")
+                    for period_start in range(0, len(valid_start_indices), period_size):
+                        period_end = min(period_start + period_size, len(valid_start_indices))
+                        period_indices = valid_start_indices[period_start:period_end]
 
-            # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
-            seq_counter = 0
-            for start_idx in anchor_dates:
-                # Перевіряємо, чи можемо створити повну послідовність
-                if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(target_horizons) > len(result_df):
-                    continue
+                        # Кількість послідовностей для цього підперіоду
+                        period_target = max(1, int(target_sequences * (period_end - period_start) / len(
+                            valid_start_indices)))
 
-                start_time = result_df.index[start_idx]
-                dt = start_time.to_pydatetime()
+                        # Відбираємо індекси для цього підперіоду
+                        period_selected = []
+                        max_attempts = period_target * 10  # Обмеження спроб
+                        attempts = 0
 
-                # Additional validation - ensure we're starting on the correct weekday for the primary anchor
-                expected_weekday = anchor_days[0]
+                        while len(period_selected) < period_target and attempts < max_attempts and period_indices:
+                            idx = np.random.choice(period_indices)
+                            period_selected.append(idx)
 
-                # Skip this sequence if it doesn't start on a Monday (only for primary anchor day sequences)
-                if dt.weekday() != expected_weekday and dt.weekday() not in additional_days:
-                    continue
+                            # Видаляємо близькі індекси
+                            period_indices = [i for i in period_indices if abs(i - idx) > min_gap]
+                            attempts += 1
 
-                # Зберігаємо часову мітку початку для перевірки
-                sequence_start_times[seq_counter] = start_time
+                        selected_indices.extend(period_selected)
+                else:
+                    # Для менших датасетів використовуємо звичайний алгоритм
+                    selected_indices = []
+                    max_attempts = target_sequences * 10
+                    attempts = 0
 
-                # Store sequences separately for each seq_id
-                sequence_points = []
-                for pos in range(sequence_length):
-                    idx = start_idx + pos
-                    if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
-                        sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
-                                                                      timeframe, sequence_length,
-                                                                      target_horizons,
-                                                                      scaler, features_to_scale)
-                        sequence_points.append(sequence_point)
+                    while len(selected_indices) < target_sequences and attempts < max_attempts and valid_start_indices:
+                        idx = np.random.choice(valid_start_indices)
+                        selected_indices.append(idx)
 
-                # Only add the sequence if it's complete
-                if len(sequence_points) == sequence_length:
-                    sequence_data.extend(sequence_points)
-                    seq_counter += 1
+                        # Видаляємо всі індекси в радіусі min_gap
+                        valid_start_indices = [i for i in valid_start_indices if abs(i - idx) > min_gap]
+                        attempts += 1
 
-        elif method == 'monthly_anchored':
-            # Anchor to the beginning of the month with a selection of specific points
-            sample_points = config.get('sample_points', 4)
-            self.logger.info(f"Monthly anchored with {sample_points} sample points per month")
-
-            # Group dates by months
-            month_groups = {}
-
-            for i in range(len(result_df)):
-                dt = result_df.index[i].to_pydatetime()
-                month_key = (dt.year, dt.month)
-
-                if i + sequence_length <= valid_end_idx:
-                    if month_key not in month_groups:
-                        month_groups[month_key] = []
-
-                    month_groups[month_key].append(i)
-
-            self.logger.info(f"Found data for {len(month_groups)} months")
-
-            # IMPORTANT FIX - Sort months for sequential processing in chronological order
-            sorted_months = sorted(month_groups.keys())
-
-            # Select points with a preference for Mondays and consistent days across months
-            seq_counter = 0
-
-            for month in sorted_months:
-                indices = month_groups[month]
-
-                # Skip months with insufficient data
-                if len(indices) < sequence_length:
-                    self.logger.warning(f"Skipping month {month} with insufficient data ({len(indices)} points)")
-                    continue
-
-                # Identify all Mondays in this month (preferred starting points)
-                monday_indices = []
-
-                for idx in indices:
-                    dt = result_df.index[idx].to_pydatetime()
-                    if dt.weekday() == 0:  # Monday
-                        monday_indices.append(idx)
-
-                selected_indices = []
-
-                # If we have Mondays, prioritize them
-                if monday_indices:
-                    # Sort Mondays by day of month
-                    monday_indices.sort(key=lambda idx: result_df.index[idx].day)
-
-                    # Take up to sample_points Mondays, evenly distributed across the month
-                    if len(monday_indices) <= sample_points:
-                        selected_indices = monday_indices
-                    else:
-                        # Select evenly distributed Mondays
-                        step = max(1, len(monday_indices) // sample_points)
-                        selected_indices = monday_indices[::step][:sample_points]
-
-                # If we don't have enough Mondays, supplement with other days
-                if len(selected_indices) < sample_points:
-                    remaining_needed = sample_points - len(selected_indices)
-                    # Get indices that aren't Mondays
-                    other_indices = [idx for idx in indices if idx not in monday_indices]
-
-                    if other_indices:
-                        # Sort by day of month
-                        other_indices.sort(key=lambda idx: result_df.index[idx].day)
-                        # Pick evenly distributed points
-                        step = max(1, len(other_indices) // remaining_needed)
-                        additional_indices = other_indices[::step][:remaining_needed]
-                        selected_indices.extend(additional_indices)
-
-                # IMPORTANT FIX - Sort indices to maintain chronological order
+                # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
                 selected_indices = sorted(selected_indices)
 
-                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
-                for start_idx in selected_indices:
-                    # Перевіряємо, чи можемо створити повну послідовність
-                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(target_horizons) > len(result_df):
-                        continue
+                # Генеруємо послідовності з відібраних початкових точок
+                self.logger.info(f"Фактично відібрано {len(selected_indices)} початкових точок послідовностей")
 
+                # ВИПРАВЛЕННЯ: Створюємо на основі часу початку, а не індексу послідовності
+                seq_counter = 0
+                for start_idx in selected_indices:
                     start_time = result_df.index[start_idx]
+
+                    # Перевіряємо, чи можемо створити повну послідовність
+                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                            target_horizons) > len(result_df):
+                        continue
 
                     # Зберігаємо часову мітку початку для перевірки
                     sequence_start_times[seq_counter] = start_time
 
+                    # Зберігаємо послідовності окремо для кожного seq_id
                     sequence_points = []
                     for pos in range(sequence_length):
                         idx = start_idx + pos
                         if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
                             sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
-                                                                          timeframe, sequence_length,
-                                                                          target_horizons,
-                                                                          scaler, features_to_scale)
+                                                                              timeframe, sequence_length,
+                                                                              target_horizons,
+                                                                              scaler, features_to_scale)
                             sequence_points.append(sequence_point)
 
-                    # Only add the sequence if it's complete
+                    # Додаємо послідовність тільки якщо вона повна
                     if len(sequence_points) == sequence_length:
                         sequence_data.extend(sequence_points)
                         seq_counter += 1
-        else:
-            # За замовчуванням - використовуємо змінний крок залежно від обсягу даних
-            total_points = valid_end_idx - sequence_length
 
-            if total_points > 500000:
-                step = sequence_length  # Без перекриття для дуже великих датасетів
-            elif total_points > 100000:
-                step = sequence_length // 2  # 50% перекриття
-            elif total_points > 10000:
-                step = sequence_length // 3  # 67% перекриття
-            else:
-                step = max(1, sequence_length // 4)  # 75% перекриття
+            elif method == 'systematic_sample':
+                # Систематична вибірка з певним інтервалом
+                sampling_fraction = config.get('sampling_fraction', 0.2)
+                offset = config.get('offset', 0)
 
-            self.logger.info(f"Default sampling with adaptive step: {step}")
+                self.logger.info(f"Систематична вибірка з часткою: {sampling_fraction}, зміщення: {offset}")
 
-            seq_counter = 0
-            # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
-            for start_idx in range(0, valid_end_idx - sequence_length, step):
-                # Перевіряємо, чи можемо створити повну послідовність
-                if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(target_horizons) > len(result_df):
-                    continue
+                # Розрахунок кроку для систематичної вибірки
+                total_possible = valid_end_idx - sequence_length
+                step = max(1, int(1 / sampling_fraction))
 
-                start_time = result_df.index[start_idx]
+                # Адаптивне коригування кроку для дуже великих датасетів
+                if total_possible > 500000:
+                    step = max(step, total_possible // 5000)  # Обмежуємо максимальну кількість послідовностей
 
-                # Зберігаємо часову мітку початку для перевірки
-                sequence_start_times[seq_counter] = start_time
+                self.logger.info(f"Використовується розмір кроку: {step} для систематичної вибірки")
 
-                # Зберігаємо послідовності окремо для кожного seq_id
-                sequence_points = []
-                for pos in range(sequence_length):
-                    idx = start_idx + pos
-                    if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
-                        sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
-                                                                      timeframe, sequence_length,
-                                                                      target_horizons,
-                                                                      scaler, features_to_scale)
-                        sequence_points.append(sequence_point)
+                seq_counter = 0
+                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                for start_idx in range(offset, total_possible, step):
+                    start_time = result_df.index[start_idx]
 
-                # Додаємо послідовність тільки якщо вона повна
-                if len(sequence_points) == sequence_length:
-                    sequence_data.extend(sequence_points)
-                    seq_counter += 1
+                    # Перевіряємо, чи можемо створити повну послідовність
+                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                            target_horizons) > len(result_df):
+                        continue
 
-        # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Перевіряємо порядок даних перед поверненням
-        final_df = pd.DataFrame(sequence_data)
+                    # Зберігаємо часову мітку початку для перевірки
+                    sequence_start_times[seq_counter] = start_time
 
-        # Сортуємо за послідовністю та позицією для збереження порядку
-        if 'sequence_id' in final_df.columns and 'sequence_position' in final_df.columns:
-            final_df = final_df.sort_values(['sequence_id', 'sequence_position'])
+                    # Зберігаємо послідовності окремо для кожного seq_id
+                    sequence_points = []
+                    for pos in range(sequence_length):
+                        idx = start_idx + pos
+                        if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
+                            sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
+                                                                              timeframe, sequence_length,
+                                                                              target_horizons,
+                                                                              scaler, features_to_scale)
+                            sequence_points.append(sequence_point)
 
-        # Перевірка на цілісність послідовностей
-        if 'sequence_id' in final_df.columns:
-            sequence_counts = final_df['sequence_id'].value_counts()
-            incomplete_sequences = sequence_counts[sequence_counts != sequence_length]
-            if len(incomplete_sequences) > 0:
-                self.logger.warning(f"Found {len(incomplete_sequences)} incomplete sequences")
-                # Видаляємо неповні послідовності
-                for seq_id, count in incomplete_sequences.items():
-                    final_df = final_df[final_df['sequence_id'] != seq_id]
-                self.logger.info(f"Removed incomplete sequences, {len(final_df)} rows remaining")
+                    # Додаємо послідовність тільки якщо вона повна
+                    if len(sequence_points) == sequence_length:
+                        sequence_data.extend(sequence_points)
+                        seq_counter += 1
 
-        # ВИПРАВЛЕННЯ: Перевірка на послідовність часових міток
-        if len(sequence_start_times) > 0:
-            # Перетворюємо dict в Series для легшого аналізу
-            start_times_series = pd.Series(sequence_start_times)
-            # Перевіряємо, чи часові мітки послідовностей впорядковані
-            is_monotonic = start_times_series.is_monotonic_increasing
+            elif method == 'no_overlap':
+                # Послідовності без перекриття з додатковим проміжком
+                extra_gap = config.get('extra_gap', 0)
+                step = sequence_length + extra_gap
 
-            if not is_monotonic:
-                self.logger.warning("Sequence start times are not monotonically increasing. Fixing...")
+                self.logger.info(f"Вибірка без перекриття з додатковим проміжком: {extra_gap}, загальний крок: {step}")
 
-                # Сортуємо послідовності за часом початку
-                sorted_seq_ids = start_times_series.sort_values().index
+                seq_counter = 0
+                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                for start_idx in range(0, valid_end_idx - sequence_length, step):
+                    start_time = result_df.index[start_idx]
 
-                # Create a mapping from old sequence IDs to new ordered ones
-                seq_id_mapping = {old_id: new_id for new_id, old_id in enumerate(sorted_seq_ids)}
+                    # Перевіряємо, чи можемо створити повну послідовність
+                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                            target_horizons) > len(result_df):
+                        continue
 
-                # Update sequence IDs in the final DataFrame
-                final_df['sequence_id'] = final_df['sequence_id'].map(seq_id_mapping)
+                    # Зберігаємо часову мітку початку для перевірки
+                    sequence_start_times[seq_counter] = start_time
 
-                # Re-sort the DataFrame to maintain proper order
-                final_df = final_df.sort_values(['sequence_id', 'sequence_position'])
+                    # Зберігаємо послідовності окремо для кожного seq_id
+                    sequence_points = []
+                    for pos in range(sequence_length):
+                        idx = start_idx + pos
+                        if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
+                            sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
+                                                                              timeframe, sequence_length,
+                                                                              target_horizons,
+                                                                              scaler, features_to_scale)
+                            sequence_points.append(sequence_point)
 
-                self.logger.info("Sequence IDs have been reordered chronologically")
+                    # Додаємо послідовність тільки якщо вона повна
+                    if len(sequence_points) == sequence_length:
+                        sequence_data.extend(sequence_points)
+                        seq_counter += 1
 
-                # 7. Final cleanup and validation
-            if not final_df.empty:
-                # Ensure all sequences are complete
-                seq_counts = final_df['sequence_id'].value_counts()
-                complete_seqs = seq_counts[seq_counts == sequence_length].index
-                final_df = final_df[final_df['sequence_id'].isin(complete_seqs)]
+            elif method == 'weekly_anchored':
+                # Виправлення: Завжди використовуємо понеділок (0) як основний день прив'язки для тижнів
+                anchor_day = 0  # 0=Понеділок ЗАВЖДИ
+                # Використовуємо додаткові дні тільки якщо вони явно налаштовані
+                additional_days = config.get('additional_days', [])
+                anchor_days = [anchor_day] + additional_days
 
-                # Drop any remaining NaN values
-                final_df = final_df.dropna()
-
-                # Add metadata columns
-                final_df['symbol'] = symbol
-                final_df['timeframe'] = timeframe
-                final_df['sequence_length'] = sequence_length
-
-                # Convert target columns to float32 to save space
-                for col in final_df.columns:
-                    if col.startswith('target_'):
-                        final_df[col] = final_df[col].astype('float32')
-
-                # Log final statistics
-                num_sequences = len(final_df['sequence_id'].unique())
                 self.logger.info(
-                    f"Successfully prepared LSTM data: {num_sequences} complete sequences "
-                    f"({len(final_df)} total rows) for {symbol} {timeframe}"
+                    f"Тижнева прив'язка до днів: {anchor_days}, понеділок завжди є основним днем прив'язки"
                 )
+
+                # Знаходимо всі дати, що відповідають дням прив'язки
+                anchor_dates = []
+
+                # Спочатку знаходимо всі понеділки для забезпечення правильної прив'язки тижня
+                monday_indices = []
+
+                for i in range(len(result_df)):
+                    dt = result_df.index[i].to_pydatetime()
+                    if dt.weekday() == 0 and i + sequence_length <= valid_end_idx:  # 0 = Понеділок
+                        monday_indices.append(i)
+
+                self.logger.info(f"Знайдено {len(monday_indices)} понеділків для тижневої прив'язки")
+
+                # Спочатку додаємо всі індекси понеділків до anchor_dates
+                anchor_dates.extend(monday_indices)
+
+                # Потім додаємо інші додаткові дні, якщо вказано
+                if additional_days:
+                    for day in additional_days:
+                        for i in range(len(result_df)):
+                            dt = result_df.index[i].to_pydatetime()
+                            if dt.weekday() == day and i + sequence_length <= valid_end_idx:
+                                anchor_dates.append(i)
+
+                # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
+                anchor_dates = sorted(anchor_dates)
+
+                self.logger.info(f"Знайдено загалом {len(anchor_dates)} дат прив'язки для тижневої прив'язки")
+
+                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                seq_counter = 0
+                for start_idx in anchor_dates:
+                    # Перевіряємо, чи можемо створити повну послідовність
+                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                            target_horizons) > len(result_df):
+                        continue
+
+                    start_time = result_df.index[start_idx]
+                    dt = start_time.to_pydatetime()
+
+                    # Додаткова перевірка - переконуємося, що починаємо з правильного дня тижня для основної прив'язки
+                    expected_weekday = anchor_days[0]
+
+                    # Пропускаємо цю послідовність, якщо вона не починається в понеділок (тільки для послідовностей основного дня прив'язки)
+                    if dt.weekday() != expected_weekday and dt.weekday() not in additional_days:
+                        continue
+
+                    # Зберігаємо часову мітку початку для перевірки
+                    sequence_start_times[seq_counter] = start_time
+
+                    # Зберігаємо послідовності окремо для кожного seq_id
+                    sequence_points = []
+                    for pos in range(sequence_length):
+                        idx = start_idx + pos
+                        if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
+                            sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
+                                                                              timeframe, sequence_length,
+                                                                              target_horizons,
+                                                                              scaler, features_to_scale)
+                            sequence_points.append(sequence_point)
+
+                    # Додаємо послідовність тільки якщо вона повна
+                    if len(sequence_points) == sequence_length:
+                        sequence_data.extend(sequence_points)
+                        seq_counter += 1
+
+            elif method == 'monthly_anchored':
+                # Прив'язка до початку місяця з вибором певних точок
+                sample_points = config.get('sample_points', 4)
+                self.logger.info(f"Місячна прив'язка з {sample_points} точками вибірки на місяць")
+
+                # Групуємо дати за місяцями
+                month_groups = {}
+
+                for i in range(len(result_df)):
+                    dt = result_df.index[i].to_pydatetime()
+                    month_key = (dt.year, dt.month)
+
+                    if i + sequence_length <= valid_end_idx:
+                        if month_key not in month_groups:
+                            month_groups[month_key] = []
+
+                        month_groups[month_key].append(i)
+
+                self.logger.info(f"Знайдено дані для {len(month_groups)} місяців")
+
+                # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо місяці для послідовної обробки в хронологічному порядку
+                sorted_months = sorted(month_groups.keys())
+
+                # Вибираємо точки з перевагою для понеділків і послідовних днів по місяцях
+                seq_counter = 0
+
+                for month in sorted_months:
+                    indices = month_groups[month]
+
+                    # Пропускаємо місяці з недостатньою кількістю даних
+                    if len(indices) < sequence_length:
+                        self.logger.warning(
+                            f"Пропускаємо місяць {month} з недостатньою кількістю даних ({len(indices)} точок)")
+                        continue
+
+                    # Визначаємо всі понеділки в цьому місяці (бажані початкові точки)
+                    monday_indices = []
+
+                    for idx in indices:
+                        dt = result_df.index[idx].to_pydatetime()
+                        if dt.weekday() == 0:  # Понеділок
+                            monday_indices.append(idx)
+
+                    selected_indices = []
+
+                    # Якщо у нас є понеділки, пріоритетизуємо їх
+                    if monday_indices:
+                        # Сортуємо понеділки за днем місяця
+                        monday_indices.sort(key=lambda idx: result_df.index[idx].day)
+
+                        # Беремо до sample_points понеділків, рівномірно розподілених по місяцю
+                        if len(monday_indices) <= sample_points:
+                            selected_indices = monday_indices
+                        else:
+                            # Вибираємо рівномірно розподілені понеділки
+                            step = max(1, len(monday_indices) // sample_points)
+                            selected_indices = monday_indices[::step][:sample_points]
+
+                    # Якщо у нас недостатньо понеділків, доповнюємо іншими днями
+                    if len(selected_indices) < sample_points:
+                        remaining_needed = sample_points - len(selected_indices)
+                        # Отримуємо індекси, які не є понеділками
+                        other_indices = [idx for idx in indices if idx not in monday_indices]
+
+                        if other_indices:
+                            # Сортуємо за днем місяця
+                            other_indices.sort(key=lambda idx: result_df.index[idx].day)
+                            # Вибираємо рівномірно розподілені точки
+                            step = max(1, len(other_indices) // remaining_needed)
+                            additional_indices = other_indices[::step][:remaining_needed]
+                            selected_indices.extend(additional_indices)
+
+                    # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
+                    selected_indices = sorted(selected_indices)
+
+                    # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                    for start_idx in selected_indices:
+                        # Перевіряємо, чи можемо створити повну послідовність
+                        if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                                target_horizons) > len(result_df):
+                            continue
+
+                        start_time = result_df.index[start_idx]
+
+                        # Зберігаємо часову мітку початку для перевірки
+                        sequence_start_times[seq_counter] = start_time
+
+                        sequence_points = []
+                        for pos in range(sequence_length):
+                            idx = start_idx + pos
+                            if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
+                                sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
+                                                                                  timeframe, sequence_length,
+                                                                                  target_horizons,
+                                                                                  scaler, features_to_scale)
+                                sequence_points.append(sequence_point)
+
+                        # Додаємо послідовність тільки якщо вона повна
+                        if len(sequence_points) == sequence_length:
+                            sequence_data.extend(sequence_points)
+                            seq_counter += 1
             else:
-                self.logger.warning("No valid sequences were created - returning empty DataFrame")
+                # За замовчуванням - використовуємо змінний крок залежно від обсягу даних
+                total_points = valid_end_idx - sequence_length
 
-            return final_df
+                if total_points > 500000:
+                    step = sequence_length  # Без перекриття для дуже великих датасетів
+                elif total_points > 100000:
+                    step = sequence_length // 2  # 50% перекриття
+                elif total_points > 10000:
+                    step = sequence_length // 3  # 67% перекриття
+                else:
+                    step = max(1, sequence_length // 4)  # 75% перекриття
 
-            except Exception as e:
+                self.logger.info(f"Вибірка за замовчуванням з адаптивним кроком: {step}")
+
+                seq_counter = 0
+                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                for start_idx in range(0, valid_end_idx - sequence_length, step):
+                    start_time = result_df.index[start_idx]
+
+                    # Перевіряємо, чи можемо створити повну послідовність
+                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                            target_horizons) > len(result_df):
+                        continue
+
+                    # Зберігаємо часову мітку початку для перевірки
+                    sequence_start_times[seq_counter] = start_time
+
+                    # Зберігаємо послідовності окремо для кожного seq_id
+                    sequence_points = []
+                    for pos in range(sequence_length):
+                        idx = start_idx + pos
+                        if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
+                            sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
+                                                                              timeframe, sequence_length,
+                                                                              target_horizons,
+                                                                              scaler, features_to_scale)
+                            sequence_points.append(sequence_point)
+
+                    # Додаємо послідовність тільки якщо вона повна
+                    if len(sequence_points) == sequence_length:
+                        sequence_data.extend(sequence_points)
+                        seq_counter += 1
+
+            # Перевіряємо, чи створені послідовності
+            if not sequence_data:
+                self.logger.warning(f"Не створено жодної послідовності для {symbol}, {timeframe}")
+                return pd.DataFrame()
+
+            # Створюємо фінальний DataFrame з послідовностями
+            sequences_df = pd.DataFrame(sequence_data)
+
+            # Логування статистики створених послідовностей
+            num_sequences = len(sequence_start_times)
+            self.logger.info(f"Створено {num_sequences} послідовностей для {symbol}, {timeframe}")
+            self.logger.info(f"Загальна кількість точок даних: {len(sequences_df)}")
+
+            # Додаємо метадані про скейлер для використання при інференсі
+            sequences_df.attrs['scaler'] = scaler
+            sequences_df.attrs['features_to_scale'] = features_to_scale
+            sequences_df.attrs['symbol'] = symbol
+            sequences_df.attrs['timeframe'] = timeframe
+            sequences_df.attrs['sequence_length'] = sequence_length
+            sequences_df.attrs['target_horizons'] = target_horizons
+
+            return sequences_df
+
+        except Exception as e:
             self.logger.error(f"Error in prepare_lstm_data: {str(e)}", exc_info=True)
             return pd.DataFrame()
 
-    # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Виділяємо створення точки даних в окремий метод
+
     def _create_sequence_data_point(self, result_df, idx, seq_id, pos,
-                                    timeframe, sequence_length, target_horizons,
-                                    scaler, features_to_scale):
-        """
-        Створює точку даних для послідовності з перевіркою валідності індексу
-        """
-        row = result_df.iloc[idx].copy()
-        return {
-            'timeframe': timeframe,
-            'sequence_id': seq_id,
-            'sequence_position': pos,
-            'open_time': result_df.index[idx],
+                                        timeframe, sequence_length, target_horizons,
+                                        scaler, features_to_scale):
+            """
+            Створює точку даних для послідовності з перевіркою валідності індексу
+            """
+            row = result_df.iloc[idx].copy()
+            return {
+                'timeframe': timeframe,
+                'sequence_id': seq_id,
+                'sequence_position': pos,
+                'open_time': result_df.index[idx],
 
-            # Scaled features
-            'open_scaled': float(row['open_scaled']),
-            'high_scaled': float(row['high_scaled']),
-            'low_scaled': float(row['low_scaled']),
-            'close_scaled': float(row['close_scaled']),
-            'volume_scaled': float(row['volume_scaled']),
+                # Scaled features
+                'open_scaled': float(row['open_scaled']),
+                'high_scaled': float(row['high_scaled']),
+                'low_scaled': float(row['low_scaled']),
+                'close_scaled': float(row['close_scaled']),
+                'volume_scaled': float(row['volume_scaled']),
 
-            # Added volume features
-            'volume_change_scaled': float(row['volume_change_scaled']),
-            'volume_rolling_mean_scaled': float(row['volume_rolling_mean_scaled']),
-            'volume_rolling_std_scaled': float(row['volume_rolling_std_scaled']),
-            'volume_spike_scaled': float(row['volume_spike_scaled']),
+                # Added volume features
+                'volume_change_scaled': float(row['volume_change_scaled']),
+                'volume_rolling_mean_scaled': float(row['volume_rolling_mean_scaled']),
+                'volume_rolling_std_scaled': float(row['volume_rolling_std_scaled']),
+                'volume_spike_scaled': float(row['volume_spike_scaled']),
 
-            # Time features
-            'hour_sin': float(row['hour_sin']),
-            'hour_cos': float(row['hour_cos']),
-            'day_of_week_sin': float(row['day_of_week_sin']),
-            'day_of_week_cos': float(row['day_of_week_cos']),
-            'month_sin': float(row['month_sin']),
-            'month_cos': float(row['month_cos']),
-            'day_of_month_sin': float(row['day_of_month_sin']),
-            'day_of_month_cos': float(row['day_of_month_cos']),
+                # Time features
+                'hour_sin': float(row['hour_sin']),
+                'hour_cos': float(row['hour_cos']),
+                'day_of_week_sin': float(row['day_of_week_sin']),
+                'day_of_week_cos': float(row['day_of_week_cos']),
+                'month_sin': float(row['month_sin']),
+                'month_cos': float(row['month_cos']),
+                'day_of_month_sin': float(row['day_of_month_sin']),
+                'day_of_month_cos': float(row['day_of_month_cos']),
 
-            # Target values
-            'target_close_1': float(row['target_close_1']) if 1 in target_horizons else None,
-            'target_close_5': float(row['target_close_5']) if 5 in target_horizons else None,
-            'target_close_10': float(row['target_close_10']) if 10 in target_horizons else None,
+                # Target values
+                'target_close_1': float(row['target_close_1']) if 1 in target_horizons else None,
+                'target_close_5': float(row['target_close_5']) if 5 in target_horizons else None,
+                'target_close_10': float(row['target_close_10']) if 10 in target_horizons else None,
 
-            # Metadata
-            'sequence_length': sequence_length,
-            'scaling_metadata': json.dumps({
-                'feature_range': scaler.feature_range,
-                'data_min': scaler.data_min_.tolist(),
-                'data_max': scaler.data_max_.tolist(),
-                'columns': features_to_scale
-            })
-        }
+                # Metadata
+                'sequence_length': sequence_length,
+                'scaling_metadata': json.dumps({
+                    'feature_range': scaler.feature_range,
+                    'data_min': scaler.data_min_.tolist(),
+                    'data_max': scaler.data_max_.tolist(),
+                    'columns': features_to_scale
+                })
+            }
 
     def _adaptive_sample_rate(self, total_points, min_rate=0.001, max_rate=0.1, threshold=500000):
         if total_points >= threshold:

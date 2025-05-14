@@ -8,10 +8,10 @@ from arch import arch_model
 
 # Import from other project modules
 from data.db import DatabaseManager
-from data_collection import  DataCleaner
-from models import TimeSeriesModels
-from data_collection import AnomalyDetector
-from data_collection import FeatureEngineering
+from data_collection.DataCleaner import  DataCleaner
+from models.time_series import TimeSeriesModels
+from data_collection.AnomalyDetector import AnomalyDetector
+from data_collection.feature_engineering import FeatureEngineering
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -1021,17 +1021,7 @@ class VolatilityAnalysis:
             }
 
     def _generate_volatility_report(self, symbol, timeframe, analysis_results):
-        """
-        Generate volatility report and visualizations
 
-        Args:
-            symbol (str): Cryptocurrency symbol
-            timeframe (str): Timeframe of analysis
-            analysis_results (dict): Analysis results
-
-        Returns:
-            None
-        """
         try:
             vol_df = analysis_results['volatility_data']
 
