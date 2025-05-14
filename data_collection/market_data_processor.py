@@ -967,7 +967,7 @@ class MarketDataProcessor:
         self.logger.info(f"Виявлення аномалій виконано ")
 
         # 7. Підготовка даних для моделей ARIMA і LSTM
-        model_data_timeframes = ['1m', '4h', '1d', '1w']
+        model_data_timeframes = ['1m','1h', '4h', '1d', '1w']
         if timeframe in model_data_timeframes:
             # ARIMA
             self.logger.info(f"Підготовка даних для ARIMA моделі")
