@@ -1189,10 +1189,10 @@ def main():
     SYMBOLS = ['ETH']
 
     # Всі таймфрейми
-    ALL_TIMEFRAMES = ['1h', '4h', '1d', '1w']
+    ALL_TIMEFRAMES = ['1m','1h', '4h', '1d', '1w']
 
     # Базові таймфрейми, які вже існують в базі даних
-    BASE_TIMEFRAMES = ['1h', '1d']
+    BASE_TIMEFRAMES = ['1m','1h', '1d']
 
     # Похідні таймфрейми, які будуть створені через ресемплінг
     DERIVED_TIMEFRAMES = ['4h', '1w']
