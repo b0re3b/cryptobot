@@ -2012,7 +2012,7 @@ class DataResampler:
             '1h': (72, 168, 24),
             '4h': (30, 90, 60),
             '1d': (45, 90, 30),
-            '1w': (12, 52, 26)
+            '1w': (26, 52, 12)
         }
 
         default_value = (30, 90, 45)
@@ -2206,7 +2206,7 @@ class DataResampler:
                 '1d': {
                     'method': 'sliding_window',  # Новий метод з перекриттям
                     'window_step': 1,            # Крок вікна (1 = максимальне перекриття)
-                    'max_sequences': 2000        # Обмеження кількості послідовностей
+                    'max_sequences': 4000       # Обмеження кількості послідовностей
                 },
                 '1w': {
                     'method': 'weekly_anchored',
@@ -2295,7 +2295,7 @@ class DataResampler:
             elif method == 'sliding_window':
                 # Ковзне вікно з заданим кроком
                 window_step = config.get('window_step', 1)  # За замовчуванням крок = 1
-                max_sequences = config.get('max_sequences', 2000)  # Обмеження на кількість послідовностей
+                max_sequences = config.get('max_sequences', 4000)  # Обмеження на кількість послідовностей
 
                 self.logger.info(
                     f"Використовується метод ковзного вікна з кроком: {window_step}, макс. послідовностей: {max_sequences}")
