@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import acf, pacf
+from statsmodels.tsa.stattools import acf
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-import arch
 from arch import arch_model
 
 # Import from other project modules
@@ -26,7 +25,7 @@ class VolatilityAnalysis:
         self.volatility_models = {}
         self.regime_models = {}
         self.data_cleaner = DataCleaner()
-        self.anomaly_detector = AnomalyDetector()
+        self.anomaly_detector = AnomalyDetector(logger=logger)
         self.feature_engineer = FeatureEngineering()
         self.time_series = TimeSeriesModels()
 
