@@ -9,7 +9,7 @@ import seaborn as sns
 
 # Internal imports
 from data.db import DatabaseManager
-from data_collection.market_data_processor import MarketDataProcessor
+from DMP.market_data_processor import MarketDataProcessor
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)

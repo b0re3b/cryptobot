@@ -5,15 +5,14 @@ import logging
 from typing import List, Dict, Optional, Tuple, Any
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
-import gc
 from datetime import datetime, time
 
 from pandas import DataFrame
 
-from data_collection.AnomalyDetector import AnomalyDetector
-from data_collection.DataCleaner import DataCleaner
-from data_collection.DataResampler import DataResampler
-from data_collection.DataStorageManager import DataStorageManager
+from DMP.AnomalyDetector import AnomalyDetector
+from DMP.DataCleaner import DataCleaner
+from DMP.DataResampler import DataResampler
+from DMP.DataStorageManager import DataStorageManager
 from data.db import DatabaseManager
 
 

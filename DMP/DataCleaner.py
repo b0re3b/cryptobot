@@ -6,8 +6,8 @@ import pandas as pd
 import pytz
 from sklearn.preprocessing import StandardScaler
 
-from data_collection.AnomalyDetector import AnomalyDetector
-from data_collection.DataResampler import DataResampler
+from DMP.AnomalyDetector import AnomalyDetector
+from DMP.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
 
 
