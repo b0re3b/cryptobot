@@ -786,18 +786,8 @@ class VolatilityAnalysis:
                 'error': str(e)
             }
 
-    def analyze_crypto_market_conditions(self, symbols=['BTC', 'ETH', 'BNB'], timeframe='1d', window=14):
-        """
-        Analyze overall crypto market volatility conditions
+    def analyze_crypto_market_conditions(self, symbols=['BTC', 'ETH', 'SOL'], timeframe='1d', window=14):
 
-        Args:
-            symbols (list): List of cryptocurrency symbols to analyze
-            timeframe (str): Timeframe to analyze
-            window (int): Window for volatility calculation
-
-        Returns:
-            dict: Dictionary with market volatility metrics
-        """
         try:
             volatilities = {}
 

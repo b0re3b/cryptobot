@@ -2166,53 +2166,60 @@ class DataResampler:
             # Визначаємо загальний розмір даних і адаптуємо параметри відповідно
             total_data_points = len(result_df)
 
-            # Оновлена конфігурація таймфрейму з явною прив'язкою до понеділка для тижневих даних
+            # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Відстежуємо всі створені послідовності за датою початку
+            sequence_start_times = {}
+
+            # Оновлена конфігурація для всіх методів з установкою step = sequence_length
             timeframe_config = {
                 '1m': {
                     'method': 'random_sample',
                     'sample_rate': self._adaptive_sample_rate(total_data_points, 0.001, 0.05, 500000),
-                    'min_gap': max(10, sequence_length // 20)  # Динамічний мінімальний проміжок
+                    'min_gap': sequence_length  # Встановлюємо мінімальний проміжок рівним sequence_length
                 },
                 '5m': {
                     'method': 'random_sample',
                     'sample_rate': self._adaptive_sample_rate(total_data_points, 0.005, 0.1, 200000),
-                    'min_gap': max(8, sequence_length // 15)
+                    'min_gap': sequence_length
                 },
                 '15m': {
                     'method': 'systematic_sample',
                     'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.02, 0.2, 100000),
-                    'offset': 3
+                    'offset': 3,
+                    'step': sequence_length  # Додаємо явний крок
                 },
                 '30m': {
                     'method': 'systematic_sample',
                     'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.05, 0.3, 50000),
-                    'offset': 2
+                    'offset': 2,
+                    'step': sequence_length  # Додаємо явний крок
                 },
                 '1h': {
                     'method': 'systematic_sample',
                     'sampling_fraction': self._adaptive_sample_rate(total_data_points, 0.1, 0.4, 20000),
-                    'offset': 2
+                    'offset': 2,
+                    'step': sequence_length  # Додаємо явний крок
                 },
                 '4h': {
                     'method': 'no_overlap',
-                    'extra_gap': max(1, int(sequence_length * 0.1))  # 10% довжини послідовності
+                    'extra_gap': 0  # Встановлюємо extra_gap = 0 для відсутності додаткового проміжку
                 },
                 '1d': {
-                    'method': 'weekly_anchored',
-                    'anchor_day': 0,  # Тільки понеділок (фіксовано)
-                    'additional_days': [2, 4]  # Додатково середа та п'ятниця
+                    'method': 'sliding_window',  # Новий метод з перекриттям
+                    'window_step': 1,            # Крок вікна (1 = максимальне перекриття)
+                    'max_sequences': 2000        # Обмеження кількості послідовностей
                 },
                 '1w': {
-                    'method': 'weekly_anchored',  # Змінено з monthly_anchored на weekly_anchored для кращого контролю
+                    'method': 'weekly_anchored',
                     'anchor_day': 0,  # Тільки понеділок (фіксовано)
-                    'additional_days': []  # Без додаткових днів для тижневих даних - тільки послідовності з понеділка
+                    'additional_days': [],  # Без додаткових днів для тижневих даних
+                    'step': sequence_length  # Додаємо явний крок
                 }
             }
 
             # За замовчуванням використовуємо метод без перекриття
             default_config = {
                 'method': 'no_overlap',
-                'extra_gap': sequence_length // 5  # 20% від довжини послідовності
+                'extra_gap': 0  # Встановлюємо extra_gap = 0 для відсутності додаткового проміжку
             }
 
             # Отримуємо конфігурацію для даного часового інтервалу
@@ -2225,70 +2232,31 @@ class DataResampler:
                 f"Використовується метод генерації послідовностей '{method}' для таймфрейму {timeframe} з {total_data_points} точками даних"
             )
 
-            # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Відстежуємо всі створені послідовності за датою початку
-            sequence_start_times = {}
-
             # Генерація послідовностей в залежності від методу
             if method == 'random_sample':
                 # Випадковий відбір з мінімальними проміжками
                 sample_rate = config.get('sample_rate', 0.1)
-                min_gap = config.get('min_gap', 1)
+                min_gap = sequence_length  # ЗМІНА: Встановлюємо завжди рівним sequence_length
 
                 # Логуємо актуальні параметри
                 self.logger.info(f"Випадкова вибірка з частотою: {sample_rate}, мінімальний проміжок: {min_gap}")
 
                 # Визначаємо всі допустимі початкові індекси
-                valid_start_indices = list(range(0, valid_end_idx - sequence_length))
+                valid_start_indices = list(
+                    range(0, valid_end_idx - sequence_length, sequence_length))  # ЗМІНА: Крок sequence_length
 
                 # Кількість послідовностей для відбору
-                target_sequences = int(len(valid_start_indices) * sample_rate)
+                target_sequences = min(len(valid_start_indices), int(len(valid_start_indices) * sample_rate))
                 target_sequences = min(target_sequences, 10000)  # Обмежуємо максимальну кількість послідовностей
 
                 self.logger.info(f"Цільова кількість послідовностей для створення: {target_sequences}")
 
-                # Відбираємо початкові точки з мінімальним проміжком
-                # Використовуємо більш ефективний алгоритм для великих обсягів даних
-                if len(valid_start_indices) > 100000:
-                    # Для дуже великих датасетів використовуємо стратифікований підхід
-                    selected_indices = []
-                    # Розбиваємо весь період на підперіоди і відбираємо з кожного
-                    period_size = len(valid_start_indices) // 20  # 20 підперіодів
-
-                    for period_start in range(0, len(valid_start_indices), period_size):
-                        period_end = min(period_start + period_size, len(valid_start_indices))
-                        period_indices = valid_start_indices[period_start:period_end]
-
-                        # Кількість послідовностей для цього підперіоду
-                        period_target = max(1, int(target_sequences * (period_end - period_start) / len(
-                            valid_start_indices)))
-
-                        # Відбираємо індекси для цього підперіоду
-                        period_selected = []
-                        max_attempts = period_target * 10  # Обмеження спроб
-                        attempts = 0
-
-                        while len(period_selected) < period_target and attempts < max_attempts and period_indices:
-                            idx = np.random.choice(period_indices)
-                            period_selected.append(idx)
-
-                            # Видаляємо близькі індекси
-                            period_indices = [i for i in period_indices if abs(i - idx) > min_gap]
-                            attempts += 1
-
-                        selected_indices.extend(period_selected)
+                # Відбираємо початкові точки без перекриття
+                if len(valid_start_indices) > target_sequences:
+                    # Обираємо випадкові початкові точки без перекриття
+                    selected_indices = np.random.choice(valid_start_indices, size=target_sequences, replace=False)
                 else:
-                    # Для менших датасетів використовуємо звичайний алгоритм
-                    selected_indices = []
-                    max_attempts = target_sequences * 10
-                    attempts = 0
-
-                    while len(selected_indices) < target_sequences and attempts < max_attempts and valid_start_indices:
-                        idx = np.random.choice(valid_start_indices)
-                        selected_indices.append(idx)
-
-                        # Видаляємо всі індекси в радіусі min_gap
-                        valid_start_indices = [i for i in valid_start_indices if abs(i - idx) > min_gap]
-                        attempts += 1
+                    selected_indices = valid_start_indices
 
                 # Сортуємо індекси для збереження хронологічного порядку
                 selected_indices = sorted(selected_indices)
@@ -2324,27 +2292,57 @@ class DataResampler:
                     if len(sequence_points) == sequence_length:
                         sequence_data.extend(sequence_points)
                         seq_counter += 1
+            elif method == 'sliding_window':
+                # Ковзне вікно з заданим кроком
+                window_step = config.get('window_step', 1)  # За замовчуванням крок = 1
+                max_sequences = config.get('max_sequences', 2000)  # Обмеження на кількість послідовностей
 
+                self.logger.info(
+                    f"Використовується метод ковзного вікна з кроком: {window_step}, макс. послідовностей: {max_sequences}")
+
+                seq_counter = 0
+                # Створюємо послідовності з перекриттям
+                for start_idx in range(0, valid_end_idx - sequence_length, window_step):
+                    # Обмеження кількості послідовностей
+                    if seq_counter >= max_sequences:
+                        self.logger.info(f"Досягнуто максимальну кількість послідовностей ({max_sequences})")
+                        break
+
+                    start_time = result_df.index[start_idx]
+
+                    # Перевіряємо, чи можемо створити повну послідовність
+                    if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
+                            target_horizons) > len(result_df):
+                        continue
+
+                    # Зберігаємо часову мітку початку для перевірки
+                    sequence_start_times[seq_counter] = start_time
+
+                    # Зберігаємо послідовності окремо для кожного seq_id
+                    sequence_points = []
+                    for pos in range(sequence_length):
+                        idx = start_idx + pos
+                        if 0 <= idx < len(result_df) and idx + max(target_horizons) < len(result_df):
+                            sequence_point = self._create_sequence_data_point(result_df, idx, seq_counter, pos,
+                                                                              timeframe, sequence_length,
+                                                                              target_horizons,
+                                                                              scaler, features_to_scale)
+                            sequence_points.append(sequence_point)
+
+                    # Додаємо послідовність тільки якщо вона повна
+                    if len(sequence_points) == sequence_length:
+                        sequence_data.extend(sequence_points)
+                        seq_counter += 1
             elif method == 'systematic_sample':
                 # Систематична вибірка з певним інтервалом
-                sampling_fraction = config.get('sampling_fraction', 0.2)
+                step = sequence_length  # ЗМІНА: Крок завжди дорівнює sequence_length
                 offset = config.get('offset', 0)
 
-                self.logger.info(f"Систематична вибірка з часткою: {sampling_fraction}, зміщення: {offset}")
-
-                # Розрахунок кроку для систематичної вибірки
-                total_possible = valid_end_idx - sequence_length
-                step = max(1, int(1 / sampling_fraction))
-
-                # Адаптивне коригування кроку для дуже великих датасетів
-                if total_possible > 500000:
-                    step = max(step, total_possible // 5000)  # Обмежуємо максимальну кількість послідовностей
-
-                self.logger.info(f"Використовується розмір кроку: {step} для систематичної вибірки")
+                self.logger.info(f"Систематична вибірка з кроком: {step}, зміщення: {offset}")
 
                 seq_counter = 0
                 # Створюємо на основі часу початку, а не індексу послідовності
-                for start_idx in range(offset, total_possible, step):
+                for start_idx in range(offset, valid_end_idx - sequence_length, step):
                     start_time = result_df.index[start_idx]
 
                     # Перевіряємо, чи можемо створити повну послідовність
@@ -2372,11 +2370,11 @@ class DataResampler:
                         seq_counter += 1
 
             elif method == 'no_overlap':
-                # Послідовності без перекриття з додатковим проміжком
-                extra_gap = config.get('extra_gap', 0)
-                step = sequence_length + extra_gap
+                # Послідовності без перекриття
+                extra_gap = 0  # ЗМІНА: Встановлюємо extra_gap = 0
+                step = sequence_length + extra_gap  # Крок дорівнює sequence_length
 
-                self.logger.info(f"Вибірка без перекриття з додатковим проміжком: {extra_gap}, загальний крок: {step}")
+                self.logger.info(f"Вибірка без перекриття з кроком: {step}")
 
                 seq_counter = 0
                 # Створюємо на основі часу початку, а не індексу послідовності
@@ -2408,8 +2406,6 @@ class DataResampler:
                         seq_counter += 1
 
             elif method == 'weekly_anchored':
-                # Виправлена логіка для тижневого таймфрейму
-
                 # Аналіз днів тижня в даних для діагностики
                 day_counts = {}
                 for i in range(len(result_df)):
@@ -2423,49 +2419,37 @@ class DataResampler:
                     first_dates = [result_df.index[i].strftime('%Y-%m-%d (%A)') for i in range(min(5, len(result_df)))]
                     self.logger.info(f"Перші 5 дат: {first_dates}")
 
-                # Спеціальна обробка для тижневого таймфрейму
-                if timeframe == '1w':
-                    # Для тижневих даних - шукати будь-який день як початок послідовності
-                    # Спроба визначити, який день тижня найчастіше використовується
-                    most_common_day = max(day_counts.items(), key=lambda x: x[1])[0] if day_counts else 0
-                    self.logger.info(
-                        f"Найбільш поширений день тижня в даних: {most_common_day} ({['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][most_common_day]})")
+                # Визначаємо step для неперекривних послідовностей
+                step = sequence_length
+                self.logger.info(f"Для таймфрейму використовуємо крок {step} (без перекриття)")
 
-                    # Використовуємо найбільш поширений день як основний, або всі дні, якщо дані рідкісні
+                if timeframe == '1w':
+                    most_common_day = max(day_counts.items(), key=lambda x: x[1])[0] if day_counts else 0
                     if max(day_counts.values() if day_counts else [0]) > 5:
-                        # Є достатньо даних для одного дня
                         anchor_days = [most_common_day]
                         self.logger.info(
-                            f"Використовуємо {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][most_common_day]} як день прив'язки для тижневих даних")
+                            f"Використовуємо {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][most_common_day]} як день прив'язки")
                     else:
-                        # Даних мало, використовуємо всі дні
                         anchor_days = list(range(7))
                         self.logger.info("Недостатньо даних для одного дня тижня, використовуємо всі дні")
                 else:
-                    # Для інших таймфреймів використовуємо налаштування з конфігурації
-                    anchor_day = config.get('anchor_day', 0)  # 0=Понеділок за замовчуванням
-                    additional_days = config.get('additional_days', [])
-                    anchor_days = [anchor_day] + additional_days
+                    anchor_day = config.get('anchor_day', 0)
+                    anchor_days = [anchor_day]  # ЗМІНА: Використовуємо тільки основний день прив'язки
 
-                    self.logger.info(f"Тижнева прив'язка до днів: {anchor_days}")
-
-                # Знаходимо всі дати, що відповідають дням прив'язки
+                # Формуємо anchor_dates з кроком sequence_length
                 anchor_dates = []
-
-                for i in range(len(result_df)):
+                for i in range(0, valid_end_idx - sequence_length + 1, step):
                     dt = result_df.index[i].to_pydatetime()
-                    if dt.weekday() in anchor_days and i + sequence_length <= valid_end_idx:
+                    if dt.weekday() in anchor_days:
                         anchor_dates.append(i)
 
-                self.logger.info(f"Знайдено {len(anchor_dates)} дат прив'язки для тижневої прив'язки")
+                self.logger.info(f"Знайдено {len(anchor_dates)} дат прив'язки")
 
                 # Якщо все ще немає дат прив'язки, використовуємо альтернативний підхід
-                if not anchor_dates and timeframe == '1w':
-                    self.logger.warning(
-                        "Не знайдено відповідних дат прив'язки, використовуємо метод без перекриття")
+                if not anchor_dates:
+                    self.logger.warning("Не знайдено відповідних дат прив'язки, використовуємо метод без перекриття")
                     # Використовуємо метод без перекриття як резервний
-                    step = sequence_length + 2  # Невеликий проміжок
-                    for start_idx in range(0, valid_end_idx - sequence_length, step):
+                    for start_idx in range(0, valid_end_idx - sequence_length, sequence_length):
                         if start_idx + sequence_length <= valid_end_idx:
                             anchor_dates.append(start_idx)
 
@@ -2503,28 +2487,28 @@ class DataResampler:
 
             elif method == 'monthly_anchored':
                 # Прив'язка до початку місяця з вибором певних точок
-                sample_points = config.get('sample_points', 4)
-                self.logger.info(f"Місячна прив'язка з {sample_points} точками вибірки на місяць")
+                # ЗМІНА: Модифікуємо для забезпечення відсутності перекриття
+                self.logger.info(f"Місячна прив'язка з кроком {sequence_length}")
 
                 # Групуємо дати за місяцями
                 month_groups = {}
 
-                for i in range(len(result_df)):
+                for i in range(0, valid_end_idx - sequence_length + 1,
+                               sequence_length):  # ЗМІНА: Використовуємо крок sequence_length
                     dt = result_df.index[i].to_pydatetime()
                     month_key = (dt.year, dt.month)
 
-                    if i + sequence_length <= valid_end_idx:
-                        if month_key not in month_groups:
-                            month_groups[month_key] = []
+                    if month_key not in month_groups:
+                        month_groups[month_key] = []
 
-                        month_groups[month_key].append(i)
+                    month_groups[month_key].append(i)
 
                 self.logger.info(f"Знайдено дані для {len(month_groups)} місяців")
 
-                # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо місяці для послідовної обробки в хронологічному порядку
+                # Сортуємо місяці для послідовної обробки в хронологічному порядку
                 sorted_months = sorted(month_groups.keys())
 
-                # Вибираємо точки з перевагою для понеділків і послідовних днів по місяцях
+                # Вибираємо точки з перевагою для понеділків без перекриття
                 seq_counter = 0
 
                 for month in sorted_months:
@@ -2551,30 +2535,22 @@ class DataResampler:
                         # Сортуємо понеділки за днем місяця
                         monday_indices.sort(key=lambda idx: result_df.index[idx].day)
 
-                        # Беремо до sample_points понеділків, рівномірно розподілених по місяцю
-                        if len(monday_indices) <= sample_points:
-                            selected_indices = monday_indices
-                        else:
-                            # Вибираємо рівномірно розподілені понеділки
-                            step = max(1, len(monday_indices) // sample_points)
-                            selected_indices = monday_indices[::step][:sample_points]
+                        # ЗМІНА: Вибираємо понеділки з кроком, що забезпечує відсутність перекриття
+                        current_idx = 0
+                        while current_idx < len(monday_indices):
+                            selected_indices.append(monday_indices[current_idx])
 
-                    # Якщо у нас недостатньо понеділків, доповнюємо іншими днями
-                    if len(selected_indices) < sample_points:
-                        remaining_needed = sample_points - len(selected_indices)
-                        # Отримуємо індекси, які не є понеділками
-                        other_indices = [idx for idx in indices if idx not in monday_indices]
+                            # Визначаємо наступний індекс, який не перекривається з поточним
+                            next_idx = current_idx + 1
+                            while next_idx < len(monday_indices) and monday_indices[next_idx] < monday_indices[
+                                current_idx] + sequence_length:
+                                next_idx += 1
 
-                        if other_indices:
-                            # Сортуємо за днем місяця
-                            other_indices.sort(key=lambda idx: result_df.index[idx].day)
-                            # Вибираємо рівномірно розподілені точки
-                            step = max(1, len(other_indices) // remaining_needed)
-                            additional_indices = other_indices[::step][:remaining_needed]
-                            selected_indices.extend(additional_indices)
+                            current_idx = next_idx
 
-                    # ВСортуємо індекси для збереження хронологічного порядку
-                    selected_indices = sorted(selected_indices)
+                    # Якщо у нас немає жодного понеділка, використовуємо перший індекс місяця
+                    if not selected_indices and indices:
+                        selected_indices = [indices[0]]
 
                     # Створюємо на основі часу початку, а не індексу послідовності
                     for start_idx in selected_indices:
@@ -2603,19 +2579,10 @@ class DataResampler:
                             sequence_data.extend(sequence_points)
                             seq_counter += 1
             else:
-                # За замовчуванням - використовуємо змінний крок залежно від обсягу даних
-                total_points = valid_end_idx - sequence_length
+                # За замовчуванням - використовуємо крок sequence_length без перекриття
+                step = sequence_length  # ЗМІНА: Завжди використовуємо sequence_length
 
-                if total_points > 500000:
-                    step = sequence_length  # Без перекриття для дуже великих датасетів
-                elif total_points > 100000:
-                    step = sequence_length // 2  # 50% перекриття
-                elif total_points > 10000:
-                    step = sequence_length // 3  # 67% перекриття
-                else:
-                    step = max(1, sequence_length // 4)  # 75% перекриття
-
-                self.logger.info(f"Вибірка за замовчуванням з адаптивним кроком: {step}")
+                self.logger.info(f"Вибірка за замовчуванням з кроком: {step}")
 
                 seq_counter = 0
                 # Створюємо на основі часу початку, а не індексу послідовності

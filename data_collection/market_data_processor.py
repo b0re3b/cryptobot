@@ -976,7 +976,6 @@ class MarketDataProcessor:
 
             if arima_data is not None and not arima_data.empty:
                 results['arima_data'] = arima_data
-                self.logger.info(f"Підготовлено {len(arima_data)} записів ARIMA даних")
 
                 if save_results:
                     try:
@@ -989,11 +988,7 @@ class MarketDataProcessor:
                             record['original_close'] = record.get('original_close', record.get('close', None))
                             record['original_volume'] = record.get('original_volume', record.get('volume', None))
 
-                            # Додайте перевірку та логування
-                            if record.get('original_volume') is not None:
-                                self.logger.info(f"Record has volume: {record['original_volume']}")
-                            else:
-                                self.logger.warning(f"Record missing volume data")
+
 
                         # Виклик уніфікованого методу
                         arima_ids = self.save_arima_data(symbol, arima_data_points)
@@ -1016,7 +1011,6 @@ class MarketDataProcessor:
 
                 if lstm_df is not None and not lstm_df.empty:
                     results['lstm_data'] = lstm_df
-                    self.logger.info(f"Підготовлено {len(lstm_df)} записів LSTM даних")
 
                     if save_results:
                         try:
