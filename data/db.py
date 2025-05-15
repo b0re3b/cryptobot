@@ -4605,15 +4605,7 @@ class DatabaseManager:
     # --------- VOLATILITY METRICS ---------
 
     def save_volatility_metrics(self, metrics: Dict[str, Any]) -> int:
-        """
-        Зберігає метрики волатильності в таблицю volatility_metrics.
 
-        Args:
-            metrics: Словник з даними метрик волатильності
-
-        Returns:
-            id: Ідентифікатор збереженого запису
-        """
         if not self.conn:
             self.connect()
 
@@ -4646,19 +4638,7 @@ class DatabaseManager:
                                start_date: Optional[datetime] = None,
                                end_date: Optional[datetime] = None,
                                limit: int = 100) -> List[Dict[str, Any]]:
-        """
-        Отримує метрики волатильності з таблиці volatility_metrics.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            start_date: Початкова дата вибірки (опціонально)
-            end_date: Кінцева дата вибірки (опціонально)
-            limit: Обмеження кількості результатів (за замовчуванням 100)
-
-        Returns:
-            List[Dict]: Список словників з метриками волатильності
-        """
         if not self.conn:
             self.connect()
 
@@ -4693,15 +4673,7 @@ class DatabaseManager:
     # --------- VOLATILITY MODELS ---------
 
     def save_volatility_model(self, model_data: Dict[str, Any]) -> int:
-        """
-        Зберігає модель волатильності в таблицю volatility_models.
 
-        Args:
-            model_data: Словник з даними моделі
-
-        Returns:
-            id: Ідентифікатор збереженого запису
-        """
         if not self.conn:
             self.connect()
 
@@ -4736,19 +4708,7 @@ class DatabaseManager:
     def get_volatility_model(self, symbol: str, timeframe: str,
                              model_type: str = None, p: int = None,
                              q: int = None) -> Optional[Dict[str, Any]]:
-        """
-        Отримує модель волатильності з таблиці volatility_models.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            model_type: Тип моделі (опціонально)
-            p: Параметр p моделі (опціонально)
-            q: Параметр q моделі (опціонально)
-
-        Returns:
-            Dict: Словник з даними моделі або None, якщо модель не знайдено
-        """
         if not self.conn:
             self.connect()
 
@@ -4793,15 +4753,7 @@ class DatabaseManager:
     # --------- VOLATILITY REGIMES ---------
 
     def save_volatility_regime(self, regime_data: Dict[str, Any]) -> int:
-        """
-        Зберігає режим волатильності в таблицю volatility_regimes.
 
-        Args:
-            regime_data: Словник з даними режиму волатильності
-
-        Returns:
-            id: Ідентифікатор збереженого запису
-        """
         if not self.conn:
             self.connect()
 
@@ -4837,18 +4789,7 @@ class DatabaseManager:
     def get_volatility_regime(self, symbol: str, timeframe: str,
                               method: str = None,
                               n_regimes: int = None) -> Optional[Dict[str, Any]]:
-        """
-        Отримує режим волатильності з таблиці volatility_regimes.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            method: Метод виявлення режимів (опціонально)
-            n_regimes: Кількість режимів (опціонально)
-
-        Returns:
-            Dict: Словник з даними режиму або None, якщо режим не знайдено
-        """
         if not self.conn:
             self.connect()
 
@@ -4889,15 +4830,7 @@ class DatabaseManager:
     # --------- VOLATILITY FEATURES ---------
 
     def save_volatility_features(self, features_data: Dict[str, Any]) -> int:
-        """
-        Зберігає ознаки волатильності в таблицю volatility_features.
 
-        Args:
-            features_data: Словник з даними ознак
-
-        Returns:
-            id: Ідентифікатор збереженого запису
-        """
         if not self.conn:
             self.connect()
 

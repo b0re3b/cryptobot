@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS sol_volume_profile (
 -- CREATE INDEX IF NOT EXISTS idx_sol_volume_profile ON sol_volume_profile(timeframe, time_bucket);
 
 
--- Таблиця для зберігання джерел новин
+/*-- Таблиця для зберігання джерел новин
 CREATE TABLE IF NOT EXISTS news_sources (
     source_id SERIAL PRIMARY KEY,
     source_name VARCHAR(100) NOT NULL UNIQUE,
@@ -316,7 +316,7 @@ INSERT INTO news_categories (source_id, category_name, category_url_path) VALUES
 ((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'business', 'business'),
 ((SELECT source_id FROM news_sources WHERE source_name = 'theblock'), 'markets', 'markets')
 ON CONFLICT (source_id, category_name) DO NOTHING;
--- Схема для збереження даних про часові ряди та результати моделювання
+-- Схема для збереження даних про часові ряди та результати моделювання*/
 
 -- Таблиця для зберігання метаданих моделей часових рядів
 CREATE TABLE IF NOT EXISTS time_series_models (

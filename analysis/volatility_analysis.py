@@ -6,10 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from arch import arch_model
 import concurrent.futures
-import os
 from functools import lru_cache
-
-# Import from other project modules
 from data.db import DatabaseManager
 from DMP.DataCleaner import DataCleaner
 from models.time_series import TimeSeriesModels
@@ -36,7 +33,6 @@ class VolatilityAnalysis:
         self.max_workers = max_workers
         self.cache_size = cache_size
 
-    # Оптимізація: кешування результатів для покращення продуктивності
     @lru_cache(maxsize=128)
     def _calc_log_returns(self, prices_tuple):
         """Хелпер для обчислення логарифмічних прибутків з кешуванням"""
