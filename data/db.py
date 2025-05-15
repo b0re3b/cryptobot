@@ -4694,30 +4694,63 @@ class DatabaseManager:
 
     # --------- VOLATILITY MODELS ---------
 
-    def save_volatility_model(self, model_data: Dict[str, Any]) -> int:
-
+    def save_volatility_model(
+            self,
+            symbol: str,
+            timeframe: str,
+            model_type: str,
+            p: int,
+            q: int,
+            created_at: Optional[datetime] = None,
+            updated_at: Optional[datetime] = None,
+            parameters: Union[dict, str, None] = None,
+            aic: Optional[float] = None,
+            bic: Optional[float] = None,
+            log_likelihood: Optional[float] = None,
+            serialized_model: Optional[bytes] = None
+    ) -> int:
         if not self.conn:
             self.connect()
 
         try:
             # Перетворення параметрів у JSON, якщо вони є словником
-            if isinstance(model_data.get("parameters"), dict):
-                model_data["parameters"] = json.dumps(model_data["parameters"])
+            if isinstance(parameters, dict):
+                parameters = json.dumps(parameters)
+
+            data = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "model_type": model_type,
+                "p": p,
+                "q": q,
+                "created_at": created_at,
+                "updated_at": updated_at or datetime.utcnow(),
+                "parameters": parameters,
+                "aic": aic,
+                "bic": bic,
+                "log_likelihood": log_likelihood,
+                "serialized_model": serialized_model
+            }
 
             query = """
                     INSERT INTO volatility_models (symbol, timeframe, model_type, p, q, created_at, updated_at, \
-                                                   parameters, aic, bic, log_likelihood, serialized_model) \
+                                                   parameters, aic, bic, log_likelihood, serialized_model)
                     VALUES (%(symbol)s, %(timeframe)s, %(model_type)s, %(p)s, %(q)s, \
                             COALESCE(%(created_at)s, NOW()), %(updated_at)s, \
                             %(parameters)s, %(aic)s, %(bic)s, %(log_likelihood)s, \
                             %(serialized_model)s) ON CONFLICT (symbol, timeframe, model_type, p, q) DO \
                     UPDATE \
-                    SET
-                        updated_at = NOW(), parameters = EXCLUDED.parameters, aic = EXCLUDED.aic, bic = EXCLUDED.bic, log_likelihood = EXCLUDED.log_likelihood, serialized_model = EXCLUDED.serialized_model
+                        SET \
+                            updated_at = NOW(), \
+                        parameters = EXCLUDED.parameters, \
+                        aic = EXCLUDED.aic, \
+                        bic = EXCLUDED.bic, \
+                        log_likelihood = EXCLUDED.log_likelihood, \
+                        serialized_model = EXCLUDED.serialized_model \
                         RETURNING id; \
                     """
 
-            self.cursor.execute(query, model_data)
+            self.cursor.execute(query, data)
             record_id = self.cursor.fetchone()[0]
             self.conn.commit()
             return record_id
@@ -4928,26 +4961,38 @@ class DatabaseManager:
 
     # --------- CROSS ASSET VOLATILITY ---------
 
-    def save_cross_asset_volatility(self, cross_vol_data: Dict[str, Any], timeframe:str) -> int:
-
-
+    def save_cross_asset_volatility(
+            self,
+            base_symbol: str,
+            compared_symbol: str,
+            timeframe: str,
+            timestamp: datetime,
+            correlation: float,
+            lag: int
+    ) -> int:
         if not self.conn:
             self.connect()
 
         try:
             query = """
-                    INSERT INTO cross_asset_volatility (base_symbol, compared_symbol, timeframe, timestamp, correlation, \
-                                                        lag) \
-                    VALUES (%(base_symbol)s, %(compared_symbol)s, %(timeframe)s, %(timestamp)s, \
-                            %(correlation)s, \
+                    INSERT INTO cross_asset_volatility (base_symbol, compared_symbol, timeframe, timestamp, correlation, lag)
+                    VALUES (%(base_symbol)s, %(compared_symbol)s, %(timeframe)s, %(timestamp)s, %(correlation)s, \
                             %(lag)s) ON CONFLICT (base_symbol, compared_symbol, timeframe, timestamp, lag) DO \
                     UPDATE \
-                    SET
-                        correlation = EXCLUDED.correlation
-                        RETURNING id; \
+                        SET correlation = EXCLUDED.correlation \
+                        RETURNING id;
                     """
 
-            self.cursor.execute(query, cross_vol_data)
+            data = {
+                'base_symbol': base_symbol,
+                'compared_symbol': compared_symbol,
+                'timeframe': timeframe,
+                'timestamp': timestamp,
+                'correlation': correlation,
+                'lag': lag
+            }
+
+            self.cursor.execute(query, data)
             record_id = self.cursor.fetchone()[0]
             self.conn.commit()
             return record_id

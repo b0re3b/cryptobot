@@ -829,7 +829,7 @@ class VolatilityAnalysis:
                     save_tasks.append(('metrics', lambda: self.db_manager.save_volatility_metrics(
                         symbol=symbol,
                         timeframe=timeframe,
-                        metrics_data=volatility_data
+                        metrics=volatility_data
                     )))
 
                 # 2. Збереження моделей волатильності (GARCH тощо)
@@ -837,8 +837,8 @@ class VolatilityAnalysis:
                     save_tasks.append(('model', lambda: self.db_manager.save_volatility_model(
                         symbol=symbol,
                         timeframe=timeframe,
-                        model_name=model_data.get('name', 'garch'),
-                        model_params=model_data.get('params', {}),
+                        model_type=model_data.get('name', 'garch'),
+                        parameters=model_data.get('params', {}),
                         forecast_data=model_data.get('forecast'),
                         model_stats=model_data.get('stats', {})
                     )))
@@ -940,7 +940,7 @@ class VolatilityAnalysis:
                     cross_asset_success = self.db_manager.save_cross_asset_volatility(
                         base_symbol=symbol,
                         timeframe=timeframe,
-                        correlation_data=cross_asset_data
+                        correlation=cross_asset_data
                     )
                     results['cross_asset'] = cross_asset_success
                     success = success and cross_asset_success
