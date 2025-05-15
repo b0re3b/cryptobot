@@ -1531,13 +1531,6 @@ class DataResampler:
                     self.logger.warning(
                         f"prepare_arima_data: {na_count} значень у high_low_range_pct замінені на NaN через ділення на нуль")
 
-            # Перед обробкою volume
-            self.logger.info(f"prepare_arima_data: Перевірка наявності колонки 'volume': {'volume' in data.columns}")
-            if 'volume' in data.columns:
-                self.logger.info(f"prepare_arima_data: Перші 5 значень volume: {data['volume'].head(5).tolist()}")
-                self.logger.info(f"prepare_arima_data: Тип даних volume: {data['volume'].dtype}")
-                self.logger.info(f"prepare_arima_data: Кількість NaN у volume: {data['volume'].isna().sum()}")
-
             # У секції обробки volume
             volume_col = self.find_column(data, 'volume')
             self.logger.info(f"prepare_arima_data: Результат пошуку колонки volume: {volume_col}")
@@ -1545,35 +1538,115 @@ class DataResampler:
                 self.logger.info(
                     f"prepare_arima_data: Знайдено колонку '{volume_col}', додаємо розширені трансформації об'єму")
 
-                vol_series = data[volume_col].copy()
+                # Явне перетворення до числового типу з діагностичним виводом
+                original_vol_series = data[volume_col].copy()
+                self.logger.info(
+                    f"prepare_arima_data: Тип даних оригінальної серії volume: {original_vol_series.dtype}")
+                self.logger.info(
+                    f"prepare_arima_data: Перші 5 значень оригінальної серії volume: {original_vol_series.head(5).tolist()}")
+                self.logger.info(
+                    f"prepare_arima_data: Статистика оригінальної серії volume: min={original_vol_series.min()}, max={original_vol_series.max()}")
+
+                # Безпечне перетворення до числового типу
+                vol_series = pd.to_numeric(original_vol_series, errors='coerce')
+                self.logger.info(f"prepare_arima_data: Тип даних після перетворення: {vol_series.dtype}")
+                self.logger.info(f"prepare_arima_data: Кількість NaN після перетворення: {vol_series.isna().sum()}")
+
+                # Перевірка, чи серія має дійсні дані
+                if vol_series.isna().all():
+                    self.logger.error(f"prepare_arima_data: Всі значення volume стали NaN після перетворення!")
+                    # Спробуємо альтернативний підхід - використовувати оригінальні дані
+                    vol_series = original_vol_series
+
+                # Зберігаємо оригінальний volume (для діагностики)
+                result_df['original_volume_raw'] = original_vol_series
                 result_df['original_volume'] = vol_series
 
-                # Перевірка на нульові значення
-                if (vol_series == 0).any():
-                    zeros_count = (vol_series == 0).sum()
+                # Явно перевіряємо і логуємо вставлені значення
+                self.logger.info(
+                    f"prepare_arima_data: Перевірка result_df['original_volume']: Тип - {result_df['original_volume'].dtype}")
+                self.logger.info(
+                    f"prepare_arima_data: Кількість NaN у result_df['original_volume']: {result_df['original_volume'].isna().sum()}")
+                self.logger.info(
+                    f"prepare_arima_data: Перші 5 значень result_df['original_volume']: {result_df['original_volume'].head(5).tolist()}")
+
+                # Безпечна перевірка на нульові значення
+                has_zeros = (vol_series == 0).any()
+                self.logger.info(f"prepare_arima_data: Серія має нулі: {has_zeros}")
+
+                # Безпечно створюємо копію для подальшої обробки
+                vol_series_safe = vol_series.copy()
+
+                # Безпечно замінюємо нулі
+                if has_zeros:
+                    zeros_count = (vol_series_safe == 0).sum()
                     self.logger.warning(
                         f"prepare_arima_data: Колонка '{volume_col}' містить {zeros_count} нульових значень")
 
                     # Додаємо малу константу для уникнення log(0)
-                    vol_series = vol_series.replace(0, 0.000001)
+                    vol_series_safe = vol_series_safe.replace(0, 0.000001)
 
-                # Основні трансформації об'єму
-                result_df['volume_log'] = np.log(vol_series)
-                result_df['volume_diff'] = vol_series.diff()
-                result_df['volume_log_diff'] = result_df['volume_log'].diff()
-                result_df['volume_pct_change'] = vol_series.pct_change()
+                    # Перевірка після заміни
+                    self.logger.info(
+                        f"prepare_arima_data: Кількість нулів після заміни: {(vol_series_safe == 0).sum()}")
 
-                # Додаємо сезонну різницю для об'єму
-                result_df['volume_seasonal_diff'] = vol_series.diff(season_period)
+                # Основні трансформації об'єму з додатковою діагностикою
+                try:
+                    result_df['volume_log'] = np.log(vol_series_safe)
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_log, кількість NaN: {result_df['volume_log'].isna().sum()}")
 
-                # Додаткові трансформації для об'єму
-                # Відносна зміна об'єму (об'єм / середній об'єм за період)
-                window_size = min(20, len(vol_series) // 10) if len(vol_series) > 20 else 5
-                result_df['volume_relative'] = vol_series / vol_series.rolling(window=window_size).mean()
+                    result_df['volume_diff'] = vol_series_safe.diff()
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_diff, кількість NaN: {result_df['volume_diff'].isna().sum()}")
 
-                # Логарифм відносної зміни
-                result_df['volume_relative_log'] = np.log(result_df['volume_relative'].replace(0, 0.000001))
+                    result_df['volume_log_diff'] = result_df['volume_log'].diff()
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_log_diff, кількість NaN: {result_df['volume_log_diff'].isna().sum()}")
 
+                    result_df['volume_pct_change'] = vol_series_safe.pct_change()
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_pct_change, кількість NaN: {result_df['volume_pct_change'].isna().sum()}")
+
+                    # Додаємо сезонну різницю для об'єму
+                    result_df['volume_seasonal_diff'] = vol_series_safe.diff(season_period)
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_seasonal_diff, кількість NaN: {result_df['volume_seasonal_diff'].isna().sum()}")
+
+                    # Додаткові трансформації для об'єму
+                    # Безпечно обчислюємо window_size
+                    window_size = min(20, len(vol_series_safe) // 10) if len(vol_series_safe) > 20 else 5
+                    self.logger.info(
+                        f"prepare_arima_data: Використовуємо window_size={window_size} для обчислення volume_relative")
+
+                    # Безпечно обчислюємо середнє значення
+                    rolling_mean = vol_series_safe.rolling(window=window_size).mean()
+                    self.logger.info(
+                        f"prepare_arima_data: Обчислено rolling_mean, кількість NaN: {rolling_mean.isna().sum()}")
+
+                    # Обробляємо випадок ділення на нуль при обчисленні відносного значення
+                    result_df['volume_relative'] = pd.Series(np.nan,
+                                                             index=vol_series_safe.index)  # Ініціалізуємо пустими значеннями
+                    non_zero_mask = rolling_mean != 0
+                    self.logger.info(f"prepare_arima_data: Кількість нулів у rolling_mean: {(~non_zero_mask).sum()}")
+
+                    if non_zero_mask.any():
+                        result_df.loc[non_zero_mask, 'volume_relative'] = vol_series_safe.loc[non_zero_mask] / \
+                                                                          rolling_mean.loc[non_zero_mask]
+
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_relative, кількість NaN: {result_df['volume_relative'].isna().sum()}")
+
+                    # Безпечно обчислюємо логарифм
+                    result_df['volume_relative_log'] = np.log(
+                        result_df['volume_relative'].replace([0, np.nan], 0.000001))
+                    self.logger.info(
+                        f"prepare_arima_data: Створено volume_relative_log, кількість NaN: {result_df['volume_relative_log'].isna().sum()}")
+
+                except Exception as ex:
+                    self.logger.error(f"prepare_arima_data: Помилка при створенні трансформацій volume: {str(ex)}")
+                    import traceback
+                    self.logger.error(f"prepare_arima_data: Деталі помилки: {traceback.format_exc()}")
             # Заповнення NA у всіх нових колонках
             for col in result_df.columns:
                 if col not in ['timeframe']:
@@ -1932,16 +2005,40 @@ class DataResampler:
             # Default to weekly seasonality
             return 7
 
+    def get_adaptive_sequence_length(self, timeframe: str) -> int:
+
+        sequence_length_config = {
+            '1m': (120, 240, 60),
+            '1h': (72, 168, 24),
+            '4h': (30, 90, 60),
+            '1d': (45, 90, 30),
+            '1w': (12, 52, 26)
+        }
+
+        default_value = (30, 90, 45)
+        min_len, max_len, typical_len = sequence_length_config.get(timeframe, default_value)
+
+
+
+        self.logger.info(f"Використовуємо адаптивний розмір sequence_length для {timeframe}: {typical_len} "
+                         f"(можливий діапазон: {min_len}-{max_len})")
+
+        return typical_len
+
     def prepare_lstm_data(
             self,
             data: pd.DataFrame | dd.DataFrame,
             symbol: str,
             timeframe: str,
-            sequence_length: int = 60,
+            sequence_length: int = None,
             target_horizons: list = [1, 5, 10]
     ) -> pd.DataFrame:
         try:
             self.logger.info(f"Підготовка даних LSTM для збереження в базі даних: {symbol}, {timeframe}")
+
+            if sequence_length is None:
+                sequence_length = self.get_adaptive_sequence_length(timeframe)
+                self.logger.info(f"Використання адаптивного sequence_length: {sequence_length} для {timeframe}")
 
             # Конвертуємо Dask DataFrame в pandas, якщо необхідно
             if hasattr(data, 'compute'):
@@ -1951,10 +2048,23 @@ class DataResampler:
                 self.logger.warning("Надано порожній DataFrame")
                 return pd.DataFrame()
 
+            # Додано діагностичну інформацію про індекс
+            self.logger.info(f"Тип індексу: {type(data.index)}")
+            if len(data.index) > 0:
+                self.logger.info(f"Приклад першої дати: {data.index[0]} (тип: {type(data.index[0])})")
+                if isinstance(data.index[0], pd.Timestamp):
+                    self.logger.info(f"День тижня для першої дати: {data.index[0].day_name()}")
+
             # Переконуємось, що маємо DatetimeIndex
             if not isinstance(data.index, pd.DatetimeIndex):
                 self.logger.error("Дані повинні мати DatetimeIndex")
-                return pd.DataFrame()
+                # Спроба конвертації до DatetimeIndex
+                try:
+                    data.index = pd.DatetimeIndex(data.index)
+                    self.logger.info("Успішно конвертовано індекс до DatetimeIndex")
+                except Exception as e:
+                    self.logger.error(f"Не вдалося конвертувати індекс: {str(e)}")
+                    return pd.DataFrame()
 
             # ВАЖЛИВЕ ВИПРАВЛЕННЯ: Переконаймося, що дані відсортовані за часом
             data = data.sort_index()
@@ -2007,7 +2117,7 @@ class DataResampler:
 
             # Адаптивна стратегія для вибірки даних для скейлера залежно від таймфрейму
             scaling_samples = {
-                '1m': 25000,  # Для 1m беремо більше зразків через високу варіативність
+                '1m': 25000,
                 '5m': 20000,
                 '15m': 15000,
                 '30m': 10000,
@@ -2180,13 +2290,13 @@ class DataResampler:
                         valid_start_indices = [i for i in valid_start_indices if abs(i - idx) > min_gap]
                         attempts += 1
 
-                # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
+                # Сортуємо індекси для збереження хронологічного порядку
                 selected_indices = sorted(selected_indices)
 
                 # Генеруємо послідовності з відібраних початкових точок
                 self.logger.info(f"Фактично відібрано {len(selected_indices)} початкових точок послідовностей")
 
-                # ВИПРАВЛЕННЯ: Створюємо на основі часу початку, а не індексу послідовності
+                # Створюємо на основі часу початку, а не індексу послідовності
                 seq_counter = 0
                 for start_idx in selected_indices:
                     start_time = result_df.index[start_idx]
@@ -2233,7 +2343,7 @@ class DataResampler:
                 self.logger.info(f"Використовується розмір кроку: {step} для систематичної вибірки")
 
                 seq_counter = 0
-                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                # Створюємо на основі часу початку, а не індексу послідовності
                 for start_idx in range(offset, total_possible, step):
                     start_time = result_df.index[start_idx]
 
@@ -2269,7 +2379,7 @@ class DataResampler:
                 self.logger.info(f"Вибірка без перекриття з додатковим проміжком: {extra_gap}, загальний крок: {step}")
 
                 seq_counter = 0
-                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                # Створюємо на основі часу початку, а не індексу послідовності
                 for start_idx in range(0, valid_end_idx - sequence_length, step):
                     start_time = result_df.index[start_idx]
 
@@ -2298,46 +2408,71 @@ class DataResampler:
                         seq_counter += 1
 
             elif method == 'weekly_anchored':
-                # Виправлення: Завжди використовуємо понеділок (0) як основний день прив'язки для тижнів
-                anchor_day = 0  # 0=Понеділок ЗАВЖДИ
-                # Використовуємо додаткові дні тільки якщо вони явно налаштовані
-                additional_days = config.get('additional_days', [])
-                anchor_days = [anchor_day] + additional_days
+                # Виправлена логіка для тижневого таймфрейму
 
-                self.logger.info(
-                    f"Тижнева прив'язка до днів: {anchor_days}, понеділок завжди є основним днем прив'язки"
-                )
+                # Аналіз днів тижня в даних для діагностики
+                day_counts = {}
+                for i in range(len(result_df)):
+                    dt = result_df.index[i].to_pydatetime()
+                    day_counts[dt.weekday()] = day_counts.get(dt.weekday(), 0) + 1
+
+                self.logger.info(f"Розподіл днів тижня в даних: {day_counts}")
+
+                # Виведення перших кількох дат для аналізу
+                if len(result_df) > 0:
+                    first_dates = [result_df.index[i].strftime('%Y-%m-%d (%A)') for i in range(min(5, len(result_df)))]
+                    self.logger.info(f"Перші 5 дат: {first_dates}")
+
+                # Спеціальна обробка для тижневого таймфрейму
+                if timeframe == '1w':
+                    # Для тижневих даних - шукати будь-який день як початок послідовності
+                    # Спроба визначити, який день тижня найчастіше використовується
+                    most_common_day = max(day_counts.items(), key=lambda x: x[1])[0] if day_counts else 0
+                    self.logger.info(
+                        f"Найбільш поширений день тижня в даних: {most_common_day} ({['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][most_common_day]})")
+
+                    # Використовуємо найбільш поширений день як основний, або всі дні, якщо дані рідкісні
+                    if max(day_counts.values() if day_counts else [0]) > 5:
+                        # Є достатньо даних для одного дня
+                        anchor_days = [most_common_day]
+                        self.logger.info(
+                            f"Використовуємо {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][most_common_day]} як день прив'язки для тижневих даних")
+                    else:
+                        # Даних мало, використовуємо всі дні
+                        anchor_days = list(range(7))
+                        self.logger.info("Недостатньо даних для одного дня тижня, використовуємо всі дні")
+                else:
+                    # Для інших таймфреймів використовуємо налаштування з конфігурації
+                    anchor_day = config.get('anchor_day', 0)  # 0=Понеділок за замовчуванням
+                    additional_days = config.get('additional_days', [])
+                    anchor_days = [anchor_day] + additional_days
+
+                    self.logger.info(f"Тижнева прив'язка до днів: {anchor_days}")
 
                 # Знаходимо всі дати, що відповідають дням прив'язки
                 anchor_dates = []
 
-                # Спочатку знаходимо всі понеділки для забезпечення правильної прив'язки тижня
-                monday_indices = []
-
                 for i in range(len(result_df)):
                     dt = result_df.index[i].to_pydatetime()
-                    if dt.weekday() == 0 and i + sequence_length <= valid_end_idx:  # 0 = Понеділок
-                        monday_indices.append(i)
+                    if dt.weekday() in anchor_days and i + sequence_length <= valid_end_idx:
+                        anchor_dates.append(i)
 
-                self.logger.info(f"Знайдено {len(monday_indices)} понеділків для тижневої прив'язки")
+                self.logger.info(f"Знайдено {len(anchor_dates)} дат прив'язки для тижневої прив'язки")
 
-                # Спочатку додаємо всі індекси понеділків до anchor_dates
-                anchor_dates.extend(monday_indices)
+                # Якщо все ще немає дат прив'язки, використовуємо альтернативний підхід
+                if not anchor_dates and timeframe == '1w':
+                    self.logger.warning(
+                        "Не знайдено відповідних дат прив'язки, використовуємо метод без перекриття")
+                    # Використовуємо метод без перекриття як резервний
+                    step = sequence_length + 2  # Невеликий проміжок
+                    for start_idx in range(0, valid_end_idx - sequence_length, step):
+                        if start_idx + sequence_length <= valid_end_idx:
+                            anchor_dates.append(start_idx)
 
-                # Потім додаємо інші додаткові дні, якщо вказано
-                if additional_days:
-                    for day in additional_days:
-                        for i in range(len(result_df)):
-                            dt = result_df.index[i].to_pydatetime()
-                            if dt.weekday() == day and i + sequence_length <= valid_end_idx:
-                                anchor_dates.append(i)
-
-                # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
+                # Сортуємо індекси для збереження хронологічного порядку
                 anchor_dates = sorted(anchor_dates)
 
-                self.logger.info(f"Знайдено загалом {len(anchor_dates)} дат прив'язки для тижневої прив'язки")
-
-                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                # Створюємо на основі часу початку, а не індексу послідовності
                 seq_counter = 0
                 for start_idx in anchor_dates:
                     # Перевіряємо, чи можемо створити повну послідовність
@@ -2346,14 +2481,6 @@ class DataResampler:
                         continue
 
                     start_time = result_df.index[start_idx]
-                    dt = start_time.to_pydatetime()
-
-                    # Додаткова перевірка - переконуємося, що починаємо з правильного дня тижня для основної прив'язки
-                    expected_weekday = anchor_days[0]
-
-                    # Пропускаємо цю послідовність, якщо вона не починається в понеділок (тільки для послідовностей основного дня прив'язки)
-                    if dt.weekday() != expected_weekday and dt.weekday() not in additional_days:
-                        continue
 
                     # Зберігаємо часову мітку початку для перевірки
                     sequence_start_times[seq_counter] = start_time
@@ -2446,10 +2573,10 @@ class DataResampler:
                             additional_indices = other_indices[::step][:remaining_needed]
                             selected_indices.extend(additional_indices)
 
-                    # ВАЖЛИВЕ ВИПРАВЛЕННЯ - Сортуємо індекси для збереження хронологічного порядку
+                    # ВСортуємо індекси для збереження хронологічного порядку
                     selected_indices = sorted(selected_indices)
 
-                    # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                    # Створюємо на основі часу початку, а не індексу послідовності
                     for start_idx in selected_indices:
                         # Перевіряємо, чи можемо створити повну послідовність
                         if start_idx + sequence_length > len(result_df) or start_idx + sequence_length + max(
@@ -2491,7 +2618,7 @@ class DataResampler:
                 self.logger.info(f"Вибірка за замовчуванням з адаптивним кроком: {step}")
 
                 seq_counter = 0
-                # ВИПРАВЛЕННЯ - Створюємо на основі часу початку, а не індексу послідовності
+                # Створюємо на основі часу початку, а не індексу послідовності
                 for start_idx in range(0, valid_end_idx - sequence_length, step):
                     start_time = result_df.index[start_idx]
 

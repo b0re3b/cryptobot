@@ -2764,14 +2764,19 @@ class DatabaseManager:
                 significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
 
                 query = """
-                        INSERT INTO btc_arima_data (timeframe, open_time, original_close, \
-                                                    close_diff, close_diff2, close_log, close_log_diff, \
-                                                    close_pct_change, \
-                                                    close_seasonal_diff, close_combo_diff, \
+                        INSERT INTO btc_arima_data (timeframe, open_time, \
+                                                    original_close, close_diff, close_diff2, close_log, close_log_diff, \
+                                                    close_pct_change, close_seasonal_diff, close_combo_diff, \
                                                     adf_pvalue, kpss_pvalue, is_stationary, significant_lags, \
-                                                    residual_variance, aic_score, bic_score)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
-                                %s) ON CONFLICT (timeframe, open_time) DO \
+                                                    residual_variance, aic_score, bic_score, \
+                                                    original_volume, volume_diff, volume_log, volume_pct_change, \
+                                                    volume_seasonal_diff)
+                        VALUES (%s, %s,
+                                %s, %s, %s, %s, %s,
+                                %s, %s, %s,
+                                %s, %s, %s, %s,
+                                %s, %s, %s,
+                                %s, %s, %s, %s, %s) ON CONFLICT (timeframe, open_time) DO \
                         UPDATE SET
                             original_close = EXCLUDED.original_close, \
                             close_diff = EXCLUDED.close_diff, \
@@ -2788,8 +2793,13 @@ class DatabaseManager:
                             residual_variance = EXCLUDED.residual_variance, \
                             aic_score = EXCLUDED.aic_score, \
                             bic_score = EXCLUDED.bic_score, \
+                            original_volume = EXCLUDED.original_volume, \
+                            volume_diff = EXCLUDED.volume_diff, \
+                            volume_log = EXCLUDED.volume_log, \
+                            volume_pct_change = EXCLUDED.volume_pct_change, \
+                            volume_seasonal_diff = EXCLUDED.volume_seasonal_diff, \
                             updated_at = CURRENT_TIMESTAMP \
-                            RETURNING id \
+                            RETURNING id
                         """
 
                 self.cursor.execute(query, (
@@ -2809,7 +2819,12 @@ class DatabaseManager:
                     significant_lags_json,
                     data.get('residual_variance'),
                     data.get('aic_score'),
-                    data.get('bic_score')
+                    data.get('bic_score'),
+                    data.get('original_volume'),
+                    data.get('volume_diff'),
+                    data.get('volume_log'),
+                    data.get('volume_pct_change'),
+                    data.get('volume_seasonal_diff')
                 ))
 
                 result = self.cursor.fetchone()
@@ -2939,14 +2954,19 @@ class DatabaseManager:
                 significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
 
                 query = """
-                        INSERT INTO eth_arima_data (timeframe, open_time, original_close, \
-                                                    close_diff, close_diff2, close_log, close_log_diff, \
-                                                    close_pct_change, \
-                                                    close_seasonal_diff, close_combo_diff, \
+                        INSERT INTO eth_arima_data (timeframe, open_time, \
+                                                    original_close, close_diff, close_diff2, close_log, close_log_diff, \
+                                                    close_pct_change, close_seasonal_diff, close_combo_diff, \
                                                     adf_pvalue, kpss_pvalue, is_stationary, significant_lags, \
-                                                    residual_variance, aic_score, bic_score)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
-                                %s) ON CONFLICT (timeframe, open_time) DO \
+                                                    residual_variance, aic_score, bic_score, \
+                                                    original_volume, volume_diff, volume_log, volume_pct_change, \
+                                                    volume_seasonal_diff)
+                        VALUES (%s, %s,
+                                %s, %s, %s, %s, %s,
+                                %s, %s, %s,
+                                %s, %s, %s, %s,
+                                %s, %s, %s,
+                                %s, %s, %s, %s, %s) ON CONFLICT (timeframe, open_time) DO \
                         UPDATE SET
                             original_close = EXCLUDED.original_close, \
                             close_diff = EXCLUDED.close_diff, \
@@ -2963,8 +2983,13 @@ class DatabaseManager:
                             residual_variance = EXCLUDED.residual_variance, \
                             aic_score = EXCLUDED.aic_score, \
                             bic_score = EXCLUDED.bic_score, \
+                            original_volume = EXCLUDED.original_volume, \
+                            volume_diff = EXCLUDED.volume_diff, \
+                            volume_log = EXCLUDED.volume_log, \
+                            volume_pct_change = EXCLUDED.volume_pct_change, \
+                            volume_seasonal_diff = EXCLUDED.volume_seasonal_diff, \
                             updated_at = CURRENT_TIMESTAMP \
-                            RETURNING id \
+                            RETURNING id
                         """
 
                 self.cursor.execute(query, (
@@ -2984,7 +3009,12 @@ class DatabaseManager:
                     significant_lags_json,
                     data.get('residual_variance'),
                     data.get('aic_score'),
-                    data.get('bic_score')
+                    data.get('bic_score'),
+                    data.get('original_volume'),
+                    data.get('volume_diff'),
+                    data.get('volume_log'),
+                    data.get('volume_pct_change'),
+                    data.get('volume_seasonal_diff')
                 ))
 
                 result = self.cursor.fetchone()
@@ -3112,14 +3142,19 @@ class DatabaseManager:
                 significant_lags_json = json.dumps(significant_lags) if significant_lags is not None else None
 
                 query = """
-                        INSERT INTO sol_arima_data (timeframe, open_time, original_close, \
-                                                    close_diff, close_diff2, close_log, close_log_diff, \
-                                                    close_pct_change, \
-                                                    close_seasonal_diff, close_combo_diff, \
+                        INSERT INTO sol_arima_data (timeframe, open_time, \
+                                                    original_close, close_diff, close_diff2, close_log, close_log_diff, \
+                                                    close_pct_change, close_seasonal_diff, close_combo_diff, \
                                                     adf_pvalue, kpss_pvalue, is_stationary, significant_lags, \
-                                                    residual_variance, aic_score, bic_score)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, \
-                                %s) ON CONFLICT (timeframe, open_time) DO \
+                                                    residual_variance, aic_score, bic_score, \
+                                                    original_volume, volume_diff, volume_log, volume_pct_change, \
+                                                    volume_seasonal_diff)
+                        VALUES (%s, %s,
+                                %s, %s, %s, %s, %s,
+                                %s, %s, %s,
+                                %s, %s, %s, %s,
+                                %s, %s, %s,
+                                %s, %s, %s, %s, %s) ON CONFLICT (timeframe, open_time) DO \
                         UPDATE SET
                             original_close = EXCLUDED.original_close, \
                             close_diff = EXCLUDED.close_diff, \
@@ -3136,8 +3171,13 @@ class DatabaseManager:
                             residual_variance = EXCLUDED.residual_variance, \
                             aic_score = EXCLUDED.aic_score, \
                             bic_score = EXCLUDED.bic_score, \
+                            original_volume = EXCLUDED.original_volume, \
+                            volume_diff = EXCLUDED.volume_diff, \
+                            volume_log = EXCLUDED.volume_log, \
+                            volume_pct_change = EXCLUDED.volume_pct_change, \
+                            volume_seasonal_diff = EXCLUDED.volume_seasonal_diff, \
                             updated_at = CURRENT_TIMESTAMP \
-                            RETURNING id \
+                            RETURNING id
                         """
 
                 self.cursor.execute(query, (
@@ -3157,7 +3197,12 @@ class DatabaseManager:
                     significant_lags_json,
                     data.get('residual_variance'),
                     data.get('aic_score'),
-                    data.get('bic_score')
+                    data.get('bic_score'),
+                    data.get('original_volume'),
+                    data.get('volume_diff'),
+                    data.get('volume_log'),
+                    data.get('volume_pct_change'),
+                    data.get('volume_seasonal_diff')
                 ))
 
                 result = self.cursor.fetchone()

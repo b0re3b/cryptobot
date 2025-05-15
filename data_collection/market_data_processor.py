@@ -606,9 +606,9 @@ class MarketDataProcessor:
 
         return self.data_resampler.prepare_arima_data(data, symbol=symbol, **kwargs)
 
-    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str, **kwargs) -> DataFrame:
+    def prepare_lstm_data(self, data: pd.DataFrame, symbol: str, timeframe: str, sequence_length: None, **kwargs) -> DataFrame:
 
-        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, timeframe=timeframe, **kwargs)
+        return self.data_resampler.prepare_lstm_data(data, symbol=symbol, timeframe=timeframe, sequence_length = sequence_length, **kwargs)
 
 
     def load_data(self, data_source: str, symbol: str, timeframe: str, data_type: str = 'candles',
@@ -823,7 +823,7 @@ class MarketDataProcessor:
     def process_market_data(self, symbol: str, timeframe: str, start_date: Optional[str] = None,
                             end_date: Optional[str] = None, save_results: bool = True,
                             auto_detect: bool = True,
-                            check_interval_compatibility: bool = True) -> DataFrame | dict[Any, Any]:
+                            check_interval_compatibility: bool = True, sequence_length=None) -> DataFrame | dict[Any, Any]:
 
         self.logger.info(f"Початок комплексної обробки даних для {symbol} ({timeframe})")
         results = {}
@@ -987,6 +987,13 @@ class MarketDataProcessor:
                             record['open_time'] = record.get('open_time', record.get('timestamp', record.get('index',
                                                                                                              pd.Timestamp.now())))
                             record['original_close'] = record.get('original_close', record.get('close', None))
+                            record['original_volume'] = record.get('original_volume', record.get('volume', None))
+
+                            # Додайте перевірку та логування
+                            if record.get('original_volume') is not None:
+                                self.logger.info(f"Record has volume: {record['original_volume']}")
+                            else:
+                                self.logger.warning(f"Record missing volume data")
 
                         # Виклик уніфікованого методу
                         arima_ids = self.save_arima_data(symbol, arima_data_points)
@@ -1004,7 +1011,7 @@ class MarketDataProcessor:
             # LSTM
             try:
                 self.logger.info(f"Підготовка даних для LSTM моделі")
-                lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe)
+                lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe, sequence_length = sequence_length)
 
 
                 if lstm_df is not None and not lstm_df.empty:
@@ -1189,7 +1196,7 @@ def main():
     SYMBOLS = ['ETH', 'BTC', 'SOL']
 
     # Всі таймфрейми
-    ALL_TIMEFRAMES = ['1h', '4h', '1d', '1w']
+    ALL_TIMEFRAMES = ['1m','1h', '4h', '1d', '1w']
 
     # Базові таймфрейми, які вже існують в базі даних
     BASE_TIMEFRAMES = ['1h', '1d']
