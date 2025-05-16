@@ -9,9 +9,9 @@ import concurrent.futures
 from functools import lru_cache
 from data.db import DatabaseManager
 from DMP.DataCleaner import DataCleaner
-from models.time_series import TimeSeriesModels
+from timeseriesmodels.time_series import TimeSeriesModels
 from DMP.AnomalyDetector import AnomalyDetector
-from data_collection.feature_engineering import FeatureEngineering
+from featureengineering.feature_engineering import FeatureEngineering
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

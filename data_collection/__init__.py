@@ -4,7 +4,7 @@
 
 # Імпорт класів з відповідних модулів
 from .binance_client import BinanceClient
-from .feature_engineering import FeatureEngineering
+from featureengineering.feature_engineering import FeatureEngineering
 from .crypto_news_scraper import CryptoNewsScraper
 from .NewsCollector import NewsCollector
 # Версія пакету
