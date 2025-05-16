@@ -782,8 +782,6 @@ class TrendDetection:
 
     def calculate_fibonacci_levels(self, data: pd.DataFrame, trend_type: str) -> Dict[str, float]:
 
-        import pandas_ta as ta
-
         if data.empty or len(data) < 2:
             return {}
 
@@ -1107,58 +1105,58 @@ class TrendDetection:
         if 'close' not in data.columns:
             raise ValueError("DataFrame повинен містити стовпець 'close'")
 
-        # Визначаємо поточний тренд
-        current_trend = self.detect_trend(data)
-
-        # Ініціалізуємо змінні
-        trend_start_index = 0
-        trend_periods = 0
-        current_streak = 0
-        longest_streak = 0
-
-        # Використовуємо простий метод ковзної середньої для визначення тренду
-        data['sma20'] = data['close'].rolling(window=20, min_periods=1).mean()
-        data['sma50'] = data['close'].rolling(window=50, min_periods=1).mean()
+        # Використовуємо pandas-ta для розрахунку ковзних середніх
+        data = data.copy()  # Працюємо з копією, щоб не змінювати оригінальний датафрейм
+        data['sma20'] = ta.sma(data['close'], length=20)
+        data['sma50'] = ta.sma(data['close'], length=50)
 
         # Визначаємо напрямок за ковзними середніми
         data['trend_direction'] = np.where(data['sma20'] > data['sma50'], 'uptrend',
                                            np.where(data['sma20'] < data['sma50'], 'downtrend', 'sideways'))
 
+        # Визначаємо поточний тренд (останній запис)
+        current_trend = data['trend_direction'].iloc[-1]
+
         # Знаходимо початок поточного тренду
-        for i in range(len(data) - 1, 0, -1):
-            if data['trend_direction'].iloc[i] != data['trend_direction'].iloc[i - 1]:
-                trend_start_index = i
-                break
+        trend_changes = data['trend_direction'] != data['trend_direction'].shift(1)
+        trend_change_indices = trend_changes[trend_changes].index
+
+        if len(trend_change_indices) > 0:
+            # Знаходимо останню зміну тренду
+            last_change_index = data.index.get_loc(trend_change_indices[-1])
+            trend_start_index = last_change_index
+        else:
+            # Якщо змін тренду не було, початок - перший елемент датафрейму
+            trend_start_index = 0
 
         # Рахуємо тривалість поточного тренду
         trend_periods = len(data) - trend_start_index
 
-        # Рахуємо найдовшу тривалість тренду того ж напрямку в історичних даних
-        temp_streak = 1
-        for i in range(1, len(data)):
-            if data['trend_direction'].iloc[i] == data['trend_direction'].iloc[i - 1]:
-                temp_streak += 1
-            else:
-                if temp_streak > longest_streak:
-                    longest_streak = temp_streak
-                temp_streak = 1
+        # Створюємо допоміжний стовпець для групування періодів тренду
+        data['trend_group'] = (data['trend_direction'] != data['trend_direction'].shift(1)).cumsum()
 
-        if temp_streak > longest_streak:
-            longest_streak = temp_streak
+        # Групуємо за трендом і рахуємо тривалість кожного тренду
+        trend_durations = data.groupby('trend_group').size()
+
+        # Знаходимо максимальну тривалість тренду
+        longest_streak = trend_durations.max() if not trend_durations.empty else 1
 
         # Рахуємо середню тривалість тренду
-        trend_changes = (data['trend_direction'] != data['trend_direction'].shift(1)).sum()
-        avg_trend_duration = len(data) // (trend_changes + 1)
+        avg_trend_duration = trend_durations.mean() if not trend_durations.empty else len(data)
+
+        # Отримуємо дату початку поточного тренду
+        if hasattr(data.index, 'strftime'):
+            trend_start_date = data.index[trend_start_index].strftime('%Y-%m-%d')
+        else:
+            trend_start_date = str(trend_start_index)
 
         # Формуємо результат
         result = {
             'current_trend': current_trend,
             'current_trend_duration': trend_periods,
-            'longest_trend_duration': longest_streak,
-            'average_trend_duration': avg_trend_duration,
-            'trend_start_date': data.index[trend_start_index].strftime('%Y-%m-%d') if hasattr(data.index,
-                                                                                              'strftime') else str(
-                trend_start_index),
+            'longest_trend_duration': int(longest_streak),
+            'average_trend_duration': int(avg_trend_duration),
+            'trend_start_date': trend_start_date,
             'total_periods_analyzed': len(data)
         }
 
