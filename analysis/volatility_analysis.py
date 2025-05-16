@@ -840,7 +840,6 @@ class VolatilityAnalysis:
                         model_type=model_data.get('name', 'garch'),
                         parameters=model_data.get('params', {}),
                         forecast_data=model_data.get('forecast'),
-                        model_stats=model_data.get('stats', {})
                     )))
 
                 # 3. Збереження даних режиму
@@ -848,9 +847,9 @@ class VolatilityAnalysis:
                     save_tasks.append(('regime', lambda: self.db_manager.save_volatility_regime(
                         symbol=symbol,
                         timeframe=timeframe,
-                        regime_data=regime_data.get('regimes'),
-                        regime_method=regime_data.get('method', 'kmeans'),
-                        regime_params=regime_data.get('params', {})
+                        regime_labels=regime_data.get('regimes'),
+                        method=regime_data.get('method', 'kmeans'),
+                        regime_parameters=regime_data.get('params', {})
                     )))
 
                 # 4. Збереження ML функцій
@@ -858,15 +857,15 @@ class VolatilityAnalysis:
                     save_tasks.append(('features', lambda: self.db_manager.save_volatility_features(
                         symbol=symbol,
                         timeframe=timeframe,
-                        features_data=features_data
+                        features=features_data
                     )))
 
                 # 5. Збереження даних крос-активної волатильності
                 if cross_asset_data is not None and not cross_asset_data.empty:
                     save_tasks.append(('cross_asset', lambda: self.db_manager.save_cross_asset_volatility(
-                        base_symbol=symbol,
+                        symbol=symbol,
                         timeframe=timeframe,
-                        correlation_data=cross_asset_data
+                        correlation=cross_asset_data
                     )))
 
                 # Паралельне виконання завдань збереження
@@ -891,7 +890,7 @@ class VolatilityAnalysis:
                     metrics_success = self.db_manager.save_volatility_metrics(
                         symbol=symbol,
                         timeframe=timeframe,
-                        metrics_data=volatility_data
+                        metrics=volatility_data
                     )
                     results['metrics'] = metrics_success
                     success = success and metrics_success
@@ -902,8 +901,8 @@ class VolatilityAnalysis:
                     model_success = self.db_manager.save_volatility_model(
                         symbol=symbol,
                         timeframe=timeframe,
-                        model_name=model_data.get('name', 'garch'),
-                        model_params=model_data.get('params', {}),
+                        model_type=model_data.get('name', 'garch'),
+                        parameters=model_data.get('params', {}),
                         forecast_data=model_data.get('forecast'),
                         model_stats=model_data.get('stats', {})
                     )
@@ -916,9 +915,9 @@ class VolatilityAnalysis:
                     regime_success = self.db_manager.save_volatility_regime(
                         symbol=symbol,
                         timeframe=timeframe,
-                        regime_data=regime_data.get('regimes'),
-                        regime_method=regime_data.get('method', 'kmeans'),
-                        regime_params=regime_data.get('params', {})
+                        n_regimes=regime_data.get('regimes'),
+                        method=regime_data.get('method', 'kmeans'),
+                        regime_parameters=regime_data.get('params', {})
                     )
                     results['regime'] = regime_success
                     success = success and regime_success
@@ -929,7 +928,7 @@ class VolatilityAnalysis:
                     features_success = self.db_manager.save_volatility_features(
                         symbol=symbol,
                         timeframe=timeframe,
-                        features_data=features_data
+                        features=features_data
                     )
                     results['features'] = features_success
                     success = success and features_success
@@ -938,7 +937,7 @@ class VolatilityAnalysis:
                 # 5. Збереження даних крос-активної волатильності
                 if cross_asset_data is not None and not cross_asset_data.empty:
                     cross_asset_success = self.db_manager.save_cross_asset_volatility(
-                        base_symbol=symbol,
+                        symbol=symbol,
                         timeframe=timeframe,
                         correlation=cross_asset_data
                     )
@@ -966,7 +965,7 @@ class VolatilityAnalysis:
                         symbol=symbol, timeframe=timeframe, start_date=start_date, end_date=end_date
                     )),
                     ('model_data', lambda: self.db_manager.get_volatility_model(
-                        symbol=symbol, timeframe=timeframe, model_name='garch'
+                        symbol=symbol, timeframe=timeframe, model_type='garch'
                     )),
                     ('regime_data', lambda: self.db_manager.get_volatility_regime(
                         symbol=symbol, timeframe=timeframe, start_date=start_date, end_date=end_date
@@ -998,7 +997,7 @@ class VolatilityAnalysis:
 
                 # 2. Завантаження даних моделі волатильності (за замовчуванням GARCH)
                 results['model_data'] = self.db_manager.get_volatility_model(
-                    symbol=symbol, timeframe=timeframe, model_name='garch'
+                    symbol=symbol, timeframe=timeframe, model_type='garch'
                 )
 
                 # 3. Завантаження даних режиму
@@ -1325,3 +1324,40 @@ class VolatilityAnalysis:
 
         except Exception as e:
             logger.error(f"Error generating volatility report: {e}")
+
+
+def main():
+    # Параметри для тесту
+    symbol = 'BTCUSDT'
+    timeframe = '1d'
+
+    print(f"=== Стартує аналіз волатильності для {symbol} на таймфреймі {timeframe} ===")
+
+    # Ініціалізація аналізатора волатильності
+    va = VolatilityAnalysis(use_parallel=True, max_workers=4)
+
+    # Запуск повного аналізу
+    result = va.run_full_volatility_analysis(symbol, timeframe, save_to_db=False)
+
+    # Перевірка, чи є результати
+    if result.get('error'):
+        print(f"[ERROR] Аналіз завершився з помилкою: {result['error']}")
+        return
+
+    print("\n=== Підсумки аналізу ===")
+    print(f"Поточна волатильність (hist_vol_14d): {result['latest_volatility'].get('hist_vol_14d')}")
+    print(f"Поточний режим: {result['current_regime']}")
+    print(f"Кількість проривів за 30 днів: {result['recent_breakouts']}")
+    print(f"Sharpe ratio: {result['risk_metrics'].get('sharpe_ratio')}")
+    print(f"Режими волатильності: {set(result['volatility_data']['regime'].dropna())}")
+
+    if 'summary' in result:
+        print("\n=== Статистика ===")
+        for key, value in result['summary'].items():
+            print(f"{key}: {value}")
+
+    print("\n=== Аналіз завершено успішно ===")
+
+
+if __name__ == "__main__":
+    main()

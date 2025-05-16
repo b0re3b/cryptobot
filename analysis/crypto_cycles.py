@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
 from data.db import DatabaseManager
-
+from utils.config import *
 class CryptoCycles:
 
 
@@ -12,41 +12,11 @@ class CryptoCycles:
         self.db_connection = DatabaseManager()
 
         # Bitcoin halving dates
-        self.btc_halving_dates = [
-            "2012-11-28",  # First halving
-            "2016-07-09",  # Second halving
-            "2020-05-11",  # Third halving
-            "2024-04-20",  # Estimated fourth halving
-        ]
-
+        self.btc_halving_dates = btc_halving_dates
         # Ethereum significant network upgrades/events
-        self.eth_significant_events = [
-            {"date": "2015-07-30", "name": "Frontier", "description": "Initial launch"},
-            {"date": "2016-03-14", "name": "Homestead", "description": "First planned upgrade"},
-            {"date": "2016-07-20", "name": "DAO Fork", "description": "Hard fork after DAO hack"},
-            {"date": "2017-10-16", "name": "Byzantium", "description": "First part of Metropolis upgrade"},
-            {"date": "2019-02-28", "name": "Constantinople", "description": "Second part of Metropolis upgrade"},
-            {"date": "2019-12-08", "name": "Istanbul", "description": "Final hard fork before ETH 2.0"},
-            {"date": "2020-12-01", "name": "Beacon Chain", "description": "Launch of ETH 2.0 Phase 0"},
-            {"date": "2021-08-05", "name": "London", "description": "EIP-1559 implementation"},
-            {"date": "2022-09-15", "name": "The Merge", "description": "Transition to Proof of Stake"},
-            {"date": "2023-04-12", "name": "Shanghai", "description": "Enabled staking withdrawals"},
-            {"date": "2023-03-16", "name": "Capella", "description": "Enabled validator withdrawals"},
-            {"date": "2024-03-13", "name": "Dencun", "description": "Proto-danksharding with blobs"}
-        ]
-
+        self.eth_significant_events = eth_significant_events
         # Solana significant events
-        self.sol_significant_events = [
-            {"date": "2020-03-16", "name": "Mainnet Beta", "description": "Initial launch of Solana mainnet beta"},
-            {"date": "2021-05-26", "name": "Wormhole", "description": "Cross-chain bridge to Ethereum launched"},
-            {"date": "2021-09-14", "name": "Network Outage", "description": "Major network outage lasting 17 hours"},
-            {"date": "2022-02-02", "name": "Wormhole Hack", "description": "$320M Wormhole hack"},
-            {"date": "2022-06-01", "name": "Network Outage", "description": "4-hour network outage"},
-            {"date": "2023-02-25", "name": "Network Outage", "description": "20-hour outage due to validator issues"},
-            {"date": "2023-06-23", "name": "Network Update", "description": "QUIC implementation to prevent spam"},
-            {"date": "2024-02-06", "name": "Firedancer", "description": "Introduction of alternate client"}
-        ]
-
+        self.sol_significant_events = sol_significant_events
         # Dictionary to map symbol to its significant events
         self.symbol_events_map = {
             "BTC": self.btc_halving_dates,

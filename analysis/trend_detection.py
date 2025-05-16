@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Optional
 import logging
-import ta
+
+from scipy.stats import stats
+
 from data.db import DatabaseManager
+import pandas_ta as ta
 
 
 class TrendDetection:
@@ -48,48 +51,95 @@ class TrendDetection:
                 self.logger.error("DataFrame must contain 'close' column for trend detection")
                 raise ValueError("DataFrame must contain 'close' column")
 
-            # Використовуємо тільки останні window_size точок для визначення поточного тренду
-            recent_data = data.tail(window_size)
+            df = data.copy()
 
-            # Обчислення простого лінійного тренду
-            x = np.arange(len(recent_data))
-            y = recent_data['close'].values
+            # Використовуємо кілька методів для визначення тренду
 
-            # Обчислення коефіцієнтів лінійної регресії (поліном 1-го ступеня)
-            slope, intercept = np.polyfit(x, y, 1)
+            # 1. Додаємо ADX (Average Directional Index) для визначення сили тренду
+            adx = ta.adx(df['high'], df['low'], df['close'], length=window_size)
+            df['adx'] = adx['ADX_' + str(window_size)]
+            df['plus_di'] = adx['DMP_' + str(window_size)]  # +DI
+            df['minus_di'] = adx['DMN_' + str(window_size)]  # -DI
 
-            # Обчислення відносної зміни для визначення значущості тренду
-            # (нахил відносно до середньої ціни)
-            mean_price = np.mean(y)
-            relative_slope = slope / mean_price
+            # 2. Додаємо SMA (Simple Moving Average) для двох періодів
+            df['sma_short'] = ta.sma(df['close'], length=window_size // 2)
+            df['sma_long'] = ta.sma(df['close'], length=window_size)
 
-            # Обчислення R-квадрат для оцінки сили тренду
-            y_pred = slope * x + intercept
-            ss_tot = np.sum((y - mean_price) ** 2)
-            ss_res = np.sum((y - y_pred) ** 2)
-            r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
+            # 3. Додаємо MACD (Moving Average Convergence Divergence)
+            macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+            df['macd'] = macd['MACD_12_26_9']
+            df['macd_signal'] = macd['MACDs_12_26_9']
+            df['macd_hist'] = macd['MACDh_12_26_9']
 
-            # Обчислення стандартного відхилення цін відносно тренду
-            std_dev = np.std(y - y_pred) / mean_price
+            # 4. Додаємо RSI (Relative Strength Index)
+            df['rsi'] = ta.rsi(df['close'], length=window_size)
 
-            # Логуємо деталі обчислень для діагностики
-            self.logger.debug(f"Slope: {slope}, Relative Slope: {relative_slope}, R²: {r_squared}, Std Dev: {std_dev}")
+            # Беремо останні дані для аналізу
+            recent = df.dropna().tail(3)  # Використовуємо останні 3 свічки з повними індикаторами
 
-            # Визначення типу тренду на основі нахилу та статистичної значущості
-            # Значення порогів можна винести в конфігурацію
-            slope_threshold = self.config.get('slope_threshold', 0.0005)
-            r_squared_threshold = self.config.get('r_squared_threshold', 0.5)
-            volatility_threshold = self.config.get('volatility_threshold', 0.02)
+            if len(recent) < 3:
+                self.logger.warning("Not enough data points for reliable trend detection")
+                return "unknown"
 
-            # Перевірка на боковий тренд (висока волатильність або низька значущість тренду)
-            if abs(relative_slope) < slope_threshold or r_squared < r_squared_threshold or std_dev > volatility_threshold:
-                return "sideways"
-            # Якщо нахил значущий та позитивний - висхідний тренд
-            elif relative_slope > 0:
-                return "uptrend"
-            # Якщо нахил значущий та негативний - низхідний тренд
+            # Визначення тренду на основі комбінації індикаторів
+            trend_signals = []
+
+            # Перевірка ADX (сила тренду)
+            last_adx = recent['adx'].iloc[-1]
+            last_plus_di = recent['plus_di'].iloc[-1]
+            last_minus_di = recent['minus_di'].iloc[-1]
+
+            adx_threshold = self.config.get('adx_threshold', 25)
+
+            # ADX > 25 зазвичай вказує на наявність тренду
+            if last_adx > adx_threshold:
+                if last_plus_di > last_minus_di:
+                    trend_signals.append("uptrend")
+                else:
+                    trend_signals.append("downtrend")
             else:
+                trend_signals.append("sideways")
+
+            # Перевірка SMA (ковзні середні)
+            if recent['close'].iloc[-1] > recent['sma_short'].iloc[-1] > recent['sma_long'].iloc[-1]:
+                trend_signals.append("uptrend")
+            elif recent['close'].iloc[-1] < recent['sma_short'].iloc[-1] < recent['sma_long'].iloc[-1]:
+                trend_signals.append("downtrend")
+            else:
+                trend_signals.append("sideways")
+
+            # Перевірка MACD
+            if recent['macd'].iloc[-1] > recent['macd_signal'].iloc[-1] and recent['macd_hist'].iloc[-1] > 0:
+                trend_signals.append("uptrend")
+            elif recent['macd'].iloc[-1] < recent['macd_signal'].iloc[-1] and recent['macd_hist'].iloc[-1] < 0:
+                trend_signals.append("downtrend")
+            else:
+                trend_signals.append("sideways")
+
+            # Перевірка RSI
+            last_rsi = recent['rsi'].iloc[-1]
+            if last_rsi > 60:  # Тенденція до перекупленості, але все ще в бичачому тренді
+                trend_signals.append("uptrend")
+            elif last_rsi < 40:  # Тенденція до перепроданості, але все ще в ведмежому тренді
+                trend_signals.append("downtrend")
+            else:  # RSI в нейтральній зоні
+                trend_signals.append("sideways")
+
+            # Логуємо сигнали для діагностики
+            self.logger.debug(
+                f"Trend signals: {trend_signals}, ADX: {last_adx}, +DI: {last_plus_di}, -DI: {last_minus_di}, RSI: {last_rsi}")
+
+            # Визначаємо остаточний тренд на основі більшості сигналів
+            uptrend_count = trend_signals.count("uptrend")
+            downtrend_count = trend_signals.count("downtrend")
+            sideways_count = trend_signals.count("sideways")
+
+            if uptrend_count > downtrend_count and uptrend_count > sideways_count:
+                return "uptrend"
+            elif downtrend_count > uptrend_count and downtrend_count > sideways_count:
                 return "downtrend"
+            else:
+                return "sideways"
 
         except Exception as e:
             self.logger.error(f"Error in trend detection: {str(e)}")
@@ -100,77 +150,30 @@ class TrendDetection:
         try:
             # Перевірка наявності необхідних стовпців
             required_columns = ['high', 'low', 'close']
-            if not all(col in data.columns for col in required_columns):
-                self.logger.error(f"DataFrame must contain columns: {required_columns}")
-                raise ValueError(f"DataFrame must contain columns: {required_columns}")
+            for col in required_columns:
+                if col not in data.columns:
+                    self.logger.error(f"DataFrame must contain '{col}' column for ADX calculation")
+                    raise ValueError(f"DataFrame must contain '{col}' column")
 
-            # Створимо копію даних, щоб не змінювати вхідний DataFrame
-            result = data.copy()
-
-            # Обчислення True Range (TR)
-            result['tr0'] = abs(result['high'] - result['low'])
-            result['tr1'] = abs(result['high'] - result['close'].shift(1))
-            result['tr2'] = abs(result['low'] - result['close'].shift(1))
-            result['tr'] = result[['tr0', 'tr1', 'tr2']].max(axis=1)
-
-            # Обчислення напрямків руху (directional movement)
-            result['up_move'] = result['high'] - result['high'].shift(1)
-            result['down_move'] = result['low'].shift(1) - result['low']
-
-            # Визначення позитивного і негативного напрямку руху
-            result['plus_dm'] = np.where(
-                (result['up_move'] > result['down_move']) & (result['up_move'] > 0),
-                result['up_move'],
-                0
-            )
-            result['minus_dm'] = np.where(
-                (result['down_move'] > result['up_move']) & (result['down_move'] > 0),
-                result['down_move'],
-                0
+            # Копіюємо DataFrame щоб уникнути попереджень
+            df = data.copy()
+            # Розрахунок ADX з використанням pandas_ta
+            adx_result = ta.adx(
+                high=df['high'],
+                low=df['low'],
+                close=df['close'],
+                length=period
             )
 
-            # Розрахунок згладжених значень TR, +DM, -DM
-            # Використовуємо модифікований експоненціальний фільтр Wilder
-            alpha = 1 / period
+            # Додаємо результати до вхідного DataFrame
+            df['adx'] = adx_result[f'ADX_{period}']
+            df['plus_di'] = adx_result[f'DMP_{period}']  # +DI (Positive Directional Indicator)
+            df['minus_di'] = adx_result[f'DMN_{period}']  # -DI (Negative Directional Indicator)
 
-            # Ініціалізація перших значень як суму за перший період
-            smoothed_tr = result['tr'].rolling(window=period).sum().fillna(0)
-            smoothed_plus_dm = result['plus_dm'].rolling(window=period).sum().fillna(0)
-            smoothed_minus_dm = result['minus_dm'].rolling(window=period).sum().fillna(0)
+            # Логуємо успішне виконання
+            self.logger.debug(f"ADX calculated successfully for {len(df)} data points with period {period}")
 
-            # Застосування згладжування Wilder
-            for i in range(period, len(result)):
-                smoothed_tr.iloc[i] = smoothed_tr.iloc[i - 1] - (smoothed_tr.iloc[i - 1] / period) + result['tr'].iloc[
-                    i]
-                smoothed_plus_dm.iloc[i] = smoothed_plus_dm.iloc[i - 1] - (smoothed_plus_dm.iloc[i - 1] / period) + \
-                                           result['plus_dm'].iloc[i]
-                smoothed_minus_dm.iloc[i] = smoothed_minus_dm.iloc[i - 1] - (smoothed_minus_dm.iloc[i - 1] / period) + \
-                                            result['minus_dm'].iloc[i]
-
-            # Розрахунок індексів напрямку +DI та -DI
-            result['plus_di'] = 100 * (smoothed_plus_dm / smoothed_tr)
-            result['minus_di'] = 100 * (smoothed_minus_dm / smoothed_tr)
-
-            # Розрахунок різниці та суми індексів напрямку
-            result['di_diff'] = abs(result['plus_di'] - result['minus_di'])
-            result['di_sum'] = result['plus_di'] + result['minus_di']
-
-            # Розрахунок DX (Directional Index)
-            result['dx'] = 100 * (result['di_diff'] / result['di_sum'])
-
-            # Розрахунок ADX як згладженого значення DX
-            result['adx'] = result['dx'].rolling(window=period).mean()
-
-            # Видалення проміжних обчислень
-            columns_to_drop = ['tr0', 'tr1', 'tr2', 'tr', 'up_move', 'down_move',
-                               'plus_dm', 'minus_dm', 'di_diff', 'di_sum', 'dx']
-            result = result.drop(columns=columns_to_drop)
-
-            # Заповнення NaN значень
-            result = result.fillna(0)
-
-            self.logger.info(f"ADX calculated successfully for period {period}")
-            return result
+            return df
 
         except Exception as e:
             self.logger.error(f"Error in ADX calculation: {str(e)}")
@@ -424,61 +427,154 @@ class TrendDetection:
 
     def calculate_trend_strength(self, data: pd.DataFrame) -> float:
 
-        if data.empty or len(data) < 20:  # Потрібно достатньо даних для аналізу
+        try:
+            # Перевірка наявності достатньої кількості даних
+            if data.empty or len(data) < 20:
+                self.logger.warning("Insufficient data for trend strength calculation (minimum 20 points required)")
+                return 0.0
+
+            # Перевіряємо наявність необхідних колонок
+            if 'close' not in data.columns:
+                self.logger.error("Data must contain 'close' column for trend strength calculation")
+                raise ValueError("Data must contain 'close' column")
+
+
+
+            # Створюємо копію DataFrame для уникнення попереджень
+            df = data.copy()
+
+            # 1. Розрахунок ADX (Average Directional Index) - основний індикатор сили тренду
+            if all(col in df.columns for col in ['high', 'low']):
+                # Використовуємо pandas_ta для розрахунку ADX
+                adx_result = ta.adx(df['high'], df['low'], df['close'], length=14)
+                adx_value = adx_result['ADX_14'].iloc[-1] / 100.0  # Нормалізація до 0-1
+            else:
+                # Якщо немає даних high/low, використовуємо нейтральне значення
+                adx_value = 0.5
+                self.logger.warning("No high/low data for ADX calculation, using default value")
+
+            # 2. Розрахунок лінійної регресії для визначення напрямку і сили тренду
+            x = np.arange(len(df))
+            y = df['close'].values
+            slope, intercept, r_value, _, _ = stats.linregress(x, y)
+            r_squared = r_value ** 2  # Коефіцієнт детермінації (0-1)
+            trend_direction = np.sign(slope)  # 1 для висхідного, -1 для низхідного
+
+            # 3. Розрахунок Aroon-індикатору (показує силу і напрямок тренду)
+            if all(col in df.columns for col in ['high', 'low']):
+                aroon = ta.aroon(df['high'], df['low'], length=14)
+                aroon_up = aroon['AROONU_14'].iloc[-1] / 100.0
+                aroon_down = aroon['AROOND_14'].iloc[-1] / 100.0
+                aroon_oscillator = aroon_up - aroon_down  # від -1 до 1
+                aroon_strength = abs(aroon_oscillator)  # сила тренду по Aroon (0-1)
+            else:
+                aroon_strength = 0.5
+
+            # 4. Розрахунок MACD для визначення імпульсу тренду
+            macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+            macd_value = macd['MACD_12_26_9'].iloc[-1]
+            macd_signal = macd['MACDs_12_26_9'].iloc[-1]
+            macd_hist = macd['MACDh_12_26_9'].iloc[-1]
+
+            # Нормалізований MACD (відносно ціни)
+            avg_price = df['close'].mean()
+            macd_norm = abs(macd_value) / avg_price
+            macd_strength = min(1.0, macd_norm * 100)  # Обмежуємо до 1.0
+
+            # 5. Розрахунок RSI для визначення сили тренду через перекупленість/перепроданість
+            rsi = ta.rsi(df['close'], length=14)
+            rsi_value = rsi.iloc[-1]
+
+            # Перетворюємо RSI на індикатор сили тренду (екстремальні значення = сильний тренд)
+            rsi_strength = 0.0
+            if rsi_value >= 70 or rsi_value <= 30:
+                # Екстремальні значення RSI вказують на сильний тренд
+                rsi_strength = (abs(rsi_value - 50) - 20) / 30  # Перетворюємо на діапазон 0-1
+                rsi_strength = max(0, min(1, rsi_strength))  # Обмежуємо діапазоном 0-1
+            else:
+                # Значення RSI ближче до 50 вказують на слабший тренд
+                rsi_strength = 0.2  # Базове значення для середнього діапазону
+
+            # 6. Аналіз патернів свічок (опціонально, якщо є дані)
+            candle_pattern_strength = 0.0
+            if all(col in df.columns for col in ['open', 'high', 'low']):
+                # Визначаємо останні 3 свічки
+                recent = df.tail(3)
+                # Шукаємо патерни трьох свічок за допомогою pandas_ta
+                # Для прикладу - перевіряємо паттерн "Three White Soldiers" або "Three Black Crows"
+                bodies = abs(recent['close'] - recent['open'])
+                avg_body = bodies.mean()
+
+                # Для спрощення просто перевіряємо, чи мають свічки послідовний напрямок і великі тіла
+                consistent_direction = all(np.sign(recent['close'] - recent['open']) == trend_direction)
+                large_bodies = all(bodies > avg_body * 0.8)
+
+                if consistent_direction and large_bodies:
+                    candle_pattern_strength = 0.2
+
+            # 7. Розрахунок волатильності (стандартне відхилення відносних змін)
+            volatility = df['close'].pct_change().std()
+            volatility_factor = 1.0 - min(1.0, volatility * 20)  # Висока волатильність зменшує силу тренду
+
+            # 8. Аналіз об'єму (якщо доступний)
+            volume_factor = 0.5  # Нейтральне значення за замовчуванням
+            if 'volume' in df.columns:
+                # Розраховуємо тренд об'єму
+                volume_sma = ta.sma(df['volume'], length=20)
+                recent_volume = df['volume'].tail(5).mean()
+                historical_volume = volume_sma.iloc[-1]
+
+                # Високий об'єм підсилює тренд
+                if historical_volume > 0:
+                    volume_ratio = recent_volume / historical_volume
+                    volume_factor = min(1.0, volume_ratio / 2)  # Нормалізуємо (max 1.0)
+
+            # Розраховуємо зважене значення сили тренду
+            weights = {
+                'adx': 0.25,  # ADX (основний індикатор сили тренду)
+                'r_squared': 0.15,  # Сила лінійної регресії
+                'aroon': 0.15,  # Aroon індикатор
+                'macd': 0.15,  # MACD імпульс
+                'rsi': 0.10,  # RSI екстремуми
+                'candle': 0.05,  # Патерни свічок
+                'volatility': 0.10,  # Фактор волатильності (зворотний)
+                'volume': 0.05  # Фактор об'єму
+            }
+
+            # Обчислюємо загальну силу тренду як зважену суму компонентів
+            trend_strength = (
+                    weights['adx'] * adx_value +
+                    weights['r_squared'] * r_squared +
+                    weights['aroon'] * aroon_strength +
+                    weights['macd'] * macd_strength +
+                    weights['rsi'] * rsi_strength +
+                    weights['candle'] * candle_pattern_strength +
+                    weights['volatility'] * volatility_factor +
+                    weights['volume'] * volume_factor
+            )
+
+            # Нормалізуємо до діапазону від 0 до 1
+            trend_strength = max(0.0, min(1.0, trend_strength))
+
+            # Логуємо компоненти для діагностики
+            self.logger.debug(
+                f"Trend strength calculation: "
+                f"ADX={adx_value:.2f}, R²={r_squared:.2f}, Aroon={aroon_strength:.2f}, "
+                f"MACD={macd_strength:.2f}, RSI={rsi_strength:.2f}, "
+                f"Volatility={volatility_factor:.2f}, Volume={volume_factor:.2f}, "
+                f"Final={trend_strength:.2f}"
+            )
+
+            return float(trend_strength)
+
+        except Exception as e:
+            self.logger.error(f"Error in trend strength calculation: {str(e)}")
             return 0.0
 
-        # Перевіряємо наявність необхідних колонок
-        if 'close' not in data.columns:
-            raise ValueError("Дані повинні містити колонку 'close'")
-
-        # Розраховуємо декілька показників для визначення сили тренду
-
-        # 1. Напрямок руху (лінійна регресія)
-        x = np.arange(len(data))
-        y = data['close'].values
-        slope, _, r_value, _, _ = np.polyfit(x, y, 1, full=True)[0:5]
-        trend_direction = np.sign(slope)  # 1 для висхідного, -1 для низхідного
-        r_squared = r_value ** 2  # Коефіцієнт детермінації (0-1)
-
-        # 2. Аналіз консистентності тренду (відсоток днів у напрямку тренду)
-        daily_changes = data['close'].diff().dropna()
-        days_in_trend_direction = sum(1 for change in daily_changes if np.sign(change) == trend_direction)
-        consistency = days_in_trend_direction / len(daily_changes) if len(daily_changes) > 0 else 0
-
-        # 3. Волатильність (використовуємо стандартне відхилення)
-        volatility = data['close'].pct_change().std()
-        volatility_normalized = min(1.0, volatility * 20)  # Нормалізуємо до діапазону 0-1
-
-        # 4. Розраховуємо ADX, якщо є необхідні дані
-        adx_value = 0.5  # За замовчуванням
-        if all(col in data.columns for col in ['high', 'low']):
-            # Створюємо "замінник" для ADX на основі простого методу
-            high_low_range = (data['high'] - data['low']).mean()
-            price_range = data['close'].max() - data['close'].min()
-            if price_range > 0:
-                adx_value = min(1.0, high_low_range / (price_range * 0.1))
-
-        # Обчислюємо загальну силу тренду (зважена сума різних факторів)
-        weights = {
-            'r_squared': 0.4,  # Важливість лінійної регресії
-            'consistency': 0.3,  # Важливість консистентності
-            'volatility': -0.1,  # Негативний вплив надмірної волатильності
-            'adx': 0.2  # Важливість ADX або його заміни
-        }
-
-        trend_strength = (
-                weights['r_squared'] * r_squared +
-                weights['consistency'] * consistency +
-                weights['volatility'] * (1 - volatility_normalized) +  # Менша волатильність = сильніший тренд
-                weights['adx'] * adx_value
-        )
-
-        # Нормалізуємо до діапазону від 0 до 1
-        trend_strength = max(0, min(1, trend_strength))
-
-        return float(trend_strength)
-
     def detect_trend_reversal(self, data: pd.DataFrame) -> List[Dict]:
+
+        from ta.trend import SMAIndicator
+        from ta.momentum import RSIIndicator
 
         if data.empty or len(data) < 30:  # Потрібно достатньо історичних даних
             return []
@@ -494,80 +590,175 @@ class TrendDetection:
             if 'date' not in data.columns and isinstance(data.index, pd.DatetimeIndex):
                 data['date'] = data.index
 
+        # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
+        df = data.copy()
+
+        # Обчислюємо індикатори з використанням бібліотек TA
+        # 1. Ковзні середні для визначення тренду
+        sma20 = SMAIndicator(close=df['close'], window=20)
+        sma50 = SMAIndicator(close=df['close'], window=50)
+        df['sma20'] = sma20.sma_indicator()
+        df['sma50'] = sma50.sma_indicator()
+
+        # 2. RSI для визначення перекупленості/перепроданості
+        rsi = RSIIndicator(close=df['close'], window=14)
+        df['rsi'] = rsi.rsi()
+
+        # 3. Додаємо патерни свічкового аналізу з pandas-ta
+        candle_patterns = {}
+        # Патерни розвороту висхідного тренду
+        candle_patterns['bearish_engulfing'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
+                                                              name="engulfing", mode="bearish")
+        candle_patterns['evening_star'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'], name="star",
+                                                         mode="evening")
+        candle_patterns['shooting_star'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
+                                                          name="shootingstar")
+        candle_patterns['dark_cloud_cover'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
+                                                             name="darkcloudcover")
+
+        # Патерни розвороту низхідного тренду
+        candle_patterns['bullish_engulfing'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
+                                                              name="engulfing", mode="bullish")
+        candle_patterns['morning_star'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'], name="star",
+                                                         mode="morning")
+        candle_patterns['hammer'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'], name="hammer")
+        candle_patterns['piercing_line'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
+                                                          name="piercingline")
+
+        # Додаємо патерни до DataFrame
+        for pattern_name, pattern_values in candle_patterns.items():
+            df[pattern_name] = pattern_values
+
+        # 4. Додаємо MACD для підтвердження розвороту
+        macd = ta.macd(df['close'])
+        df['macd'] = macd['MACD_12_26_9']
+        df['macd_signal'] = macd['MACDs_12_26_9']
+        df['macd_hist'] = macd['MACDh_12_26_9']
+
+        # 5. Додаємо рівні підтримки/опору за допомогою Bollinger Bands
+        bbands = ta.bbands(df['close'], length=20)
+        df['bb_upper'] = bbands['BBU_20_2.0']
+        df['bb_middle'] = bbands['BBM_20_2.0']
+        df['bb_lower'] = bbands['BBL_20_2.0']
+
         reversals = []
 
-        # 1. Обчислюємо ковзні середні для визначення тренду
-        data['sma20'] = data['close'].rolling(window=20).mean()
-        data['sma50'] = data['close'].rolling(window=50).mean()
-
-        # 2. Обчислюємо RSI для визначення перекупленості/перепроданості
-        delta = data['close'].diff()
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-        avg_gain = gain.rolling(window=14).mean()
-        avg_loss = loss.rolling(window=14).mean()
-        rs = avg_gain / avg_loss
-        data['rsi'] = 100 - (100 / (1 + rs))
-
-        # 3. Знаходимо swing points для визначення локальних максимумів/мінімумів
-        swing_points = self.find_swing_points(data, window_size=5)
-
-        # 4. Аналізуємо можливі сигнали розвороту
-        for i in range(50, len(data)):
-            current_date = data['date'].iloc[i]
-            current_price = data['close'].iloc[i]
+        # Аналізуємо можливі сигнали розвороту
+        for i in range(50, len(df)):
+            current_date = df['date'].iloc[i]
+            current_price = df['close'].iloc[i]
 
             # Визначаємо поточний тренд за перетином ковзних середніх
-            current_trend = 'uptrend' if data['sma20'].iloc[i] > data['sma50'].iloc[i] else 'downtrend'
-            prev_trend = 'uptrend' if data['sma20'].iloc[i - 1] > data['sma50'].iloc[i - 1] else 'downtrend'
+            current_trend = 'uptrend' if df['sma20'].iloc[i] > df['sma50'].iloc[i] else 'downtrend'
+            prev_trend = 'uptrend' if df['sma20'].iloc[i - 1] > df['sma50'].iloc[i - 1] else 'downtrend'
 
             reversal_signal = None
             signal_strength = 0.0
+            signal_reasons = []
 
-            # Перетин ковзних середніх (сильний сигнал розвороту)
+            # 1. Перетин ковзних середніх (сильний сигнал розвороту)
             if current_trend != prev_trend:
-                # Перевіряємо чи це перетин зверху вниз (розворот висхідного тренду)
                 if current_trend == 'downtrend':
                     reversal_signal = 'bearish_crossover'
                     signal_strength = 0.7
-                # Перевіряємо чи це перетин знизу вгору (розворот низхідного тренду)
+                    signal_reasons.append("SMA20 перетнула SMA50 знизу вгору")
                 else:
                     reversal_signal = 'bullish_crossover'
                     signal_strength = 0.7
+                    signal_reasons.append("SMA20 перетнула SMA50 зверху вниз")
 
-            # Перевіряємо на дивергенцію між ціною та RSI
-            elif i >= 5:
-                # Знаходимо локальні екстремуми ціни та RSI
-                price_trend = 'up' if data['close'].iloc[i] > data['close'].iloc[i - 5] else 'down'
-                rsi_trend = 'up' if data['rsi'].iloc[i] > data['rsi'].iloc[i - 5] else 'down'
+            # 2. Перетин MACD з сигнальною лінією
+            macd_cross_bullish = df['macd'].iloc[i] > df['macd_signal'].iloc[i] and df['macd'].iloc[i - 1] <= \
+                                 df['macd_signal'].iloc[i - 1]
+            macd_cross_bearish = df['macd'].iloc[i] < df['macd_signal'].iloc[i] and df['macd'].iloc[i - 1] >= \
+                                 df['macd_signal'].iloc[i - 1]
 
-                # Класична дивергенція (різнонаправлений рух ціни та RSI)
-                if price_trend != rsi_trend:
-                    if price_trend == 'up' and rsi_trend == 'down':
-                        reversal_signal = 'bearish_divergence'
-                        signal_strength = 0.6
-                    else:
-                        reversal_signal = 'bullish_divergence'
-                        signal_strength = 0.6
+            if macd_cross_bearish and current_trend == 'uptrend':
+                if not reversal_signal:
+                    reversal_signal = 'bearish_macd_cross'
+                    signal_strength = 0.6
+                    signal_reasons.append("Ведмежий перетин MACD")
+                else:
+                    signal_strength += 0.2
+                    signal_reasons.append("Підтверджено ведмежим перетином MACD")
 
-            # Додаємо перекупленість/перепроданість по RSI
-            if data['rsi'].iloc[i] > 70 and current_trend == 'uptrend':
-                # Перевіряємо чи був RSI вище 70 і почав падати
-                if data['rsi'].iloc[i] < data['rsi'].iloc[i - 1]:
-                    if not reversal_signal:  # Якщо сигналу ще не було
+            elif macd_cross_bullish and current_trend == 'downtrend':
+                if not reversal_signal:
+                    reversal_signal = 'bullish_macd_cross'
+                    signal_strength = 0.6
+                    signal_reasons.append("Бичачий перетин MACD")
+                else:
+                    signal_strength += 0.2
+                    signal_reasons.append("Підтверджено бичачим перетином MACD")
+
+            # 3. RSI перекупленість/перепроданість
+            if df['rsi'].iloc[i] > 70 and current_trend == 'uptrend':
+                if df['rsi'].iloc[i] < df['rsi'].iloc[i - 1]:
+                    if not reversal_signal:
                         reversal_signal = 'overbought'
                         signal_strength = 0.5
-                    else:  # Посилюємо існуючий сигнал
-                        signal_strength += 0.2
+                        signal_reasons.append(f"RSI перекуплений ({df['rsi'].iloc[i]:.1f}) і почав падати")
+                    else:
+                        signal_strength += 0.15
+                        signal_reasons.append(f"Підтверджено перекупленим RSI ({df['rsi'].iloc[i]:.1f})")
 
-            elif data['rsi'].iloc[i] < 30 and current_trend == 'downtrend':
-                # Перевіряємо чи був RSI нижче 30 і почав рости
-                if data['rsi'].iloc[i] > data['rsi'].iloc[i - 1]:
-                    if not reversal_signal:  # Якщо сигналу ще не було
+            elif df['rsi'].iloc[i] < 30 and current_trend == 'downtrend':
+                if df['rsi'].iloc[i] > df['rsi'].iloc[i - 1]:
+                    if not reversal_signal:
                         reversal_signal = 'oversold'
                         signal_strength = 0.5
-                    else:  # Посилюємо існуючий сигнал
-                        signal_strength += 0.2
+                        signal_reasons.append(f"RSI перепроданий ({df['rsi'].iloc[i]:.1f}) і почав рости")
+                    else:
+                        signal_strength += 0.15
+                        signal_reasons.append(f"Підтверджено перепроданим RSI ({df['rsi'].iloc[i]:.1f})")
+
+            # 4. Свічкові патерни
+            # Перевіряємо ведмежі свічкові патерни
+            if current_trend == 'uptrend':
+                for pattern_name in ['bearish_engulfing', 'evening_star', 'shooting_star', 'dark_cloud_cover']:
+                    if df[pattern_name].iloc[i] > 0:
+                        if not reversal_signal:
+                            reversal_signal = 'bearish_candlestick'
+                            signal_strength = 0.55
+                            signal_reasons.append(f"Ведмежий свічковий патерн: {pattern_name}")
+                        else:
+                            signal_strength += 0.15
+                            signal_reasons.append(f"Підтверджено ведмежим свічковим патерном: {pattern_name}")
+
+            # Перевіряємо бичачі свічкові патерни
+            elif current_trend == 'downtrend':
+                for pattern_name in ['bullish_engulfing', 'morning_star', 'hammer', 'piercing_line']:
+                    if df[pattern_name].iloc[i] > 0:
+                        if not reversal_signal:
+                            reversal_signal = 'bullish_candlestick'
+                            signal_strength = 0.55
+                            signal_reasons.append(f"Бичачий свічковий патерн: {pattern_name}")
+                        else:
+                            signal_strength += 0.15
+                            signal_reasons.append(f"Підтверджено бичачим свічковим патерном: {pattern_name}")
+
+            # 5. Тестування рівнів Bollinger Bands
+            # Ціна пробиває верхню лінію і повертається назад (ведмежий сигнал)
+            if current_trend == 'uptrend' and df['close'].iloc[i - 1] > df['bb_upper'].iloc[i - 1] and df['close'].iloc[
+                i] < df['bb_upper'].iloc[i]:
+                if not reversal_signal:
+                    reversal_signal = 'bearish_bb_rejection'
+                    signal_strength = 0.45
+                    signal_reasons.append("Відбиття від верхньої лінії Bollinger Bands")
+                else:
+                    signal_strength += 0.1
+                    signal_reasons.append("Підтверджено відбиттям від верхньої лінії Bollinger Bands")
+
+            # Ціна пробиває нижню лінію і повертається назад (бичачий сигнал)
+            elif current_trend == 'downtrend' and df['close'].iloc[i - 1] < df['bb_lower'].iloc[i - 1] and \
+                    df['close'].iloc[i] > df['bb_lower'].iloc[i]:
+                if not reversal_signal:
+                    reversal_signal = 'bullish_bb_rejection'
+                    signal_strength = 0.45
+                    signal_reasons.append("Відбиття від нижньої лінії Bollinger Bands")
+                else:
+                    signal_strength += 0.1
+                    signal_reasons.append("Підтверджено відбиттям від нижньої лінії Bollinger Bands")
 
             # Якщо виявлено сигнал розвороту, додаємо його до списку
             if reversal_signal:
@@ -577,19 +768,21 @@ class TrendDetection:
                     'signal_type': reversal_signal,
                     'strength': min(1.0, signal_strength),  # Обмежуємо силу сигналу до 1.0
                     'current_trend': current_trend,
-                    'rsi': data['rsi'].iloc[i],
+                    'rsi': df['rsi'].iloc[i],
+                    'reasons': signal_reasons
                 }
 
                 # Додаємо додаткові дані, якщо доступні
-                if 'volume' in data.columns:
-                    reversal['volume'] = data['volume'].iloc[i]
+                if 'volume' in df.columns:
+                    reversal['volume'] = df['volume'].iloc[i]
 
                 reversals.append(reversal)
 
         return reversals
 
-    def calculate_fibonacci_levels(self, data: pd.DataFrame,
-                                   trend_type: str) -> Dict[str, float]:
+    def calculate_fibonacci_levels(self, data: pd.DataFrame, trend_type: str) -> Dict[str, float]:
+
+        import pandas_ta as ta
 
         if data.empty or len(data) < 2:
             return {}
@@ -603,111 +796,42 @@ class TrendDetection:
         if trend_type not in ['uptrend', 'downtrend']:
             raise ValueError("trend_type повинен бути 'uptrend' або 'downtrend'")
 
-        # Знаходимо останні максимуми і мінімуми для тренду
         # Використаємо вікно останніх 90 точок або всі дані, якщо їх менше
         window = min(90, len(data))
         recent_data = data.iloc[-window:]
 
-        # Визначаємо swing high та swing low в межах вікна
-        swing_points = self.find_swing_points(recent_data, window_size=5)
+        # Знаходимо значення екстремумів для розрахунку
+        if trend_type == 'uptrend':
+            # Для висхідного тренду беремо мінімум як стартову точку і максимум як кінцеву
+            start_price = recent_data['low'].min()
+            end_price = recent_data['high'].max()
+        else:  # downtrend
+            # Для низхідного тренду беремо максимум як стартову точку і мінімум як кінцеву
+            start_price = recent_data['high'].max()
+            end_price = recent_data['low'].min()
 
-        # Якщо не знайдено точок розвороту, використовуємо глобальні максимум і мінімум вікна
-        if not swing_points['highs'] and not swing_points['lows']:
-            swing_high = recent_data['high'].max()
-            swing_low = recent_data['low'].min()
-        else:
-            # Для висхідного тренду: беремо останній мінімум і після нього максимум
-            # Для низхідного тренду: беремо останній максимум і після нього мінімум
-            if trend_type == 'uptrend':
-                # Сортуємо точки за індексом (часом)
-                lows = sorted(swing_points['lows'], key=lambda x: x['index'])
-                highs = sorted(swing_points['highs'], key=lambda x: x['index'])
+        # Розраховуємо рівні Фібоначчі використовуючи pandas-ta
+        fib_levels = ta.fibonacci(start_price, end_price,
+                                  retrace=[0, 0.236, 0.382, 0.5, 0.618, 0.786, 1],
+                                  extensions=[1.272, 1.618, 2.618])
 
-                # Якщо є точки, знаходимо останній мінімум
-                if lows:
-                    last_low_index = lows[-1]['index']
-                    swing_low = lows[-1]['price']
-
-                    # Знаходимо максимум після останнього мінімуму
-                    highs_after_low = [h for h in highs if h['index'] > last_low_index]
-                    if highs_after_low:
-                        # Беремо найвищий максимум після останнього мінімуму
-                        swing_high = max(h['price'] for h in highs_after_low)
-                    else:
-                        # Якщо немає максимумів після мінімуму, беремо поточну ціну закриття
-                        swing_high = data['close'].iloc[-1]
-                else:
-                    # Якщо немає мінімумів, використовуємо глобальні значення
-                    swing_low = recent_data['low'].min()
-                    swing_high = recent_data['high'].max()
-            else:  # downtrend
-                # Сортуємо точки за індексом (часом)
-                highs = sorted(swing_points['highs'], key=lambda x: x['index'])
-                lows = sorted(swing_points['lows'], key=lambda x: x['index'])
-
-                # Якщо є точки, знаходимо останній максимум
-                if highs:
-                    last_high_index = highs[-1]['index']
-                    swing_high = highs[-1]['price']
-
-                    # Знаходимо мінімум після останнього максимуму
-                    lows_after_high = [l for l in lows if l['index'] > last_high_index]
-                    if lows_after_high:
-                        # Беремо найнижчий мінімум після останнього максимуму
-                        swing_low = min(l['price'] for l in lows_after_high)
-                    else:
-                        # Якщо немає мінімумів після максимуму, беремо поточну ціну закриття
-                        swing_low = data['close'].iloc[-1]
-                else:
-                    # Якщо немає максимумів, використовуємо глобальні значення
-                    swing_high = recent_data['high'].max()
-                    swing_low = recent_data['low'].min()
-
-        # Переконуємося, що swing_high > swing_low
-        if swing_high <= swing_low:
-            # У рідкісних випадках може виникнути помилка у визначенні точок
-            swing_high = recent_data['high'].max()
-            swing_low = recent_data['low'].min()
-
-        # Розраховуємо діапазон цін
-        price_range = swing_high - swing_low
-
-        # Стандартні рівні Фібоначчі
-        fib_levels = {
-            '0.0': swing_low,
-            '0.236': swing_low + 0.236 * price_range,
-            '0.382': swing_low + 0.382 * price_range,
-            '0.5': swing_low + 0.5 * price_range,
-            '0.618': swing_low + 0.618 * price_range,
-            '0.786': swing_low + 0.786 * price_range,
-            '1.0': swing_high,
-            # Розширені рівні Фібоначчі
-            '1.272': swing_low + 1.272 * price_range,
-            '1.618': swing_low + 1.618 * price_range,
-            '2.618': swing_low + 2.618 * price_range
-        }
-
-        # Для низхідного тренду ми можемо "віддзеркалити" рівні
-        if trend_type == 'downtrend':
-            fib_levels = {
-                '0.0': swing_high,
-                '0.236': swing_high - 0.236 * price_range,
-                '0.382': swing_high - 0.382 * price_range,
-                '0.5': swing_high - 0.5 * price_range,
-                '0.618': swing_high - 0.618 * price_range,
-                '0.786': swing_high - 0.786 * price_range,
-                '1.0': swing_low,
-                # Розширені рівні Фібоначчі
-                '1.272': swing_high - 1.272 * price_range,
-                '1.618': swing_high - 1.618 * price_range,
-                '2.618': swing_high - 2.618 * price_range
-            }
+        # Перетворюємо результат на словник
+        result = {}
+        for level, price in zip(fib_levels.index, fib_levels.values):
+            # Конвертуємо рівень до рядка
+            level_str = str(level) if level == 0 or level == 1 else f"{level:.3f}"
+            # Конвертуємо у формат, що відповідає оригінальному методу
+            if level == 0:
+                level_str = '0.0'
+            elif level == 1:
+                level_str = '1.0'
+            result[level_str] = float(price)
 
         # Додаємо інформацію про використані екстремуми
-        fib_levels['swing_high'] = swing_high
-        fib_levels['swing_low'] = swing_low
+        result['swing_high'] = recent_data['high'].max()
+        result['swing_low'] = recent_data['low'].min()
 
-        return fib_levels
+        return result
 
     def detect_chart_patterns(self, data: pd.DataFrame) -> List[Dict]:
 
@@ -1042,92 +1166,179 @@ class TrendDetection:
 
     def identify_market_regime(self, data: pd.DataFrame) -> str:
 
+        from ta.volatility import BollingerBands, AverageTrueRange
+        from ta.trend import ADXIndicator
+
         # Перевірка наявності необхідних даних
         if 'close' not in data.columns:
             raise ValueError("DataFrame повинен містити стовпець 'close'")
 
-        # Для визначення режиму ринку використовуємо:
-        # 1. ADX для визначення сили тренду
-        # 2. Волатильність (ATR/Ціна) для визначення рівня волатильності
-        # 3. Ширину діапазону Боллінджера для визначення консолідації/розширення
+        if 'high' not in data.columns or 'low' not in data.columns:
+            raise ValueError("DataFrame повинен містити стовпці 'high' та 'low'")
+
+        # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
+        df = data.copy()
+
+        # 1. Розрахунок індикаторів за допомогою бібліотек TA
 
         # Розрахунок волатильності (ATR - Average True Range)
-        data['high_low'] = data['high'] - data['low'] if ('high' in data.columns and 'low' in data.columns) else 0
-        data['high_close'] = abs(data['high'] - data['close'].shift(1)) if 'high' in data.columns else 0
-        data['low_close'] = abs(data['low'] - data['close'].shift(1)) if 'low' in data.columns else 0
-
-        data['tr'] = data[['high_low', 'high_close', 'low_close']].max(axis=1)
-        data['atr14'] = data['tr'].rolling(window=14, min_periods=1).mean()
+        atr = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14)
+        df['atr14'] = atr.average_true_range()
 
         # Нормалізована волатильність (ATR / Ціна)
-        data['norm_volatility'] = data['atr14'] / data['close'] * 100
+        df['norm_volatility'] = df['atr14'] / df['close'] * 100
+
+        # Смуги Боллінджера
+        bollinger = BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_upper'] = bollinger.bollinger_hband()
+        df['bb_lower'] = bollinger.bollinger_lband()
+        df['bb_middle'] = bollinger.bollinger_mavg()
+        # Ширина смуг Боллінджера відносно ціни
+        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'] * 100
+
+        # ADX - Індекс спрямованого руху
+        adx_indicator = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14)
+        df['adx'] = adx_indicator.adx()
+        df['+di'] = adx_indicator.adx_pos()
+        df['-di'] = adx_indicator.adx_neg()
+
+        # 2. Додаткові індикатори для визначення ринкового стану
+
+        # Додаємо RSI для визначення перекупленості/перепроданості
+        df['rsi'] = ta.rsi(df['close'], length=14)
+
+        # Додаємо MACD для визначення моментуму
+        macd = ta.macd(df['close'])
+        df['macd'] = macd['MACD_12_26_9']
+        df['macd_signal'] = macd['MACDs_12_26_9']
+        df['macd_hist'] = macd['MACDh_12_26_9']
+
+        # Додаємо Stochastic oscillator для визначення моментуму
+        stoch = ta.stoch(df['high'], df['low'], df['close'])
+        df['stoch_k'] = stoch['STOCHk_14_3_3']
+        df['stoch_d'] = stoch['STOCHd_14_3_3']
+
+        # 3. Аналіз поточного стану ринку
+
+        # Видаляємо рядки з NA значеннями для коректного аналізу
+        df_clean = df.dropna()
+
+        # Якщо після видалення NA залишилось мало даних, повертаємо 'insufficient_data'
+        if len(df_clean) < 20:
+            return "insufficient_data"
+
+        # Визначаємо сучасний стан індикаторів
+        last_idx = df_clean.index[-1]
+
+        # Отримуємо останні значення індикаторів
+        adx_value = df_clean['adx'].iloc[-1]
+        plus_di = df_clean['+di'].iloc[-1]
+        minus_di = df_clean['-di'].iloc[-1]
 
         # Середнє значення нормалізованої волатильності за останні 20 періодів
-        recent_volatility = data['norm_volatility'].tail(20).mean()
-        historical_volatility = data['norm_volatility'].mean()
+        recent_volatility = df_clean['norm_volatility'].tail(20).mean()
+        historical_volatility = df_clean['norm_volatility'].mean()
 
         # Визначаємо квартилі волатильності
-        low_vol_threshold = data['norm_volatility'].quantile(0.25)
-        high_vol_threshold = data['norm_volatility'].quantile(0.75)
-
-        # Розрахунок смуг Боллінджера для визначення консолідації
-        data['sma20'] = data['close'].rolling(window=20, min_periods=1).mean()
-        data['std20'] = data['close'].rolling(window=20, min_periods=1).std()
-        data['bb_upper'] = data['sma20'] + (data['std20'] * 2)
-        data['bb_lower'] = data['sma20'] - (data['std20'] * 2)
-        data['bb_width'] = (data['bb_upper'] - data['bb_lower']) / data['sma20'] * 100
+        low_vol_threshold = df_clean['norm_volatility'].quantile(0.25)
+        high_vol_threshold = df_clean['norm_volatility'].quantile(0.75)
 
         # Аналіз ширини смуг Боллінджера за останні 10 періодів
-        recent_bb_width = data['bb_width'].tail(10).mean()
-        historical_bb_width = data['bb_width'].mean()
+        recent_bb_width = df_clean['bb_width'].tail(10).mean()
+        historical_bb_width = df_clean['bb_width'].mean()
 
-        # Розрахунок ADX (спрощена версія)
-        if self.calculate_adx is not None and callable(self.calculate_adx):
-            adx_data = self.calculate_adx(data)
-            if 'ADX' in adx_data.columns:
-                adx_value = adx_data['ADX'].iloc[-1]
-            else:
-                # Спрощений розрахунок ADX, якщо метод не реалізовано
-                data['plus_dm'] = data['high'].diff().clip(lower=0) if 'high' in data.columns else 0
-                data['minus_dm'] = (-data['low'].diff()).clip(lower=0) if 'low' in data.columns else 0
-                data['plus_di'] = 100 * data['plus_dm'].rolling(window=14).mean() / data['atr14']
-                data['minus_di'] = 100 * data['minus_dm'].rolling(window=14).mean() / data['atr14']
-                data['dx'] = 100 * abs(data['plus_di'] - data['minus_di']) / (data['plus_di'] + data['minus_di'])
-                data['ADX'] = data['dx'].rolling(window=14).mean()
-                adx_value = data['ADX'].iloc[-1]
+        # Додаткові метрики
+        rsi_value = df_clean['rsi'].iloc[-1]
+        macd_hist = df_clean['macd_hist'].tail(3).mean()  # Середнє значення гістограми MACD за останні 3 періоди
+
+        # 4. Визначення режиму ринку на основі комбінації показників
+
+        # Визначаємо напрямок тренду
+        if plus_di > minus_di:
+            trend_direction = "uptrend"
+        elif minus_di > plus_di:
+            trend_direction = "downtrend"
         else:
-            # Якщо метод calculate_adx недоступний, використовуємо спрощений підхід
-            data['plus_dm'] = data['high'].diff().clip(lower=0) if 'high' in data.columns else 0
-            data['minus_dm'] = (-data['low'].diff()).clip(lower=0) if 'low' in data.columns else 0
-            data['plus_di'] = 100 * data['plus_dm'].rolling(window=14).mean() / data['atr14']
-            data['minus_di'] = 100 * data['minus_dm'].rolling(window=14).mean() / data['atr14']
-            data['dx'] = 100 * abs(data['plus_di'] - data['minus_di']) / (data['plus_di'] + data['minus_di'])
-            data['ADX'] = data['dx'].rolling(window=14).mean()
-            adx_value = data['ADX'].iloc[-1]
+            trend_direction = "neutral"
 
-        # Визначення режиму ринку на основі комбінації показників
-        if adx_value > 25:  # Сильний тренд
-            if recent_volatility > high_vol_threshold:
-                return "strong_trend_high_volatility"
-            else:
-                return "strong_trend_normal_volatility"
-        elif adx_value < 20:  # Слабкий тренд або його відсутність
-            if recent_bb_width < historical_bb_width * 0.8:
-                return "consolidation"  # Смуги Боллінджера звужуються - консолідація
-            elif recent_volatility < low_vol_threshold:
-                return "low_volatility_sideways"  # Низька волатильність - боковий ринок
-            else:
-                return "choppy_market"  # Невизначений ринок без чіткого тренду
-        else:  # Середня сила тренду
-            if recent_volatility > high_vol_threshold:
-                return "emerging_trend_high_volatility"
-            else:
-                return "emerging_trend"
+        # Визначаємо силу тренду на основі ADX
+        if adx_value > 30:
+            trend_strength = "strong"
+        elif adx_value > 20:
+            trend_strength = "moderate"
+        else:
+            trend_strength = "weak"
 
-        # Для більш простого виводу можна використовувати:
-        # - "trend" - якщо є виражений тренд (ADX > 25)
-        # - "consolidation" - якщо ринок консолідується (ADX < 20 і низька волатильність)
-        # - "high_volatility" - якщо волатильність висока незалежно від тренду
+        # Визначаємо стан волатильності
+        if recent_volatility > high_vol_threshold * 1.5:
+            volatility_state = "extremely_high"
+        elif recent_volatility > high_vol_threshold:
+            volatility_state = "high"
+        elif recent_volatility < low_vol_threshold:
+            volatility_state = "low"
+        else:
+            volatility_state = "normal"
+
+        # Визначаємо стан ширини смуг Боллінджера (консолідація чи розширення)
+        if recent_bb_width < historical_bb_width * 0.7:
+            bollinger_state = "tight"  # Значна консолідація
+        elif recent_bb_width < historical_bb_width * 0.9:
+            bollinger_state = "narrowing"  # Звуження
+        elif recent_bb_width > historical_bb_width * 1.3:
+            bollinger_state = "wide"  # Значне розширення
+        elif recent_bb_width > historical_bb_width * 1.1:
+            bollinger_state = "expanding"  # Розширення
+        else:
+            bollinger_state = "normal"  # Нормальний стан
+
+        # 5. Інтегрована оцінка режиму ринку
+
+        # Сильний тренд
+        if trend_strength == "strong":
+            if volatility_state in ["high", "extremely_high"]:
+                if trend_direction == "uptrend":
+                    return "strong_uptrend_high_volatility"
+                else:
+                    return "strong_downtrend_high_volatility"
+            else:
+                if trend_direction == "uptrend":
+                    return "strong_uptrend_normal_volatility"
+                else:
+                    return "strong_downtrend_normal_volatility"
+
+        # Помірний тренд
+        elif trend_strength == "moderate":
+            if bollinger_state in ["expanding", "wide"]:
+                if trend_direction == "uptrend":
+                    return "emerging_uptrend"
+                else:
+                    return "emerging_downtrend"
+            else:
+                return "moderate_trend"
+
+        # Слабкий тренд або відсутність тренду
+        else:
+            if bollinger_state in ["tight", "narrowing"]:
+                # Перевіряємо додаткові ознаки потенційного прориву
+                if rsi_value > 60 or rsi_value < 40:  # RSI наближається до екстремальних значень
+                    return "accumulation_before_breakout"
+                else:
+                    return "consolidation"
+
+            elif volatility_state == "low":
+                return "low_volatility_sideways"
+
+            elif bollinger_state in ["expanding", "wide"] and volatility_state in ["high", "extremely_high"]:
+                return "high_volatility_range"
+
+            else:
+                return "choppy_market"
+
+        # Примітка: для простішої класифікації можна використовувати:
+        # - "trend" - для всіх типів тренду
+        # - "consolidation" - для консолідацій
+        # - "choppy" - для невизначених ринків
+        # - "high_volatility" - для ринків з високою волатильністю
 
     def detect_divergence(self, price_data: pd.DataFrame, indicator_data: pd.DataFrame) -> List[Dict]:
 

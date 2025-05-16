@@ -4699,8 +4699,6 @@ class DatabaseManager:
             symbol: str,
             timeframe: str,
             model_type: str,
-            p: int,
-            q: int,
             created_at: Optional[datetime] = None,
             updated_at: Optional[datetime] = None,
             parameters: Union[dict, str, None] = None,
@@ -4721,8 +4719,6 @@ class DatabaseManager:
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "model_type": model_type,
-                "p": p,
-                "q": q,
                 "created_at": created_at,
                 "updated_at": updated_at or datetime.utcnow(),
                 "parameters": parameters,
@@ -4807,31 +4803,54 @@ class DatabaseManager:
 
     # --------- VOLATILITY REGIMES ---------
 
-    def save_volatility_regime(self, regime_data: Dict[str, Any]) -> int:
-
+    def save_volatility_regime(
+            self,
+            symbol: str,
+            timeframe: str,
+            method: str,
+            n_regimes: int,
+            regime_thresholds: Any,
+            regime_centroids: Any,
+            regime_labels: Any,
+            regime_parameters: Optional[Dict[str, Any]] = None,
+            created_at: Optional[str] = None,
+    ) -> int:
         if not self.conn:
             self.connect()
 
         try:
-            # Перетворення параметрів у JSON, якщо вони є словником
-            if isinstance(regime_data.get("regime_parameters"), dict):
-                regime_data["regime_parameters"] = json.dumps(regime_data["regime_parameters"])
+            # Підготовка параметрів
+            params = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "method": method,
+                "n_regimes": n_regimes,
+                "regime_thresholds": regime_thresholds,
+                "regime_centroids": regime_centroids,
+                "regime_labels": regime_labels,
+                "regime_parameters": json.dumps(regime_parameters) if isinstance(regime_parameters,
+                                                                                 dict) else regime_parameters,
+                "created_at": created_at,
+            }
 
             query = """
                     INSERT INTO volatility_regimes (symbol, timeframe, method, n_regimes, created_at, \
                                                     regime_thresholds, regime_centroids, regime_labels, \
-                                                    regime_parameters) \
+                                                    regime_parameters)
                     VALUES (%(symbol)s, %(timeframe)s, %(method)s, %(n_regimes)s, \
                             COALESCE(%(created_at)s, NOW()), \
                             %(regime_thresholds)s, %(regime_centroids)s, %(regime_labels)s, \
-                            %(regime_parameters)s) ON CONFLICT (symbol, timeframe, method, n_regimes) DO \
-                    UPDATE \
-                    SET
-                        regime_thresholds = EXCLUDED.regime_thresholds, regime_centroids = EXCLUDED.regime_centroids, regime_labels = EXCLUDED.regime_labels, regime_parameters = EXCLUDED.regime_parameters
+                            %(regime_parameters)s) ON CONFLICT (symbol, timeframe, method, n_regimes)
+                    DO \
+                    UPDATE SET
+                        regime_thresholds = EXCLUDED.regime_thresholds, \
+                        regime_centroids = EXCLUDED.regime_centroids, \
+                        regime_labels = EXCLUDED.regime_labels, \
+                        regime_parameters = EXCLUDED.regime_parameters \
                         RETURNING id; \
                     """
 
-            self.cursor.execute(query, regime_data)
+            self.cursor.execute(query, params)
             record_id = self.cursor.fetchone()[0]
             self.conn.commit()
             return record_id
@@ -4841,21 +4860,27 @@ class DatabaseManager:
             print(f"Помилка збереження режиму волатильності: {e}")
             return -1
 
-    def get_volatility_regime(self, symbol: str, timeframe: str,
-                              method: str = None,
-                              n_regimes: int = None) -> Optional[Dict[str, Any]]:
-
+    def get_volatility_regime(
+            self,
+            symbol: str,
+            timeframe: str,
+            method: Optional[str] = None,
+            n_regimes: Optional[int] = None,
+            created_at: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         if not self.conn:
             self.connect()
 
         query = """
                 SELECT * \
                 FROM volatility_regimes
-                WHERE symbol = %(symbol)s \
+                WHERE symbol = %(symbol)s
                   AND timeframe = %(timeframe)s \
                 """
-
-        params = {"symbol": symbol, "timeframe": timeframe}
+        params = {
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
 
         if method:
             query += " AND method = %(method)s"
@@ -4865,6 +4890,10 @@ class DatabaseManager:
             query += " AND n_regimes = %(n_regimes)s"
             params["n_regimes"] = n_regimes
 
+        if created_at:
+            query += " AND created_at = %(created_at)s"
+            params["created_at"] = created_at
+
         query += " ORDER BY created_at DESC LIMIT 1"
 
         try:
@@ -4873,7 +4902,6 @@ class DatabaseManager:
 
             if result:
                 regime_data = dict(result)
-                # Перетворення JSON в словник
                 if regime_data.get("regime_parameters"):
                     regime_data["regime_parameters"] = json.loads(regime_data["regime_parameters"])
                 return regime_data
@@ -4884,27 +4912,38 @@ class DatabaseManager:
 
     # --------- VOLATILITY FEATURES ---------
 
-    def save_volatility_features(self, features_data: Dict[str, Any]) -> int:
-
+    def save_volatility_features(
+            self,
+            symbol: str,
+            timeframe: str,
+            timestamp: str,
+            features: Union[Dict[str, Any], str]
+    ) -> int:
         if not self.conn:
             self.connect()
 
         try:
             # Перетворення features у JSON, якщо вони є словником
-            if isinstance(features_data.get("features"), dict):
-                features_data["features"] = json.dumps(features_data["features"])
+            if isinstance(features, dict):
+                features = json.dumps(features)
+
+            params = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "timestamp": timestamp,
+                "features": features,
+            }
 
             query = """
                     INSERT INTO volatility_features (symbol, timeframe, timestamp, features) \
-                    VALUES (%(symbol)s, %(timeframe)s, %(timestamp)s, \
-                            %(features)s) ON CONFLICT (symbol, timeframe, timestamp) DO \
-                    UPDATE \
-                    SET
-                        features = EXCLUDED.features
+                    VALUES (%(symbol)s, %(timeframe)s, %(timestamp)s, %(features)s) ON CONFLICT (symbol, timeframe, timestamp)
+                DO \
+                    UPDATE SET
+                        features = EXCLUDED.features \
                         RETURNING id; \
                     """
 
-            self.cursor.execute(query, features_data)
+            self.cursor.execute(query, params)
             record_id = self.cursor.fetchone()[0]
             self.conn.commit()
             return record_id
@@ -4963,7 +5002,7 @@ class DatabaseManager:
 
     def save_cross_asset_volatility(
             self,
-            base_symbol: str,
+            symbol: str,
             compared_symbol: str,
             timeframe: str,
             timestamp: datetime,
@@ -4984,7 +5023,7 @@ class DatabaseManager:
                     """
 
             data = {
-                'base_symbol': base_symbol,
+                'base_symbol': symbol,
                 'compared_symbol': compared_symbol,
                 'timeframe': timeframe,
                 'timestamp': timestamp,

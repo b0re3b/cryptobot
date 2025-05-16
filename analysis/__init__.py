@@ -2,12 +2,12 @@ from .crypto_cycles import CryptoCycles
 from .market_correlation import MarketCorrelation
 from .volatility_analysis import VolatilityAnalysis
 from .trend_detection import TrendDetection
-from .backtesting import BacktestingEngine
+# from .backtesting import BacktestingEngine
 
 __all__ = [
     'CryptoCycles',
     'MarketCorrelation',
     'VolatilityAnalysis',
     'TrendDetection',
-    'BacktestingEngine'
+    # 'BacktestingEngine'
 ]
