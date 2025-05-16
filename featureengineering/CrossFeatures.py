@@ -1,4 +1,4 @@
-from typing import List
+from typing import List,  Tuple
 
 import numpy as np
 import pandas as pd
@@ -7,40 +7,99 @@ from featureengineering.feature_engineering import FeatureEngineering
 
 
 class CrossFeatures(FeatureEngineering):
+    """Клас для створення перехресних ознак із наявних числових стовпців."""
+
+    def __init__(self):
+        super().__init__()
+        self.added_features = []  # Відстеження доданих ознак
+
+    def _validate_columns(self, data: pd.DataFrame,
+                          column_lists: List[List[str]],
+                          list_names: List[str]) -> List[List[str]]:
+        """Перевіряє наявність стовпців та повертає тільки дійсні стовпці.
+
+        Args:
+            data: Вхідний DataFrame
+            column_lists: Список списків імен стовпців для перевірки
+            list_names: Відповідні назви списків стовпців для логування
+
+        Returns:
+            Відфільтровані списки стовпців
+        """
+        validated_lists = []
+
+        for columns, name in zip(column_lists, list_names):
+            missing_cols = [col for col in columns if col not in data.columns]
+
+            if missing_cols:
+                self.logger.warning(f"{name} {missing_cols} не знайдено в даних і будуть пропущені")
+                valid_cols = [col for col in columns if col in data.columns]
+            else:
+                valid_cols = columns.copy()
+
+            validated_lists.append(valid_cols)
+
+        return validated_lists
+
+    def _handle_nan_values(self, df: pd.DataFrame, column: str, is_binary: bool = False) -> None:
+        """Обробляє NaN значення у стовпці.
+
+        Args:
+            df: DataFrame для обробки
+            column: Назва стовпця для обробки
+            is_binary: Чи є стовпець бінарним
+        """
+        if not df[column].isna().any():
+            return
+
+        self.logger.debug(f"Заповнення NaN значень у стовпці {column}")
+
+        if is_binary:
+            df[column] = df[column].fillna(0)
+        else:
+            # Спочатку спробувати заповнити прямим і зворотнім методом
+            df[column] = df[column].fillna(method='ffill').fillna(method='bfill')
+
+            # Якщо все ще є NaN, заповнюємо нулями
+            if df[column].isna().any():
+                df[column] = df[column].fillna(0)
 
     def create_ratio_features(self, data: pd.DataFrame,
                               numerators: List[str],
-                              denominators: List[str]) -> pd.DataFrame:
+                              denominators: List[str],
+                              clip_percentiles: Tuple[float, float] = (0.01, 0.99)) -> pd.DataFrame:
+        """Створює ознаки-співвідношення між числовими стовпцями.
 
+        Args:
+            data: Вхідний DataFrame
+            numerators: Список стовпців для використання у чисельнику
+            denominators: Список стовпців для використання у знаменнику
+            clip_percentiles: Перцентилі для обмеження значень (нижній, верхній)
+
+        Returns:
+            DataFrame з доданими ознаками співвідношень
+        """
         self.logger.info("Створення ознак-співвідношень...")
 
-        # Створюємо копію, щоб не модифікувати оригінальні дані
+        # Створюємо копію даних
         result_df = data.copy()
 
-        # Перевіряємо, що всі зазначені стовпці існують в даних
-        missing_numerators = [col for col in numerators if col not in result_df.columns]
-        missing_denominators = [col for col in denominators if col not in result_df.columns]
-
-        if missing_numerators:
-            self.logger.warning(f"Стовпці чисельника {missing_numerators} не знайдено в даних і будуть пропущені")
-            numerators = [col for col in numerators if col in result_df.columns]
-
-        if missing_denominators:
-            self.logger.warning(f"Стовпці знаменника {missing_denominators} не знайдено в даних і будуть пропущені")
-            denominators = [col for col in denominators if col in result_df.columns]
+        # Перевіряємо наявність стовпців
+        num_cols, den_cols = self._validate_columns(
+            result_df, [numerators, denominators], ["Стовпці чисельника", "Стовпці знаменника"]
+        )
 
         # Перевіряємо, чи залишились стовпці після фільтрації
-        if not numerators or not denominators:
+        if not num_cols or not den_cols:
             self.logger.error("Немає доступних стовпців для створення співвідношень")
             return result_df
 
-        # Лічильник доданих ознак
-        added_features_count = 0
-
         # Створюємо всі можливі комбінації співвідношень
-        for num_col in numerators:
-            for den_col in denominators:
-                # Пропускаємо деякі комбінації, якщо чисельник і знаменник однакові
+        added_count = 0
+
+        for num_col in num_cols:
+            for den_col in den_cols:
+                # Пропускаємо однакові стовпці
                 if num_col == den_col:
                     self.logger.debug(f"Пропускаємо співвідношення {num_col}/{den_col} (однакові стовпці)")
                     continue
@@ -48,95 +107,82 @@ class CrossFeatures(FeatureEngineering):
                 # Створюємо назву нової ознаки
                 ratio_name = f"ratio_{num_col}_to_{den_col}"
 
-                # Обробляємо випадки з нульовими знаменниками
-                # Використовуємо numpy.divide з параметром where для безпечного ділення
-                self.logger.debug(f"Створюємо співвідношення {ratio_name}")
+                # Перевіряємо наявність нульових значень в знаменнику
+                zero_count = (result_df[den_col] == 0).sum()
 
-                # Перевіряємо, чи є нульові значення в знаменнику
-                zero_denominator_count = (result_df[den_col] == 0).sum()
-                if zero_denominator_count > 0:
-                    self.logger.warning(f"Знаменник {den_col} містить {zero_denominator_count} нульових значень")
+                # Створюємо ознаку співвідношення
+                if zero_count > 0:
+                    self.logger.warning(f"Знаменник {den_col} містить {zero_count} нульових значень")
+                    non_zero_mask = (result_df[den_col] != 0)
 
-                    # Використовуємо безпечне ділення: ігноруємо ділення на нуль
-                    # і встановлюємо спеціальне значення для таких випадків
-                    denominator = result_df[den_col].copy()
-
-                    # Створюємо маску для ненульових значень
-                    non_zero_mask = (denominator != 0)
-
-                    # Виконуємо ділення тільки для ненульових знаменників
-                    result_df[ratio_name] = np.nan  # спочатку встановлюємо NaN
-                    result_df.loc[non_zero_mask, ratio_name] = result_df.loc[non_zero_mask, num_col] / denominator[
-                        non_zero_mask]
-
-                    # Для нульових знаменників можна встановити спеціальне значення або залишити NaN
-                    # Тут ми залишаємо NaN і потім заповнюємо їх
+                    # Векторизоване обчислення для ненульових знаменників
+                    result_df[ratio_name] = np.nan
+                    result_df.loc[non_zero_mask, ratio_name] = (
+                            result_df.loc[non_zero_mask, num_col] / result_df.loc[non_zero_mask, den_col]
+                    )
                 else:
-                    # Якщо нульових знаменників немає, просто ділимо
                     result_df[ratio_name] = result_df[num_col] / result_df[den_col]
 
-                # Обробляємо випадки з нескінченностями (можуть виникнути при діленні на дуже малі числа)
+                # Обробляємо нескінченності
                 inf_count = np.isinf(result_df[ratio_name]).sum()
                 if inf_count > 0:
                     self.logger.warning(f"Співвідношення {ratio_name} містить {inf_count} нескінченних значень")
-                    # Замінюємо нескінченності на NaN для подальшої обробки
                     result_df[ratio_name].replace([np.inf, -np.inf], np.nan, inplace=True)
 
-                # Заповнюємо NaN значення (якщо є)
+                # Заповнюємо NaN значення
                 if result_df[ratio_name].isna().any():
-                    # Заповнюємо NaN медіаною стовпця
                     median_val = result_df[ratio_name].median()
-                    if pd.isna(median_val):  # Якщо медіана теж NaN
-                        result_df[ratio_name] = result_df[ratio_name].fillna(0)
-                        self.logger.debug(f"Заповнення NaN значень у стовпці {ratio_name} нулями")
-                    else:
-                        result_df[ratio_name] = result_df[ratio_name].fillna(median_val)
-                        self.logger.debug(f"Заповнення NaN значень у стовпці {ratio_name} медіаною: {median_val}")
+                    result_df[ratio_name] = result_df[ratio_name].fillna(
+                        0 if pd.isna(median_val) else median_val
+                    )
 
-                # Додаємо опціональне обмеження на великі значення
-                # Можна використовувати вінсоризацію або кліпінг
-                # Тут використовуємо простий кліпінг на основі перцентилів
-                q_low, q_high = result_df[ratio_name].quantile([0.01, 0.99])
+                # Застосовуємо обмеження на основі перцентилів
+                q_low, q_high = result_df[ratio_name].quantile(list(clip_percentiles))
                 result_df[ratio_name] = result_df[ratio_name].clip(q_low, q_high)
 
-                added_features_count += 1
+                self.added_features.append(ratio_name)
+                added_count += 1
 
-        self.logger.info(f"Додано {added_features_count} ознак-співвідношень")
+        self.logger.info(f"Додано {added_count} ознак-співвідношень")
 
         return result_df
+
     def create_crossover_features(self, data: pd.DataFrame,
                                   fast_columns: List[str],
-                                  slow_columns: List[str]) -> pd.DataFrame:
+                                  slow_columns: List[str],
+                                  slope_periods: int = 3) -> pd.DataFrame:
+        """Створює ознаки перетинів технічних індикаторів.
 
+        Args:
+            data: Вхідний DataFrame
+            fast_columns: Список швидких індикаторів
+            slow_columns: Список повільних індикаторів
+            slope_periods: Кількість періодів для обчислення нахилу
+
+        Returns:
+            DataFrame з доданими ознаками перетинів
+        """
         self.logger.info("Створення ознак перетинів індикаторів...")
 
-        # Створюємо копію, щоб не модифікувати оригінальні дані
+        # Створюємо копію даних
         result_df = data.copy()
 
-        # Перевіряємо, що всі зазначені стовпці існують в даних
-        missing_fast = [col for col in fast_columns if col not in result_df.columns]
-        missing_slow = [col for col in slow_columns if col not in result_df.columns]
-
-        if missing_fast:
-            self.logger.warning(f"Швидкі індикатори {missing_fast} не знайдено в даних і будуть пропущені")
-            fast_columns = [col for col in fast_columns if col in result_df.columns]
-
-        if missing_slow:
-            self.logger.warning(f"Повільні індикатори {missing_slow} не знайдено в даних і будуть пропущені")
-            slow_columns = [col for col in slow_columns if col in result_df.columns]
+        # Перевіряємо наявність стовпців
+        fast_cols, slow_cols = self._validate_columns(
+            result_df, [fast_columns, slow_columns], ["Швидкі індикатори", "Повільні індикатори"]
+        )
 
         # Перевіряємо, чи залишились стовпці після фільтрації
-        if not fast_columns or not slow_columns:
+        if not fast_cols or not slow_cols:
             self.logger.error("Немає доступних індикаторів для створення перетинів")
             return result_df
 
-        # Лічильник доданих ознак
-        added_features_count = 0
+        added_count = 0
 
-        # Для кожної пари індикаторів створюємо ознаки перетинів
-        for fast_col in fast_columns:
-            for slow_col in slow_columns:
-                # Пропускаємо пари однакових індикаторів
+        # Векторизоване створення ознак для всіх пар індикаторів
+        for fast_col in fast_cols:
+            for slow_col in slow_cols:
+                # Пропускаємо однакові індикатори
                 if fast_col == slow_col:
                     self.logger.debug(f"Пропускаємо пару {fast_col}/{slow_col} (однакові індикатори)")
                     continue
@@ -144,93 +190,106 @@ class CrossFeatures(FeatureEngineering):
                 # Базова назва для ознак цієї пари
                 base_name = f"{fast_col}_x_{slow_col}"
 
-                # 1. Створюємо ознаку відносної різниці між індикаторами
+                # 1. Різниця між індикаторами (vectorized)
                 diff_name = f"{base_name}_diff"
                 result_df[diff_name] = result_df[fast_col] - result_df[slow_col]
-                added_features_count += 1
+                self.added_features.append(diff_name)
+                added_count += 1
 
-                # 2. Створюємо ознаку відносної різниці (у відсотках)
+                # 2. Відносна різниця (у відсотках)
                 rel_diff_name = f"{base_name}_rel_diff"
-                # Уникаємо ділення на нуль
                 non_zero_mask = (result_df[slow_col] != 0)
+
+                # Векторизоване обчислення для ненульових знаменників
                 result_df[rel_diff_name] = np.nan
                 result_df.loc[non_zero_mask, rel_diff_name] = (
                         (result_df.loc[non_zero_mask, fast_col] / result_df.loc[non_zero_mask, slow_col] - 1) * 100
                 )
                 # Заповнюємо NaN значення
                 result_df[rel_diff_name].fillna(0, inplace=True)
-                added_features_count += 1
+                self.added_features.append(rel_diff_name)
+                added_count += 1
 
-                # 3. Створюємо бінарні ознаки перетинів
-                # Визначаємо попередні значення різниці для виявлення перетинів
+                # 3. Бінарні ознаки перетинів (vectorized)
                 prev_diff = result_df[diff_name].shift(1)
 
-                # Golden Cross: швидкий індикатор перетинає повільний знизу вгору
+                # Golden Cross: швидкий перетинає повільний знизу вгору
                 golden_cross_name = f"{base_name}_golden_cross"
                 result_df[golden_cross_name] = ((result_df[diff_name] > 0) & (prev_diff <= 0)).astype(int)
-                added_features_count += 1
+                self.added_features.append(golden_cross_name)
+                added_count += 1
 
-                # Death Cross: швидкий індикатор перетинає повільний згори вниз
+                # Death Cross: швидкий перетинає повільний згори вниз
                 death_cross_name = f"{base_name}_death_cross"
                 result_df[death_cross_name] = ((result_df[diff_name] < 0) & (prev_diff >= 0)).astype(int)
-                added_features_count += 1
+                self.added_features.append(death_cross_name)
+                added_count += 1
 
-                # 4. Створюємо ознаку тривалості поточного стану (кількість періодів після останнього перетину)
-                duration_name = f"{base_name}_state_duration"
-
-                # Ініціалізуємо значення тривалості
-                result_df[duration_name] = 0
-
-                # Знаходимо індекси всіх перетинів (обох типів)
-                all_crosses = (result_df[golden_cross_name] == 1) | (result_df[death_cross_name] == 1)
-                cross_indices = np.where(all_crosses)[0]
-
-                if len(cross_indices) > 0:
-                    # Для кожного сегмента між перетинами встановлюємо тривалість
-                    prev_idx = 0
-                    for idx in cross_indices:
-                        if idx > 0:  # Пропускаємо перший перетин (немає даних до нього)
-                            # Збільшуємо тривалість для всіх точок у сегменті
-                            for i in range(prev_idx, idx):
-                                result_df.iloc[i, result_df.columns.get_loc(duration_name)] = i - prev_idx
-                        prev_idx = idx
-
-                    # Обробляємо останній сегмент до кінця даних
-                    for i in range(prev_idx, len(result_df)):
-                        result_df.iloc[i, result_df.columns.get_loc(duration_name)] = i - prev_idx
-
-                added_features_count += 1
-
-                # 5. Додаємо ознаку напрямку (1 якщо швидкий вище повільного, -1 якщо нижче)
+                # 4. Напрямок (vectorized)
                 direction_name = f"{base_name}_direction"
                 result_df[direction_name] = np.sign(result_df[diff_name]).fillna(0).astype(int)
-                added_features_count += 1
+                self.added_features.append(direction_name)
+                added_count += 1
 
-                # 6. Додаємо ознаку кутового коефіцієнта (нахилу) між індикаторами
-                # Обчислюємо різницю похідних індикаторів для оцінки відносної швидкості зміни
+                # 5. Різниця нахилів індикаторів (vectorized)
                 slope_name = f"{base_name}_slope_diff"
-                # Використовуємо різницю за 3 періоди для стабільнішого результату
-                fast_slope = result_df[fast_col].diff(3)
-                slow_slope = result_df[slow_col].diff(3)
-                result_df[slope_name] = fast_slope - slow_slope
-                added_features_count += 1
+                result_df[slope_name] = (
+                        result_df[fast_col].diff(slope_periods) - result_df[slow_col].diff(slope_periods)
+                )
+                self.added_features.append(slope_name)
+                added_count += 1
 
-        # Заповнюємо NaN значення для нових ознак
-        for col in result_df.columns:
+                # 6. Оптимізована тривалість стану
+                self._add_state_duration_feature(result_df, base_name, golden_cross_name, death_cross_name)
+                self.added_features.append(f"{base_name}_state_duration")
+                added_count += 1
+
+        # Заповнюємо NaN для всіх нових ознак
+        for col in self.added_features:
             if col not in data.columns:  # Перевіряємо, що це нова ознака
-                if result_df[col].isna().any():
-                    self.logger.debug(f"Заповнення NaN значень у стовпці {col}")
-                    # Для бінарних ознак (перетини) використовуємо 0
-                    if col.endswith('_cross'):
-                        result_df[col] = result_df[col].fillna(0)
-                    else:
-                        # Для інших ознак використовуємо прямий і зворотній метод заповнення
-                        result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
+                self._handle_nan_values(result_df, col, is_binary=col.endswith('_cross'))
 
-                        # Якщо все ще є NaN, заповнюємо нулями
-                        if result_df[col].isna().any():
-                            result_df[col] = result_df[col].fillna(0)
-
-        self.logger.info(f"Додано {added_features_count} ознак перетинів індикаторів")
+        self.logger.info(f"Додано {added_count} ознак перетинів індикаторів")
 
         return result_df
+
+    def _add_state_duration_feature(self, df: pd.DataFrame, base_name: str,
+                                    golden_cross_name: str, death_cross_name: str) -> None:
+        """Додає ознаку тривалості поточного стану (оптимізована версія).
+
+        Args:
+            df: DataFrame для обробки
+            base_name: Базова назва для ознаки
+            golden_cross_name: Назва стовпця golden cross
+            death_cross_name: Назва стовпця death cross
+        """
+        duration_name = f"{base_name}_state_duration"
+
+        # Знаходимо всі перетини
+        all_crosses = (df[golden_cross_name] == 1) | (df[death_cross_name] == 1)
+
+        # Використовуємо numpy для ефективного обчислення тривалості стану
+        # Створюємо масив з кумулятивним числом без перетину
+        cross_indices = np.where(all_crosses)[0]
+        duration = np.zeros(len(df))
+
+        if len(cross_indices) > 0:
+            # Використовуємо numpy масиви для швидкої операції
+            segment_starts = np.zeros(len(df), dtype=int)
+
+            # Позначаємо початки сегментів
+            segment_starts[cross_indices] = 1
+
+            # Для кожної точки знаходимо відстань до останнього перетину
+            # використовуючи кумулятивну суму як лічильник з моменту перетину
+            cumulative_idx = np.cumsum(np.arange(len(df)))
+            last_cross_cumidx = np.maximum.accumulate(cumulative_idx * segment_starts)
+
+            # Обчислюємо тривалість станів
+            duration = np.where(
+                segment_starts == 1,
+                0,  # На точках перетину тривалість = 0
+                cumulative_idx - last_cross_cumidx  # Інакше різниця між поточним та останнім перетином
+            )
+
+        df[duration_name] = duration
