@@ -1,8 +1,8 @@
 from typing import Optional, List
-
+from utils.logger import CryptoLogger
 import numpy as np
 import pandas as pd
-import ta
+import pandas_ta as ta
 
 
 class TechnicalFeatures:
@@ -26,111 +26,141 @@ class TechnicalFeatures:
         if indicators is None:
             indicators = [
                 'sma', 'ema', 'rsi', 'macd', 'bollinger_bands',
-                'stochastic', 'atr', 'adx', 'obv', 'roc', 'cci'
+                'stochastic', 'atr', 'adx', 'obv', 'roc', 'cci',
+                'vwap', 'supertrend', 'keltner', 'psar', 'ichimoku'
             ]
             self.logger.info(f"Використовується базовий набір індикаторів: {indicators}")
 
         # Лічильник доданих ознак
         added_features_count = 0
 
-        # Індикатори на основі бібліотеки ta
+        # Індикатори на основі бібліотеки pandas_ta
         for indicator in indicators:
             try:
                 # Прості ковзні середні
                 if indicator == 'sma':
                     for window in [5, 10, 20, 50, 200]:
                         if 'close' in result_df.columns:
-                            result_df[f'sma_{window}'] = ta.trend.sma_indicator(result_df['close'], window=window)
+                            result_df[f'sma_{window}'] = ta.sma(result_df['close'], length=window)
                             added_features_count += 1
 
                 # Експоненціальні ковзні середні
                 elif indicator == 'ema':
                     for window in [5, 10, 20, 50, 200]:
                         if 'close' in result_df.columns:
-                            result_df[f'ema_{window}'] = ta.trend.ema_indicator(result_df['close'], window=window)
+                            result_df[f'ema_{window}'] = ta.ema(result_df['close'], length=window)
                             added_features_count += 1
 
                 # Relative Strength Index
                 elif indicator == 'rsi':
                     for window in [7, 14, 21]:
                         if 'close' in result_df.columns:
-                            result_df[f'rsi_{window}'] = ta.momentum.rsi(result_df['close'], window=window)
+                            result_df[f'rsi_{window}'] = ta.rsi(result_df['close'], length=window)
                             added_features_count += 1
 
                 # Moving Average Convergence Divergence
                 elif indicator == 'macd':
                     if 'close' in result_df.columns:
-                        macd = ta.trend.macd(result_df['close'], fast=12, slow=26, signal=9)
-                        result_df['macd_line'] = macd.iloc[:, 0]
-                        result_df['macd_signal'] = macd.iloc[:, 1]
-                        result_df['macd_histogram'] = macd.iloc[:, 2]
+                        macd_df = ta.macd(result_df['close'], fast=12, slow=26, signal=9)
+                        result_df = pd.concat([result_df, macd_df], axis=1)
                         added_features_count += 3
 
                 # Bollinger Bands
                 elif indicator == 'bollinger_bands':
                     for window in [20]:
                         if 'close' in result_df.columns:
-                            result_df[f'bb_high_{window}'] = ta.volatility.bollinger_hband(result_df['close'],
-                                                                                           window=window)
-                            result_df[f'bb_mid_{window}'] = ta.volatility.bollinger_mavg(result_df['close'],
-                                                                                         window=window)
-                            result_df[f'bb_low_{window}'] = ta.volatility.bollinger_lband(result_df['close'],
-                                                                                          window=window)
-                            result_df[f'bb_width_{window}'] = (result_df[f'bb_high_{window}'] - result_df[
-                                f'bb_low_{window}']) / result_df[f'bb_mid_{window}']
+                            bbands = ta.bbands(result_df['close'], length=window)
+                            result_df = pd.concat([result_df, bbands], axis=1)
+                            # Додаємо розрахунок ширини полос
+                            result_df[f'bb_width_{window}'] = (result_df[f'BBU_{window}_2.0'] -
+                                                               result_df[f'BBL_{window}_2.0']) / result_df[
+                                                                  f'BBM_{window}_2.0']
                             added_features_count += 4
 
                 # Stochastic Oscillator
                 elif indicator == 'stochastic':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                        result_df['stoch_k'] = ta.momentum.stoch(result_df['high'], result_df['low'],
-                                                                 result_df['close'])
-                        result_df['stoch_d'] = ta.momentum.stoch_signal(result_df['high'], result_df['low'],
-                                                                        result_df['close'])
+                        stoch = ta.stoch(result_df['high'], result_df['low'], result_df['close'], k=14, d=3, smooth_k=3)
+                        result_df = pd.concat([result_df, stoch], axis=1)
                         added_features_count += 2
 
                 # Average True Range
                 elif indicator == 'atr':
                     for window in [14]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                            result_df[f'atr_{window}'] = ta.volatility.average_true_range(result_df['high'],
-                                                                                          result_df['low'],
-                                                                                          result_df['close'],
-                                                                                          window=window)
+                            result_df[f'atr_{window}'] = ta.atr(result_df['high'], result_df['low'],
+                                                                result_df['close'], length=window)
                             added_features_count += 1
 
                 # Average Directional Index
                 elif indicator == 'adx':
                     for window in [14]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                            result_df[f'adx_{window}'] = ta.trend.adx(result_df['high'], result_df['low'],
-                                                                      result_df['close'], window=window)
-                            result_df[f'adx_pos_{window}'] = ta.trend.adx_pos(result_df['high'], result_df['low'],
-                                                                              result_df['close'], window=window)
-                            result_df[f'adx_neg_{window}'] = ta.trend.adx_neg(result_df['high'], result_df['low'],
-                                                                              result_df['close'], window=window)
+                            adx_df = ta.adx(result_df['high'], result_df['low'], result_df['close'], length=window)
+                            result_df = pd.concat([result_df, adx_df], axis=1)
                             added_features_count += 3
 
                 # On Balance Volume
                 elif indicator == 'obv':
                     if all(col in result_df.columns for col in ['close', 'volume']):
-                        result_df['obv'] = ta.volume.on_balance_volume(result_df['close'], result_df['volume'])
+                        result_df['obv'] = ta.obv(result_df['close'], result_df['volume'])
                         added_features_count += 1
 
                 # Rate of Change
                 elif indicator == 'roc':
                     for window in [5, 10, 20]:
                         if 'close' in result_df.columns:
-                            result_df[f'roc_{window}'] = ta.momentum.roc(result_df['close'], window=window)
+                            result_df[f'roc_{window}'] = ta.roc(result_df['close'], length=window)
                             added_features_count += 1
 
                 # Commodity Channel Index
                 elif indicator == 'cci':
                     for window in [20]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                            result_df[f'cci_{window}'] = ta.trend.cci(result_df['high'], result_df['low'],
-                                                                      result_df['close'], window=window)
+                            result_df[f'cci_{window}'] = ta.cci(result_df['high'], result_df['low'],
+                                                                result_df['close'], length=window)
                             added_features_count += 1
+
+                # Volume Weighted Average Price (VWAP)
+                elif indicator == 'vwap':
+                    if all(col in result_df.columns for col in ['high', 'low', 'close', 'volume']):
+                        # pandas_ta не має вбудованого VWAP з параметром довжини, тому робимо власний розрахунок
+                        for period in [14, 30]:
+                            typical_price = (result_df['high'] + result_df['low'] + result_df['close']) / 3
+                            vol_tp = result_df['volume'] * typical_price
+                            result_df[f'vwap_{period}'] = vol_tp.rolling(window=period).sum() / result_df[
+                                'volume'].rolling(window=period).sum()
+                            added_features_count += 1
+
+                # SuperTrend індикатор
+                elif indicator == 'supertrend':
+                    if all(col in result_df.columns for col in ['high', 'low', 'close']):
+                        for period in [10, 20]:
+                            st_df = ta.supertrend(result_df['high'], result_df['low'], result_df['close'],
+                                                  length=period, multiplier=3.0)
+                            result_df = pd.concat([result_df, st_df], axis=1)
+                            added_features_count += 2  # Додає індикатор і сигнальні лінії
+
+                # Полоси Кельтнера
+                elif indicator == 'keltner':
+                    if all(col in result_df.columns for col in ['high', 'low', 'close']):
+                        kc_df = ta.kc(result_df['high'], result_df['low'], result_df['close'], length=20)
+                        result_df = pd.concat([result_df, kc_df], axis=1)
+                        added_features_count += 3  # Верхня, середня і нижня лінії
+
+                # Parabolic SAR
+                elif indicator == 'psar':
+                    if all(col in result_df.columns for col in ['high', 'low', 'close']):
+                        psar_df = ta.psar(result_df['high'], result_df['low'])
+                        result_df = pd.concat([result_df, psar_df], axis=1)
+                        added_features_count += 2  # PSARl_0.02_0.2 і PSARs_0.02_0.2
+
+                # Ichimoku Cloud
+                elif indicator == 'ichimoku':
+                    if all(col in result_df.columns for col in ['high', 'low', 'close']):
+                        ichimoku_df = ta.ichimoku(result_df['high'], result_df['low'], result_df['close'])
+                        result_df = pd.concat([result_df, ichimoku_df], axis=1)
+                        added_features_count += 5  # Tenkan, Kijun, Senkou A, Senkou B, Chikou
 
                 # Додаткові індикатори можна додати тут
                 else:
@@ -154,8 +184,17 @@ class TechnicalFeatures:
         self.logger.info(f"Додано {added_features_count} технічних індикаторів")
 
         return result_df
-    def create_candle_pattern_features(self, data: pd.DataFrame) -> pd.DataFrame:
 
+    def create_candle_pattern_features(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Створює ознаки на основі патернів свічок з використанням pandas_ta.
+
+        Args:
+            data: DataFrame з OHLCV даними
+
+        Returns:
+            DataFrame з доданими ознаками свічкових патернів
+        """
         self.logger.info("Створення ознак на основі патернів свічок...")
 
         # Створюємо копію, щоб не модифікувати оригінальні дані
@@ -172,10 +211,9 @@ class TechnicalFeatures:
         # Лічильник доданих ознак
         added_features_count = 0
 
-        # --- Базові властивості свічок ---
-
+        # --- Базові властивості свічок (векторизовано) ---
         # 1. Тіло свічки (абсолютне)
-        result_df['candle_body'] = abs(result_df['close'] - result_df['open'])
+        result_df['candle_body'] = np.abs(result_df['close'] - result_df['open'])
         added_features_count += 1
 
         # 2. Верхня тінь
@@ -191,27 +229,37 @@ class TechnicalFeatures:
         added_features_count += 1
 
         # 5. Відносний розмір тіла (порівняно з повним розмахом)
-        # Уникаємо ділення на нуль
-        non_zero_range = result_df['candle_range'] != 0
-        result_df['rel_body_size'] = np.nan
-        result_df.loc[non_zero_range, 'rel_body_size'] = (
-                result_df.loc[non_zero_range, 'candle_body'] / result_df.loc[non_zero_range, 'candle_range']
+        # Уникаємо ділення на нуль векторизовано
+        result_df['rel_body_size'] = np.where(
+            result_df['candle_range'] != 0,
+            result_df['candle_body'] / result_df['candle_range'],
+            0
         )
-        result_df['rel_body_size'].fillna(0, inplace=True)
         added_features_count += 1
 
         # 6. Напрямок свічки (1 для бичачої, -1 для ведмежої)
         result_df['candle_direction'] = np.sign(result_df['close'] - result_df['open']).fillna(0).astype(int)
         added_features_count += 1
 
-        # --- Патерни з однієї свічки ---
+        # 7. Розмір відносно попередніх N свічок (новий індикатор)
+        window = 20
+        result_df['rel_candle_size'] = result_df['candle_body'] / result_df['candle_body'].rolling(window=window).mean()
+        added_features_count += 1
 
-        # 1. Дожі (тіло менше X% від розмаху)
+        # --- Використання pandas_ta для патернів свічок ---
+        # pandas_ta має вбудовані функції для розпізнавання патернів свічок
+        patterns = ta.cdl_pattern(open_=result_df['open'], high=result_df['high'],
+                                  low=result_df['low'], close=result_df['close'])
+        result_df = pd.concat([result_df, patterns], axis=1)
+        added_features_count += len(patterns.columns)
+
+        # --- Патерни з однієї свічки (додаткові) ---
+        # 1. Дожі (тіло менше X% від розмаху) - векторизовано
         doji_threshold = 0.1  # 10% від повного розмаху
         result_df['doji'] = (result_df['rel_body_size'] < doji_threshold).astype(int)
         added_features_count += 1
 
-        # 2. Молот (маленьке тіло, коротка верхня тінь, довга нижня тінь)
+        # 2. Молот (векторизовано)
         hammer_conditions = (
                 (result_df['rel_body_size'] < 0.3) &  # маленьке тіло
                 (result_df['lower_shadow'] > 2 * result_df['candle_body']) &  # довга нижня тінь
@@ -220,7 +268,7 @@ class TechnicalFeatures:
         result_df['hammer'] = hammer_conditions.astype(int)
         added_features_count += 1
 
-        # 3. Перевернутий молот (маленьке тіло, довга верхня тінь, коротка нижня тінь)
+        # 3. Перевернутий молот (векторизовано)
         inv_hammer_conditions = (
                 (result_df['rel_body_size'] < 0.3) &  # маленьке тіло
                 (result_df['upper_shadow'] > 2 * result_df['candle_body']) &  # довга верхня тінь
@@ -229,13 +277,13 @@ class TechnicalFeatures:
         result_df['inverted_hammer'] = inv_hammer_conditions.astype(int)
         added_features_count += 1
 
-        # 4. Довгі свічки (тіло більше X% від середнього тіла за N періодів)
+        # 4. Довгі свічки (векторизовано)
         window = 20
         avg_body = result_df['candle_body'].rolling(window=window).mean()
         result_df['long_candle'] = (result_df['candle_body'] > 1.5 * avg_body).astype(int)
         added_features_count += 1
 
-        # 5. Марібозу (свічка майже без тіней)
+        # 5. Марібозу (векторизовано)
         marubozu_threshold = 0.05  # тіні менше 5% від розмаху
         marubozu_conditions = (
                 (result_df['upper_shadow'] < marubozu_threshold * result_df['candle_range']) &
@@ -245,10 +293,27 @@ class TechnicalFeatures:
         result_df['marubozu'] = marubozu_conditions.astype(int)
         added_features_count += 1
 
-        # --- Патерни з декількох свічок ---
+        # 6. Висока хвиля (High Wave) - новий патерн
+        high_wave_conditions = (
+                (result_df['rel_body_size'] < 0.3) &  # маленьке тіло
+                ((result_df['upper_shadow'] > 3 * result_df['candle_body']) |
+                 (result_df['lower_shadow'] > 3 * result_df['candle_body']))  # довга тінь (верхня або нижня)
+        )
+        result_df['high_wave'] = high_wave_conditions.astype(int)
+        added_features_count += 1
 
-        # 1. Поглинання (bullish/bearish engulfing)
-        # Бичаче поглинання: ведмежа свічка, за якою йде більша бичача
+        # 7. Світлячок (Firefly) - новий патерн
+        firefly_conditions = (
+                (result_df['rel_body_size'] < 0.25) &  # дуже маленьке тіло
+                (result_df['upper_shadow'] < 0.1 * result_df['candle_range']) &  # майже немає верхньої тіні
+                (result_df['lower_shadow'] > 2.5 * result_df['candle_body'])  # дуже довга нижня тінь
+        )
+        result_df['firefly'] = firefly_conditions.astype(int)
+        added_features_count += 1
+
+        # --- Патерни з декількох свічок (векторизовано) ---
+        # 1. Поглинання
+        # Бичаче поглинання
         bullish_engulfing = (
                 (result_df['candle_direction'].shift(1) == -1) &  # попередня свічка ведмежа
                 (result_df['candle_direction'] == 1) &  # поточна свічка бичача
@@ -258,7 +323,7 @@ class TechnicalFeatures:
         result_df['bullish_engulfing'] = bullish_engulfing.astype(int)
         added_features_count += 1
 
-        # Ведмеже поглинання: бичача свічка, за якою йде більша ведмежа
+        # Ведмеже поглинання
         bearish_engulfing = (
                 (result_df['candle_direction'].shift(1) == 1) &  # попередня свічка бичача
                 (result_df['candle_direction'] == -1) &  # поточна свічка ведмежа
@@ -268,29 +333,27 @@ class TechnicalFeatures:
         result_df['bearish_engulfing'] = bearish_engulfing.astype(int)
         added_features_count += 1
 
-        # 2. Ранкова зірка (morning star) - ведмежа свічка, за нею маленька, потім бичача
+        # 2. Ранкова зірка
         morning_star = (
                 (result_df['candle_direction'].shift(2) == -1) &  # перша свічка ведмежа
                 (result_df['rel_body_size'].shift(1) < 0.3) &  # друга свічка маленька
                 (result_df['candle_direction'] == 1) &  # третя свічка бичача
                 (result_df['close'] > (result_df['open'].shift(2) + result_df['close'].shift(2)) / 2)
-        # закриття вище середини першої свічки
         )
         result_df['morning_star'] = morning_star.astype(int)
         added_features_count += 1
 
-        # 3. Вечірня зірка (evening star) - бичача свічка, за нею маленька, потім ведмежа
+        # 3. Вечірня зірка
         evening_star = (
                 (result_df['candle_direction'].shift(2) == 1) &  # перша свічка бичача
                 (result_df['rel_body_size'].shift(1) < 0.3) &  # друга свічка маленька
                 (result_df['candle_direction'] == -1) &  # третя свічка ведмежа
                 (result_df['close'] < (result_df['open'].shift(2) + result_df['close'].shift(2)) / 2)
-        # закриття нижче середини першої свічки
         )
         result_df['evening_star'] = evening_star.astype(int)
         added_features_count += 1
 
-        # 4. Три білих солдати (three white soldiers) - три послідовні бичачі свічки з закриттям вище попереднього
+        # 4. Три білих солдати
         three_white_soldiers = (
                 (result_df['candle_direction'].shift(2) == 1) &  # перша свічка бичача
                 (result_df['candle_direction'].shift(1) == 1) &  # друга свічка бичача
@@ -301,7 +364,7 @@ class TechnicalFeatures:
         result_df['three_white_soldiers'] = three_white_soldiers.astype(int)
         added_features_count += 1
 
-        # 5. Три чорні ворони (three black crows) - три послідовні ведмежі свічки з закриттям нижче попереднього
+        # 5. Три чорні ворони
         three_black_crows = (
                 (result_df['candle_direction'].shift(2) == -1) &  # перша свічка ведмежа
                 (result_df['candle_direction'].shift(1) == -1) &  # друга свічка ведмежа
@@ -312,16 +375,16 @@ class TechnicalFeatures:
         result_df['three_black_crows'] = three_black_crows.astype(int)
         added_features_count += 1
 
-        # 6. Зірка доджі (doji star) - свічка, за якою йде доджі
+        # 6. Зірка доджі
         result_df['doji_star'] = (result_df['doji'] & (result_df['doji'].shift(1) == 0)).astype(int)
         added_features_count += 1
 
-        # 7. Пінцет (зверху/знизу) - дві свічки з однаковими максимумами/мінімумами
+        # 7. Пінцет (зверху/знизу)
         pinbar_tolerance = 0.001  # допустима різниця для "однакових" значень
 
         # Верхній пінцет (однакові максимуми)
         top_pinbar = (
-                (abs(result_df['high'] - result_df['high'].shift(1)) < pinbar_tolerance * result_df['high']) &
+                (np.abs(result_df['high'] - result_df['high'].shift(1)) < pinbar_tolerance * result_df['high']) &
                 (result_df['candle_direction'].shift(1) != result_df['candle_direction'])  # різний напрямок свічок
         )
         result_df['top_pinbar'] = top_pinbar.astype(int)
@@ -329,11 +392,64 @@ class TechnicalFeatures:
 
         # Нижній пінцет (однакові мінімуми)
         bottom_pinbar = (
-                (abs(result_df['low'] - result_df['low'].shift(1)) < pinbar_tolerance * result_df['low']) &
+                (np.abs(result_df['low'] - result_df['low'].shift(1)) < pinbar_tolerance * result_df['low']) &
                 (result_df['candle_direction'].shift(1) != result_df['candle_direction'])  # різний напрямок свічок
         )
         result_df['bottom_pinbar'] = bottom_pinbar.astype(int)
         added_features_count += 1
+
+        # 8. Харамі (нові патерни)
+        # Бичаче харамі
+        bullish_harami = (
+                (result_df['candle_direction'].shift(1) == -1) &  # попередня свічка ведмежа
+                (result_df['candle_direction'] == 1) &  # поточна свічка бичача
+                (result_df['open'] > result_df['close'].shift(1)) &  # відкриття вище закриття попередньої
+                (result_df['close'] < result_df['open'].shift(1)) &  # закриття нижче відкриття попередньої
+                (result_df['candle_body'] < result_df['candle_body'].shift(1) * 0.6)  # тіло менше 60% попереднього
+        )
+        result_df['bullish_harami'] = bullish_harami.astype(int)
+        added_features_count += 1
+
+        # Ведмеже харамі
+        bearish_harami = (
+                (result_df['candle_direction'].shift(1) == 1) &  # попередня свічка бичача
+                (result_df['candle_direction'] == -1) &  # поточна свічка ведмежа
+                (result_df['open'] < result_df['close'].shift(1)) &  # відкриття нижче закриття попередньої
+                (result_df['close'] > result_df['open'].shift(1)) &  # закриття вище відкриття попередньої
+                (result_df['candle_body'] < result_df['candle_body'].shift(1) * 0.6)  # тіло менше 60% попереднього
+        )
+        result_df['bearish_harami'] = bearish_harami.astype(int)
+        added_features_count += 1
+
+        # 9. Висхідний трикутник (новий патерн)
+        for period in [5]:
+            # Нижні мінімуми зростають, верхні максимуми однакові
+            min_low = result_df['low'].rolling(window=period).min()
+            max_high = result_df['high'].rolling(window=period).max()
+
+            # Умови для висхідного трикутника
+            ascending_triangle = (
+                    (result_df['low'] > min_low.shift(1)) &  # поточний мінімум вище попереднього мінімуму
+                    (np.abs(result_df['high'] - max_high.shift(1)) < pinbar_tolerance * result_df['high'])
+            # максимуми рівні
+            )
+            result_df[f'ascending_triangle_{period}'] = ascending_triangle.astype(int)
+            added_features_count += 1
+
+        # 10. Низхідний трикутник (новий патерн)
+        for period in [5]:
+            # Верхні максимуми спадають, нижні мінімуми однакові
+            min_low = result_df['low'].rolling(window=period).min()
+            max_high = result_df['high'].rolling(window=period).max()
+
+            # Умови для низхідного трикутника
+            descending_triangle = (
+                    (result_df['high'] < max_high.shift(1)) &  # поточний максимум нижче попереднього максимуму
+                    (np.abs(result_df['low'] - min_low.shift(1)) < pinbar_tolerance * result_df['low'])
+            # мінімуми рівні
+            )
+            result_df[f'descending_triangle_{period}'] = descending_triangle.astype(int)
+            added_features_count += 1
 
         # Заповнюємо пропущені значення (особливо на початку ряду через використання .shift())
         for col in result_df.columns:
@@ -371,239 +487,219 @@ class TechnicalFeatures:
 
         if missing_columns_info:
             for group, missing in missing_columns_info.items():
-                self.logger.warning(f"Для групи '{group}' відсутні колонки: {missing}")
-
-        if not available_groups:
-            self.logger.error("Немає достатньо даних для розрахунку жодного індикатора")
-            return result_df
+                self.logger.warning(f"Група індикаторів '{group}' недоступна через відсутні колонки: {missing}")
 
         # Лічильник доданих ознак
         added_features_count = 0
 
-        # --- 1. Chaikin Money Flow (CMF) ---
-        if 'ohlcv' in available_groups:
-            # Кількість періодів для розрахунку CMF
-            for period in [20]:
-                # Money Flow Multiplier
-                mfm = ((result_df['close'] - result_df['low']) - (result_df['high'] - result_df['close'])) / (
-                            result_df['high'] - result_df['low'])
-                # Замінюємо нескінченні значення на нуль (коли high=low)
-                mfm = mfm.replace([np.inf, -np.inf], 0)
+        # --- Цінові індикатори (потребують тільки цінових даних) ---
+        if 'basic' in available_groups:
+            try:
+                # 1. Хвилі Еліота (спрощений підхід) - виявлення паттернів
+                for window in [21, 34]:
+                    # Знаходимо локальні максимуми і мінімуми
+                    result_df[f'local_max_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
+                        lambda x: 1 if x.argmax() == len(x) // 2 else 0, raw=True)
+                    result_df[f'local_min_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
+                        lambda x: 1 if x.argmin() == len(x) // 2 else 0, raw=True)
+                    added_features_count += 2
 
-                # Money Flow Volume
-                mfv = mfm * result_df['volume']
+                # 2. Фрактальний індикатор (аналог індикатора Білла Вільямса)
+                for window in [5]:  # класично використовується 5
+                    half_window = window // 2
+                    # Верхні фрактали
+                    result_df[f'fractal_high_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
+                        lambda x: 1 if (x[half_window] == max(x)) and (x[half_window] != x[0]) and (
+                                    x[half_window] != x[-1]) else 0,
+                        raw=True)
+                    # Нижні фрактали
+                    result_df[f'fractal_low_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
+                        lambda x: 1 if (x[half_window] == min(x)) and (x[half_window] != x[0]) and (
+                                    x[half_window] != x[-1]) else 0,
+                        raw=True)
+                    added_features_count += 2
 
-                # Chaikin Money Flow
-                cmf_name = f'cmf_{period}'
-                result_df[cmf_name] = mfv.rolling(window=period).sum() / result_df['volume'].rolling(
-                    window=period).sum()
+                # 3. Цикли Фібоначчі (відносні рівні)
+                for fib_level in [0.236, 0.382, 0.5, 0.618, 0.786]:
+                    # Розрахуємо для різних періодів
+                    for window in [55, 89]:  # числа Фібоначчі
+                        # Знаходимо мінімум і максимум у вікні
+                        roll_max = result_df['close'].rolling(window=window).max()
+                        roll_min = result_df['close'].rolling(window=window).min()
+                        # Розраховуємо рівень Фібоначчі
+                        fib_level_price = roll_min + (roll_max - roll_min) * fib_level
+                        # Створюємо індикатор близькості до рівня Фібоначчі
+                        tolerance = 0.005  # допустиме відхилення у відсотках
+                        near_fib = np.abs(result_df['close'] - fib_level_price) < (result_df['close'] * tolerance)
+                        result_df[f'near_fib_{fib_level:.3f}_{window}'] = near_fib.astype(int)
+                        added_features_count += 1
+
+                # 4. Середній діапазон денних свічок (власний криптоспецифічний індикатор)
+                time_window = 24  # для денних свічок
+                result_df['daily_range_ratio'] = result_df['close'].pct_change(periods=time_window).abs()
                 added_features_count += 1
 
-                # Згладжений CMF (EMA на 10 періодів)
-                smooth_cmf_name = f'smooth_cmf_{period}'
-                result_df[smooth_cmf_name] = result_df[cmf_name].ewm(span=10, min_periods=5).mean()
-                added_features_count += 1
+                # 5. Тренд-аналізатор (власний індикатор для виявлення сили тренду)
+                for window in [7, 14, 30]:
+                    # Цей індикатор оцінює послідовність руху ціни у вікні
+                    # Рахуємо кількість напрямків руху, що збігаються
+                    direction = np.sign(result_df['close'].diff()).fillna(0)
+                    result_df[f'trend_strength_{window}'] = direction.rolling(window=window).apply(
+                        lambda x: abs(x.sum()) / window, raw=True)
+                    added_features_count += 1
 
-        # --- 2. On Balance Volume (OBV) ---
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні цінових індикаторів: {str(e)}")
+
+        # --- Індикатори на основі об'єму (потребують цінових даних та об'єму) ---
         if 'volume' in available_groups:
-            # Розрахунок OBV (класичний алгоритм)
-            result_df['price_change'] = result_df['close'].diff()
-            result_df['obv'] = 0
-
-            # Перший OBV дорівнює першому обсягу
-            if len(result_df) > 0:
-                result_df.loc[result_df.index[0], 'obv'] = result_df.loc[result_df.index[0], 'volume']
-
-            # Розрахунок OBV для всіх наступних точок
-            for i in range(1, len(result_df)):
-                prev_obv = result_df.loc[result_df.index[i - 1], 'obv']
-                curr_volume = result_df.loc[result_df.index[i], 'volume']
-                price_change = result_df.loc[result_df.index[i], 'price_change']
-
-                if price_change > 0:  # Ціна зросла
-                    result_df.loc[result_df.index[i], 'obv'] = prev_obv + curr_volume
-                elif price_change < 0:  # Ціна знизилась
-                    result_df.loc[result_df.index[i], 'obv'] = prev_obv - curr_volume
-                else:  # Ціна не змінилась
-                    result_df.loc[result_df.index[i], 'obv'] = prev_obv
-
-            # Видаляємо допоміжний стовпець
-            result_df.drop('price_change', axis=1, inplace=True)
-            added_features_count += 1
-
-            # OBV EMA Signal - ковзне середнє для OBV
-            for period in [20]:
-                obv_signal_name = f'obv_signal_{period}'
-                result_df[obv_signal_name] = result_df['obv'].ewm(span=period, min_periods=period // 2).mean()
+            try:
+                # 1. Відношення об'єму до цінової зміни (особливо важливо для криптовалют)
+                result_df['volume_price_ratio'] = result_df['volume'] / (np.abs(result_df['close'].diff()) + 1e-10)
                 added_features_count += 1
 
-            # OBV Difference - різниця між OBV та його сигнальною лінією
-            result_df['obv_diff'] = result_df['obv'] - result_df['obv_signal_20']
-            added_features_count += 1
+                # 2. Кумулятивний індекс об'єму (delta)
+                close_diff = result_df['close'].diff()
+                result_df['volume_delta'] = result_df['volume'] * np.sign(close_diff).fillna(0)
+                result_df['cumulative_volume_delta'] = result_df['volume_delta'].cumsum()
+                added_features_count += 2
 
-        # --- 3. Accumulation/Distribution Line (ADL) ---
+                # 3. Об'ємні аномалії (відхилення від середнього об'єму)
+                for window in [20, 50]:
+                    mean_volume = result_df['volume'].rolling(window=window).mean()
+                    std_volume = result_df['volume'].rolling(window=window).std()
+                    result_df[f'volume_zscore_{window}'] = (result_df['volume'] - mean_volume) / (std_volume + 1e-10)
+                    added_features_count += 1
+
+                # 4. Накопичення/розподіл (Accumulation/Distribution) індикатор
+                clv = ((result_df['close'] - result_df['low']) - (result_df['high'] - result_df['close'])) / (
+                            result_df['high'] - result_df['low'] + 1e-10)
+                result_df['acc_dist'] = clv * result_df['volume']
+                result_df['acc_dist_cumulative'] = result_df['acc_dist'].cumsum()
+                added_features_count += 2
+
+                # 5. Об'єм відносно середнього (Volume Relative to Average)
+                for window in [7, 14, 30]:
+                    result_df[f'volume_rel_avg_{window}'] = result_df['volume'] / result_df['volume'].rolling(
+                        window=window).mean()
+                    added_features_count += 1
+
+                # 6. Об'ємний профіль (розподіл об'єму за цінами) - спрощений підхід
+                for window in [20]:
+                    # Зважена ціна по об'єму
+                    result_df[f'volume_weighted_price_{window}'] = (result_df['close'] * result_df['volume']).rolling(
+                        window=window).sum() / result_df['volume'].rolling(window=window).sum()
+                    added_features_count += 1
+
+                # 7. Силові Індекси (ElderRay)
+                for period in [13]:
+                    ema = result_df['close'].ewm(span=period, adjust=False).mean()
+                    result_df[f'elder_bull_power_{period}'] = result_df['high'] - ema
+                    result_df[f'elder_bear_power_{period}'] = result_df['low'] - ema
+                    added_features_count += 2
+
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні індикаторів на основі об'єму: {str(e)}")
+
+        # --- Специфічні для криптовалют індикатори (потребують усіх OHLCV даних) ---
         if 'ohlcv' in available_groups:
-            # Money Flow Multiplier
-            mfm = ((result_df['close'] - result_df['low']) - (result_df['high'] - result_df['close'])) / (
-                        result_df['high'] - result_df['low'])
-            mfm = mfm.replace([np.inf, -np.inf], 0)
+            try:
+                # 1. Волатильність за годину/добу/тиждень (специфічно для крипторинку, що працює 24/7)
+                for periods in [24, 24 * 7]:  # година, доба, тиждень у годинних даних
+                    high_period = result_df['high'].rolling(window=periods).max()
+                    low_period = result_df['low'].rolling(window=periods).min()
+                    result_df[f'volatility_{periods}h'] = (high_period - low_period) / low_period
+                    added_features_count += 1
 
-            # Money Flow Volume
-            mfv = mfm * result_df['volume']
+                # 2. Індикатор криптовалютної паніки (аналог "індексу страху і жадібності")
+                # Використовує комбінацію волатильності і об'єму
+                for window in [24]:
+                    volatility = result_df['close'].rolling(window=window).std() / result_df['close'].rolling(
+                        window=window).mean()
+                    volume_change = result_df['volume'].pct_change(periods=window)
+                    # Індекс страху: висока волатильність + різкий зріст об'єму + зниження ціни
+                    fear_index = volatility * np.where(
+                        (volume_change > 0) & (result_df['close'].pct_change(periods=window) < 0),
+                        volume_change + 1, 1)
+                    result_df[f'crypto_fear_index_{window}'] = fear_index
+                    added_features_count += 1
 
-            # ADL - кумулятивна сума Money Flow Volume
-            result_df['adl'] = mfv.cumsum()
-            added_features_count += 1
+                # 3. Індикатор різкого руху (для виявлення pump & dump)
+                for window in [6, 12, 24]:  # 6 годин, 12 годин, 24 години
+                    # Оцінює відносну зміну ціни за короткий період
+                    price_change = result_df['close'].pct_change(periods=window).abs()
+                    volume_change = result_df['volume'].pct_change(periods=window)
+                    # Індикатор = зміна ціни * зміна об'єму
+                    result_df[f'pump_dump_indicator_{window}'] = np.where(volume_change > 0,
+                                                                          price_change * volume_change, 0)
+                    added_features_count += 1
 
-            # ADL EMA сигнальна лінія
-            for period in [14]:
-                adl_signal_name = f'adl_signal_{period}'
-                result_df[adl_signal_name] = result_df['adl'].ewm(span=period, min_periods=period // 2).mean()
-                added_features_count += 1
+                # 4. Індикатор ф'ючерсного ажіотажу (для криптовалют)
+                # На реальних даних тут можна було б використовувати funding rate, але заміняємо на синтетичний розрахунок
+                for window in [24, 48]:
+                    close_mean = result_df['close'].rolling(window=window).mean()
+                    close_std = result_df['close'].rolling(window=window).std()
+                    # Індикатор ажіотажу: наскільки поточна ціна відхиляється від середньої в термінах стандартних відхилень
+                    result_df[f'futures_heat_{window}'] = (result_df['close'] - close_mean) / (close_std + 1e-10)
+                    added_features_count += 1
 
-        # --- 4. Price Volume Trend (PVT) ---
-        if 'volume' in available_groups:
-            # Розрахунок процентної зміни ціни
-            result_df['price_pct_change'] = result_df['close'].pct_change()
+                # 5. Індикатор відновлення піків/мінімумів
+                for percent in [0.05, 0.1]:  # 5% і 10% від попереднього піку/мінімуму
+                    for window in [30, 60]:  # час для пошуку піків/мінімумів
+                        # Знаходимо піки і мінімуми
+                        roll_max = result_df['high'].rolling(window=window).max()
+                        roll_min = result_df['low'].rolling(window=window).min()
 
-            # PVT = Попередній PVT + (Процентна зміна ціни * Обсяг)
-            result_df['pvt'] = result_df['price_pct_change'] * result_df['volume']
-            result_df['pvt'] = result_df['pvt'].cumsum()
-            added_features_count += 1
+                        # Перевіряємо, чи наближаємося до піку/мінімуму
+                        near_peak = result_df['close'] >= roll_max * (1 - percent)
+                        near_bottom = result_df['close'] <= roll_min * (1 + percent)
 
-            # Сигнальна лінія PVT
-            for period in [20]:
-                pvt_signal_name = f'pvt_signal_{period}'
-                result_df[pvt_signal_name] = result_df['pvt'].ewm(span=period, min_periods=period // 2).mean()
-                added_features_count += 1
+                        result_df[f'near_peak_{int(percent * 100)}p_{window}'] = near_peak.astype(int)
+                        result_df[f'near_bottom_{int(percent * 100)}p_{window}'] = near_bottom.astype(int)
+                        added_features_count += 2
 
-            # Видаляємо допоміжний стовпець
-            result_df.drop('price_pct_change', axis=1, inplace=True)
-            # --- 5. Money Flow Index (MFI) ---
-            if 'ohlcv' in available_groups:
-                for period in [14]:
-                    # Типова ціна
-                    result_df['typical_price'] = (result_df['high'] + result_df['low'] + result_df['close']) / 3
-
-                    # Raw Money Flow = Типова ціна * Обсяг
-                    result_df['raw_money_flow'] = result_df['typical_price'] * result_df['volume']
-
-                    # Позитивний і негативний грошовий потік
-                    result_df['positive_flow'] = 0.0
-                    result_df['negative_flow'] = 0.0
-
-                    # Визначаємо напрямок потоку на основі зміни типової ціни
-                    for i in range(1, len(result_df)):
-                        if result_df['typical_price'].iloc[i] > result_df['typical_price'].iloc[i - 1]:
-                            result_df['positive_flow'].iloc[i] = result_df['raw_money_flow'].iloc[i]
+                # 6. Індикатор тривалості циклу (специфічний для крипторинку)
+                for window in [90]:  # ~3 місяці
+                    # Пошук циклів між значними максимумами
+                    def find_cycle_position(x):
+                        if len(x) < 3:
+                            return 0
+                        # Знаходимо максимум
+                        max_idx = np.argmax(x)
+                        # Позиція у циклі (0 = початок, 1 = кінець)
+                        if max_idx == 0:
+                            return 0  # На початку циклу
+                        elif max_idx == len(x) - 1:
+                            return 1  # У кінці циклу
                         else:
-                            result_df['negative_flow'].iloc[i] = result_df['raw_money_flow'].iloc[i]
+                            return max_idx / (len(x) - 1)  # Відносна позиція
 
-                    # Підрахунок сум позитивного і негативного потоків за вказаний період
-                    positive_money_flow = result_df['positive_flow'].rolling(window=period).sum()
-                    negative_money_flow = result_df['negative_flow'].rolling(window=period).sum()
-
-                    # Запобігаємо діленню на нуль
-                    negative_money_flow = negative_money_flow.replace(0, 1e-9)
-
-                    # Money Ratio
-                    money_ratio = positive_money_flow / negative_money_flow
-
-                    # Money Flow Index
-                    mfi_name = f'mfi_{period}'
-                    result_df[mfi_name] = 100 - (100 / (1 + money_ratio))
+                    result_df[f'cycle_position_{window}'] = result_df['close'].rolling(window=window).apply(
+                        find_cycle_position, raw=False)
                     added_features_count += 1
 
-                    # Видаляємо допоміжні колонки
-                    result_df.drop(['typical_price', 'raw_money_flow', 'positive_flow', 'negative_flow'], axis=1,
-                                   inplace=True)
-
-            # --- 6. Volume Price Trend (VPT) ---
-            if 'volume' in available_groups:
-                # Розрахунок VPT
-                result_df['price_change_pct'] = result_df['close'].pct_change()
-                result_df['vpt'] = (result_df['price_change_pct'] * result_df['volume']).fillna(0).cumsum()
-                added_features_count += 1
-
-                # VPT EMA сигнальна лінія
-                for period in [20]:
-                    vpt_signal_name = f'vpt_signal_{period}'
-                    result_df[vpt_signal_name] = result_df['vpt'].ewm(span=period, min_periods=period // 2).mean()
+                # 7. Індикатор консолідації (для виявлення бічних рухів перед сильними рухами)
+                for window in [14, 21]:
+                    # Обчислюємо відношення діапазону за останні N періодів до середнього періоду
+                    high_low_range = result_df['high'].rolling(window=window).max() - result_df['low'].rolling(
+                        window=window).min()
+                    avg_candle_range = (result_df['high'] - result_df['low']).rolling(window=window).mean()
+                    result_df[f'consolidation_{window}'] = avg_candle_range / (high_low_range + 1e-10)
                     added_features_count += 1
 
-                # Видаляємо допоміжний стовпець
-                result_df.drop('price_change_pct', axis=1, inplace=True)
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні специфічних криптовалютних індикаторів: {str(e)}")
 
-            # --- 7. Volume Weighted Average Price (VWAP) ---
-            if 'ohlcv' in available_groups:
-                # Типова ціна
-                result_df['typical_price'] = (result_df['high'] + result_df['low'] + result_df['close']) / 3
+        # Заповнюємо пропущені значення
+        for col in result_df.columns:
+            if col not in data.columns:  # перевіряємо, що це нова ознака
+                # Для заповнення використовуємо forward fill, потім backward fill
+                result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
 
-                # Обсяг * Типова ціна
-                result_df['vol_tp'] = result_df['volume'] * result_df['typical_price']
+                # Якщо все ще є NaN, заповнюємо нулями
+                if result_df[col].isna().any():
+                    result_df[col] = result_df[col].fillna(0)
 
-                # VWAP за різні періоди
-                for period in [14, 30]:
-                    vwap_name = f'vwap_{period}'
-                    result_df[vwap_name] = result_df['vol_tp'].rolling(window=period).sum() / result_df[
-                        'volume'].rolling(window=period).sum()
-                    added_features_count += 1
+        self.logger.info(f"Додано {added_features_count} специфічних індикаторів для криптовалют")
 
-                # Видаляємо допоміжні колонки
-                result_df.drop(['typical_price', 'vol_tp'], axis=1, inplace=True)
-
-            # --- 8. Relative Volume (по відношенню до середнього) ---
-            if 'volume' in available_groups:
-                for period in [20]:
-                    avg_volume_name = f'avg_volume_{period}'
-                    result_df[avg_volume_name] = result_df['volume'].rolling(window=period).mean()
-
-                    rel_volume_name = f'rel_volume_{period}'
-                    result_df[rel_volume_name] = result_df['volume'] / result_df[avg_volume_name]
-                    added_features_count += 1
-
-            # --- 9. Bollinger Bands на обсязі ---
-            if 'volume' in available_groups:
-                for period in [20]:
-                    # Середній обсяг
-                    vol_ma_name = f'volume_ma_{period}'
-                    result_df[vol_ma_name] = result_df['volume'].rolling(window=period).mean()
-
-                    # Стандартне відхилення обсягу
-                    vol_std = result_df['volume'].rolling(window=period).std()
-
-                    # Bollinger Bands для обсягу
-                    vol_upper_name = f'volume_upper_band_{period}'
-                    vol_lower_name = f'volume_lower_band_{period}'
-                    result_df[vol_upper_name] = result_df[vol_ma_name] + (2 * vol_std)
-                    result_df[vol_lower_name] = result_df[vol_ma_name] - (2 * vol_std)
-                    added_features_count += 3
-
-            # --- 10. Price Volume Divergence ---
-            if 'volume' in available_groups:
-                # Нормалізуємо ціну та обсяг для порівняння
-                for period in [20]:
-                    # Нормалізовані значення (Z-score)
-                    norm_price_name = f'norm_price_{period}'
-                    norm_volume_name = f'norm_volume_{period}'
-
-                    price_mean = result_df['close'].rolling(window=period).mean()
-                    price_std = result_df['close'].rolling(window=period).std()
-                    result_df[norm_price_name] = (result_df['close'] - price_mean) / price_std
-
-                    volume_mean = result_df['volume'].rolling(window=period).mean()
-                    volume_std = result_df['volume'].rolling(window=period).std()
-                    result_df[norm_volume_name] = (result_df['volume'] - volume_mean) / volume_std
-
-                    # Різниця між нормалізованими значеннями (дивергенція)
-                    pv_divergence_name = f'price_volume_divergence_{period}'
-                    result_df[pv_divergence_name] = result_df[norm_price_name] - result_df[norm_volume_name]
-                    added_features_count += 3
-
-            self.logger.info(f"Створено {added_features_count} додаткових специфічних індикаторів для криптовалют")
-
-            # Замінюємо всі нескінченні значення та NaN на нуль
-            result_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-            result_df.fillna(0, inplace=True)
-
-            return result_df
+        return result_df
