@@ -1286,45 +1286,6 @@ class VolatilityAnalysis:
                 'partial_results': locals().get('vol_df', None)
             }
 
-    def _generate_volatility_report(self, symbol, timeframe, analysis_results):
-
-        try:
-            vol_df = analysis_results['volatility_data']
-
-            # Create plots directory if it doesn't exist
-            import os
-            os.makedirs('reports/volatility', exist_ok=True)
-
-            # Plot volatility metrics
-            plt.figure(figsize=(12, 8))
-            for col in ['hist_vol_14d', 'parkinson_vol', 'gk_vol', 'yz_vol']:
-                if col in vol_df.columns:
-                    plt.plot(vol_df.index, vol_df[col], label=col)
-            plt.title(f"{symbol} Volatility Metrics - {timeframe}")
-            plt.legend()
-            plt.savefig(f"reports/volatility/{symbol}_{timeframe}_volatility_metrics.png")
-
-            # Plot volatility regimes
-            plt.figure(figsize=(12, 6))
-            plt.plot(vol_df.index, vol_df['hist_vol_14d'], label='Historical Vol (14d)')
-            plt.scatter(vol_df.index, vol_df['hist_vol_14d'], c=vol_df['regime'], cmap='viridis', label='Regimes')
-            plt.title(f"{symbol} Volatility Regimes - {timeframe}")
-            plt.colorbar(label='Regime')
-            plt.legend()
-            plt.savefig(f"reports/volatility/{symbol}_{timeframe}_volatility_regimes.png")
-
-            # Plot seasonality
-            if 'seasonality' in analysis_results and 'dow' in analysis_results['seasonality']:
-                plt.figure(figsize=(10, 6))
-                analysis_results['seasonality']['dow'].plot(kind='bar')
-                plt.title(f"{symbol} Day-of-Week Volatility Seasonality")
-                plt.savefig(f"reports/volatility/{symbol}_{timeframe}_dow_seasonality.png")
-
-            logger.info(f"Generated volatility report for {symbol}")
-
-        except Exception as e:
-            logger.error(f"Error generating volatility report: {e}")
-
 
 def main():
     # Параметри для тесту

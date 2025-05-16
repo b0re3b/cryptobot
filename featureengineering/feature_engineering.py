@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
 import logging
@@ -31,8 +32,102 @@ class FeatureEngineering:
                                price_column: str = 'close',
                                horizon: int = 1,
                                target_type: str = 'return') -> pd.DataFrame:
-        """Створення цільової змінної."""
-        return self.statistical_features.create_target_variable(data, price_column, horizon, target_type)
+
+        self.logger.info(f"Створення цільової змінної типу '{target_type}' з горизонтом {horizon}")
+
+        # Створюємо копію, щоб не модифікувати оригінальні дані
+        result_df = data.copy()
+
+        # Перевіряємо, що price_column існує в даних
+        if price_column not in result_df.columns:
+            self.logger.error(f"Стовпець {price_column} не знайдено в даних")
+            raise ValueError(f"Стовпець {price_column} не знайдено в даних")
+
+        # Перевіряємо, що індекс часовий для правильного зсуву
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            self.logger.warning("Індекс даних не є часовим (DatetimeIndex). Цільова змінна може бути неточною.")
+
+        # Перевіряємо наявність пропущених значень у стовпці ціни
+        if result_df[price_column].isna().any():
+            self.logger.warning(f"Стовпець {price_column} містить NaN значення, вони будуть заповнені")
+            result_df[price_column] = result_df[price_column].fillna(method='ffill').fillna(method='bfill')
+
+        # Створюємо цільову змінну в залежності від типу
+        if target_type == 'return':
+            # Процентна зміна ціни через horizon періодів
+            target_name = f'target_return_{horizon}p'
+            result_df[target_name] = result_df[price_column].pct_change(periods=-horizon).shift(horizon)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як процентну зміну ціни")
+
+        elif target_type == 'log_return':
+            # Логарифмічна зміна ціни
+            target_name = f'target_log_return_{horizon}p'
+            result_df[target_name] = np.log(result_df[price_column].shift(-horizon) / result_df[price_column])
+            self.logger.info(f"Створено цільову змінну '{target_name}' як логарифмічну зміну ціни")
+
+        elif target_type == 'direction':
+            # Напрямок зміни ціни (1 - ріст, 0 - падіння)
+            target_name = f'target_direction_{horizon}p'
+            future_price = result_df[price_column].shift(-horizon)
+            result_df[target_name] = np.where(future_price > result_df[price_column], 1, 0)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як напрямок зміни ціни")
+
+        elif target_type == 'volatility':
+            # Майбутня волатильність як стандартне відхилення прибутковості за період
+            target_name = f'target_volatility_{horizon}p'
+            # Розраховуємо логарифмічну прибутковість
+            log_returns = np.log(result_df[price_column] / result_df[price_column].shift(1))
+            # Розраховуємо волатильність за наступні horizon періодів
+            result_df[target_name] = log_returns.rolling(window=horizon).std().shift(-horizon)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як майбутню волатильність")
+
+        elif target_type == 'price':
+            # Майбутня ціна
+            target_name = f'target_price_{horizon}p'
+            result_df[target_name] = result_df[price_column].shift(-horizon)
+            self.logger.info(f"Створено цільову змінну '{target_name}' як майбутню ціну")
+
+        elif target_type == 'range':
+            # Діапазон зміни ціни (high-low) за наступні horizon періодів
+            target_name = f'target_range_{horizon}p'
+            # Для точного розрахунку діапазону потрібні high і low колонки
+            if 'high' in result_df.columns and 'low' in result_df.columns:
+                # Знаходимо максимальне high і мінімальне low за наступні horizon періодів
+                high_values = result_df['high'].rolling(window=horizon, min_periods=1).max().shift(-horizon)
+                low_values = result_df['low'].rolling(window=horizon, min_periods=1).min().shift(-horizon)
+                result_df[target_name] = (high_values - low_values) / result_df[price_column]
+                self.logger.info(f"Створено цільову змінну '{target_name}' як відносний діапазон ціни")
+            else:
+                self.logger.warning(
+                    "Колонки 'high' або 'low' відсутні, використовуємо близьку ціну для розрахунку діапазону")
+                # Використовуємо амплітуду зміни ціни close
+                price_max = result_df[price_column].rolling(window=horizon, min_periods=1).max().shift(-horizon)
+                price_min = result_df[price_column].rolling(window=horizon, min_periods=1).min().shift(-horizon)
+                result_df[target_name] = (price_max - price_min) / result_df[price_column]
+                self.logger.info(f"Створено цільову змінну '{target_name}' як відносний діапазон ціни")
+        else:
+            self.logger.error(f"Невідомий тип цільової змінної: {target_type}")
+            raise ValueError(
+                f"Невідомий тип цільової змінної: {target_type}. Допустимі значення: 'return', 'log_return', 'direction', 'volatility', 'price', 'range'")
+
+        # Заповнюємо NaN значення в цільовій змінній
+        if result_df[target_name].isna().any():
+            self.logger.warning(
+                f"Цільова змінна {target_name} містить {result_df[target_name].isna().sum()} NaN значень")
+            # Для цільових змінних краще видалити рядки з NaN, ніж заповнювати їх
+            if target_type in ['return', 'log_return', 'price', 'range', 'volatility']:
+                # Для числових цільових змінних можна спробувати заповнити медіаною
+                # Але це не рекомендується для навчання моделей
+                median_val = result_df[target_name].median()
+                result_df[target_name] = result_df[target_name].fillna(median_val)
+                self.logger.warning(f"NaN значення в цільовій змінній заповнені медіаною: {median_val}")
+            elif target_type == 'direction':
+                # Для бінарної класифікації можна заповнити найбільш поширеним класом
+                mode_val = result_df[target_name].mode()[0]
+                result_df[target_name] = result_df[target_name].fillna(mode_val)
+                self.logger.warning(f"NaN значення в цільовій змінній заповнені модою: {mode_val}")
+
+        return result_df
 
     def select_features(self, X: pd.DataFrame, y: pd.Series,
                         n_features: Optional[int] = None,
