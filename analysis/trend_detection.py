@@ -1,8 +1,12 @@
+import json
+from datetime import datetime
+from scipy.stats import linregress
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import logging
-from scipy.stats import stats
+from scipy import stats
 from data.db import DatabaseManager
 import pandas_ta as ta
 
@@ -1731,35 +1735,229 @@ class TrendDetection:
         Returns:
             bool: Успішність збереження
         """
-        pass
+        try:
+            # Використовуємо поточну дату для аналізу
+            analysis_date = datetime.now()
 
-    def load_trend_analysis_from_db(self, symbol: str,
-                                    timeframe: str,
-                                    start_time: Optional[str] = None,
-                                    end_time: Optional[str] = None) -> Dict:
-        """
-        Завантаження результатів аналізу тренду з бази даних.
+            # Викликаємо метод save_trend_analysis для збереження даних
+            return self.db_manager.save_trend_analysis(
+                symbol=symbol,
+                timeframe=timeframe,
+                analysis_date=analysis_date,
+                trend_data=analysis_results
+            )
+        except Exception as e:
+            self.logger.error(f"Error saving trend analysis to DB: {str(e)}")
+            return False
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал аналізу
-            start_time: Початок періоду
-            end_time: Кінець періоду
+    def load_trend_analysis_from_db(self,
+            symbol: str,
+            timeframe: str,
+            start_date: Optional[datetime] = None,
+            end_date: Optional[datetime] = None,
+            latest_only: bool = False
+            ) -> Dict[str, Any]:
 
-        Returns:
-            Dict: Результати аналізу тренду
-        """
-        pass
+        try:
+            result = self.db_manager.get_trend_analysis(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                latest_only=latest_only
+            )
+
+            if result is None:
+                return {
+                    'status': 'no_data',
+                    'message': 'Дані трендового аналізу не знайдено'
+                }
+
+            return {
+                'status': 'success',
+                'data': result
+            }
+
+        except Exception as e:
+            self.logger.error(f"Помилка у get(): {str(e)}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
 
     def get_trend_summary(self, symbol: str, timeframe: str) -> Dict:
-        """
-        Отримання зведеної інформації про поточний тренд.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал аналізу
+        try:
+            # Завантажуємо останній аналіз тренду з бази даних
+            latest_analysis = self.load_trend_analysis_from_db(symbol, timeframe)
 
-        Returns:
-            Dict: Зведена інформація про тренд
-        """
-        pass
+            if not latest_analysis:
+                return {
+                    'status': 'no_data',
+                    'message': 'No trend analysis available for this symbol and timeframe'
+                }
+
+            # Беремо останній запис
+            latest = latest_analysis[0]
+
+            # Формуємо зведений звіт
+            summary = {
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'trend_type': latest.get('trend_type', 'unknown'),
+                'trend_strength': latest.get('trend_strength', 0),
+                'market_regime': latest.get('market_regime', 'unknown'),
+                'support_levels': latest.get('support_levels', []),
+                'resistance_levels': latest.get('resistance_levels', []),
+                'patterns_detected': len(latest.get('detected_patterns', [])),
+                'last_analysis_date': latest.get('analysis_date'),
+                'additional_metrics': latest.get('additional_metrics', {})
+            }
+
+            # Додаємо індикатори сили тренду, якщо вони є
+            if 'additional_metrics' in latest:
+                metrics = latest['additional_metrics']
+                summary.update({
+                    'trend_speed': metrics.get('speed_20', 0),
+                    'trend_acceleration': metrics.get('acceleration_20', 0),
+                    'volatility': metrics.get('volatility_20', 0)
+                })
+
+            return summary
+
+        except Exception as e:
+            self.logger.error(f"Error generating trend summary: {str(e)}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+
+
+def main():
+    # Initialize TrendDetection
+    trend_detector = TrendDetection()
+
+    # Get real market data from exchange
+    symbol = "BTC"
+    timeframe = "1d"
+    limit = 200  # Number of candles to fetch
+
+    try:
+        # Fetch klines data (assuming db_manager has get_klines method)
+        klines = trend_detector.db_manager.get_klines(
+            symbol=symbol,
+            timeframe=timeframe,
+            limit=limit
+        )
+
+        # Convert to DataFrame
+        test_data = pd.DataFrame(klines, columns=[
+            'open_time', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades',
+            'taker_buy_base', 'taker_buy_quote', 'ignore'
+        ])
+
+        # Convert columns to numeric
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        test_data[numeric_cols] = test_data[numeric_cols].apply(pd.to_numeric)
+
+        # Convert timestamp to datetime
+        test_data['date'] = pd.to_datetime(test_data['open_time'], unit='ms')
+        test_data = test_data.set_index('date')
+
+        print(f"\nFetched {len(test_data)} candles for {symbol} {timeframe}")
+        print("Latest data points:")
+        print(test_data[['open', 'high', 'low', 'close']].tail(3))
+
+        # Test trend detection
+        trend = trend_detector.detect_trend(test_data)
+        print("\n1. Detected trend:", trend)
+
+        # Test support/resistance levels
+        sr_levels = trend_detector.identify_support_resistance(test_data)
+        print("\n2. Support levels:", [round(x, 2) for x in sr_levels['support'][-3:]])
+        print("   Resistance levels:", [round(x, 2) for x in sr_levels['resistance'][-3:]])
+
+        # Test breakouts
+        breakouts = trend_detector.detect_breakouts(test_data, sr_levels)
+        print("\n3. Detected breakouts:", len(breakouts))
+        if breakouts:
+            latest_breakout = breakouts[-1]
+            print(
+                f"   Latest breakout: {latest_breakout['type']} at {latest_breakout['level']:.2f} on {latest_breakout['date']}")
+
+        # Test trend strength
+        strength = trend_detector.calculate_trend_strength(test_data)
+        print("\n4. Trend strength (0-1):", round(strength, 2))
+
+        # Test trend reversal detection
+        reversals = trend_detector.detect_trend_reversal(test_data)
+        print("\n5. Detected reversals:", len(reversals))
+        if reversals:
+            latest_reversal = reversals[-1]
+            print(f"   Latest reversal: {latest_reversal['signal_type']} on {latest_reversal['date']}")
+
+        # Test Fibonacci levels
+        fib_levels = trend_detector.calculate_fibonacci_levels(test_data, trend)
+        print("\n6. Fibonacci retracement levels:")
+        for level, price in sorted(fib_levels.items()):
+            if level not in ['swing_high', 'swing_low']:
+                print(f"   {level}: {price:.2f}")
+
+        # Test chart patterns
+        patterns = trend_detector.detect_chart_patterns(test_data)
+        print("\n7. Detected chart patterns:", len(patterns))
+        if patterns:
+            latest_pattern = patterns[-1]
+            print(
+                f"   Latest pattern: {latest_pattern['type']} from {latest_pattern['start_date']} to {latest_pattern['end_date']}")
+
+        # Test market regime
+        regime = trend_detector.identify_market_regime(test_data)
+        print("\n8. Current market regime:", regime)
+
+        # Test trend metrics
+        metrics = trend_detector.calculate_trend_metrics(test_data)
+        print("\n9. Key trend metrics:")
+        print(f"   Speed (20): {metrics['speed_20']:.4f}")
+        print(f"   Acceleration (20): {metrics['acceleration_20']:.4f}")
+        print(f"   Volatility (20): {metrics['volatility_20']:.4f}")
+        print(f"   Trend strength: {metrics['trend_strength']:.2f}")
+
+        # Save results to DB
+        analysis_results = {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'trend_type': trend,
+            'trend_strength': strength,
+            'support_levels': sr_levels['support'],
+            'resistance_levels': sr_levels['resistance'],
+            'market_regime': regime,
+            'detected_patterns': [p['type'] for p in patterns],
+            'analysis_date': datetime.now().isoformat(),
+            'additional_metrics': metrics
+        }
+
+        save_result = trend_detector.save_trend_analysis_to_db(
+            symbol=symbol,
+            timeframe=timeframe,
+            analysis_results=analysis_results
+        )
+        print("\n10. Save to DB successful:", save_result)
+
+        # Get trend summary
+        summary = trend_detector.get_trend_summary(symbol, timeframe)
+        print("\n11. Trend Summary:")
+        print(f"   Symbol: {summary.get('symbol')}")
+        print(f"   Trend: {summary.get('trend_type')}")
+        print(f"   Strength: {summary.get('trend_strength', 0):.2f}")
+        print(f"   Market Regime: {summary.get('market_regime')}")
+        print(f"   Support Levels: {len(summary.get('support_levels', []))}")
+        print(f"   Resistance Levels: {len(summary.get('resistance_levels', []))}")
+
+    except Exception as e:
+        print(f"\nError occurred: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
