@@ -1,20 +1,91 @@
-# Файл forecaster.py
+from datetime import datetime, timedelta
+from typing import Dict
+import numpy as np
+import pandas as pd
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from statsmodels.tsa.stattools import adfuller, acf
+
+
 class Forecaster:
     def __init__(self, logger, db_manager):
+        self.models = {}
         self.logger = logger
         self.db_manager = db_manager
 
-    def forecast(self, model_key: str, steps: int = 24) -> pd.Series:
+        # Import these classes only when needed to avoid circular imports
+        from timeseriesmodels.TimeSeriesTransformer import TimeSeriesTransformer
+        from timeseriesmodels.TimeSeriesAnalyzer import TimeSeriesAnalyzer
+        from timeseriesmodels.ARIMAModeler import ARIMAModeler
 
+        self.transformer = TimeSeriesTransformer(logger)
+        self.analyzer = TimeSeriesAnalyzer(db_manager)
+        self.modeler = ARIMAModeler(db_manager)
+
+    def _check_stationarity(self, series: pd.Series) -> Dict:
+        """Check if a time series is stationary using Augmented Dickey-Fuller test"""
+        try:
+            # ADF test
+            result = adfuller(series.dropna())
+            adf_stat, p_value = result[0], result[1]
+
+            # Interpret test results
+            is_stationary = p_value < 0.05
+
+            return {
+                "is_stationary": is_stationary,
+                "adf_statistic": adf_stat,
+                "p_value": p_value,
+                "critical_values": result[4]
+            }
+        except Exception as e:
+            self.logger.error(f"Error in stationarity check: {str(e)}")
+            # Default to non-stationary if test fails
+            return {"is_stationary": False, "error": str(e)}
+
+    def _create_forecast_index(self, data: pd.Series, steps: int, forecast_steps=24) -> pd.Index:
+        """Create appropriate index for forecast values"""
+        if isinstance(data.index, pd.DatetimeIndex):
+            last_date = data.index[-1]
+
+            # Try to determine frequency
+            if len(data) >= 2:
+                freq = pd.infer_freq(data.index)
+                if freq:
+                    forecast_index = pd.date_range(start=last_date + pd.Timedelta(seconds=1),
+                                                   periods=steps,
+                                                   freq=freq)
+                else:
+                    # If frequency detection fails, estimate median interval
+                    time_diff = data.index[1:] - data.index[:-1]
+                    median_diff = pd.Timedelta(np.median([d.total_seconds() for d in time_diff]), unit='s')
+                    forecast_index = pd.date_range(start=last_date + median_diff,
+                                                   periods=steps,
+                                                   freq=median_diff)
+            else:
+                # Default to daily frequency if not enough data points
+                forecast_index = pd.date_range(start=last_date + pd.Timedelta(days=1),
+                                               periods=steps)
+        else:
+            # For numeric indices
+            last_idx = data.index[-1]
+            idx_diff = data.index[1] - data.index[0] if len(data) >= 2 else 1
+            forecast_index = pd.RangeIndex(start=last_idx + idx_diff,
+                                           stop=last_idx + idx_diff * (forecast_steps + 1),
+                                           step=idx_diff)
+
+        return forecast_index
+
+    def forecast(self, model_key: str, steps: int = 24) -> pd.Series:
+        """Generate forecast for a specified number of steps using a trained model"""
         self.logger.info(f"Starting forecast for model {model_key} with {steps} steps")
 
-        # Перевіряємо наявність моделі в пам'яті
+        # Check if model exists in memory
         if model_key not in self.models:
-            # Якщо моделі немає в пам'яті, спробуємо завантажити її з БД
+            # Try to load model from database
             if self.db_manager is not None:
                 try:
                     self.logger.info(f"Model {model_key} not found in memory, trying to load from database")
-                    loaded = self.db_manager.load_сomplete_model(model_key)
+                    loaded = self.db_manager.load_complete_model(model_key)
                     if loaded:
                         self.logger.info(f"Model {model_key} successfully loaded from database")
                     else:
@@ -30,7 +101,7 @@ class Forecaster:
                 self.logger.error(error_msg)
                 return pd.Series([], dtype=float)
 
-        # Отримуємо навчену модель
+        # Get the trained model
         try:
             model_info = self.models[model_key]
             fit_result = model_info.get("fit_result")
@@ -41,21 +112,21 @@ class Forecaster:
                 self.logger.error(error_msg)
                 return pd.Series([], dtype=float)
 
-            # Визначаємо тип моделі для вибору методу прогнозування
+            # Determine model type for appropriate forecasting method
             model_type = metadata.get("model_type", "ARIMA")
 
-            # Отримання останньої дати з даних навчання для побудови індексу прогнозу
+            # Get last date from training data to build forecast index
             data_range = metadata.get("data_range", {})
             end_date_str = data_range.get("end")
 
             if end_date_str:
                 try:
-                    # Парсимо дату кінця навчальних даних
+                    # Parse end date of training data
                     if isinstance(end_date_str, str):
                         try:
                             end_date = pd.to_datetime(end_date_str)
                         except:
-                            end_date = datetime.now()  # Якщо парсинг не вдався
+                            end_date = datetime.now()  # Fallback to current date if parsing fails
                     else:
                         end_date = end_date_str
                 except Exception as e:
@@ -65,15 +136,15 @@ class Forecaster:
                 self.logger.warning("No end date in metadata, using current date")
                 end_date = datetime.now()
 
-            # Виконуємо прогнозування
+            # Generate forecast
             self.logger.info(f"Forecasting {steps} steps ahead with {model_type} model")
 
-            # Для ARIMA і SARIMA моделей використовуємо різні методи прогнозування
+            # Use appropriate forecasting method based on model type
             if model_type == "ARIMA":
-                # Для ARIMA використовуємо прямий метод forecast
+                # For ARIMA use direct forecast method
                 forecast_result = fit_result.forecast(steps=steps)
             elif model_type == "SARIMA":
-                # Для SARIMA використовуємо get_forecast
+                # For SARIMA use get_forecast
                 forecast_result = fit_result.get_forecast(steps=steps)
                 forecast_result = forecast_result.predicted_mean
             else:
@@ -81,44 +152,43 @@ class Forecaster:
                 self.logger.error(error_msg)
                 return pd.Series([], dtype=float)
 
-            # Створюємо індекс для прогнозу
-            # Припускаємо, що частота даних відповідає останній різниці в індексі
+            # Create index for forecast
             try:
-                # Спроба визначити частоту даних
-                if "seasonal_order" in model_info.get("parameters", {}):
-                    # Якщо це сезонна модель, використовуємо сезонний період
-                    seasonal_period = model_info["parameters"]["seasonal_order"][3]
-                    # Для денних даних
-                    if seasonal_period == 7:
-                        freq = 'D'  # день
-                    elif seasonal_period in [12, 24]:
-                        freq = 'H'  # година
-                    elif seasonal_period == 30 or seasonal_period == 31:
-                        freq = 'D'  # день
-                    elif seasonal_period == 365:
-                        freq = 'D'  # день
-                    else:
-                        freq = 'D'  # за замовчуванням
-                else:
-                    # За замовчуванням для несезонних моделей
-                    freq = 'D'
+                # Try to determine data frequency
+                freq = 'D'  # Default to daily
 
-                # Створюємо DatetimeIndex для прогнозу
-                forecast_index = pd.date_range(start=end_date + timedelta(days=1),
-                                               periods=steps,
-                                               freq=freq)
+                if "seasonal_order" in model_info.get("parameters", {}):
+                    # For seasonal models, use seasonal period
+                    seasonal_period = model_info["parameters"]["seasonal_order"][3]
+
+                    # Map common seasonal periods to frequencies
+                    if seasonal_period == 7:
+                        freq = 'D'  # daily
+                    elif seasonal_period in [12, 24]:
+                        freq = 'H'  # hourly
+                    elif seasonal_period in [30, 31]:
+                        freq = 'D'  # daily
+                    elif seasonal_period == 365:
+                        freq = 'D'  # daily
+
+                # Create DatetimeIndex for forecast
+                forecast_index = pd.date_range(
+                    start=end_date + timedelta(days=1),
+                    periods=steps,
+                    freq=freq
+                )
             except Exception as e:
                 self.logger.warning(f"Could not create date index: {str(e)}, using numeric index")
                 forecast_index = range(steps)
 
-            # Створюємо Series з прогнозом та індексом
+            # Create Series with forecast and index
             forecast_series = pd.Series(forecast_result, index=forecast_index)
 
-            # Зберігаємо прогноз у БД, якщо є підключення
+            # Save forecast to database if connection available
             if self.db_manager is not None:
                 try:
                     self.logger.info(f"Saving forecast for model {model_key} to database")
-                    # Створюємо словник з прогнозом для збереження
+                    # Create forecast data dictionary for storage
                     forecast_data = {
                         "model_key": model_key,
                         "timestamp": datetime.now(),
@@ -142,20 +212,19 @@ class Forecaster:
             self.logger.error(error_msg)
             return pd.Series([], dtype=float)
 
-    def forecast_with_intervals(self, model_key: str, steps: int = 24,
-                                alpha: float = 0.05) -> Dict:
-
+    def forecast_with_intervals(self, model_key: str, steps: int = 24, alpha: float = 0.05) -> Dict:
+        """Generate forecast with confidence intervals"""
         self.logger.info(f"Starting forecast with intervals for model {model_key}, steps={steps}, alpha={alpha}")
 
-        # Перевірка значення alpha
+        # Validate alpha
         if alpha <= 0 or alpha >= 1:
             error_msg = f"Invalid alpha value ({alpha}). Must be between 0 and 1."
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}
 
-        # Перевірка наявності моделі
+        # Check model availability
         if model_key not in self.models:
-            # Спробувати завантажити модель з БД
+            # Try to load model from database
             if self.db_manager is not None:
                 try:
                     model_loaded = self.db_manager.load_complete_model(model_key)
@@ -174,7 +243,7 @@ class Forecaster:
                 return {"status": "error", "message": error_msg}
 
         try:
-            # Отримання моделі
+            # Get model information
             model_info = self.models.get(model_key)
             if not model_info:
                 error_msg = f"Model {model_key} information not available"
@@ -190,7 +259,7 @@ class Forecaster:
             metadata = model_info.get("metadata", {})
             model_type = metadata.get("model_type", "unknown")
 
-            # Отримання інформації про трансформації даних
+            # Get data transformation information
             transformations = None
             if self.db_manager is not None:
                 try:
@@ -200,24 +269,25 @@ class Forecaster:
                 except Exception as e:
                     self.logger.warning(f"Error getting data transformations: {str(e)}")
 
-            # Виконання прогнозування з довірчими інтервалами
+            # Generate forecast with confidence intervals
             try:
-                # Прогнозування з довірчими інтервалами
+                # Generate forecast with confidence intervals
                 forecast_result = fit_result.get_forecast(steps=steps)
 
-                # Отримання прогнозних значень та інтервалів
+                # Get prediction values and intervals
                 predicted_mean = forecast_result.predicted_mean
                 confidence_intervals = forecast_result.conf_int(alpha=alpha)
 
-                # Створення часових індексів для прогнозу
-                # Визначаємо частоту даних з оригінальної моделі
+                # Create time indices for forecast
+                # Determine data frequency from original model
                 if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
                     original_index = fit_result.model.data.dates
-                    # Визначаємо частоту
+
+                    # Determine frequency
                     if isinstance(original_index, pd.DatetimeIndex):
                         freq = pd.infer_freq(original_index)
                         if freq is None:
-                            # Спробуємо вгадати частоту на основі різниць
+                            # Try to guess frequency based on differences
                             if len(original_index) > 1:
                                 avg_diff = (original_index[-1] - original_index[0]) / (len(original_index) - 1)
                                 if avg_diff.days >= 1:
@@ -233,28 +303,28 @@ class Forecaster:
                                         else:
                                             freq = f"{avg_diff.seconds % 60}S"
 
-                        # Створення нових індексів для прогнозу
+                        # Create new indices for forecast
                         last_date = original_index[-1]
                         forecast_index = pd.date_range(start=last_date, periods=steps + 1, freq=freq)[1:]
                     else:
-                        # Якщо індекс не datetime, використовуємо числові індекси
+                        # For non-datetime indices, use numeric indices
                         last_idx = len(original_index)
                         forecast_index = pd.RangeIndex(start=last_idx, stop=last_idx + steps)
                 else:
-                    # Якщо немає інформації про дати, використовуємо числові індекси
-                    # Спробуємо вгадати останній індекс
+                    # If no date information available, use numeric indices
+                    # Try to guess the last index
                     if hasattr(fit_result.model, 'endog') and hasattr(fit_result.model.endog, 'shape'):
                         last_idx = fit_result.model.endog.shape[0]
                         forecast_index = pd.RangeIndex(start=last_idx, stop=last_idx + steps)
                     else:
                         forecast_index = pd.RangeIndex(start=0, stop=steps)
 
-                # Створення Series для прогнозу та інтервалів
+                # Create Series for forecast and intervals
                 forecast_series = pd.Series(predicted_mean, index=forecast_index)
                 lower_bound = pd.Series(confidence_intervals.iloc[:, 0].values, index=forecast_index)
                 upper_bound = pd.Series(confidence_intervals.iloc[:, 1].values, index=forecast_index)
 
-                # Зворотна трансформація, якщо потрібно
+                # Apply inverse transformation if needed
                 if transformations:
                     try:
                         transform_method = transformations.get("method")
@@ -262,16 +332,25 @@ class Forecaster:
 
                         if transform_method:
                             self.logger.info(f"Applying inverse transformation: {transform_method}")
-                            forecast_series = self.inverse_transform(forecast_series, method=transform_method,
-                                                                     lambda_param=transform_param)
-                            lower_bound = self.inverse_transform(lower_bound, method=transform_method,
-                                                                 lambda_param=transform_param)
-                            upper_bound = self.inverse_transform(upper_bound, method=transform_method,
-                                                                 lambda_param=transform_param)
+                            forecast_series = self.transformer.inverse_transform(
+                                forecast_series,
+                                method=transform_method,
+                                lambda_param=transform_param
+                            )
+                            lower_bound = self.transformer.inverse_transform(
+                                lower_bound,
+                                method=transform_method,
+                                lambda_param=transform_param
+                            )
+                            upper_bound = self.transformer.inverse_transform(
+                                upper_bound,
+                                method=transform_method,
+                                lambda_param=transform_param
+                            )
                     except Exception as e:
                         self.logger.warning(f"Error during inverse transformation: {str(e)}")
 
-                # Формування результатів прогнозу
+                # Format forecast results
                 forecast_data = {
                     "forecast": forecast_series.tolist(),
                     "lower_bound": lower_bound.tolist(),
@@ -280,7 +359,7 @@ class Forecaster:
                     "confidence_level": 1.0 - alpha
                 }
 
-                # Збереження результатів прогнозу в БД
+                # Save forecast results to database
                 if self.db_manager is not None:
                     try:
                         forecast_db_data = {
@@ -301,7 +380,7 @@ class Forecaster:
                     except Exception as e:
                         self.logger.warning(f"Error saving forecast results to database: {str(e)}")
 
-                # Повний результат
+                # Complete result
                 result = {
                     "status": "success",
                     "model_key": model_key,
@@ -327,14 +406,14 @@ class Forecaster:
 
     def run_auto_forecast(self, data: pd.Series, test_size: float = 0.2,
                           forecast_steps: int = 24, symbol: str = 'auto') -> Dict:
-
+        """Automatically analyze time series, fit optimal model, and generate forecasts"""
         self.logger.info(f"Starting auto forecasting process for symbol: {symbol}")
 
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before auto forecasting.")
             data = data.dropna()
 
-        if len(data) < 30:  # Мінімальна кількість точок для змістовного аналізу
+        if len(data) < 30:  # Minimum number of points for meaningful analysis
             error_msg = "Not enough data points for auto forecasting (min 30 required)"
             self.logger.error(error_msg)
             return {
@@ -346,92 +425,88 @@ class Forecaster:
             }
 
         try:
-            # Генеруємо унікальний ключ для моделі
+            # Generate unique key for model
             model_key = f"{symbol}_auto_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-            # 1. Розділення даних на тренувальні та тестові
+            # 1. Split data into training and test sets
             train_size = int(len(data) * (1 - test_size))
             train_data = data.iloc[:train_size]
             test_data = data.iloc[train_size:]
 
             self.logger.info(f"Split data: train={len(train_data)}, test={len(test_data)}")
 
-            # 2. Перевірка стаціонарності та підготовка даних
-            stationarity_check = self.check_stationarity(train_data)
-
-            # Змінна для збереження інформації про трансформації
+            # 2. Check stationarity and apply transformations
+            stationarity_check = self._check_stationarity(train_data)
             transformations = []
             transformed_data = train_data.copy()
 
-            # Якщо ряд нестаціонарний, застосовуємо перетворення
+            # If series is non-stationary, apply transformations
             if not stationarity_check["is_stationary"]:
                 self.logger.info("Time series is non-stationary. Applying transformations.")
 
-                # a) Логарифмічне перетворення, якщо всі дані > 0
+                # a) Logarithmic transformation if all data > 0
                 if all(train_data > 0):
                     self.logger.info("Applying log transformation")
                     transformed_data = np.log(transformed_data)
                     transformations.append({"op": "log"})
 
-                    # Перевіряємо стаціонарність після логарифмування
-                    log_stationary = self.check_stationarity(transformed_data)["is_stationary"]
+                    # Check stationarity after log transformation
+                    log_stationary = self._check_stationarity(transformed_data)["is_stationary"]
 
                     if not log_stationary:
-                        # б) Якщо все ще нестаціонарний, застосовуємо диференціювання
+                        # b) If still non-stationary, apply differencing
                         self.logger.info("Series still non-stationary. Applying differencing.")
-                        transformed_data = self.difference_series(transformed_data, order=1)
+                        transformed_data = self.transformer.difference_series(transformed_data, order=1)
                         transformations.append({"op": "diff", "order": 1})
                 else:
-                    # Якщо є від'ємні значення, відразу застосовуємо диференціювання
+                    # If there are negative values, apply differencing directly
                     self.logger.info("Series contains non-positive values. Applying differencing directly.")
-                    transformed_data = self.difference_series(train_data, order=1)
+                    transformed_data = self.transformer.difference_series(train_data, order=1)
                     transformations.append({"op": "diff", "order": 1})
 
-            # 3. Визначення наявності сезонності
-
-            # Евристика для виявлення сезонності через автокореляцію
-            from statsmodels.tsa.stattools import acf
-
+            # 3. Detect seasonality
+            # Heuristic for detecting seasonality through autocorrelation
             seasonal = False
             seasonal_period = None
 
-            if len(transformed_data) > 50:  # Достатньо даних для аналізу сезонності
-                max_lag = min(len(transformed_data) // 2, 365)  # Обмежуємо максимальний лаг
+            if len(transformed_data) > 50:  # Enough data for seasonality analysis
+                max_lag = min(len(transformed_data) // 2, 365)  # Limit maximum lag
                 acf_vals = acf(transformed_data, nlags=max_lag, fft=True)
 
-                # Шукаємо піки в автокореляції (потенційні сезонні періоди)
+                # Look for peaks in autocorrelation (potential seasonal periods)
                 potential_periods = []
 
-                # Перевіряємо типові періоди для фінансових даних
+                # Check typical periods for financial data
                 for period in [7, 14, 30, 90, 180, 365]:
                     if period < len(acf_vals):
-                        if acf_vals[period] > 0.3:  # Значна автокореляція
+                        if acf_vals[period] > 0.3:  # Significant autocorrelation
                             potential_periods.append((period, acf_vals[period]))
 
                 if potential_periods:
-                    # Вибираємо період з найсильнішою автокореляцією
+                    # Choose period with strongest autocorrelation
                     potential_periods.sort(key=lambda x: x[1], reverse=True)
                     seasonal = True
                     seasonal_period = potential_periods[0][0]
                     self.logger.info(f"Detected seasonality with period: {seasonal_period}")
 
-            # 4. Пошук оптимальних параметрів моделі
+            # 4. Find optimal model parameters
             if seasonal and seasonal_period:
-                # Для сезонного ряду
-                optimal_params = self.find_optimal_params(
+                # For seasonal series
+                optimal_params = self.analyzer.find_optimal_params(
                     transformed_data,
                     max_p=3, max_d=1, max_q=3,
-                    seasonal=True
+                    seasonal=True,
+                    seasonal_period=seasonal_period
                 )
             else:
-                # Для несезонного ряду
-                optimal_params = self.find_optimal_params(
+                # For non-seasonal series
+                optimal_params = self.analyzer.find_optimal_params(
                     transformed_data,
                     max_p=5, max_d=1, max_q=5,
                     seasonal=False
                 )
 
-            if optimal_params["status"] == "error":
+            if optimal_params.get("status") == "error":
                 self.logger.error(f"Parameter search failed: {optimal_params['message']}")
                 return {
                     "status": "error",
@@ -441,7 +516,7 @@ class Forecaster:
                     "performance": None
                 }
 
-            # 5. Навчання моделі з оптимальними параметрами
+            # 5. Train model with optimal parameters
             model_info = None
 
             if seasonal and seasonal_period:
@@ -449,7 +524,7 @@ class Forecaster:
                 order = optimal_params["parameters"]["order"]
                 seasonal_order = optimal_params["parameters"]["seasonal_order"]
 
-                fit_result = self.fit_sarima(
+                fit_result = self.modeler.fit_sarima(
                     transformed_data,
                     order=order,
                     seasonal_order=seasonal_order,
@@ -461,7 +536,7 @@ class Forecaster:
                 # ARIMA model
                 order = optimal_params["parameters"]["order"]
 
-                fit_result = self.fit_arima(
+                fit_result = self.modeler.fit_arima(
                     transformed_data,
                     order=order,
                     symbol=symbol
@@ -469,7 +544,7 @@ class Forecaster:
 
                 model_type = "ARIMA"
 
-            if fit_result["status"] == "error":
+            if fit_result.get("status") == "error":
                 self.logger.error(f"Model fitting failed: {fit_result['message']}")
                 return {
                     "status": "error",
@@ -479,97 +554,65 @@ class Forecaster:
                     "performance": None
                 }
 
-            # Зберігаємо ключ навченої моделі
+            # Save trained model key
             model_key = fit_result["model_key"]
             model_info = fit_result["model_info"]
 
-            # 6. Виконання прогнозу
+            # 6. Generate forecast
             model_obj = self.models[model_key]["fit_result"]
 
-            # Прогнозуємо на тестових даних (якщо є)
+            # Forecast test data (if available)
+            test_performance = None
             if len(test_data) > 0:
                 try:
-                    # Прогноз тестового періоду для оцінки
+                    # Forecast test period for evaluation
                     test_forecast = model_obj.forecast(len(test_data))
 
-                    # Для сезонних моделей або моделей з диференціюванням потрібно
-                    # врахувати початкові значення при інверсному перетворенні
-                    if "diff" in [t["op"] for t in transformations]:
-                        # Цей блок потребує ретельної реалізації інверсних трансформацій
-                        # Спрощений підхід - порівнюємо тренди
+                    # For seasonal models or models with differencing,
+                    # need to account for initial values in inverse transformation
+                    if "diff" in [t.get("op") for t in transformations]:
+                        # Simplified approach - compare trends
                         test_performance = {
                             "mse": mean_squared_error(test_data.values, test_forecast),
                             "rmse": np.sqrt(mean_squared_error(test_data.values, test_forecast)),
                             "mae": mean_absolute_error(test_data.values, test_forecast)
                         }
 
-                        # Розрахунок MAPE, якщо немає нульових значень
+                        # Calculate MAPE if no zero values
                         if all(test_data != 0):
                             mape = np.mean(np.abs((test_data.values - test_forecast) / test_data.values)) * 100
                             test_performance["mape"] = mape
                     else:
-                        # Для моделей без диференціювання порівнюємо безпосередньо
+                        # For models without differencing, compare directly
                         test_performance = {
                             "mse": mean_squared_error(test_data.values, test_forecast),
                             "rmse": np.sqrt(mean_squared_error(test_data.values, test_forecast)),
                             "mae": mean_absolute_error(test_data.values, test_forecast)
                         }
 
-                        # Розрахунок MAPE, якщо немає нульових значень
+                        # Calculate MAPE if no zero values
                         if all(test_data != 0):
                             mape = np.mean(np.abs((test_data.values - test_forecast) / test_data.values)) * 100
                             test_performance["mape"] = mape
                 except Exception as e:
                     self.logger.error(f"Error during test forecast: {str(e)}")
                     test_performance = {"error": str(e)}
-            else:
-                test_performance = None
 
-            # 7. Прогноз на майбутні періоди
+            # 7. Forecast future periods
             try:
                 future_forecast = model_obj.forecast(forecast_steps)
 
-                # Створюємо індекс для прогнозу
-                if isinstance(data.index, pd.DatetimeIndex):
-                    last_date = data.index[-1]
+                # Create forecast index
+                forecast_index = self._create_forecast_index(data, forecast_steps)
 
-                    # Визначення інтервалу даних для створення правильного індексу прогнозу
-                    if len(data) >= 2:
-                        freq = pd.infer_freq(data.index)
-                        if freq:
-                            forecast_index = pd.date_range(start=last_date + pd.Timedelta(seconds=1),
-                                                           periods=forecast_steps,
-                                                           freq=freq)
-                        else:
-                            # Якщо не вдалося визначити частоту, оцінюємо середній інтервал
-                            time_diff = data.index[1:] - data.index[:-1]
-                            median_diff = pd.Series(time_diff).median()
-                            forecast_index = pd.date_range(start=last_date + median_diff,
-                                                           periods=forecast_steps,
-                                                           freq=median_diff)
-                    else:
-                        # Якщо недостатньо точок, припускаємо денний інтервал
-                        forecast_index = pd.date_range(start=last_date + pd.Timedelta(days=1),
-                                                       periods=forecast_steps)
-                else:
-                    # Для числових індексів
-                    last_idx = data.index[-1]
-                    if len(data) >= 2:
-                        idx_diff = data.index[1] - data.index[0]
-                    else:
-                        idx_diff = 1
-                    forecast_index = pd.RangeIndex(start=last_idx + idx_diff,
-                                                   stop=last_idx + idx_diff * (forecast_steps + 1),
-                                                   step=idx_diff)
-
-                # Створюємо Series для прогнозу з правильним індексом
+                # Create Series for forecast with proper index
                 future_forecast = pd.Series(future_forecast, index=forecast_index)
 
-                # 8. Зворотні перетворення прогнозу (якщо застосовувались трансформації)
+                # 8. Apply inverse transformations (if transformations were applied)
                 for transform in reversed(transformations):
                     if transform["op"] == "diff":
-                        # Для зворотного диференціювання потрібно початкове значення
-                        # Беремо останнє значення вихідного ряду
+                        # For inverse differencing, need initial value
+                        # Use last value of original series
                         last_orig_value = data.iloc[-1]
                         future_forecast = future_forecast.cumsum() + last_orig_value
                     elif transform["op"] == "log":
@@ -586,31 +629,31 @@ class Forecaster:
                     "performance": test_performance
                 }
 
-            # 9. Збереження результатів у базу даних (якщо доступно)
+            # 9. Save results to database (if available)
             if self.db_manager is not None:
                 try:
-                    # Збираємо всі дані для збереження
+                    # Collect all data for storage
                     forecast_data = {
                         "future_forecast": future_forecast.to_dict(),
                         "forecast_steps": forecast_steps,
                         "forecast_date": datetime.now().isoformat()
                     }
 
-                    # Зберігаємо прогноз
+                    # Save forecast
                     self.db_manager.save_model_forecasts(model_key, forecast_data)
 
                     if test_performance:
-                        # Зберігаємо метрики ефективності
+                        # Save performance metrics
                         self.db_manager.save_model_metrics(model_key, test_performance)
 
-                    # Зберігаємо інформацію про трансформації даних
+                    # Save data transformation information
                     self.db_manager.save_data_transformations(model_key, {"transformations": transformations})
 
                     self.logger.info(f"Model {model_key} and forecast data saved to database")
                 except Exception as db_error:
                     self.logger.error(f"Error saving to database: {str(db_error)}")
 
-            # 10. Формуємо результат
+            # 10. Format result
             result = {
                 "status": "success",
                 "message": f"{model_type} model trained and forecast completed successfully",

@@ -1,9 +1,20 @@
 # Файл model_evaluator.py
+from datetime import datetime
+from typing import Dict, Tuple, List
+
+import numpy as np
+import pandas as pd
+from pmdarima import ARIMA
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from timeseriesmodels.TimeSeriesAnalyzer import TimeSeriesAnalyzer
+
 class ModelEvaluator:
     def __init__(self, logger, db_manager):
+        self.models = {}
         self.logger = logger
         self.db_manager = db_manager
-
+        self.analyzer = TimeSeriesAnalyzer(logger)
     def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:
 
         self.logger.info(f"Starting evaluation of model {model_key}")
@@ -228,7 +239,7 @@ class ModelEvaluator:
                 order = (1, 1, 1)
             if seasonal_order is None:
                 # Визначаємо сезонний період
-                seasonal_result = self.detect_seasonality(data)
+                seasonal_result = self.analyzer.detect_seasonality(data)
                 if seasonal_result["has_seasonality"] and "primary_period" in seasonal_result:
                     seasonal_period = seasonal_result["primary_period"]
                 else:

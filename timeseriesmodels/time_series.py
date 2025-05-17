@@ -1,16 +1,11 @@
 import pandas as pd
-import numpy as np
 import logging
-from typing import List, Dict, Optional, Union, Tuple, Any
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from pmdarima import auto_arima
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-from scipy import stats
-from statsmodels.tsa.seasonal import seasonal_decompose
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from data.db import DatabaseManager
-
+from timeseriesmodels.ModelEvaluator import ModelEvaluator
+from timeseriesmodels.TimeSeriesTransformer import TimeSeriesTransformer
+from timeseriesmodels.Forecaster import Forecaster
 class TimeSeriesModels:
 
     def __init__(self, log_level=logging.INFO):
@@ -18,11 +13,12 @@ class TimeSeriesModels:
         self.db_manager = DatabaseManager()
         self.models = {}  # Словник для збереження навчених моделей
         self.transformations = {}  # Словник для збереження параметрів трансформацій
-
+        self.modeler = ModelEvaluator(self.db_manager, self)
+        self.transfromer = TimeSeriesTransformer(self.db_manager)
         # Налаштування логування
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)
-
+        self.forecaster = Forecaster()
         # Якщо немає обробників логів, додаємо обробник для виведення в консоль
         if not self.logger.handlers:
             handler = logging.StreamHandler()
@@ -436,7 +432,7 @@ class TimeSeriesModels:
                 self.logger.info(f"Using column '{target_column}' for analysis of {symbol}")
 
                 # Запускаємо автоматичне прогнозування
-                forecast_result = self.run_auto_forecast(
+                forecast_result = self.forecaster.run_auto_forecast(
                     data=data[target_column],
                     test_size=0.2,  # 20% даних для тестування
                     forecast_steps=24,  # Прогноз на 24 періоди вперед
@@ -545,7 +541,7 @@ def main():
 
     stat_info = model.check_stationarity(price_series)
     if not stat_info["is_stationary"]:
-        price_series = model.difference_series(price_series)
+        price_series = self.transformer.difference_series(price_series)
 
     #  ARIMA
     arima_key = None
