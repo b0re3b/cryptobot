@@ -3,6 +3,7 @@ import pandas as pd
 import pandas_ta as ta
 from utils.config import *
 from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtractor
+
 class MarketPhaseFeatureExtractor:
     def __init__(self):
         self.eth_significant_events = eth_significant_events
