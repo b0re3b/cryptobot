@@ -6,6 +6,8 @@ import pandas_ta as ta
 
 
 class TechnicalFeatures:
+    def __init__(self):
+        self.logger = CryptoLogger('INFO')
     def create_technical_features(self, data: pd.DataFrame,
                                   indicators: Optional[List[str]] = None) -> pd.DataFrame:
 

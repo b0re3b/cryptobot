@@ -10,11 +10,12 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 from sklearn.metrics import silhouette_score
 
-from featureengineering.feature_engineering import FeatureEngineering
+from utils.logger import CryptoLogger
 
 
-class DimensionalityReducer(FeatureEngineering):
-
+class DimensionalityReducer():
+    def __init__(self):
+        self.logger = CryptoLogger('INFO')
     def select_features(self, X: pd.DataFrame, y: pd.Series,
                         n_features: Optional[int] = None,
                         method: str = 'f_regression') -> Tuple[pd.DataFrame, List[str]]:

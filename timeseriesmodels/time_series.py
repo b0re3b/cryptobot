@@ -13,8 +13,8 @@ class TimeSeriesModels:
         self.db_manager = DatabaseManager()
         self.models = {}  # Словник для збереження навчених моделей
         self.transformations = {}  # Словник для збереження параметрів трансформацій
-        self.modeler = ModelEvaluator(self.db_manager, self)
-        self.transfromer = TimeSeriesTransformer(self.db_manager)
+        self.modeler = ModelEvaluator()
+        self.transfromer = TimeSeriesTransformer()
         # Налаштування логування
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(log_level)

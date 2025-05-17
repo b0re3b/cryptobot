@@ -22,11 +22,11 @@ class FeatureEngineering:
         self.ready = True
 
         # Ініціалізація підмодулів
-        self.dimensionality_reducer = DimensionalityReducer(log_level)
+        self.dimensionality_reducer = DimensionalityReducer()
         self.cross_features = CrossFeatures()
-        self.statistical_features = StatisticalFeatures(log_level)
+        self.statistical_features = StatisticalFeatures()
         self.technical_features = TechnicalFeatures()
-        self.time_features = TimeFeatures(log_level)
+        self.time_features = TimeFeatures()
 
     def create_target_variable(self, data: pd.DataFrame,
                                price_column: str = 'close',

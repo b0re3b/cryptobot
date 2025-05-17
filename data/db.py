@@ -482,7 +482,9 @@ class DatabaseManager:
             return df
         except psycopg2.Error as e:
             print(f"Помилка отримання свічок для {symbol}: {e}")
-            return pd.DataFrame()
+            columns = [desc[0] for desc in self.cursor.description]  # витягуємо назви колонок
+            df = pd.DataFrame(rows, columns=columns)
+            return df
 
     def log_event(self, log_level, message, component):
         """Додає запис в лог"""
@@ -1682,58 +1684,85 @@ class DatabaseManager:
         return None
 
 
-    def get_correlation_breakdowns(self, symbol1=None, symbol2=None, timeframe=None,
-                                   start_time=None, end_time=None, method=None):
+    def save_correlation_breakdown(
+        self,
+        symbol1: str,
+        symbol2: str,
+        breakdown_time: datetime,
+        correlation_before: float,
+        correlation_after: float,
+        timeframe: str,
+        window_size: int,
+        threshold: float,
+        method: str
+    ) -> None:
+        with self.conn.cursor() as cur:
+            try:
+                cur.execute("""
+                    INSERT INTO correlation_breakdowns (
+                        symbol1, symbol2, breakdown_time, correlation_before,
+                        correlation_after, timeframe, window_size, threshold, method
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (symbol1, symbol2, breakdown_time, timeframe, window_size, method)
+                    DO UPDATE SET
+                        correlation_before = EXCLUDED.correlation_before,
+                        correlation_after = EXCLUDED.correlation_after,
+                        threshold = EXCLUDED.threshold,
+                        created_at = CURRENT_TIMESTAMP
+                """, (
+                    symbol1,
+                    symbol2,
+                    breakdown_time,
+                    correlation_before,
+                    correlation_after,
+                    timeframe,
+                    window_size,
+                    threshold,
+                    method
+                ))
+            except Exception as e:
+                print(f"[DB Error] Failed to save correlation breakdown: {e}")
+                raise
 
+    def get_correlation_breakdowns(
+        self,
+        symbol1: Optional[str] = None,
+        symbol2: Optional[str] = None,
+        timeframe: Optional[str] = None,
+        method: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Tuple]:
         query = """
-                SELECT symbol1, \
-                       symbol2, \
-                       breakdown_time, \
-                       correlation_before, \
-                       correlation_after,
-                       timeframe, \
-                       window_size, \
-                       threshold, \
-                       method
-                FROM correlation_breakdowns
-                WHERE 1 = 1 \
-                """
+            SELECT symbol1, symbol2, breakdown_time, correlation_before,
+                   correlation_after, timeframe, window_size, threshold, method
+            FROM correlation_breakdowns
+            WHERE 1=1
+        """
         params = []
 
-        if symbol1 and symbol2:
-            # Переконуємося, що символи впорядковані (це важливо для пошуку)
-            if symbol1 > symbol2:
-                symbol1, symbol2 = symbol2, symbol1
-            query += " AND symbol1 = ? AND symbol2 = ?"
-            params.extend([symbol1, symbol2])
-        elif symbol1:
-            query += " AND (symbol1 = ? OR symbol2 = ?)"
-            params.extend([symbol1, symbol1])
-        elif symbol2:
-            query += " AND (symbol1 = ? OR symbol2 = ?)"
-            params.extend([symbol2, symbol2])
-
+        if symbol1:
+            query += " AND symbol1 = %s"
+            params.append(symbol1)
+        if symbol2:
+            query += " AND symbol2 = %s"
+            params.append(symbol2)
         if timeframe:
-            query += " AND timeframe = ?"
+            query += " AND timeframe = %s"
             params.append(timeframe)
-
-        if start_time:
-            start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-            query += " AND breakdown_time >= ?"
-            params.append(start_time_str)
-
-        if end_time:
-            end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-            query += " AND breakdown_time <= ?"
-            params.append(end_time_str)
-
         if method:
-            query += " AND method = ?"
+            query += " AND method = %s"
             params.append(method)
 
-        query += " ORDER BY breakdown_time DESC"
+        query += " ORDER BY breakdown_time DESC LIMIT %s"
+        params.append(limit)
 
-        return self.fetch_all(query, tuple(params))
+        with self.conn.cursor() as cur:
+            try:
+                cur.execute(query, tuple(params))
+                return cur.fetchall()
+            except Exception as e:
+                print(f"[DB Error] Failed to retrieve correlation breakdowns: {e}")
+                return []
 
 
     def save_market_beta(self, beta_values, market_symbol, timeframe, start_time, end_time):
@@ -1782,48 +1811,54 @@ class DatabaseManager:
 
         return self.fetch_all(query, tuple(params))
 
-
     def save_beta_time_series(self, symbol, market_symbol, timestamps, beta_values, timeframe, window_size):
 
         timestamp_strs = []
         for ts in timestamps:
             if isinstance(ts, datetime):
                 timestamp_strs.append(ts.isoformat())
+            elif isinstance(ts, (int, float)):
+                dt = datetime.utcfromtimestamp(ts)
+                timestamp_strs.append(dt.isoformat())
             else:
                 timestamp_strs.append(ts)
 
         query = """
-        INSERT OR REPLACE INTO beta_time_series
-        (symbol, market_symbol, timestamp, beta_value, timeframe, window_size)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """
+                INSERT INTO beta_time_series
+                    (symbol, market_symbol, timestamp, beta_value, timeframe, window_size)
+                VALUES (%s, %s, %s, %s, %s, \
+                        %s) ON CONFLICT (symbol, market_symbol, timestamp, timeframe, window_size) DO \
+                UPDATE \
+                    SET beta_value = EXCLUDED.beta_value \
+                """
         params = [(symbol, market_symbol, ts, beta, timeframe, window_size)
                   for ts, beta in zip(timestamp_strs, beta_values)]
         return self.execute_many(query, params)
-
 
     def get_beta_time_series(self, symbol, market_symbol, timeframe, window_size, start_time=None, end_time=None):
 
         query = """
                 SELECT timestamp, beta_value
                 FROM beta_time_series
-                WHERE symbol = ? AND market_symbol = ? AND timeframe = ? AND window_size = ? \
+                WHERE symbol = %s \
+                  AND market_symbol = %s \
+                  AND timeframe = %s \
+                  AND window_size = %s
                 """
         params = [symbol, market_symbol, timeframe, window_size]
 
         if start_time:
             start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-            query += " AND timestamp >= ?"
+            query += " AND timestamp >= %s"
             params.append(start_time_str)
         if end_time:
             end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-            query += " AND timestamp <= ?"
+            query += " AND timestamp <= %s"
             params.append(end_time_str)
 
         query += " ORDER BY timestamp"
 
         return self.fetch_all(query, tuple(params))
-
 
     def save_sector_correlations(self, sector_correlations, correlation_type, timeframe, start_time, end_time, method):
 
@@ -1875,9 +1910,7 @@ class DatabaseManager:
 
         return self.fetch_all(query,tuple(params))
 
-
     def save_leading_indicators(self, leading_indicators):
-
         for item in leading_indicators:
             if isinstance(item['start_time'], datetime):
                 item['start_time'] = item['start_time'].isoformat()
@@ -1885,17 +1918,18 @@ class DatabaseManager:
                 item['end_time'] = item['end_time'].isoformat()
 
         query = """
-        INSERT OR REPLACE INTO leading_indicators
-        (target_symbol, indicator_symbol, lag_period, correlation_value, 
-         timeframe, start_time, end_time, method)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """
+                INSERT INTO leading_indicators
+                (target_symbol, indicator_symbol, lag_period, correlation_value,
+                 timeframe, start_time, end_time, method)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (target_symbol, indicator_symbol, lag_period, timeframe, start_time, end_time, method)
+        DO \
+                UPDATE SET correlation_value = EXCLUDED.correlation_value \
+                """
         params = [(item['target_symbol'], item['indicator_symbol'], item['lag_period'],
                    item['correlation_value'], item['timeframe'], item['start_time'],
                    item['end_time'], item['method'])
                   for item in leading_indicators]
         return self.execute_many(query, params)
-
 
     def get_leading_indicators(self, target_symbol=None, indicator_symbol=None, timeframe=None,
                                min_correlation=0.7, start_time=None, end_time=None, method=None):
@@ -1903,35 +1937,34 @@ class DatabaseManager:
         query = """
                 SELECT target_symbol, indicator_symbol, lag_period, correlation_value
                 FROM leading_indicators
-                WHERE correlation_value >= ? \
+                WHERE correlation_value >= %s
                 """
         params = [min_correlation]
 
         if target_symbol:
-            query += " AND target_symbol = ?"
+            query += " AND target_symbol = %s"
             params.append(target_symbol)
         if indicator_symbol:
-            query += " AND indicator_symbol = ?"
+            query += " AND indicator_symbol = %s"
             params.append(indicator_symbol)
         if timeframe:
-            query += " AND timeframe = ?"
+            query += " AND timeframe = %s"
             params.append(timeframe)
         if start_time:
             start_time_str = start_time.isoformat() if isinstance(start_time, datetime) else start_time
-            query += " AND start_time = ?"
+            query += " AND start_time = %s"
             params.append(start_time_str)
         if end_time:
             end_time_str = end_time.isoformat() if isinstance(end_time, datetime) else end_time
-            query += " AND end_time = ?"
+            query += " AND end_time = %s"
             params.append(end_time_str)
         if method:
-            query += " AND method = ?"
+            query += " AND method = %s"
             params.append(method)
 
         query += " ORDER BY correlation_value DESC"
 
         return self.fetch_all(query, tuple(params))
-
 
     def save_external_asset_correlations(self, correlations, timeframe, start_time, end_time, method):
 
@@ -5705,3 +5738,4 @@ class DatabaseManager:
         self.cursor.execute(query, (symbol, timeframe, start_time, end_time))
         columns = [desc[0] for desc in self.cursor.description]
         return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+

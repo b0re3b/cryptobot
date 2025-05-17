@@ -3,10 +3,12 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from featureengineering.feature_engineering import FeatureEngineering
+from utils.logger import CryptoLogger
 
 
-class StatisticalFeatures(FeatureEngineering):
+class StatisticalFeatures():
+    def __init__(self):
+        self.logger = CryptoLogger('INFO')
     def create_volatility_features(self, data: pd.DataFrame,
                                    price_column: str = 'close',
                                    window_sizes: List[int] = [5, 10, 20, 50]) -> pd.DataFrame:

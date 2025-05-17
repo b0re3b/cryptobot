@@ -519,20 +519,7 @@ CREATE TABLE IF NOT EXISTS beta_time_series (
     UNIQUE(symbol, market_symbol, timestamp, timeframe, window_size)
 );
 
--- Таблиця для збереження кореляцій між секторами криптовалют
-CREATE TABLE IF NOT EXISTS sector_correlations (
-    id SERIAL PRIMARY KEY,
-    sector1 VARCHAR(50) NOT NULL,
-    sector2 VARCHAR(50) NOT NULL,
-    correlation_value FLOAT NOT NULL,
-    correlation_type VARCHAR(20) NOT NULL,
-    timeframe VARCHAR(10) NOT NULL,
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NOT NULL,
-    method VARCHAR(10) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(sector1, sector2, correlation_type, timeframe, start_time, end_time, method)
-);
+
 
 -- Таблиця для збереження провідних індикаторів
 CREATE TABLE IF NOT EXISTS leading_indicators (

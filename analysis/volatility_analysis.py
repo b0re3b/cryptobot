@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import percentileofscore
 from statsmodels.tsa.stattools import acf
-import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from arch import arch_model
 import concurrent.futures
@@ -1212,7 +1211,7 @@ class VolatilityAnalysis:
                 symbols=[symbol, 'BTC', 'ETH'], timeframe=timeframe)
 
             # Get cross-asset correlation data
-            cross_asset_symbols = ['BTC', 'ETH', 'BNB', 'XRP']
+            cross_asset_symbols = ['BTC', 'ETH']
             asset_dict = {}
             for asset in cross_asset_symbols:
                 asset_data = self.db_manager.get_klines(f"{asset}USDT", timeframe=timeframe)
@@ -1271,8 +1270,6 @@ class VolatilityAnalysis:
                 )
                 analysis_results['saved_to_db'] = save_success
 
-            # Generate reports and visualizations
-            self._generate_volatility_report(symbol, timeframe, analysis_results)
 
             return analysis_results
 

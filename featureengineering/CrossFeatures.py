@@ -2,16 +2,16 @@ from typing import List,  Tuple
 
 import numpy as np
 import pandas as pd
+from utils.logger import CryptoLogger
 
-from featureengineering.feature_engineering import FeatureEngineering
 
-
-class CrossFeatures(FeatureEngineering):
+class CrossFeatures():
     """Клас для створення перехресних ознак із наявних числових стовпців."""
 
     def __init__(self):
         super().__init__()
         self.added_features = []  # Відстеження доданих ознак
+        self.logger = CryptoLogger('INFO')
 
     def _validate_columns(self, data: pd.DataFrame,
                           column_lists: List[List[str]],

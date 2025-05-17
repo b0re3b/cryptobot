@@ -2,9 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
 import logging
-
 from scipy.stats import stats
-
 from data.db import DatabaseManager
 import pandas_ta as ta
 

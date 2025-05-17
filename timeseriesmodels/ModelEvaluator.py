@@ -7,14 +7,18 @@ import pandas as pd
 from pmdarima import ARIMA
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+from data.db import DatabaseManager
 from timeseriesmodels.TimeSeriesAnalyzer import TimeSeriesAnalyzer
+from utils.logger import CryptoLogger
+
 
 class ModelEvaluator:
-    def __init__(self, logger, db_manager):
+    def __init__(self):
         self.models = {}
-        self.logger = logger
-        self.db_manager = db_manager
-        self.analyzer = TimeSeriesAnalyzer(logger)
+        self.logger = CryptoLogger('INFO')
+        self.db_manager = DatabaseManager()
+        self.analyzer = TimeSeriesAnalyzer()
     def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:
 
         self.logger.info(f"Starting evaluation of model {model_key}")

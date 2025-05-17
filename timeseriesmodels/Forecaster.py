@@ -4,22 +4,23 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.stattools import adfuller, acf
-
+from data.db import DatabaseManager
+from utils.logger import CryptoLogger
 
 class Forecaster:
-    def __init__(self, logger, db_manager):
+    def __init__(self):
         self.models = {}
-        self.logger = logger
-        self.db_manager = db_manager
+        self.logger = CryptoLogger('INFO')
+        self.db_manager = DatabaseManager()
 
         # Import these classes only when needed to avoid circular imports
         from timeseriesmodels.TimeSeriesTransformer import TimeSeriesTransformer
         from timeseriesmodels.TimeSeriesAnalyzer import TimeSeriesAnalyzer
         from timeseriesmodels.ARIMAModeler import ARIMAModeler
 
-        self.transformer = TimeSeriesTransformer(logger)
-        self.analyzer = TimeSeriesAnalyzer(db_manager)
-        self.modeler = ARIMAModeler(db_manager)
+        self.transformer = TimeSeriesTransformer()
+        self.analyzer = TimeSeriesAnalyzer()
+        self.modeler = ARIMAModeler()
 
     def _check_stationarity(self, series: pd.Series) -> Dict:
         """Check if a time series is stationary using Augmented Dickey-Fuller test"""

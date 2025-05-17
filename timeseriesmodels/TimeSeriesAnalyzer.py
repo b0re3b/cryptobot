@@ -6,10 +6,12 @@ import pandas as pd
 from pmdarima import auto_arima
 from statsmodels.tsa.seasonal import seasonal_decompose
 
+from utils.logger import CryptoLogger
+
 
 class TimeSeriesAnalyzer:
-    def __init__(self, logger):
-        self.logger = logger
+    def __init__(self):
+        self.logger = CryptoLogger('INFO')
 
 
 

@@ -7,6 +7,8 @@ from pmdarima import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import pickle
 import os
+from utils.logger import CryptoLogger
+from data.db import DatabaseManager
 
 
 class ARIMAModeler:
@@ -19,7 +21,7 @@ class ARIMAModeler:
     - Завантаження моделей з диску або бази даних
     """
 
-    def __init__(self, logger, db_manager=None):
+    def __init__(self):
         """
         Ініціалізація класу ARIMAModeler.
 
@@ -30,10 +32,10 @@ class ARIMAModeler:
         db_manager : об'єкт, optional
             Об'єкт для взаємодії з базою даних. За замовчуванням None.
         """
-        self.logger = logger
-        self.db_manager = db_manager
+        self.logger = CryptoLogger('INFO')
+        self.db_manager = DatabaseManager()
         self.models = {}
-        self.transformations = {}  # Додано відсутній атрибут для трансформацій
+        self.transformations = {}
 
     def _validate_data(self, data: pd.Series, min_required: int) -> pd.Series:
         """

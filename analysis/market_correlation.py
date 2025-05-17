@@ -1,9 +1,7 @@
-import json
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Optional, Union
 from datetime import datetime, timedelta
-import seaborn as sns
 from data.db import DatabaseManager
 from DMP.market_data_processor import MarketDataProcessor
 from utils.logger import setup_logger
@@ -69,6 +67,8 @@ class MarketCorrelation:
             # Створення датафрейму з цінами закриття для всіх символів
             df = pd.DataFrame()
             for symbol, data in price_data.items():
+                data['open_time'] = pd.to_datetime(data['open_time'], unit='s')  # або unit='ms' — перевір формат
+                data.set_index('open_time', inplace=True)
                 df[symbol] = data['close']
 
             # Перевірка на відсутні дані
@@ -124,7 +124,6 @@ class MarketCorrelation:
             volume_data = {}
             for symbol in symbols:
                 logger.debug(f"Отримання даних про об'єми для {symbol}")
-                # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 volume_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
                     timeframe=timeframe,
@@ -135,9 +134,10 @@ class MarketCorrelation:
             # Створення датафрейму з об'ємами торгівлі для всіх символів
             df = pd.DataFrame()
             for symbol, data in volume_data.items():
-                df[symbol] = data['volume']
+                # Конвертація до float відразу під час створення датафрейму
+                df[symbol] = data['volume'].astype(float)
 
-            # Перевірка на відсутні дані
+            # Перевірка на відсутні значення
             if df.isnull().values.any():
                 missing_count = df.isnull().sum().sum()
                 logger.warning(f"Виявлено {missing_count} відсутніх значень об'єму. Заповнення методом forward fill")
@@ -217,6 +217,8 @@ class MarketCorrelation:
             # Створення датафрейму з цінами закриття для всіх символів
             df = pd.DataFrame()
             for symbol, data in price_data.items():
+                data['open_time'] = pd.to_datetime(data['open_time'], unit='s')  # або unit='ms' — перевір формат
+                data.set_index('open_time', inplace=True)
                 df[symbol] = data['close']
 
             # Перевірка на відсутні дані
@@ -292,6 +294,8 @@ class MarketCorrelation:
             # Створення датафрейму з цінами закриття для всіх символів
             price_df = pd.DataFrame()
             for symbol, data in price_data.items():
+                data['open_time'] = pd.to_datetime(data['open_time'], unit='s')  # або unit='ms' — перевір формат
+                data.set_index('open_time', inplace=True)
                 price_df[symbol] = data['close']
 
             # Перевірка на відсутні дані
@@ -395,7 +399,6 @@ class MarketCorrelation:
                                       end_time: Optional[datetime] = None,
                                       window: int = None,
                                       method: str = None) -> pd.Series:
-
         # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
@@ -439,8 +442,8 @@ class MarketCorrelation:
             # Calculate percent changes (returns)
             returns = aligned_prices.pct_change().dropna()
 
-            # Calculate rolling correlation
-            rolling_corr = returns[symbol1].rolling(window=window).corr(returns[symbol2], method=method)
+            # Calculate rolling correlation (method='pearson' only)
+            rolling_corr = returns[symbol1].rolling(window=window).corr(returns[symbol2])
 
             logger.info(f"Successfully calculated rolling correlation with {len(rolling_corr)} data points")
             return rolling_corr
@@ -485,19 +488,34 @@ class MarketCorrelation:
             # Save breakdown data to database
             breakdown_data = []
             for point in breakdown_points:
+                correlation_before = rolling_corr.loc[rolling_corr.index < point].iloc[-1] if not rolling_corr.loc[
+                    rolling_corr.index < point].empty else None
+                correlation_after = rolling_corr.loc[point]
+                change_magnitude = correlation_changes.loc[point]
+
                 breakdown_data.append({
-                    'timestamp': point,
+                    'timestamp': pd.to_datetime(point).to_pydatetime(),  # 🔧 конвертація до datetime.datetime
                     'symbol1': symbol1,
                     'symbol2': symbol2,
-                    'correlation_before': rolling_corr.loc[rolling_corr.index < point].iloc[-1] if not rolling_corr.loc[
-                        rolling_corr.index < point].empty else None,
-                    'correlation_after': rolling_corr.loc[point],
-                    'change_magnitude': correlation_changes.loc[point]
+                    'correlation_before': correlation_before,
+                    'correlation_after': correlation_after,
+                    'change_magnitude': change_magnitude
                 })
 
             # Save to correlation_breakdowns table
             if breakdown_data:
-                self.db_manager.save_correlation_breakdowns(breakdown_data)
+                for point_data in breakdown_data:
+                    self.db_manager.save_correlation_breakdown(
+                        breakdown_time=point_data['timestamp'],
+                        symbol1=point_data['symbol1'],
+                        symbol2=point_data['symbol2'],
+                        correlation_before=point_data['correlation_before'],
+                        correlation_after=point_data['correlation_after'],
+                        method=self.config.get('default_correlation_method', 'pearson'),
+                        threshold=threshold,
+                        timeframe=timeframe,
+                        window_size=window
+                    )
                 logger.debug(f"Saved {len(breakdown_data)} breakdown points to database")
 
             return breakdown_points
@@ -540,9 +558,9 @@ class MarketCorrelation:
                 end_time=end_time
             )
 
-            # Calculate returns
-            asset_prices = asset_data['close']
-            market_prices = market_data['close']
+            # Calculate returns and convert to float immediately
+            asset_prices = asset_data['close'].astype(float)
+            market_prices = market_data['close'].astype(float)
 
             # Align time series
             df = pd.DataFrame({
@@ -570,14 +588,28 @@ class MarketCorrelation:
                             'timestamp': timestamp,
                             'symbol': symbol,
                             'market_symbol': market_symbol,
-                            'beta': beta_value,
+                            'beta': float(beta_value),  # Ensure beta is float
                             'timeframe': timeframe,
                             'window': window
                         })
 
                 # Save to beta_time_series table
                 if beta_records:
-                    self.db_manager.save_beta_time_series(beta_records)
+                    timestamps = [record['timestamp'] for record in beta_records]
+                    beta_values = [record['beta'] for record in beta_records]
+
+                    # Конвертуємо pd.Timestamp у datetime.datetime
+                    timestamps = [ts.to_pydatetime() if isinstance(ts, pd.Timestamp) else ts for ts in timestamps]
+
+                    self.db_manager.save_beta_time_series(
+                        symbol=symbol,
+                        market_symbol=market_symbol,
+                        timestamps=timestamps,
+                        beta_values=beta_values,
+                        timeframe=timeframe,
+                        window_size=window
+                    )
+
                     logger.debug(f"Saved {len(beta_records)} beta values to database")
 
                 return rolling_beta
@@ -589,11 +621,10 @@ class MarketCorrelation:
                 beta_record = {
                     'symbol': symbol,
                     'market_symbol': market_symbol,
-                    'beta': beta,
+                    'beta': float(beta),  # Ensure beta is float
                     'timeframe': timeframe,
                     'start_time': start_time,
                     'end_time': end_time,
-                    'analysis_time': datetime.now()
                 }
 
                 self.db_manager.save_market_beta([beta_record])
@@ -602,15 +633,16 @@ class MarketCorrelation:
                 return beta
 
         except Exception as e:
-            logger.error(f"Error calculating market beta: {str(e)}")
+            logger.error(f"Error calculating market beta for {symbol}: {str(e)}")
             raise
+
 
     def save_correlation_to_db(self, correlation_matrix: pd.DataFrame,
                                correlation_type: str,
                                timeframe: str,
                                start_time: datetime,
                                end_time: datetime,
-                               method: str = None) -> bool:
+                               method: str) -> bool:
 
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
@@ -635,8 +667,14 @@ class MarketCorrelation:
             }
 
             # Save to correlation_matrices table
-            self.db_manager.save_correlation_matrices([matrix_data])
-
+            self.db_manager.save_correlation_matrix(
+                correlation_matrix.columns.tolist(),
+                correlation_type,
+                timeframe,
+                start_time,
+                end_time=end_time,
+                method='pearson'
+            )
             # Extract and save highly correlated pairs
             symbols = correlation_matrix.columns.tolist()
             pairs_data = []
@@ -651,16 +689,19 @@ class MarketCorrelation:
                             'matrix_id': matrix_id,
                             'symbol1': symbol1,
                             'symbol2': symbol2,
-                            'correlation': correlation,
+                            'correlation_value': correlation,  # Changed from 'correlation'
                             'correlation_type': correlation_type,
                             'timeframe': timeframe,
+                            'start_time': start_time,  # Added
+                            'end_time': end_time,  # Added
+                            'method': method,  # Added
                             'analysis_time': datetime.now()
                         }
                         pairs_data.append(pair_data)
 
             # Save to correlated_pairs table
             if pairs_data:
-                self.db_manager.insert_correlated_pair(pairs_data)
+                self.db_manager.insert_correlated_pair(pairs_data,method='pearson')
                 logger.debug(f"Saved {len(pairs_data)} correlated pairs to database")
 
             logger.info(f"Successfully saved correlation matrix with ID {matrix_id}")
@@ -763,7 +804,7 @@ class MarketCorrelation:
 
             # Save to correlation_time_series table
             if correlation_data:
-                self.db_manager.save_correlation_time_series(correlation_data)
+                self.db_manager.save_correlation_time_series(correlation_data,method='pearson')
                 logger.debug(f"Saved {len(correlation_data)} correlation values to database")
 
             return rolling_corr
@@ -855,12 +896,13 @@ class MarketCorrelation:
                     leading_indicators_records.append({
                         'target_symbol': target_symbol,
                         'indicator_symbol': symbol,
-                        'lag_periods': lag,
-                        'correlation': correlation,
+                        'lag_period': lag,
+                        'correlation_value': correlation,
                         'timeframe': timeframe,
                         'start_time': start_time,
                         'end_time': end_time,
-                        'analysis_time': datetime.now()
+                        'analysis_time': datetime.now(),
+                        'method': 'pearson'
                     })
 
                 # Only add to results if at least one lag period had a correlation
@@ -907,10 +949,11 @@ class MarketCorrelation:
                     end_time=end_time
                 )
 
-            # Extract close prices
+            # Extract close prices and convert to float
             close_prices = {}
             for sym, data in price_data.items():
-                close_prices[sym] = data['close']
+                # Convert Decimal to float if needed
+                close_prices[sym] = pd.Series(data['close']).astype(float)
 
             # Calculate returns
             returns = {}
@@ -927,8 +970,6 @@ class MarketCorrelation:
                 all_returns = all_returns.fillna(method='ffill')
 
             # Create prediction features by shifting correlated symbols' returns
-            # We're shifting backwards because we want to use past values of correlated symbols
-            # to predict future values of the target symbol
             feature_df = pd.DataFrame()
             for i, corr_sym in enumerate(correlated_symbols):
                 for lag in range(1, prediction_horizon + 1):
@@ -957,26 +998,27 @@ class MarketCorrelation:
             # Train a simple linear regression model
             from sklearn.linear_model import LinearRegression
 
-            X_train = train_data.drop('target', axis=1)
-            y_train = train_data['target']
+            # Ensure all data is float type
+            X_train = train_data.drop('target', axis=1).astype(float)
+            y_train = train_data['target'].astype(float)
 
             model = LinearRegression()
             model.fit(X_train, y_train)
 
-            # Evaluate on test set
-            X_test = test_data.drop('target', axis=1)
-            y_test = test_data['target']
+            # Evaluate on test set - ensure test data is also float type
+            X_test = test_data.drop('target', axis=1).astype(float)
+            y_test = test_data['target'].astype(float)
 
             test_score = model.score(X_test, y_test)
             logger.info(f"Prediction model R² score: {test_score:.4f}")
 
             # Get the most recent data for prediction
-            latest_data = feature_df.iloc[-1:]
+            latest_data = feature_df.iloc[-1:].astype(float)
             if latest_data.isnull().values.any():
                 latest_data = latest_data.fillna(0)  # Handle any missing values in latest data
 
             # Make prediction for future movement
-            predicted_return = model.predict(latest_data)[0]
+            predicted_return = float(model.predict(latest_data)[0])  # Ensure result is float
 
             # Get feature importances (coefficients)
             feature_importance = dict(zip(X_train.columns, model.coef_))
@@ -993,10 +1035,10 @@ class MarketCorrelation:
 
             # Normalize RMSE to get a confidence score between 0 and 1
             avg_abs_return = np.mean(np.abs(y_test))
-            confidence = max(0, min(1, 1 - (rmse / (avg_abs_return * 2))))
+            confidence = float(max(0, min(1, 1 - (rmse / (avg_abs_return * 2)))))  # Ensure result is float
 
-            # Get current price for the symbol
-            current_price = close_prices[symbol].iloc[-1]
+            # Get current price for the symbol and ensure it's float
+            current_price = float(close_prices[symbol].iloc[-1])
 
             # Calculate predicted price
             predicted_price = current_price * (1 + predicted_return)
@@ -1010,8 +1052,8 @@ class MarketCorrelation:
                 "prediction_horizon": prediction_horizon,
                 "prediction_direction": "up" if predicted_return > 0 else "down",
                 "confidence": confidence,
-                "model_r2": test_score,
-                "top_indicators": top_features,
+                "model_r2": float(test_score),  # Ensure R² is float
+                "top_indicators": {k: float(v) for k, v in top_features.items()},  # Convert coefficients to float
                 "prediction_timestamp": datetime.now()
             }
 
@@ -1165,4 +1207,198 @@ class MarketCorrelation:
         except Exception as e:
             logger.error(f"Error analyzing market regime correlations: {str(e)}")
             raise
+
+
+def main():
+    """
+    Тестовий скрипт для демонстрації можливостей класу MarketCorrelation
+    """
+    print("Початок тестування MarketCorrelation...")
+
+    # Ініціалізація об'єкта аналізатора кореляції
+    mc = MarketCorrelation()
+
+    # Список криптовалютних пар для аналізу
+    symbols = ['BTC', 'ETH','SOL']
+    print(f"Аналізуємо наступні символи: {', '.join(symbols)}")
+
+    # Встановлення часових рамок для аналізу
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=30)  # дані за останні 30 днів
+    print(f"Період аналізу: з {start_time.strftime('%Y-%m-%d')} по {end_time.strftime('%Y-%m-%d')}")
+
+    # Встановлення таймфрейму
+    timeframe = '1h'  # 1-годинний таймфрейм
+
+    try:
+        # 1. Розрахунок кореляції цін
+        print("\n1. Розрахунок кореляції цін...")
+        price_corr = mc.calculate_price_correlation(
+            symbols=symbols,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time
+        )
+        print("Матриця кореляції цін:")
+        print(price_corr.round(2))
+
+        # 2. Знаходження високо корельованих пар активів
+        print("\n2. Високо корельовані пари:")
+        correlated_pairs = mc.get_correlated_pairs(price_corr, threshold=0.7)
+        for symbol1, symbol2, corr in correlated_pairs:
+            print(f"{symbol1} і {symbol2}: {corr:.4f}")
+
+        # 3. Знаходження анти-корельованих пар активів
+        print("\n3. Анти-корельовані пари:")
+        anticorrelated_pairs = mc.get_anticorrelated_pairs(price_corr, threshold=-0.3)
+        for symbol1, symbol2, corr in anticorrelated_pairs:
+            print(f"{symbol1} і {symbol2}: {corr:.4f}")
+
+        # 4. Розрахунок кореляції доходності
+        print("\n4. Розрахунок кореляції доходності...")
+        returns_corr = mc.calculate_returns_correlation(
+            symbols=symbols,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time
+        )
+        print("Матриця кореляції доходності:")
+        print(returns_corr.round(2))
+
+        # 5. Розрахунок кореляції волатильності
+        print("\n5. Розрахунок кореляції волатильності...")
+        volatility_corr = mc.calculate_volatility_correlation(
+            symbols=symbols,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time
+        )
+        print("Матриця кореляції волатильності:")
+        print(volatility_corr.round(2))
+
+        # 6. Розрахунок кореляції об'єму торгівлі
+        print("\n6. Розрахунок кореляції об'єму торгівлі...")
+        volume_corr = mc.calculate_volume_correlation(
+            symbols=symbols,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time
+        )
+        print("Матриця кореляції об'єму торгівлі:")
+        print(volume_corr.round(2))
+
+        # 7. Вибір однієї пари для аналізу динамічної кореляції
+        if correlated_pairs:
+            symbol1, symbol2, _ = correlated_pairs[0]
+            print(f"\n7. Аналіз динамічної кореляції між {symbol1} і {symbol2}...")
+
+            # Розрахунок змінної кореляції з часом
+            rolling_corr = mc.calculate_rolling_correlation(
+                symbol1=symbol1,
+                symbol2=symbol2,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time,
+                window=24  # вікно у 24 години
+            )
+
+            print(f"Поточна кореляція: {rolling_corr.iloc[-1]:.4f}")
+
+            # Виявлення зламів у кореляції
+            print("\n8. Виявлення зламів кореляції...")
+            breakdown_points = mc.detect_correlation_breakdowns(
+                symbol1=symbol1,
+                symbol2=symbol2,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time,
+                threshold=0.2  # суттєва зміна кореляції
+            )
+
+            print(f"Знайдено {len(breakdown_points)} точок зламу кореляції")
+            if breakdown_points:
+                for point in breakdown_points:
+                    print(f"Злам кореляції на {point}")
+
+        # 9. Розрахунок бети відносно BTC
+        print("\n9. Розрахунок бети відносно BTC...")
+        for symbol in symbols:
+            if symbol == 'BTC':
+                continue
+
+            beta = mc.calculate_market_beta(
+                symbol=symbol,
+                market_symbol='BTC',
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time
+            )
+
+            if isinstance(beta, float):
+                print(f"Бета для {symbol} відносно BTC: {beta:.4f}")
+
+        # 10. Пошук ведучих індикаторів
+        print("\n10. Пошук ведучих індикаторів для BTCUSDT...")
+        other_symbols = [s for s in symbols if s != 'BTC']
+        leading_indicators = mc.find_leading_indicators(
+            target_symbol='BTC',
+            candidate_symbols=other_symbols,
+            lag_periods=[1, 2, 3, 6, 12, 24],  # лаги у годинах
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        print("Результати пошуку ведучих індикаторів:")
+        for symbol, lags in leading_indicators.items():
+            best_lag = max(lags.items(), key=lambda x: abs(x[1]))
+            print(f"{symbol} на лагу {best_lag[0]} годин: кореляція {best_lag[1]:.4f}")
+
+        # 11. Прогнозування руху на основі корельованих активів
+        print("\n11. Прогнозування руху BTC на основі корельованих активів...")
+        prediction = mc.correlated_movement_prediction(
+            symbol='BTC',
+            correlated_symbols=other_symbols,
+            prediction_horizon=24,  # прогноз на 24 години
+            timeframe=timeframe
+        )
+
+        print("Результати прогнозування:")
+        for key, value in prediction.items():
+            print(f"{key}: {value}")
+
+        # 12. Аналіз кореляцій за різних ринкових режимів
+        print("\n12. Аналіз кореляцій за різних ринкових режимів...")
+        # Визначення ринкових режимів (приклад)
+        regime_start = start_time
+        regime_mid = start_time + (end_time - start_time) / 2
+
+        market_regimes = {
+            (regime_start, regime_mid): "Перша половина періоду",
+            (regime_mid, end_time): "Друга половина періоду"
+        }
+
+        regime_correlations = mc.analyze_market_regime_correlations(
+            symbols=symbols,
+            market_regimes=market_regimes,
+            timeframe=timeframe
+        )
+
+        print("Результати аналізу ринкових режимів:")
+        for regime_name, corr_data in regime_correlations.items():
+            if 'returns' in corr_data:
+                returns_matrix = corr_data['returns']
+                avg_corr = returns_matrix.values[np.triu_indices_from(returns_matrix.values, k=1)].mean()
+                print(f"Режим '{regime_name}' - середня кореляція доходності: {avg_corr:.4f}")
+
+        print("\nТестування MarketCorrelation завершено успішно!")
+
+    except Exception as e:
+        print(f"Помилка при тестуванні: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()
 

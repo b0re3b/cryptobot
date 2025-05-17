@@ -1,11 +1,13 @@
-from typing import Optional, List, Dict, Callable, Union
+from typing import Optional, List
 import numpy as np
 import pandas as pd
 
-from featureengineering.feature_engineering import FeatureEngineering
+from utils.logger import CryptoLogger
 
 
-class TimeFeatures(FeatureEngineering):
+class TimeFeatures():
+    def __init__(self):
+        self.logger = CryptoLogger('INFO')
     def create_lagged_features(self, data: pd.DataFrame,
                                columns: Optional[List[str]] = None,
                                lag_periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
