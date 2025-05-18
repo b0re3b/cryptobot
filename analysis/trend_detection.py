@@ -8,10 +8,6 @@ from scipy import stats
 from data.db import DatabaseManager
 import pandas_ta as ta
 from utils.logger import CryptoLogger
-import candlestick
-from candlestick.patterns import engulfing
-
-
 
 class TrendDetection:
 
@@ -31,11 +27,9 @@ class TrendDetection:
         # Ініціалізація логера
         self.logger = CryptoLogger('INFO')
 
-
-
     def detect_trend(self, data: pd.DataFrame, window_size: int = 14) -> str:
-
         try:
+            self.logger.debug(f"Input DataFrame size: {len(data)}")
             # Перевірка наявності даних
             if data.empty:
                 self.logger.warning("Empty DataFrame provided for trend detection")
@@ -46,31 +40,70 @@ class TrendDetection:
                 self.logger.error("DataFrame must contain 'close' column for trend detection")
                 raise ValueError("DataFrame must contain 'close' column")
 
+            # Перевірка наявності необхідних стовпців
+            required_columns = ['high', 'low', 'close']
+            for col in required_columns:
+                if col not in data.columns:
+                    self.logger.error(f"DataFrame must contain '{col}' column")
+                    raise ValueError(f"DataFrame must contain '{col}' column")
+
             df = data.copy()
 
-            # Використовуємо кілька методів для визначення тренду
+            # 1. Розрахунок ADX (Average Directional Index) для визначення сили тренду
+            # Розрахунок True Range (TR)
+            df['high_low'] = df['high'] - df['low']
+            df['high_close_prev'] = abs(df['high'] - df['close'].shift(1))
+            df['low_close_prev'] = abs(df['low'] - df['close'].shift(1))
+            df['tr'] = df[['high_low', 'high_close_prev', 'low_close_prev']].max(axis=1)
+            df['atr'] = df['tr'].rolling(window=window_size).mean()
 
-            # 1. Додаємо ADX (Average Directional Index) для визначення сили тренду
-            adx = ta.adx(df['high'], df['low'], df['close'], length=window_size)
-            df['adx'] = adx['ADX_' + str(window_size)]
-            df['plus_di'] = adx['DMP_' + str(window_size)]  # +DI
-            df['minus_di'] = adx['DMN_' + str(window_size)]  # -DI
+            # Розрахунок +DM і -DM
+            df['high_diff'] = df['high'] - df['high'].shift(1)
+            df['low_diff'] = df['low'].shift(1) - df['low']
 
-            # 2. Додаємо SMA (Simple Moving Average) для двох періодів
-            df['sma_short'] = ta.sma(df['close'], length=window_size // 2)
-            df['sma_long'] = ta.sma(df['close'], length=window_size)
+            df['plus_dm'] = 0.0
+            df['minus_dm'] = 0.0
 
-            # 3. Додаємо MACD (Moving Average Convergence Divergence)
-            macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
-            df['macd'] = macd['MACD_12_26_9']
-            df['macd_signal'] = macd['MACDs_12_26_9']
-            df['macd_hist'] = macd['MACDh_12_26_9']
+            # Умови для +DM і -DM
+            plus_dm_condition = (df['high_diff'] > df['low_diff']) & (df['high_diff'] > 0)
+            minus_dm_condition = (df['low_diff'] > df['high_diff']) & (df['low_diff'] > 0)
 
-            # 4. Додаємо RSI (Relative Strength Index)
-            df['rsi'] = ta.rsi(df['close'], length=window_size)
+            df.loc[plus_dm_condition, 'plus_dm'] = df['high_diff']
+            df.loc[minus_dm_condition, 'minus_dm'] = df['low_diff']
+
+            # Розрахунок згладжених +DM і -DM
+            df['plus_di'] = 100 * (df['plus_dm'].rolling(window=window_size).mean() / df['atr'])
+            df['minus_di'] = 100 * (df['minus_dm'].rolling(window=window_size).mean() / df['atr'])
+
+            # Розрахунок DX і ADX
+            df['dx'] = 100 * abs(df['plus_di'] - df['minus_di']) / (df['plus_di'] + df['minus_di'])
+            df['adx'] = df['dx'].rolling(window=window_size).mean()
+
+            # 2. Розрахунок SMA (Simple Moving Average) для двох періодів
+            df['sma_short'] = df['close'].rolling(window=window_size // 2).mean()
+            df['sma_long'] = df['close'].rolling(window=window_size).mean()
+
+            # 3. Розрахунок MACD (Moving Average Convergence Divergence)
+            ema_fast = df['close'].ewm(span=12, adjust=False).mean()
+            ema_slow = df['close'].ewm(span=26, adjust=False).mean()
+            df['macd'] = ema_fast - ema_slow
+            df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+            df['macd_hist'] = df['macd'] - df['macd_signal']
+
+            # 4. Розрахунок RSI (Relative Strength Index)
+            delta = df['close'].diff()
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+
+            avg_gain = gain.rolling(window=window_size).mean()
+            avg_loss = loss.rolling(window=window_size).mean()
+
+            # Уникаємо ділення на нуль
+            rs = avg_gain / avg_loss.replace(0, 1e-10)
+            df['rsi'] = 100 - (100 / (1 + rs))
 
             # Беремо останні дані для аналізу
-            recent = df.dropna().tail(3)  # Використовуємо останні 3 свічки з повними індикаторами
+            recent = df.tail(3)  # Використовуємо останні 3 свічки з повними індикаторами
 
             if len(recent) < 3:
                 self.logger.warning("Not enough data points for reliable trend detection")
@@ -436,13 +469,39 @@ class TrendDetection:
             df = data.copy()
 
             # 1. Розрахунок ADX (Average Directional Index) - основний індикатор сили тренду
-            if all(col in df.columns for col in ['high', 'low']):
-                # Використовуємо pandas_ta для розрахунку ADX
-                adx_result = df.ta.adx(length=14)
-                adx_value = adx_result['ADX_14'].iloc[-1] / 100.0  # Нормалізація до 0-1
+            adx_value = 0.5  # Нейтральне значення за замовчуванням
+
+            if all(col in df.columns for col in ['high', 'low', 'close']):
+                # Розрахунок ADX власноруч
+                high = df['high']
+                low = df['low']
+                close = df['close']
+                length = 14  # Стандартний період для ADX
+
+                # True Range (TR)
+                tr1 = high - low
+                tr2 = abs(high - close.shift(1))
+                tr3 = abs(low - close.shift(1))
+                true_range = pd.DataFrame({'tr1': tr1, 'tr2': tr2, 'tr3': tr3}).max(axis=1)
+                atr = true_range.rolling(window=length).mean()
+
+                # +DM і -DM (Directional Movement)
+                plus_dm = high - high.shift(1)
+                minus_dm = low.shift(1) - low
+
+                plus_dm = plus_dm.where((plus_dm > 0) & (plus_dm > minus_dm), 0)
+                minus_dm = minus_dm.where((minus_dm > 0) & (minus_dm > plus_dm), 0)
+
+                # Smoothed +DM і -DM
+                plus_di = 100 * (plus_dm.rolling(window=length).mean() / atr)
+                minus_di = 100 * (minus_dm.rolling(window=length).mean() / atr)
+
+                # Розрахунок ADX
+                dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+                adx = dx.rolling(window=length).mean()
+
+                adx_value = min(1.0, adx.iloc[-1] / 100.0) if not np.isnan(adx.iloc[-1]) else 0.5
             else:
-                # Якщо немає даних high/low, використовуємо нейтральне значення
-                adx_value = 0.5
                 self.logger.warning("No high/low data for ADX calculation, using default value")
 
             # 2. Розрахунок лінійної регресії для визначення напрямку і сили тренду
@@ -453,28 +512,68 @@ class TrendDetection:
             trend_direction = np.sign(slope)  # 1 для висхідного, -1 для низхідного
 
             # 3. Розрахунок Aroon-індикатору (показує силу і напрямок тренду)
+            aroon_strength = 0.5  # Значення за замовчуванням
+
             if all(col in df.columns for col in ['high', 'low']):
-                aroon = df.ta.aroon(length=14)
-                aroon_up = aroon['AROONU_14'].iloc[-1] / 100.0
-                aroon_down = aroon['AROOND_14'].iloc[-1] / 100.0
-                aroon_oscillator = aroon_up - aroon_down  # від -1 до 1
+                length = 14  # Стандартний період для Aroon
+
+                # Aroon Up: 100 * (length - periods since highest high) / length
+                highest_idx = df['high'].rolling(window=length).apply(lambda x: x.argmax())
+                periods_since_high = np.arange(len(df)) - highest_idx
+                aroon_up = 100 * (length - periods_since_high) / length
+
+                # Aroon Down: 100 * (length - periods since lowest low) / length
+                lowest_idx = df['low'].rolling(window=length).apply(lambda x: x.argmin())
+                periods_since_low = np.arange(len(df)) - lowest_idx
+                aroon_down = 100 * (length - periods_since_low) / length
+
+                # Замінюємо NaN значення
+                aroon_up = aroon_up.fillna(0)
+                aroon_down = aroon_down.fillna(0)
+
+                # Aroon Oscillator = Aroon Up - Aroon Down
+                aroon_oscillator = (aroon_up.iloc[-1] - aroon_down.iloc[-1]) / 100.0  # від -1 до 1
                 aroon_strength = abs(aroon_oscillator)  # сила тренду по Aroon (0-1)
-            else:
-                aroon_strength = 0.5
 
             # 4. Розрахунок MACD для визначення імпульсу тренду
-            macd = df.ta.macd(fast=12, slow=26, signal=9)
-            macd_value = macd['MACD_12_26_9'].iloc[-1]
-            macd_signal = macd['MACDs_12_26_9'].iloc[-1]
-            macd_hist = macd['MACDh_12_26_9'].iloc[-1]
+            fast_period = 12
+            slow_period = 26
+            signal_period = 9
+
+            # Розрахунок EMA
+            ema_fast = df['close'].ewm(span=fast_period, adjust=False).mean()
+            ema_slow = df['close'].ewm(span=slow_period, adjust=False).mean()
+
+            # MACD Line = Fast EMA - Slow EMA
+            macd_line = ema_fast - ema_slow
+
+            # Signal Line = EMA of MACD Line
+            signal_line = macd_line.ewm(span=signal_period, adjust=False).mean()
+
+            # MACD Histogram = MACD Line - Signal Line
+            macd_hist = macd_line - signal_line
 
             # Нормалізований MACD (відносно ціни)
             avg_price = df['close'].mean()
-            macd_norm = abs(macd_value) / avg_price
+            macd_norm = abs(macd_line.iloc[-1]) / avg_price
             macd_strength = min(1.0, macd_norm * 100)  # Обмежуємо до 1.0
 
             # 5. Розрахунок RSI для визначення сили тренду через перекупленість/перепроданість
-            rsi = df.ta.rsi(length=14)
+            period = 14
+            delta = df['close'].diff()
+
+            # Отримуємо позитивні та негативні зміни
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+
+            # Розраховуємо середні значення gain і loss
+            avg_gain = gain.rolling(window=period).mean()
+            avg_loss = loss.rolling(window=period).mean()
+
+            # Розраховуємо RS і RSI
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+
             rsi_value = rsi.iloc[-1]
 
             # Перетворюємо RSI на індикатор сили тренду (екстремальні значення = сильний тренд)
@@ -487,17 +586,16 @@ class TrendDetection:
                 # Значення RSI ближче до 50 вказують на слабший тренд
                 rsi_strength = 0.2  # Базове значення для середнього діапазону
 
-            # 6. Аналіз патернів свічок (опціонально, якщо є дані)
+            # 6. Аналіз патернів свічок
             candle_pattern_strength = 0.0
             if all(col in df.columns for col in ['open', 'high', 'low']):
                 # Визначаємо останні 3 свічки
                 recent = df.tail(3)
-                # Шукаємо патерни трьох свічок за допомогою pandas_ta
-                # Для прикладу - перевіряємо паттерн "Three White Soldiers" або "Three Black Crows"
+                # Рахуємо тіла свічок (абсолютна різниця між відкриттям і закриттям)
                 bodies = abs(recent['close'] - recent['open'])
                 avg_body = bodies.mean()
 
-                # Для спрощення просто перевіряємо, чи мають свічки послідовний напрямок і великі тіла
+                # Перевіряємо, чи мають свічки послідовний напрямок і великі тіла
                 consistent_direction = all(np.sign(recent['close'] - recent['open']) == trend_direction)
                 large_bodies = all(bodies > avg_body * 0.8)
 
@@ -511,8 +609,8 @@ class TrendDetection:
             # 8. Аналіз об'єму (якщо доступний)
             volume_factor = 0.5  # Нейтральне значення за замовчуванням
             if 'volume' in df.columns:
-                # Розраховуємо тренд об'єму
-                volume_sma = df.ta.sma(df['volume'], length=20)
+                # Розрахунок SMA для об'єму
+                volume_sma = df['volume'].rolling(window=20).mean()
                 recent_volume = df['volume'].tail(5).mean()
                 historical_volume = volume_sma.iloc[-1]
 
@@ -564,16 +662,8 @@ class TrendDetection:
             return 0.0
 
     def detect_trend_reversal(self, data: pd.DataFrame) -> List[Dict]:
-        """
-        Виявляє можливі сигнали розвороту тренду на основі технічних індикаторів з використанням pandas_ta.
 
-        Args:
-            data (pd.DataFrame): DataFrame з даними ціни, повинен містити стовпці 'open', 'high', 'low', 'close'
-
-        Returns:
-            List[Dict]: Список словників з інформацією про виявлені сигнали розвороту
-        """
-        if data.empty or len(data) < 30:  # Потрібно достатньо історичних даних
+        if data.empty or len(data) < 30:
             return []
 
         # Перевіряємо наявність необхідних колонок
@@ -590,45 +680,66 @@ class TrendDetection:
         # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
         df = data.copy()
 
-        # Обчислюємо індикатори з використанням pandas_ta
-        # 1. Ковзні середні для визначення тренду
-        df['sma20'] = df.ta.sma(length=20)
-        df['sma50'] = df.ta.sma(length=50)
+        # 1. Обчислюємо ковзні середні для визначення тренду
+        df['sma20'] = ta.sma(df['close'], length=20)
+        df['sma50'] = ta.sma(df['close'], length=50)
 
-        # 2. RSI для визначення перекупленості/перепроданості
-        df['rsi'] = df.ta.rsi(length=14)
+        # 2. Обчислюємо RSI для визначення перекупленості/перепроданості
+        rsi = ta.rsi(df['close'], length=14)
+        df['rsi'] = rsi
 
-        # 3. Додаємо патерни свічкового аналізу з pandas_ta
-        candle_patterns = {}
+        # 3. Обчислюємо MACD для підтвердження розвороту
+        macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+        df['macd'] = macd['MACD_12_26_9']
+        df['macd_signal'] = macd['MACDs_12_26_9']
+        df['macd_hist'] = macd['MACDh_12_26_9']
 
-        # Патерни розвороту висхідного тренду
-        candle_patterns['bearish_engulfing'] = df.ta.cdl_pattern(name="engulfing", mode="bearish")
-        candle_patterns['evening_star'] = df.ta.cdl_pattern(name="star", mode="evening")
-        candle_patterns['shooting_star'] = df.ta.cdl_pattern(name="shootingstar")
-        candle_patterns['dark_cloud_cover'] = df.ta.cdl_pattern(name="darkcloudcover")
+        # 4. Обчислюємо Bollinger Bands для визначення рівнів підтримки/опору
+        bbands = ta.bbands(df['close'], length=20, std=2)
+        df['bb_upper'] = bbands['BBU_20_2.0']
+        df['bb_middle'] = bbands['BBM_20_2.0']
+        df['bb_lower'] = bbands['BBL_20_2.0']
 
-        # Патерни розвороту низхідного тренду
-        candle_patterns['bullish_engulfing'] = df.ta.cdl_pattern(name="engulfing", mode="bullish")
-        candle_patterns['morning_star'] = df.ta.cdl_pattern(name="star", mode="morning")
-        candle_patterns['hammer'] = df.ta.cdl_pattern(name="hammer")
-        candle_patterns['piercing_line'] = df.ta.cdl_pattern(name="piercingline")
+        # 5. Додаємо основні свічкові патерни
+        def identify_engulfing(df, i):
+            # Бичаче поглинання
+            if (df['close'].iloc[i] > df['open'].iloc[i] and  # Поточна свічка бича
+                    df['close'].iloc[i - 1] < df['open'].iloc[i - 1] and  # Попередня свічка ведмежа
+                    df['close'].iloc[i] > df['open'].iloc[i - 1] and  # Поточне закриття вище попереднього відкриття
+                    df['open'].iloc[i] < df['close'].iloc[i - 1]):  # Поточне відкриття нижче попереднього закриття
+                return 'bullish'
+            # Ведмеже поглинання
+            elif (df['close'].iloc[i] < df['open'].iloc[i] and  # Поточна свічка ведмежа
+                  df['close'].iloc[i - 1] > df['open'].iloc[i - 1] and  # Попередня свічка бича
+                  df['close'].iloc[i] < df['open'].iloc[i - 1] and  # Поточне закриття нижче попереднього відкриття
+                  df['open'].iloc[i] > df['close'].iloc[i - 1]):  # Поточне відкриття вище попереднього закриття
+                return 'bearish'
+            return None
 
-        # Додаємо патерни до DataFrame
-        for pattern_name, pattern_values in candle_patterns.items():
-            df[pattern_name] = pattern_values
+        def identify_hammer(df, i):
+            body_size = abs(df['close'].iloc[i] - df['open'].iloc[i])
+            lower_shadow = min(df['open'].iloc[i], df['close'].iloc[i]) - df['low'].iloc[i]
+            upper_shadow = df['high'].iloc[i] - max(df['open'].iloc[i], df['close'].iloc[i])
 
-        # 4. Додаємо MACD для підтвердження розвороту
-        macd = df.ta.macd(fast=12, slow=26, signal=9)
-        df['macd'] = macd[f'MACD_{12}_{26}_{9}']
-        df['macd_signal'] = macd[f'MACDs_{12}_{26}_{9}']
-        df['macd_hist'] = macd[f'MACDh_{12}_{26}_{9}']
+            # Якщо нижня тінь хоча б в 2 рази більша за тіло та верхня тінь маленька
+            if lower_shadow > 2 * body_size and upper_shadow < 0.5 * body_size:
+                if df['close'].iloc[i] > df['open'].iloc[i]:  # Бича свічка
+                    return True
+            return False
 
-        # 5. Додаємо рівні підтримки/опору за допомогою Bollinger Bands
-        bbands = df.ta.bbands(length=20, std=2)
-        df['bb_upper'] = bbands[f'BBU_{20}_2.0']
-        df['bb_middle'] = bbands[f'BBM_{20}_2.0']
-        df['bb_lower'] = bbands[f'BBL_{20}_2.0']
+        def identify_shooting_star(df, i):
+            body_size = abs(df['close'].iloc[i] - df['open'].iloc[i])
+            lower_shadow = min(df['open'].iloc[i], df['close'].iloc[i]) - df['low'].iloc[i]
+            upper_shadow = df['high'].iloc[i] - max(df['open'].iloc[i], df['close'].iloc[i])
 
+            # Якщо верхня тінь хоча б в 2 рази більша за тіло та нижня тінь маленька
+            if upper_shadow > 2 * body_size and lower_shadow < 0.5 * body_size:
+                if df['close'].iloc[i] < df['open'].iloc[i]:  # Ведмежа свічка
+                    return True
+            return False
+
+
+        # Ініціалізуємо список для зберігання результатів
         reversals = []
 
         # Аналізуємо можливі сигнали розвороту
@@ -701,29 +812,44 @@ class TrendDetection:
                         signal_reasons.append(f"Підтверджено перепроданим RSI ({df['rsi'].iloc[i]:.1f})")
 
             # 4. Свічкові патерни
-            # Перевіряємо ведмежі свічкові патерни
-            if current_trend == 'uptrend':
-                for pattern_name in ['bearish_engulfing', 'evening_star', 'shooting_star', 'dark_cloud_cover']:
-                    if df[pattern_name].iloc[i] > 0:
-                        if not reversal_signal:
-                            reversal_signal = 'bearish_candlestick'
-                            signal_strength = 0.55
-                            signal_reasons.append(f"Ведмежий свічковий патерн: {pattern_name}")
-                        else:
-                            signal_strength += 0.15
-                            signal_reasons.append(f"Підтверджено ведмежим свічковим патерном: {pattern_name}")
+            # Перевіряємо патерн поглинання
+            engulfing = identify_engulfing(df, i)
+            if engulfing == 'bearish' and current_trend == 'uptrend':
+                if not reversal_signal:
+                    reversal_signal = 'bearish_candlestick'
+                    signal_strength = 0.55
+                    signal_reasons.append("Ведмежий свічковий патерн: bearish_engulfing")
+                else:
+                    signal_strength += 0.15
+                    signal_reasons.append("Підтверджено ведмежим свічковим патерном: bearish_engulfing")
+            elif engulfing == 'bullish' and current_trend == 'downtrend':
+                if not reversal_signal:
+                    reversal_signal = 'bullish_candlestick'
+                    signal_strength = 0.55
+                    signal_reasons.append("Бичачий свічковий патерн: bullish_engulfing")
+                else:
+                    signal_strength += 0.15
+                    signal_reasons.append("Підтверджено бичачим свічковим патерном: bullish_engulfing")
 
-            # Перевіряємо бичачі свічкові патерни
-            elif current_trend == 'downtrend':
-                for pattern_name in ['bullish_engulfing', 'morning_star', 'hammer']:
-                    if df[pattern_name].iloc[i] > 0:
-                        if not reversal_signal:
-                            reversal_signal = 'bullish_candlestick'
-                            signal_strength = 0.55
-                            signal_reasons.append(f"Бичачий свічковий патерн: {pattern_name}")
-                        else:
-                            signal_strength += 0.15
-                            signal_reasons.append(f"Підтверджено бичачим свічковим патерном: {pattern_name}")
+            # Перевіряємо патерн молот
+            if identify_hammer(df, i) and current_trend == 'downtrend':
+                if not reversal_signal:
+                    reversal_signal = 'bullish_candlestick'
+                    signal_strength = 0.55
+                    signal_reasons.append("Бичачий свічковий патерн: hammer")
+                else:
+                    signal_strength += 0.15
+                    signal_reasons.append("Підтверджено бичачим свічковим патерном: hammer")
+
+            # Перевіряємо патерн падаюча зірка
+            if identify_shooting_star(df, i) and current_trend == 'uptrend':
+                if not reversal_signal:
+                    reversal_signal = 'bearish_candlestick'
+                    signal_strength = 0.55
+                    signal_reasons.append("Ведмежий свічковий патерн: shooting_star")
+                else:
+                    signal_strength += 0.15
+                    signal_reasons.append("Підтверджено ведмежим свічковим патерном: shooting_star")
 
             # 5. Тестування рівнів Bollinger Bands
             # Ціна пробиває верхню лінію і повертається назад (ведмежий сигнал)
@@ -1159,15 +1285,7 @@ class TrendDetection:
         return result
 
     def identify_market_regime(self, data: pd.DataFrame) -> str:
-        """
-        Визначає поточний режим ринку на основі технічних індикаторів з використанням pandas_ta.
 
-        Args:
-            data (pd.DataFrame): DataFrame з даними ціни, повинен містити стовпці 'open', 'high', 'low', 'close'
-
-        Returns:
-            str: Ідентифікований режим ринку
-        """
         # Перевірка наявності необхідних даних
         if 'close' not in data.columns:
             raise ValueError("DataFrame повинен містити стовпець 'close'")
@@ -1716,17 +1834,7 @@ class TrendDetection:
 
     def save_trend_analysis_to_db(self, symbol: str, timeframe: str,
                                   analysis_results: Dict) -> bool:
-        """
-        Збереження результатів аналізу тренду в базу даних.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал аналізу
-            analysis_results: Результати аналізу тренду
-
-        Returns:
-            bool: Успішність збереження
-        """
         try:
             # Використовуємо поточну дату для аналізу
             analysis_date = datetime.now()
@@ -1857,7 +1965,7 @@ def main():
 
         print(f"\nFetched {len(test_data)} candles for {symbol} {timeframe}")
         print("Latest data points:")
-        print(test_data[['open', 'high', 'low', 'close']].tail(3))
+        print(test_data[['open', 'high', 'low', 'close']])
 
         # Test trend detection
         trend = trend_detector.detect_trend(test_data)
