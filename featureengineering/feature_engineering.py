@@ -3,7 +3,6 @@ import pandas as pd
 from typing import List, Tuple, Optional
 import logging
 from data.db import DatabaseManager
-from utils.config import db_connection
 from featureengineering.DimensionalityReducer import DimensionalityReducer
 from featureengineering.CrossFeatures import CrossFeatures
 from featureengineering.StatisticalFeatures import StatisticalFeatures
@@ -13,7 +12,6 @@ from featureengineering.TimeFeatures import TimeFeatures
 class FeatureEngineering:
     def __init__(self, log_level=logging.INFO):
         self.log_level = log_level
-        self.db_connection = db_connection
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
         logging.basicConfig(level=self.log_level)

@@ -1,0 +1,18 @@
+2025-05-19 02:24:01 - cyclefeatures - INFO - [logger.py:104] - Running full pipeline for BTC from 2024-05-19 to 2025-05-19 on 1d timeframe
+2025-05-19 02:24:01 - cyclefeatures - INFO - [logger.py:104] - Loading data for BTC 1d from 2024-05-19 to 2025-05-19
+2025-05-19 02:24:03 - cyclefeatures.featureextractor - INFO - [featureextractor.py:667] - Starting cycle anomaly detection for BTC using auto cycle type
+2025-05-19 02:24:03 - cyclefeatures.featureextractor - INFO - [featureextractor.py:697] - Auto detected cycle type: halving
+2025-05-19 02:24:03 - cyclefeatures.featureextractor - ERROR - [featureextractor.py:1143] - Error in detect_cycle_anomalies: could not convert string to float: '1d'
+2025-05-19 02:24:03 - cyclefeatures - ERROR - [logger.py:112] - Error detecting cycle anomalies: could not convert string to float: '1d'
+2025-05-19 02:24:03 - cyclefeatures - INFO - [logger.py:104] - Comparing current to historical cycles for BTC with cycle_type=auto
+2025-05-19 02:24:03 - cyclefeatures - INFO - [logger.py:104] - Most similar cycle: 3
+2025-05-19 02:24:03 - cyclefeatures - ERROR - [logger.py:112] - Error comparing with historical cycles: unsupported operand type(s) for *: 'decimal.Decimal' and 'float'
+2025-05-19 02:24:03 - cyclefeatures - INFO - [logger.py:104] - Predicting cycle turning points for BTC with cycle_type=auto
+2025-05-19 02:24:03 - cyclefeatures - INFO - [logger.py:104] - Comparing current to historical cycles for BTC with cycle_type=halving
+2025-05-19 02:24:04 - cyclefeatures - INFO - [logger.py:104] - Most similar cycle: 3
+2025-05-19 02:24:04 - cyclefeatures - ERROR - [logger.py:112] - Error in historical cycle comparison: unsupported operand type(s) for *: 'decimal.Decimal' and 'float'
+2025-05-19 02:24:04 - cyclefeatures - ERROR - [logger.py:112] - Error predicting turning points: unsupported operand type(s) for -: 'decimal.Decimal' and 'float'
+2025-05-19 02:24:04 - cyclefeatures - INFO - [logger.py:104] - Updating features for BTC with new data
+2025-05-19 02:24:04 - cyclefeatures - ERROR - [logger.py:112] - Error in update_features_with_new_data: DatabaseManager.get_latest_cycle_features() missing 1 required positional argument: 'timeframe'
+2025-05-19 02:24:04 - cyclefeatures - ERROR - [logger.py:112] - Error updating features: DatabaseManager.get_latest_cycle_features() missing 1 required positional argument: 'timeframe'
+2025-05-19 02:24:04 - cyclefeatures - INFO - [logger.py:104] - Full pipeline completed for BTC

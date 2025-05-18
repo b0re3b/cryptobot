@@ -2,6 +2,7 @@ import pandas as pd
 from typing import List, Dict, Optional, Any, Union, Tuple
 from datetime import datetime, timedelta
 from data.db import DatabaseManager
+from timeseriesmodels import TimeSeriesAnalyzer, ARIMAModeler
 from timeseriesmodels.ModelEvaluator import ModelEvaluator
 from timeseriesmodels.TimeSeriesTransformer import TimeSeriesTransformer
 from timeseriesmodels.Forecaster import Forecaster
@@ -14,13 +15,13 @@ class TimeSeriesModels:
         self.db_manager = DatabaseManager()
         self.models = {}  # Dictionary for storing trained models
         self.transformations = {}  # Dictionary for storing transformation parameters
-        self.modeler = ModelEvaluator()
+        self.modeler = ARIMAModeler()
         self.transformer = TimeSeriesTransformer()  # Fixed attribute name
         # Logging setup
         self.forecaster = Forecaster()  # Fixed attribute name (capitalization)
         self.logger = CryptoLogger('TimeSeriesModels')
-        self.analyzer = self.forecaster  # Assuming analyzer functionality is in Forecaster
-        self.evaluator = self.modeler  # Assuming evaluation functionality is in ModelEvaluator
+        self.analyzer = TimeSeriesAnalyzer()
+        self.evaluator = ModelEvaluator()
 
         self.logger.info("TimeSeriesModels initialized")
 
@@ -734,15 +735,186 @@ class TimeSeriesModels:
                 "success_rate": success / len(symbols) if symbols else 0
             }
         }
+
+    def ensemble_forecast(self, data: pd.Series, models: List[str],
+                          forecast_steps: int = 24, weights: Optional[List[float]] = None) -> Dict:
+        """
+        Create ensemble forecast from multiple models
+
+        Args:
+            data: Time series data
+            models: List of model types to include ('arima', 'sarima', 'prophet', etc.)
+            forecast_steps: Number of steps to forecast
+            weights: List of weights for each model (optional)
+
+        Returns:
+            Dict: Ensemble forecast results
+        """
+        try:
+            self.logger.info(f"Creating ensemble forecast with models: {models}")
+
+            # Check if models list is valid
+            valid_models = ['arima', 'sarima']
+            if not all(m in valid_models for m in models):
+                invalid = [m for m in models if m not in valid_models]
+                self.logger.error(f"Invalid model types: {invalid}")
+                return {"status": "error", "message": f"Invalid model types: {invalid}"}
+
+            if weights is not None and len(weights) != len(models):
+                self.logger.error(f"Number of weights ({len(weights)}) does not match number of models ({len(models)})")
+                return {"status": "error", "message": "Weights and models count mismatch"}
+
+            # If weights are not provided, use equal weights
+            if weights is None:
+                weights = [1 / len(models)] * len(models)
+
+            # Normalize weights
+            weights = [w / sum(weights) for w in weights]
+
+            # Train each model and get forecasts
+            forecasts = []
+            model_keys = []
+
+            for i, model_type in enumerate(models):
+                self.logger.info(f"Training {model_type} model...")
+
+                # Analyze data for seasonality
+                seasonality = self.analyzer.detect_seasonality(data)
+                has_seasonality = seasonality.get('has_seasonality', False)
+
+                # Train model
+                if model_type == 'arima':
+                    result = self.train_model(data, 'arima')
+                elif model_type == 'sarima' and has_seasonality:
+                    result = self.train_model(
+                        data, 'sarima',
+                        seasonal_order=(1, 1, 1, seasonality.get('primary_period', 12))
+                    )
+                else:
+                    # Skip this model
+                    self.logger.warning(f"Skipping {model_type} model as it's not applicable")
+                    continue
+
+                if result['status'] == 'success':
+                    # Get forecast
+                    model_key = result['model_key']
+                    model_keys.append(model_key)
+                    forecast = self.forecast(model_key, steps=forecast_steps)
+                    forecasts.append((forecast, weights[i]))
+                else:
+                    self.logger.warning(f"Failed to train {model_type} model: {result.get('message', 'Unknown error')}")
+
+            if not forecasts:
+                self.logger.error("No successful forecasts generated")
+                return {"status": "error", "message": "No successful forecasts"}
+
+            # Combine forecasts
+            ensemble_forecast = None
+            for forecast, weight in forecasts:
+                if ensemble_forecast is None:
+                    ensemble_forecast = forecast * weight
+                else:
+                    # Reindex to ensure indexes match
+                    forecast = forecast.reindex(ensemble_forecast.index)
+                    ensemble_forecast += forecast * weight
+
+            return {
+                "status": "success",
+                "ensemble_forecast": ensemble_forecast,
+                "component_models": model_keys,
+                "weights": weights[:len(model_keys)]
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error creating ensemble forecast: {str(e)}")
+            return {"status": "error", "message": str(e)}
+
+    def visualize_forecast(self, historical_data: pd.Series, forecast_data: pd.Series,
+                           save_path: Optional[str] = None) -> Dict:
+        """
+        Create visualization of forecast vs historical data
+
+        Args:
+            historical_data: Historical time series data
+            forecast_data: Forecast time series data
+            save_path: Path to save the visualization (optional)
+
+        Returns:
+            Dict: Status of visualization creation
+        """
+        try:
+            import matplotlib.pyplot as plt
+            import matplotlib.dates as mdates
+            from matplotlib.figure import Figure
+
+            self.logger.info("Creating forecast visualization")
+
+            # Create figure
+            fig = Figure(figsize=(12, 6))
+            ax = fig.add_subplot(111)
+
+            # Plot historical data
+            ax.plot(historical_data.index, historical_data.values,
+                    label='Historical', color='blue')
+
+            # Plot forecast data
+            ax.plot(forecast_data.index, forecast_data.values,
+                    label='Forecast', color='red', linestyle='--')
+
+            # Add forecast area
+            ax.fill_between(forecast_data.index,
+                            forecast_data.values * 0.95,
+                            forecast_data.values * 1.05,
+                            color='red', alpha=0.2)
+
+            # Format x-axis
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+            fig.autofmt_xdate()
+
+            # Add labels and title
+            ax.set_xlabel('Date')
+            ax.set_ylabel('Price')
+            ax.set_title('Historical Data and Forecast')
+            ax.legend()
+
+            # Add grid
+            ax.grid(True, linestyle='--', alpha=0.7)
+
+            if save_path:
+                fig.savefig(save_path)
+                self.logger.info(f"Visualization saved to {save_path}")
+
+            return {
+                "status": "success",
+                "message": "Visualization created successfully",
+                "figure": fig
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error creating visualization: {str(e)}")
+            return {"status": "error", "message": str(e)}
+
 def main():
+    """Enhanced main function with better error handling and visualization"""
+    import os
     import pprint
     from datetime import datetime, timedelta
+    import matplotlib.pyplot as plt
 
+    # Configuration
     symbol = "BTC"
     timeframe = "1d"
-    forecast_steps = 7
+    forecast_steps = 30  # Forecast for the next 30 days
+    output_dir = "forecasts"  # Directory to save outputs
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"✅ Created output directory: {output_dir}")
 
     # Initialize TimeSeriesModels
+    print("🔄 Initializing TimeSeriesModels...")
     model = TimeSeriesModels()
     db = model.db_manager
 
@@ -750,9 +922,28 @@ def main():
         print("❌ Database manager is not configured.")
         return
 
-    # Get current date and calculate start date (1 year ago)
+    # Get list of available symbols
+    print("🔄 Getting available symbols...")
+    try:
+        available_symbols = model.get_available_crypto_symbols(db)
+        if not available_symbols:
+            print("❌ No symbols available in the database.")
+            return
+
+        if symbol not in available_symbols:
+            print(f"⚠️ Symbol {symbol} not found in database. Available symbols: {', '.join(available_symbols[:5])}...")
+            # Use the first available symbol instead
+            symbol = available_symbols[0]
+            print(f"🔄 Using {symbol} instead.")
+    except Exception as e:
+        print(f"❌ Error retrieving symbols: {e}")
+        return
+
+    # Get current date and calculate start date (2 years of historical data)
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=365)
+    start_date = end_date - timedelta(days=730)
+
+    print(f"🔄 Loading {symbol} price data from {start_date.date()} to {end_date.date()}...")
 
     try:
         # Load data using the correct method from TimeSeriesModels
@@ -767,42 +958,121 @@ def main():
         print(f"❌ Error while retrieving data: {e}")
         return
 
-    if df is None or df.empty or "close" not in df.columns:
+    if df is None or df.empty:
         print("❌ No data available for model training.")
         return
 
+    # Check if 'close' column exists
+    if "close" not in df.columns:
+        # Try to find alternative price column
+        price_cols = ["Close", "price", "Price", "value", "Value"]
+        for col in price_cols:
+            if col in df.columns:
+                print(f"⚠️ Using '{col}' instead of 'close' column")
+                df["close"] = df[col]
+                break
+        else:
+            # If no suitable column is found
+            print("❌ No suitable price column found in data.")
+            print(f"Available columns: {', '.join(df.columns)}")
+            return
+
     price_series = df["close"]
 
-    # Run auto forecast using the forecaster
-    forecast_result = model.Forecaster.run_auto_forecast(
-        data=price_series,
-        test_size=0.2,
-        forecast_steps=forecast_steps,
-        symbol=symbol
+    # Data analysis and preprocessing
+    print("🔄 Analyzing price data...")
+    analysis = model.analyze_series(price_series)
+    print(f"📊 Data analysis results:")
+    print(f"  - Is stationary: {analysis['stationarity']['is_stationary']}")
+    print(f"  - Has seasonality: {analysis['seasonality']['has_seasonality']}")
+    if analysis['seasonality']['has_seasonality']:
+        print(f"  - Primary seasonality period: {analysis['seasonality']['primary_period']}")
+    print(f"  - Volatility (std): {analysis['volatility'].get('std', 'N/A')}")
+
+    # Detect anomalies
+    print("🔄 Detecting anomalies in price data...")
+
+
+    # Create train/test split for model validation
+    train_size = int(len(price_series) * 0.8)
+    train_data = price_series[:train_size]
+    test_data = price_series[train_size:]
+    print(f"📊 Data split: {train_size} training points, {len(test_data)} testing points")
+
+    # Try ensemble forecast with multiple models
+    print("🔄 Creating ensemble forecast...")
+    ensemble_result = model.ensemble_forecast(
+        data=train_data,
+        models=['arima', 'sarima'],
+        forecast_steps=forecast_steps
     )
 
-    if forecast_result.get("status") == "success" and "model_key" in forecast_result:
-        model_key = forecast_result["model_key"]
-        print(f"✅ Model created and saved with key: {model_key}")
+    if ensemble_result.get('status') == 'success':
+        ensemble_forecast = ensemble_result.get('ensemble_forecast')
+        component_models = ensemble_result.get('component_models')
+        print(f"✅ Ensemble forecast created using {len(component_models)} models")
 
-        # Save the model to database
-        try:
-            model.db_manager.save_complete_model(model_key, forecast_result.get("model_info", {}))
-            print(f"✅ Model for {symbol} saved to database")
-        except Exception as db_error:
-            print(f"❌ Error saving model to database: {str(db_error)}")
+        # Visualize the forecast
+        print("🔄 Creating visualization...")
 
-        # Get forecast from the model
-        forecast = model.load_forecast_from_db(db, symbol, model_key)
-        if forecast is not None:
-            print("\n📊 Forecast:")
-            pprint.pprint(forecast.to_dict())
+        # Get historical data and concatenate with forecast
+        historical = price_series
+
+        # Create visualization
+        viz_result = model.visualize_forecast(
+            historical_data=historical,
+            forecast_data=ensemble_forecast,
+            save_path=os.path.join(output_dir, f"{symbol}_forecast.png")
+        )
+
+        if viz_result.get('status') == 'success':
+            print(f"✅ Visualization saved to {output_dir}/{symbol}_forecast.png")
+
+            # Export forecast to CSV
+            csv_path = os.path.join(output_dir, f"{symbol}_forecast.csv")
+            # Export ensemble forecast directly
+            ensemble_df = pd.DataFrame(ensemble_forecast)
+            ensemble_df.columns = ['forecast_value']
+            ensemble_df.index.name = 'date'
+            ensemble_df['symbol'] = symbol
+            ensemble_df['generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            ensemble_df.to_csv(csv_path)
+
+            print(f"✅ Forecast data saved to {csv_path}")
         else:
-            print("❌ Failed to retrieve forecast.")
+            print(f"❌ Error creating visualization: {viz_result.get('message', 'Unknown error')}")
     else:
-        print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
+        print(f"❌ Ensemble forecast failed: {ensemble_result.get('message', 'Unknown error')}")
 
-    print("\n✅ Completed.")
+        # Fallback to simple ARIMA forecast
+        print("🔄 Falling back to standard ARIMA forecast...")
+        forecast_result = model.forecaster.run_auto_forecast(
+            data=price_series,
+            test_size=0.2,
+            forecast_steps=forecast_steps,
+            symbol=symbol
+        )
+
+        if forecast_result.get("status") == "success" and "model_key" in forecast_result:
+            model_key = forecast_result["model_key"]
+            print(f"✅ Model created and saved with key: {model_key}")
+
+
+
+            # Get forecast
+            forecast = model.forecast(model_key, steps=forecast_steps)
+            if forecast is not None:
+                # Save forecast
+                csv_path = os.path.join(output_dir, f"{symbol}_forecast.csv")
+                model.export_forecast_to_csv(model_key, symbol, csv_path)
+                print(f"✅ Forecast saved to {csv_path}")
+            else:
+                print("❌ Failed to generate forecast.")
+        else:
+            print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
+
+    print("\n✅ Analysis completed.")
+
 
 if __name__ == "__main__":
     main()

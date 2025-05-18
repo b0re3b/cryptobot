@@ -117,9 +117,6 @@ class DatabaseManager:
         self._create_base_tables()
         # Таблиці для оброблених даних
         self._create_processed_tables()
-        # Таблиці для профілів об'єму
-        # self._create_volume_profile_tables()
-        # Таблиця для логування обробки даних
         self._create_data_processing_log_table()
 
     def _create_base_tables(self):

@@ -1,0 +1,10 @@
+2025-05-19 02:24:01 - FeatureExtractor - INFO - [logger.py:104] - FeatureExtractor initialized
+2025-05-19 02:24:01 - FeatureExtractor - INFO - [logger.py:104] - Creating cyclical features for BTC
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Calculating token-specific cycle features for BTC
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Finding optimal cycle length between 7 and 365 days
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Found optimal cycle: lag=65, correlation=0.0539
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Found optimal cycle length: 65, strength: 0.0539
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Successfully created cyclical features for BTC
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Calculating cycle ROI for BTC using cycle type: auto
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Auto detected cycle type: halving for BTC
+2025-05-19 02:24:03 - FeatureExtractor - INFO - [logger.py:104] - Successfully calculated cycle ROI for BTC with 2831 data points

@@ -3,6 +3,7 @@ import decimal
 import numpy as np
 import pandas as pd
 
+from cyclefeatures.MarketPhaseFeatureExtractor import MarketPhaseFeatureExtractor
 from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtractor
 from cyclefeatures.SolanaCycleFeatureExtractor import SolanaCycleFeatureExtractor
 from cyclefeatures.EthereumCycleFeatureExtractor import EthereumCycleFeatureExtractor
@@ -28,6 +29,7 @@ class FeatureExtractor:
             "ETH": self.eth_significant_events,
             "SOL": self.sol_significant_events
         }
+        self.marketplace = MarketPhaseFeatureExtractor()
         self.logger.info("FeatureExtractor initialized")
 
     def get_significant_events_for_symbol(self, symbol: str) -> List:
@@ -647,348 +649,497 @@ class FeatureExtractor:
     def detect_cycle_anomalies(self, processed_data: pd.DataFrame,
                                symbol: str,
                                cycle_type: str = 'auto') -> pd.DataFrame:
+        """
+        Detect anomalies in cryptocurrency cycles based on specified cycle type.
 
-        # Create a copy of the input DataFrame
-        result_df = processed_data.copy()
+        Args:
+            processed_data: DataFrame with crypto price data
+            symbol: Cryptocurrency symbol
+            cycle_type: Type of cycle analysis to perform ('auto', 'halving', 'bull_bear', 'network_upgrade', 'ecosystem_event')
 
-        # Ensure we have the required columns
-        if 'close' not in result_df.columns:
-            raise ValueError("Required column 'close' not found in processed_data")
+        Returns:
+            DataFrame containing detected anomalies
+        """
+        import logging
+        import decimal
 
-        # Ensure the DataFrame has a datetime index
-        if not isinstance(result_df.index, pd.DatetimeIndex):
-            raise ValueError("DataFrame index must be a DatetimeIndex")
+        logger = logging.getLogger(__name__)
+        logger.info(f"Starting cycle anomaly detection for {symbol} using {cycle_type} cycle type")
 
-        # Clean symbol format
-        clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+        try:
+            # Create a copy of the input DataFrame
+            result_df = processed_data.copy()
 
-        # Determine the cycle type based on the symbol if set to 'auto'
-        if cycle_type == 'auto':
-            if clean_symbol == 'BTC':
-                cycle_type = 'halving'
-            elif clean_symbol == 'ETH':
-                cycle_type = 'network_upgrade'
-            elif clean_symbol == 'SOL':
-                cycle_type = 'ecosystem_event'
-            else:
-                cycle_type = 'bull_bear'  # Default for other cryptocurrencies
+            # Ensure we have the required columns
+            if 'close' not in result_df.columns:
+                logger.error("Required column 'close' not found in processed_data")
+                raise ValueError("Required column 'close' not found in processed_data")
 
-        # Initialize the anomalies DataFrame
-        anomalies = pd.DataFrame(index=result_df.index)
-        anomalies['date'] = anomalies.index
-        anomalies['symbol'] = symbol
-        anomalies['anomaly_detected'] = False
-        anomalies['anomaly_type'] = None
-        anomalies['significance_score'] = 0.0
-        anomalies['description'] = None
+            # Ensure the DataFrame has a datetime index
+            if not isinstance(result_df.index, pd.DatetimeIndex):
+                logger.error("DataFrame index must be a DatetimeIndex")
+                raise ValueError("DataFrame index must be a DatetimeIndex")
 
-        # Calculate baseline metrics for anomaly detection
-        result_df['price_change_1d'] = result_df['close'].pct_change(1)
-        result_df['price_change_7d'] = result_df['close'].pct_change(7)
-        result_df['price_change_30d'] = result_df['close'].pct_change(30)
-        result_df['volatility_14d'] = result_df['close'].pct_change().rolling(window=14).std()
+            # Clean symbol format
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            logger.debug(f"Cleaned symbol: {clean_symbol}")
 
-        # Calculate rolling metrics for baseline comparison
-        result_df['price_change_1d_zscore'] = (
-                (result_df['price_change_1d'] - result_df['price_change_1d'].rolling(window=365).mean()) /
-                result_df['price_change_1d'].rolling(window=365).std()
-        )
-        result_df['price_change_7d_zscore'] = (
-                (result_df['price_change_7d'] - result_df['price_change_7d'].rolling(window=365).mean()) /
-                result_df['price_change_7d'].rolling(window=365).std()
-        )
-        result_df['volatility_14d_zscore'] = (
-                (result_df['volatility_14d'] - result_df['volatility_14d'].rolling(window=365).mean()) /
-                result_df['volatility_14d'].rolling(window=365).std()
-        )
+            # Determine the cycle type based on the symbol if set to 'auto'
+            if cycle_type == 'auto':
+                if clean_symbol == 'BTC':
+                    cycle_type = 'halving'
+                elif clean_symbol == 'ETH':
+                    cycle_type = 'network_upgrade'
+                elif clean_symbol == 'SOL':
+                    cycle_type = 'ecosystem_event'
+                else:
+                    cycle_type = 'bull_bear'  # Default for other cryptocurrencies
+                logger.info(f"Auto detected cycle type: {cycle_type}")
 
-        # Add cycle-specific features based on cycle_type
-        if cycle_type == 'halving':
-            # Get halving cycle features
-            halving_df = self.btcycle.calculate_btc_halving_cycle_features(result_df)
+            # Initialize the anomalies DataFrame
+            anomalies = pd.DataFrame(index=result_df.index)
+            anomalies['date'] = anomalies.index
+            anomalies['symbol'] = symbol
+            anomalies['anomaly_detected'] = False
+            anomalies['anomaly_type'] = None
+            anomalies['significance_score'] = 0.0
+            anomalies['description'] = None
 
-            # Merge the relevant columns with result_df
-            for col in ['halving_cycle_phase', 'days_since_last_halving', 'days_to_next_halving', 'cycle_number']:
-                if col in halving_df.columns:
-                    result_df[col] = halving_df[col]
+            # Calculate baseline metrics for anomaly detection
+            logger.debug("Calculating baseline metrics")
+            result_df['price_change_1d'] = result_df['close'].pct_change(1)
+            result_df['price_change_7d'] = result_df['close'].pct_change(7)
+            result_df['price_change_30d'] = result_df['close'].pct_change(30)
+            result_df['volatility_14d'] = result_df['close'].pct_change().rolling(window=14).std()
 
-            # Group historical data by cycle number for comparison
-            if 'cycle_number' in result_df.columns and 'halving_cycle_phase' in result_df.columns:
-                cycles_data = {}
-                current_cycle = result_df['cycle_number'].max()
+            # Convert any Decimal columns to float to avoid type errors
+            for col in result_df.select_dtypes(include=[decimal.Decimal]).columns:
+                logger.debug(f"Converting {col} from Decimal to float")
+                result_df[col] = result_df[col].astype(float)
 
-                for cycle in result_df['cycle_number'].unique():
-                    if cycle < current_cycle:  # Historical cycles
-                        cycle_data = result_df[result_df['cycle_number'] == cycle]
-                        cycles_data[cycle] = cycle_data
+            # Calculate rolling metrics for baseline comparison
+            logger.debug("Calculating z-scores")
 
-                # Get current cycle data
-                current_cycle_data = result_df[result_df['cycle_number'] == current_cycle]
+            # Guard against division by zero or NaN values
+            price_1d_std = result_df['price_change_1d'].rolling(window=365).std()
+            price_7d_std = result_df['price_change_7d'].rolling(window=365).std()
+            volatility_std = result_df['volatility_14d'].rolling(window=365).std()
 
-                # For each point in the current cycle, compare with historical cycles at the same phase
-                for idx, row in current_cycle_data.iterrows():
-                    if pd.isna(row['halving_cycle_phase']):
-                        continue
+            # Replace zeros with NaN to avoid division by zero
+            price_1d_std = price_1d_std.replace(0, np.nan)
+            price_7d_std = price_7d_std.replace(0, np.nan)
+            volatility_std = volatility_std.replace(0, np.nan)
 
-                    current_phase = row['halving_cycle_phase']
-                    phase_margin = 0.05  # 5% phase window for comparison
+            result_df['price_change_1d_zscore'] = (
+                    (result_df['price_change_1d'] - result_df['price_change_1d'].rolling(window=365).mean()) /
+                    price_1d_std
+            )
+            result_df['price_change_7d_zscore'] = (
+                    (result_df['price_change_7d'] - result_df['price_change_7d'].rolling(window=365).mean()) /
+                    price_7d_std
+            )
+            result_df['volatility_14d_zscore'] = (
+                    (result_df['volatility_14d'] - result_df['volatility_14d'].rolling(window=365).mean()) /
+                    volatility_std
+            )
 
-                    # Collect historical prices at similar cycle phases
-                    historical_values = []
+            # Add cycle-specific features based on cycle_type
+            if cycle_type == 'halving':
+                logger.info("Processing halving cycle")
+                try:
+                    # Get halving cycle features
+                    halving_df = self.btcycle.calculate_btc_halving_cycle_features(result_df)
 
-                    for cycle, cycle_data in cycles_data.items():
-                        similar_phase_data = cycle_data[
-                            (cycle_data['halving_cycle_phase'] >= current_phase - phase_margin) &
-                            (cycle_data['halving_cycle_phase'] <= current_phase + phase_margin)
-                            ]
+                    # Convert any Decimal columns to float to avoid type errors
+                    for col in halving_df.select_dtypes(include=[decimal.Decimal]).columns:
+                        logger.debug(f"Converting {col} from Decimal to float in halving_df")
+                        halving_df[col] = halving_df[col].astype(float)
 
-                        if not similar_phase_data.empty:
-                            # Use normalized price change from cycle start
-                            if 'price_change_since_halving' in similar_phase_data.columns:
-                                historical_values.extend(similar_phase_data['price_change_since_halving'].tolist())
+                    # Merge the relevant columns with result_df
+                    for col in ['halving_cycle_phase', 'days_since_last_halving', 'days_to_next_halving',
+                                'cycle_number']:
+                        if col in halving_df.columns:
+                            result_df[col] = halving_df[col]
 
-                    # If we have enough historical data points for comparison
-                    if len(historical_values) >= 3:
-                        historical_mean = np.mean(historical_values)
-                        historical_std = np.std(historical_values)
+                    # Group historical data by cycle number for comparison
+                    if 'cycle_number' in result_df.columns and 'halving_cycle_phase' in result_df.columns:
+                        cycles_data = {}
+                        current_cycle = result_df['cycle_number'].max()
+                        logger.debug(f"Current halving cycle: {current_cycle}")
 
-                        # Calculate z-score compared to historical cycles
-                        if 'price_change_since_halving' in current_cycle_data.columns and historical_std > 0:
-                            current_value = row.get('price_change_since_halving', 0)
-                            z_score = (current_value - historical_mean) / historical_std
+                        for cycle in result_df['cycle_number'].unique():
+                            if pd.notna(cycle) and cycle < current_cycle:  # Historical cycles
+                                cycle_data = result_df[result_df['cycle_number'] == cycle]
+                                cycles_data[cycle] = cycle_data
+                                logger.debug(f"Found historical cycle {cycle} with {len(cycle_data)} data points")
 
-                            # Check for significant deviation
-                            if abs(z_score) > 2.0:  # More than 2 standard deviations
-                                anomalies.loc[idx, 'anomaly_detected'] = True
-                                anomalies.loc[idx, 'significance_score'] = abs(z_score)
+                        # Get current cycle data
+                        current_cycle_data = result_df[result_df['cycle_number'] == current_cycle]
+                        logger.debug(f"Current cycle has {len(current_cycle_data)} data points")
 
-                                if z_score > 0:
-                                    anomalies.loc[idx, 'anomaly_type'] = 'higher_than_historical'
-                                    anomalies.loc[idx, 'description'] = (
-                                        f"Price is {z_score:.2f} std devs higher than historical cycles "
-                                        f"at similar phase ({current_phase:.2f})"
-                                    )
-                                else:
-                                    anomalies.loc[idx, 'anomaly_type'] = 'lower_than_historical'
-                                    anomalies.loc[idx, 'description'] = (
-                                        f"Price is {abs(z_score):.2f} std devs lower than historical cycles "
-                                        f"at similar phase ({current_phase:.2f})"
-                                    )
+                        # For each point in the current cycle, compare with historical cycles at the same phase
+                        for idx, row in current_cycle_data.iterrows():
+                            if pd.isna(row['halving_cycle_phase']):
+                                continue
 
-        elif cycle_type == 'bull_bear':
-            # Get bull/bear cycle information
-            bull_bear_df = self.marketplace.identify_bull_bear_cycles(result_df)
+                            current_phase = float(row['halving_cycle_phase'])  # Ensure float type
+                            phase_margin = 0.05  # 5% phase window for comparison
 
-            # Merge the relevant columns with result_df
-            for col in ['cycle_state', 'cycle_id', 'days_in_cycle', 'cycle_max_roi', 'cycle_max_drawdown']:
-                if col in bull_bear_df.columns:
-                    result_df[col] = bull_bear_df[col]
+                            # Collect historical prices at similar cycle phases
+                            historical_values = []
 
-            # Check for anomalies in ROI or drawdown compared to typical bull/bear cycles
-            if 'cycle_state' in result_df.columns and 'cycle_id' in result_df.columns:
-                # Group by cycle_state to get typical metrics for bull and bear markets
-                if hasattr(bull_bear_df, 'cycles_summary') and not bull_bear_df.cycles_summary.empty:
-                    cycles_summary = bull_bear_df.cycles_summary
+                            for cycle, cycle_data in cycles_data.items():
+                                similar_phase_data = cycle_data[
+                                    (cycle_data['halving_cycle_phase'] >= current_phase - phase_margin) &
+                                    (cycle_data['halving_cycle_phase'] <= current_phase + phase_margin)
+                                    ]
 
-                    # Get metrics by cycle type
-                    bull_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bull']
-                    bear_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bear']
+                                if not similar_phase_data.empty:
+                                    # Use normalized price change from cycle start
+                                    if 'price_change_since_halving' in similar_phase_data.columns:
+                                        # Convert to float to ensure consistent types
+                                        values = similar_phase_data['price_change_since_halving'].astype(float).tolist()
+                                        historical_values.extend(values)
 
-                    # Calculate average duration and ROI metrics
-                    if not bull_cycles.empty:
-                        avg_bull_duration = bull_cycles['duration_days'].mean()
-                        avg_bull_roi = bull_cycles['max_roi'].mean()
-                        std_bull_roi = bull_cycles['max_roi'].std()
+                            # If we have enough historical data points for comparison
+                            if len(historical_values) >= 3:
+                                historical_mean = np.mean(historical_values)
+                                historical_std = np.std(historical_values)
 
-                    if not bear_cycles.empty:
-                        avg_bear_duration = bear_cycles['duration_days'].mean()
-                        avg_bear_drawdown = bear_cycles['max_drawdown'].mean()
-                        std_bear_drawdown = bear_cycles['max_drawdown'].std()
+                                # Calculate z-score compared to historical cycles
+                                if 'price_change_since_halving' in current_cycle_data.columns and historical_std > 0:
+                                    current_value = float(row.get('price_change_since_halving', 0))  # Ensure float
+                                    z_score = (current_value - historical_mean) / historical_std
 
-                    # Identify current cycle
-                    current_cycle_id = result_df['cycle_id'].max()
-                    current_cycle_data = result_df[result_df['cycle_id'] == current_cycle_id]
+                                    # Check for significant deviation
+                                    if abs(z_score) > 2.0:  # More than 2 standard deviations
+                                        anomalies.loc[idx, 'anomaly_detected'] = True
+                                        anomalies.loc[idx, 'significance_score'] = float(abs(z_score))  # Ensure float
 
-                    if not current_cycle_data.empty:
-                        current_state = current_cycle_data['cycle_state'].iloc[0]
-                        current_duration = current_cycle_data['days_in_cycle'].max()
+                                        if z_score > 0:
+                                            anomalies.loc[idx, 'anomaly_type'] = 'higher_than_historical'
+                                            anomalies.loc[idx, 'description'] = (
+                                                f"Price is {z_score:.2f} std devs higher than historical cycles "
+                                                f"at similar phase ({current_phase:.2f})"
+                                            )
+                                            logger.info(
+                                                f"Detected 'higher_than_historical' anomaly on {idx.date()} with score {z_score:.2f}")
+                                        else:
+                                            anomalies.loc[idx, 'anomaly_type'] = 'lower_than_historical'
+                                            anomalies.loc[idx, 'description'] = (
+                                                f"Price is {abs(z_score):.2f} std devs lower than historical cycles "
+                                                f"at similar phase ({current_phase:.2f})"
+                                            )
+                                            logger.info(
+                                                f"Detected 'lower_than_historical' anomaly on {idx.date()} with score {abs(z_score):.2f}")
+                except Exception as e:
+                    logger.error(f"Error in halving cycle analysis: {str(e)}")
+                    logger.debug("Traceback", exc_info=True)
 
-                        # Check for duration anomalies
-                        if current_state == 'bull' and 'avg_bull_duration' in locals():
-                            if current_duration > 1.5 * avg_bull_duration:
-                                # Extended bull market
-                                for idx in current_cycle_data.index[-30:]:  # Last 30 days
+            elif cycle_type == 'bull_bear':
+                logger.info("Processing bull/bear cycle")
+                try:
+                    # Get bull/bear cycle information
+                    bull_bear_df = self.marketplace.identify_bull_bear_cycles(result_df)
+
+                    # Convert any Decimal columns to float to avoid type errors
+                    for col in bull_bear_df.select_dtypes(include=[decimal.Decimal]).columns:
+                        logger.debug(f"Converting {col} from Decimal to float in bull_bear_df")
+                        bull_bear_df[col] = bull_bear_df[col].astype(float)
+
+                    # Merge the relevant columns with result_df
+                    for col in ['cycle_state', 'cycle_id', 'days_in_cycle', 'cycle_max_roi', 'cycle_max_drawdown']:
+                        if col in bull_bear_df.columns:
+                            result_df[col] = bull_bear_df[col]
+
+                    # Check for anomalies in ROI or drawdown compared to typical bull/bear cycles
+                    if 'cycle_state' in result_df.columns and 'cycle_id' in result_df.columns:
+                        # Group by cycle_state to get typical metrics for bull and bear markets
+                        if hasattr(bull_bear_df, 'cycles_summary') and not bull_bear_df.cycles_summary.empty:
+                            cycles_summary = bull_bear_df.cycles_summary
+
+                            # Convert any Decimal columns to float in cycles_summary
+                            for col in cycles_summary.select_dtypes(include=[decimal.Decimal]).columns:
+                                logger.debug(f"Converting {col} from Decimal to float in cycles_summary")
+                                cycles_summary[col] = cycles_summary[col].astype(float)
+
+                            # Get metrics by cycle type
+                            bull_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bull']
+                            bear_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bear']
+
+                            logger.debug(f"Found {len(bull_cycles)} bull cycles and {len(bear_cycles)} bear cycles")
+
+                            # Calculate average duration and ROI metrics
+                            avg_bull_duration = None
+                            avg_bull_roi = None
+                            std_bull_roi = None
+
+                            avg_bear_duration = None
+                            avg_bear_drawdown = None
+                            std_bear_drawdown = None
+
+                            if not bull_cycles.empty:
+                                avg_bull_duration = float(bull_cycles['duration_days'].mean())
+                                avg_bull_roi = float(bull_cycles['max_roi'].mean())
+                                std_bull_roi = float(bull_cycles['max_roi'].std())
+                                logger.debug(
+                                    f"Bull cycle stats - Avg duration: {avg_bull_duration}, Avg ROI: {avg_bull_roi}, Std ROI: {std_bull_roi}")
+
+                            if not bear_cycles.empty:
+                                avg_bear_duration = float(bear_cycles['duration_days'].mean())
+                                avg_bear_drawdown = float(bear_cycles['max_drawdown'].mean())
+                                std_bear_drawdown = float(bear_cycles['max_drawdown'].std())
+                                logger.debug(
+                                    f"Bear cycle stats - Avg duration: {avg_bear_duration}, Avg drawdown: {avg_bear_drawdown}, Std drawdown: {std_bear_drawdown}")
+
+                            # Identify current cycle
+                            current_cycle_id = result_df['cycle_id'].max()
+                            current_cycle_data = result_df[result_df['cycle_id'] == current_cycle_id]
+
+                            if not current_cycle_data.empty:
+                                current_state = current_cycle_data['cycle_state'].iloc[0]
+                                current_duration = float(current_cycle_data['days_in_cycle'].max())
+                                logger.debug(
+                                    f"Current cycle: ID {current_cycle_id}, State {current_state}, Duration {current_duration} days")
+
+                                # Check for duration anomalies
+                                if current_state == 'bull' and avg_bull_duration is not None:
+                                    if current_duration > 1.5 * avg_bull_duration:
+                                        # Extended bull market
+                                        for idx in current_cycle_data.index[-30:]:  # Last 30 days
+                                            ratio = current_duration / avg_bull_duration
+                                            anomalies.loc[idx, 'anomaly_detected'] = True
+                                            anomalies.loc[idx, 'anomaly_type'] = 'extended_bull_market'
+                                            anomalies.loc[idx, 'significance_score'] = float(ratio)  # Ensure float
+                                            anomalies.loc[idx, 'description'] = (
+                                                f"Extended bull market: {current_duration:.0f} days vs. "
+                                                f"typical {avg_bull_duration:.0f} days"
+                                            )
+                                        logger.info(
+                                            f"Detected 'extended_bull_market' anomaly with ratio {current_duration / avg_bull_duration:.2f}")
+
+                                elif current_state == 'bear' and avg_bear_duration is not None:
+                                    if current_duration > 1.5 * avg_bear_duration:
+                                        # Extended bear market
+                                        for idx in current_cycle_data.index[-30:]:  # Last 30 days
+                                            ratio = current_duration / avg_bear_duration
+                                            anomalies.loc[idx, 'anomaly_detected'] = True
+                                            anomalies.loc[idx, 'anomaly_type'] = 'extended_bear_market'
+                                            anomalies.loc[idx, 'significance_score'] = float(ratio)  # Ensure float
+                                            anomalies.loc[idx, 'description'] = (
+                                                f"Extended bear market: {current_duration:.0f} days vs. "
+                                                f"typical {avg_bear_duration:.0f} days"
+                                            )
+                                        logger.info(
+                                            f"Detected 'extended_bear_market' anomaly with ratio {current_duration / avg_bear_duration:.2f}")
+
+                                # Check for ROI/drawdown anomalies
+                                if current_state == 'bull' and std_bull_roi is not None and std_bull_roi > 0:
+                                    current_roi = float(current_cycle_data['cycle_max_roi'].max())
+                                    roi_z_score = (current_roi - avg_bull_roi) / std_bull_roi
+
+                                    if abs(roi_z_score) > 2.0:
+                                        anomaly_type = 'stronger_bull' if roi_z_score > 0 else 'weaker_bull'
+                                        for idx in current_cycle_data.index[-15:]:  # Last 15 days
+                                            anomalies.loc[idx, 'anomaly_detected'] = True
+                                            anomalies.loc[idx, 'anomaly_type'] = anomaly_type
+                                            anomalies.loc[idx, 'significance_score'] = float(
+                                                abs(roi_z_score))  # Ensure float
+                                            anomalies.loc[idx, 'description'] = (
+                                                f"{'Stronger' if roi_z_score > 0 else 'Weaker'} than typical bull market: "
+                                                f"{current_roi:.1%} ROI vs. typical {avg_bull_roi:.1%}"
+                                            )
+                                        logger.info(
+                                            f"Detected '{anomaly_type}' anomaly with z-score {abs(roi_z_score):.2f}")
+
+                                elif current_state == 'bear' and std_bear_drawdown is not None and std_bear_drawdown > 0:
+                                    current_drawdown = float(current_cycle_data['cycle_max_drawdown'].min())
+                                    drawdown_z_score = (current_drawdown - avg_bear_drawdown) / std_bear_drawdown
+
+                                    if abs(drawdown_z_score) > 2.0:
+                                        anomaly_type = 'milder_bear' if drawdown_z_score > 0 else 'severe_bear'
+                                        for idx in current_cycle_data.index[-15:]:  # Last 15 days
+                                            anomalies.loc[idx, 'anomaly_detected'] = True
+                                            anomalies.loc[idx, 'anomaly_type'] = anomaly_type
+                                            anomalies.loc[idx, 'significance_score'] = float(
+                                                abs(drawdown_z_score))  # Ensure float
+                                            anomalies.loc[idx, 'description'] = (
+                                                f"{'Milder' if drawdown_z_score > 0 else 'More severe'} than typical bear market: "
+                                                f"{current_drawdown:.1%} drawdown vs. typical {avg_bear_drawdown:.1%}"
+                                            )
+                                        logger.info(
+                                            f"Detected '{anomaly_type}' anomaly with z-score {abs(drawdown_z_score):.2f}")
+                except Exception as e:
+                    logger.error(f"Error in bull/bear cycle analysis: {str(e)}")
+                    logger.debug("Traceback", exc_info=True)
+
+            elif cycle_type == 'network_upgrade' or cycle_type == 'ecosystem_event':
+                logger.info(f"Processing {cycle_type} cycle for {clean_symbol}")
+                try:
+                    # For ETH or SOL, detect anomalies around significant events
+                    events = self.get_significant_events_for_symbol(clean_symbol)
+                    logger.debug(f"Found {len(events) if events else 0} significant events for {clean_symbol}")
+
+                    # If we have events data
+                    if events:
+                        # Analyze volatility and price changes around events
+                        for i, event in enumerate(events):
+                            # Skip if event data is not a dictionary (for BTC it's just dates)
+                            if not isinstance(event, dict):
+                                logger.debug(f"Skipping event {i} - not a dictionary")
+                                continue
+
+                            event_date = pd.to_datetime(event['date'])
+                            event_name = event['name']
+                            logger.debug(f"Processing event: {event_name} on {event_date}")
+
+                            # Skip events that are too recent or future events
+                            if event_date > result_df.index.max():
+                                logger.debug(f"Skipping future event: {event_name} on {event_date}")
+                                continue
+
+                            # Define pre and post event windows
+                            pre_event_window = 7  # 7 days before
+                            post_event_window = 30  # 30 days after
+
+                            # Get data around the event
+                            pre_event_mask = (result_df.index >= event_date - pd.Timedelta(days=pre_event_window)) & (
+                                    result_df.index < event_date)
+                            post_event_mask = (result_df.index >= event_date) & (
+                                    result_df.index < event_date + pd.Timedelta(days=post_event_window))
+
+                            pre_event_data = result_df[pre_event_mask]
+                            post_event_data = result_df[post_event_mask]
+
+                            # Skip if not enough data
+                            if len(pre_event_data) < 3 or len(post_event_data) < 3:
+                                logger.debug(
+                                    f"Skipping event {event_name} - insufficient data (pre: {len(pre_event_data)}, post: {len(post_event_data)})")
+                                continue
+
+                            # Calculate metrics
+                            pre_event_volatility = float(pre_event_data[
+                                                             'volatility_14d'].mean()) if 'volatility_14d' in pre_event_data.columns else 0
+                            post_event_volatility = float(post_event_data[
+                                                              'volatility_14d'].mean()) if 'volatility_14d' in post_event_data.columns else 0
+
+                            logger.debug(
+                                f"Event {event_name} - pre volatility: {pre_event_volatility:.6f}, post volatility: {post_event_volatility:.6f}")
+
+                            # Price change from event day
+                            if event_date in result_df.index:
+                                event_price = float(result_df.loc[event_date, 'close'])
+                                post_event_data['price_change_from_event'] = post_event_data['close'].astype(
+                                    float) / event_price - 1
+
+                                # Check for significant price changes after the event
+                                for idx, row in post_event_data.iterrows():
+                                    days_after_event = (idx - event_date).days
+                                    price_change = float(row['price_change_from_event'])
+
+                                    # If price change is >10% within 7 days or >20% within 30 days of the event
+                                    if (days_after_event <= 7 and abs(price_change) > 0.1) or \
+                                            (days_after_event > 7 and abs(price_change) > 0.2):
+                                        anomalies.loc[idx, 'anomaly_detected'] = True
+                                        anomalies.loc[idx, 'anomaly_type'] = 'significant_post_event_move'
+                                        anomalies.loc[idx, 'significance_score'] = float(
+                                            abs(price_change) * 5)  # Scale for comparison
+                                        anomalies.loc[idx, 'description'] = (
+                                            f"Significant price change of {price_change:.1%} "
+                                            f"{days_after_event} days after {event_name}"
+                                        )
+                                        logger.info(
+                                            f"Detected 'significant_post_event_move' after {event_name} - {price_change:.1%} change after {days_after_event} days")
+
+                            # Check for volatility anomalies
+                            if pre_event_volatility > 0 and post_event_volatility > 1.5 * pre_event_volatility:
+                                # Increased volatility after event
+                                for idx in post_event_data.index[:10]:  # First 10 days after event
+                                    vol_ratio = post_event_volatility / pre_event_volatility
                                     anomalies.loc[idx, 'anomaly_detected'] = True
-                                    anomalies.loc[idx, 'anomaly_type'] = 'extended_bull_market'
-                                    anomalies.loc[idx, 'significance_score'] = current_duration / avg_bull_duration
+                                    anomalies.loc[idx, 'anomaly_type'] = 'increased_post_event_volatility'
+                                    anomalies.loc[idx, 'significance_score'] = float(vol_ratio)  # Ensure float
                                     anomalies.loc[idx, 'description'] = (
-                                        f"Extended bull market: {current_duration} days vs. "
-                                        f"typical {avg_bull_duration:.0f} days"
+                                        f"Increased volatility after {event_name}: "
+                                        f"{post_event_volatility:.4f} vs pre-event {pre_event_volatility:.4f}"
                                     )
+                                logger.info(
+                                    f"Detected 'increased_post_event_volatility' after {event_name} - ratio: {vol_ratio:.2f}")
+                except Exception as e:
+                    logger.error(f"Error in {cycle_type} analysis: {str(e)}")
+                    logger.debug("Traceback", exc_info=True)
 
-                        elif current_state == 'bear' and 'avg_bear_duration' in locals():
-                            if current_duration > 1.5 * avg_bear_duration:
-                                # Extended bear market
-                                for idx in current_cycle_data.index[-30:]:  # Last 30 days
-                                    anomalies.loc[idx, 'anomaly_detected'] = True
-                                    anomalies.loc[idx, 'anomaly_type'] = 'extended_bear_market'
-                                    anomalies.loc[idx, 'significance_score'] = current_duration / avg_bear_duration
-                                    anomalies.loc[idx, 'description'] = (
-                                        f"Extended bear market: {current_duration} days vs. "
-                                        f"typical {avg_bear_duration:.0f} days"
-                                    )
+            # General price anomalies (applicable to all cycle types)
+            logger.info("Processing general price anomalies")
+            anomaly_count = 0
+            for idx, row in result_df.iterrows():
+                # Skip rows with insufficient data for z-scores
+                if pd.isna(row.get('price_change_1d_zscore')) or pd.isna(row.get('volatility_14d_zscore')):
+                    continue
 
-                        # Check for ROI/drawdown anomalies
-                        if current_state == 'bull' and 'std_bull_roi' in locals() and std_bull_roi > 0:
-                            current_roi = current_cycle_data['cycle_max_roi'].max()
-                            roi_z_score = (current_roi - avg_bull_roi) / std_bull_roi
-
-                            if abs(roi_z_score) > 2.0:
-                                anomaly_type = 'stronger_bull' if roi_z_score > 0 else 'weaker_bull'
-                                for idx in current_cycle_data.index[-15:]:  # Last 15 days
-                                    anomalies.loc[idx, 'anomaly_detected'] = True
-                                    anomalies.loc[idx, 'anomaly_type'] = anomaly_type
-                                    anomalies.loc[idx, 'significance_score'] = abs(roi_z_score)
-                                    anomalies.loc[idx, 'description'] = (
-                                        f"{'Stronger' if roi_z_score > 0 else 'Weaker'} than typical bull market: "
-                                        f"{current_roi:.1%} ROI vs. typical {avg_bull_roi:.1%}"
-                                    )
-
-                        elif current_state == 'bear' and 'std_bear_drawdown' in locals() and std_bear_drawdown > 0:
-                            current_drawdown = current_cycle_data['cycle_max_drawdown'].min()
-                            drawdown_z_score = (current_drawdown - avg_bear_drawdown) / std_bear_drawdown
-
-                            if abs(drawdown_z_score) > 2.0:
-                                anomaly_type = 'milder_bear' if drawdown_z_score > 0 else 'severe_bear'
-                                for idx in current_cycle_data.index[-15:]:  # Last 15 days
-                                    anomalies.loc[idx, 'anomaly_detected'] = True
-                                    anomalies.loc[idx, 'anomaly_type'] = anomaly_type
-                                    anomalies.loc[idx, 'significance_score'] = abs(drawdown_z_score)
-                                    anomalies.loc[idx, 'description'] = (
-                                        f"{'Milder' if drawdown_z_score > 0 else 'More severe'} than typical bear market: "
-                                        f"{current_drawdown:.1%} drawdown vs. typical {avg_bear_drawdown:.1%}"
-                                    )
-
-        elif cycle_type == 'network_upgrade' or cycle_type == 'ecosystem_event':
-            # For ETH or SOL, detect anomalies around significant events
-            events = self.get_significant_events_for_symbol(clean_symbol)
-
-            # If we have events data
-            if events:
-                # Analyze volatility and price changes around events
-                for event in events:
-                    # Skip if event data is not a dictionary (for BTC it's just dates)
-                    if not isinstance(event, dict):
-                        continue
-
-                    event_date = pd.Timestamp(event['date'])
-                    event_name = event['name']
-
-                    # Skip events that are too recent or future events
-                    if event_date > result_df.index.max():
-                        continue
-
-                    # Define pre and post event windows
-                    pre_event_window = 7  # 7 days before
-                    post_event_window = 30  # 30 days after
-
-                    # Get data around the event
-                    pre_event_mask = (result_df.index >= event_date - pd.Timedelta(days=pre_event_window)) & (
-                                result_df.index < event_date)
-                    post_event_mask = (result_df.index >= event_date) & (
-                                result_df.index < event_date + pd.Timedelta(days=post_event_window))
-
-                    pre_event_data = result_df[pre_event_mask]
-                    post_event_data = result_df[post_event_mask]
-
-                    # Skip if not enough data
-                    if len(pre_event_data) < 3 or len(post_event_data) < 3:
-                        continue
-
-                    # Calculate metrics
-                    pre_event_volatility = pre_event_data[
-                        'volatility_14d'].mean() if 'volatility_14d' in pre_event_data.columns else 0
-                    post_event_volatility = post_event_data[
-                        'volatility_14d'].mean() if 'volatility_14d' in post_event_data.columns else 0
-
-                    # Price change from event day
-                    if event_date in result_df.index:
-                        event_price = result_df.loc[event_date, 'close']
-                        post_event_data['price_change_from_event'] = post_event_data['close'] / event_price - 1
-
-                        # Check for significant price changes after the event
-                        for idx, row in post_event_data.iterrows():
-                            days_after_event = (idx - event_date).days
-
-                            # If price change is >10% within 7 days or >20% within 30 days of the event
-                            if (days_after_event <= 7 and abs(row['price_change_from_event']) > 0.1) or \
-                                    (days_after_event > 7 and abs(row['price_change_from_event']) > 0.2):
-                                anomalies.loc[idx, 'anomaly_detected'] = True
-                                anomalies.loc[idx, 'anomaly_type'] = 'significant_post_event_move'
-                                anomalies.loc[idx, 'significance_score'] = abs(
-                                    row['price_change_from_event']) * 5  # Scale for comparison
-                                anomalies.loc[idx, 'description'] = (
-                                    f"Significant price change of {row['price_change_from_event']:.1%} "
-                                    f"{days_after_event} days after {event_name}"
-                                )
-
-                    # Check for volatility anomalies
-                    if post_event_volatility > 1.5 * pre_event_volatility:
-                        # Increased volatility after event
-                        for idx in post_event_data.index[:10]:  # First 10 days after event
-                            anomalies.loc[idx, 'anomaly_detected'] = True
-                            anomalies.loc[idx, 'anomaly_type'] = 'increased_post_event_volatility'
-                            anomalies.loc[idx, 'significance_score'] = post_event_volatility / pre_event_volatility
-                            anomalies.loc[idx, 'description'] = (
-                                f"Increased volatility after {event_name}: "
-                                f"{post_event_volatility:.4f} vs pre-event {pre_event_volatility:.4f}"
-                            )
-
-        # General price anomalies (applicable to all cycle types)
-        for idx, row in result_df.iterrows():
-            # Skip rows with insufficient data for z-scores
-            if pd.isna(row.get('price_change_1d_zscore')) or pd.isna(row.get('volatility_14d_zscore')):
-                continue
-
-            # 1. Check for extreme daily price changes
-            if abs(row['price_change_1d_zscore']) > 3.0:  # More than 3 standard deviations
-                anomalies.loc[idx, 'anomaly_detected'] = True
-                anomalies.loc[idx, 'anomaly_type'] = 'extreme_daily_move'
-                anomalies.loc[idx, 'significance_score'] = abs(row['price_change_1d_zscore'])
-                direction = "up" if row['price_change_1d'] > 0 else "down"
-                anomalies.loc[idx, 'description'] = (
-                    f"Extreme daily price move {direction} ({row['price_change_1d']:.1%}), "
-                    f"z-score: {row['price_change_1d_zscore']:.2f}"
-                )
-
-            # 2. Check for extreme volatility
-            if row['volatility_14d_zscore'] > 3.0:  # More than 3 standard deviations
-                # Only mark as anomaly if not already detected for price change
-                if not anomalies.loc[idx, 'anomaly_detected']:
+                # 1. Check for extreme daily price changes
+                if abs(row['price_change_1d_zscore']) > 3.0:  # More than 3 standard deviations
+                    zscore = float(row['price_change_1d_zscore'])
+                    price_change = float(row['price_change_1d'])
                     anomalies.loc[idx, 'anomaly_detected'] = True
-                    anomalies.loc[idx, 'anomaly_type'] = 'extreme_volatility'
-                    anomalies.loc[idx, 'significance_score'] = row['volatility_14d_zscore']
+                    anomalies.loc[idx, 'anomaly_type'] = 'extreme_daily_move'
+                    anomalies.loc[idx, 'significance_score'] = abs(zscore)
+                    direction = "up" if price_change > 0 else "down"
                     anomalies.loc[idx, 'description'] = (
-                        f"Extreme volatility detected ({row['volatility_14d']:.4f}), "
-                        f"z-score: {row['volatility_14d_zscore']:.2f}"
+                        f"Extreme daily price move {direction} ({price_change:.1%}), "
+                        f"z-score: {zscore:.2f}"
                     )
+                    anomaly_count += 1
+                    if anomaly_count <= 5:  # Log only a few to avoid excessive logging
+                        logger.info(
+                            f"Detected 'extreme_daily_move' on {idx.date()} - {direction} {price_change:.1%}, z-score: {zscore:.2f}")
 
-            # 3. Check for volatility collapse (can precede large moves)
-            if row['volatility_14d_zscore'] < -2.0:  # More than 2 standard deviations below mean
-                # Only mark as anomaly if not already detected
-                if not anomalies.loc[idx, 'anomaly_detected']:
-                    anomalies.loc[idx, 'anomaly_detected'] = True
-                    anomalies.loc[idx, 'anomaly_type'] = 'volatility_collapse'
-                    anomalies.loc[idx, 'significance_score'] = abs(row['volatility_14d_zscore'])
-                    anomalies.loc[idx, 'description'] = (
-                        f"Unusually low volatility ({row['volatility_14d']:.4f}), "
-                        f"z-score: {row['volatility_14d_zscore']:.2f}"
-                    )
+                # 2. Check for extreme volatility
+                if row['volatility_14d_zscore'] > 3.0:  # More than 3 standard deviations
+                    # Only mark as anomaly if not already detected for price change
+                    if not anomalies.loc[idx, 'anomaly_detected']:
+                        zscore = float(row['volatility_14d_zscore'])
+                        volatility = float(row['volatility_14d'])
+                        anomalies.loc[idx, 'anomaly_detected'] = True
+                        anomalies.loc[idx, 'anomaly_type'] = 'extreme_volatility'
+                        anomalies.loc[idx, 'significance_score'] = zscore
+                        anomalies.loc[idx, 'description'] = (
+                            f"Extreme volatility detected ({volatility:.4f}), "
+                            f"z-score: {zscore:.2f}"
+                        )
+                        anomaly_count += 1
+                        if anomaly_count <= 10:  # Log only a few to avoid excessive logging
+                            logger.info(
+                                f"Detected 'extreme_volatility' on {idx.date()} - {volatility:.4f}, z-score: {zscore:.2f}")
 
-        # Filter to only include detected anomalies
-        anomalies = anomalies[anomalies['anomaly_detected']]
+                # 3. Check for volatility collapse (can precede large moves)
+                if row['volatility_14d_zscore'] < -2.0:  # More than 2 standard deviations below mean
+                    # Only mark as anomaly if not already detected
+                    if not anomalies.loc[idx, 'anomaly_detected']:
+                        zscore = float(row['volatility_14d_zscore'])
+                        volatility = float(row['volatility_14d'])
+                        anomalies.loc[idx, 'anomaly_detected'] = True
+                        anomalies.loc[idx, 'anomaly_type'] = 'volatility_collapse'
+                        anomalies.loc[idx, 'significance_score'] = abs(zscore)
+                        anomalies.loc[idx, 'description'] = (
+                            f"Unusually low volatility ({volatility:.4f}), "
+                            f"z-score: {zscore:.2f}"
+                        )
+                        anomaly_count += 1
+                        if anomaly_count <= 10:  # Log only a few to avoid excessive logging
+                            logger.info(
+                                f"Detected 'volatility_collapse' on {idx.date()} - {volatility:.4f}, z-score: {zscore:.2f}")
 
-        # Sort by significance score
-        anomalies = anomalies.sort_values('significance_score', ascending=False)
+            # Filter to only include detected anomalies
+            anomalies = anomalies[anomalies['anomaly_detected']]
 
-        return anomalies
+            # Sort by significance score
+            anomalies = anomalies.sort_values('significance_score', ascending=False)
+
+            logger.info(f"Anomaly detection complete. Found {len(anomalies)} anomalies for {symbol}.")
+            return anomalies
+
+        except Exception as e:
+            logger.error(f"Error in detect_cycle_anomalies: {str(e)}")
+            logger.debug("Detailed traceback:", exc_info=True)
+            raise  # Re-raise the exception after logging

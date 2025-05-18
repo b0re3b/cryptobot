@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
+import decimal
+import logging
+import traceback
+from cyclefeatures.featureextractor import FeatureExtractor
 from data.db import DatabaseManager
 from utils.config import *
 from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtractor
@@ -9,15 +13,18 @@ from cyclefeatures.EthereumCycleFeatureExtractor import EthereumCycleFeatureExtr
 from cyclefeatures.SolanaCycleFeatureExtractor import SolanaCycleFeatureExtractor
 from cyclefeatures.seasonality import TemporalSeasonalityAnalyzer
 from cyclefeatures.MarketPhaseFeatureExtractor import MarketPhaseFeatureExtractor
+from utils.logger import CryptoLogger
+
+
 class CryptoCycles:
     def __init__(self):
-
         self.db_connection = DatabaseManager()
         self.btcycle = BitcoinCycleFeatureExtractor()
         self.ethcycle = EthereumCycleFeatureExtractor()
         self.solanacycle = SolanaCycleFeatureExtractor()
         self.seasonality = TemporalSeasonalityAnalyzer()
         self.marketplace = MarketPhaseFeatureExtractor()
+        self.features = FeatureExtractor()
         # Bitcoin halving dates
         self.btc_halving_dates = btc_halving_dates
         # Ethereum significant network upgrades/events
@@ -30,34 +37,73 @@ class CryptoCycles:
             "ETH": self.eth_significant_events,
             "SOL": self.sol_significant_events
         }
-
+        # Setup logger
+        self.logger = CryptoLogger('cyclefeatures')
         self.cached_processed_data = {}
+
+    def _ensure_float_df(self, df):
+        """
+        Ensure all numeric columns in the dataframe are float type, not Decimal.
+        This helps prevent type mismatches in calculations.
+        """
+        self.logger.debug("Converting dataframe to float type")
+
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        for col in numeric_cols:
+            # Check if column contains Decimal values
+            if any(isinstance(x, decimal.Decimal) for x in df[col].dropna().head(5)):
+                self.logger.debug(f"Converting column {col} from Decimal to float")
+                df[col] = df[col].astype(float)
+
+        return df
 
     def load_processed_data(self, symbol: str, timeframe: str,
                             start_date: Optional[str] = None,
                             end_date: Optional[str] = None) -> dict[Any, Any] | None | Any:
 
         cache_key = f"{symbol}_{timeframe}_{start_date}_{end_date}"
+        self.logger.info(f"Loading data for {symbol} {timeframe} from {start_date} to {end_date}")
 
         if cache_key in self.cached_processed_data:
+            self.logger.debug(f"Using cached data for {cache_key}")
             return self.cached_processed_data[cache_key]
 
-        # Load pre-processed data from storage manager
-        processed_data = self.db_connection.get_klines(
-            symbol=symbol,
-            timeframe=timeframe,
+        try:
+            # Load pre-processed data from storage manager
+            processed_data = self.db_connection.get_klines(
+                symbol=symbol,
+                timeframe=timeframe,
+            )
 
-        )
+            if processed_data is None or len(processed_data) == 0:
+                self.logger.warning(f"No data found for {symbol} {timeframe}")
+                return None
 
-        # Cache for future use
-        self.cached_processed_data[cache_key] = processed_data
+            # Convert any Decimal types to float to avoid type errors
+            processed_data = self._ensure_float_df(processed_data)
 
-        return processed_data
+            # Cache for future use
+            self.cached_processed_data[cache_key] = processed_data
+            self.logger.debug(f"Loaded {len(processed_data)} rows for {symbol} {timeframe}")
+
+            return processed_data
+
+        except Exception as e:
+            self.logger.error(f"Error loading data: {str(e)}")
+            self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+            raise
 
     def compare_current_to_historical_cycles(self, processed_data: pd.DataFrame,
                                              symbol: str,
                                              cycle_type: str = 'auto',
                                              normalize: bool = True) -> Dict:
+        """
+        Compare current market cycle to historical cycles.
+        """
+        self.logger.info(f"Comparing current to historical cycles for {symbol} with cycle_type={cycle_type}")
+
+        # Ensure we have float data to prevent Decimal/float errors
+        processed_data = self._ensure_float_df(processed_data)
 
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
 
@@ -72,44 +118,57 @@ class CryptoCycles:
             else:
                 cycle_type = 'bull_bear'
 
+        self.logger.debug(f"Using cycle_type={cycle_type} for {symbol}")
+
         # Ensure the DataFrame has a datetime index
         if not isinstance(processed_data.index, pd.DatetimeIndex):
+            self.logger.error("DataFrame index must be a DatetimeIndex")
             raise ValueError("DataFrame index must be a DatetimeIndex")
 
         # Identify cycles in the data based on cycle_type
-        if cycle_type == 'bull_bear':
-            # Use the bull_bear cycle identification logic
-            cycles_data = self.marketplace.identify_bull_bear_cycles(processed_data)
-            cycle_column = 'cycle_id'
-        elif cycle_type == 'halving' and symbol == 'BTC':
-            # Use halving cycles for BTC
-            cycles_data = self.btcycle.calculate_btc_halving_cycle_features(processed_data)
-            cycle_column = 'cycle_number'
-        elif cycle_type == 'network_upgrade' and symbol == 'ETH':
-            # For ETH, use network upgrades as cycle boundaries
-            # Implementation would depend on how ETH cycles are defined
-            cycles_data = processed_data.copy()
-            # This is just a placeholder - the actual implementation would need
-            # to process ETH network upgrade cycles
-            cycle_column = 'cycle_id'
-        elif cycle_type == 'ecosystem_event' and symbol == 'SOL':
-            # For SOL, use ecosystem events as cycle boundaries
-            # Implementation would depend on how SOL cycles are defined
-            cycles_data = processed_data.copy()
-            # This is just a placeholder - the actual implementation would need
-            # to process SOL ecosystem event cycles
-            cycle_column = 'cycle_id'
-        else:
-            # Default to bull/bear cycles for unknown combinations
-            cycles_data = self.marketplace.identify_bull_bear_cycles(processed_data)
-            cycle_column = 'cycle_id'
+        try:
+            if cycle_type == 'bull_bear':
+                # Use the bull_bear cycle identification logic
+                self.logger.debug("Identifying bull/bear cycles")
+                cycles_data = self.marketplace.identify_bull_bear_cycles(processed_data)
+                cycle_column = 'cycle_id'
+            elif cycle_type == 'halving' and symbol == 'BTC':
+                # Use halving cycles for BTC
+                self.logger.debug("Calculating BTC halving cycle features")
+                cycles_data = self.btcycle.calculate_btc_halving_cycle_features(processed_data)
+                cycle_column = 'cycle_number'
+            elif cycle_type == 'network_upgrade' and symbol == 'ETH':
+                # For ETH, use network upgrades as cycle boundaries
+                self.logger.debug("Using ETH network upgrade cycles")
+                cycles_data = processed_data.copy()
+                # This is just a placeholder - the actual implementation would need
+                # to process ETH network upgrade cycles
+                cycle_column = 'cycle_id'
+            elif cycle_type == 'ecosystem_event' and symbol == 'SOL':
+                # For SOL, use ecosystem events as cycle boundaries
+                self.logger.debug("Using SOL ecosystem event cycles")
+                cycles_data = processed_data.copy()
+                # This is just a placeholder - the actual implementation would need
+                # to process SOL ecosystem event cycles
+                cycle_column = 'cycle_id'
+            else:
+                # Default to bull/bear cycles for unknown combinations
+                self.logger.debug(f"Using default bull/bear cycles for {symbol} with {cycle_type}")
+                cycles_data = self.marketplace.identify_bull_bear_cycles(processed_data)
+                cycle_column = 'cycle_id'
+        except Exception as e:
+            self.logger.error(f"Error identifying cycles: {str(e)}")
+            self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+            raise
 
         # Extract the current cycle
         if cycle_column in cycles_data.columns:
             current_cycle_id = cycles_data[cycle_column].iloc[-1]
+            self.logger.debug(f"Current cycle ID: {current_cycle_id}")
             current_cycle_data = cycles_data[cycles_data[cycle_column] == current_cycle_id]
         else:
             # If cycle column is not found, assume the last 90 days is the current cycle
+            self.logger.warning(f"Cycle column '{cycle_column}' not found, using last 90 days as current cycle")
             lookback_days = 90
             current_date = cycles_data.index[-1]
             start_date = current_date - pd.Timedelta(days=lookback_days)
@@ -127,6 +186,7 @@ class CryptoCycles:
 
         # If no historical cycles found or cycle column not present, create them by year
         if not historical_cycles:
+            self.logger.warning("No historical cycles found, grouping by year as fallback")
             # Group by year as a fallback
             for year in set(cycles_data.index.year):
                 if year != cycles_data.index[-1].year:  # Skip current year
@@ -139,6 +199,7 @@ class CryptoCycles:
 
         # Check if we have enough data for comparison
         if len(current_cycle_data) < 10 or not historical_cycles:
+            self.logger.warning("Insufficient data for comparison")
             return {"error": "Insufficient data for comparison", "similarity_scores": {}}
 
         # Extract price data for comparison
@@ -146,16 +207,19 @@ class CryptoCycles:
 
         # If normalize is True, normalize the current prices
         if normalize:
+            self.logger.debug("Normalizing price data")
             current_prices = current_prices / current_prices[0]
 
         # Compare with each historical cycle
         similarity_scores = {}
 
         for cycle_id, cycle_data in historical_cycles.items():
+            self.logger.debug(f"Comparing with historical cycle {cycle_id}")
             historical_prices = cycle_data['close'].values
 
             # Skip if not enough data points
             if len(historical_prices) < len(current_prices):
+                self.logger.debug(f"Skipping cycle {cycle_id} - insufficient data points")
                 continue
 
             # If normalize is True, normalize the historical prices
@@ -185,7 +249,7 @@ class CryptoCycles:
 
             # Store the results
             similarity_scores[cycle_id] = {
-                "similarity": similarity,
+                "similarity": float(similarity),  # Ensure we're using float, not Decimal
                 "start_idx": best_start_idx,
                 "matched_length": len(current_prices)
             }
@@ -202,6 +266,7 @@ class CryptoCycles:
         most_similar_cycle_data = None
 
         if most_similar_cycle_id:
+            self.logger.info(f"Most similar cycle: {most_similar_cycle_id}")
             most_similar_cycle_data = historical_cycles[most_similar_cycle_id]
             best_start_idx = sorted_scores[most_similar_cycle_id]["start_idx"]
             matched_length = sorted_scores[most_similar_cycle_id]["matched_length"]
@@ -214,13 +279,21 @@ class CryptoCycles:
 
                 # If normalized, adjust the continuation to match the current price level
                 if normalize:
-                    adjustment_factor = current_prices[-1] / (
-                                most_similar_cycle_data['close'].iloc[best_start_idx + matched_length - 1] /
-                                most_similar_cycle_data['close'].iloc[best_start_idx])
+                    # Convert to float to avoid Decimal/float issues
+                    current_price_end = float(current_prices[-1])
+                    historical_price_end = float(
+                        most_similar_cycle_data['close'].iloc[best_start_idx + matched_length - 1])
+                    historical_price_start = float(most_similar_cycle_data['close'].iloc[best_start_idx])
+
+                    adjustment_factor = current_price_end / (historical_price_end / historical_price_start)
                     predicted_continuation = continuation_segment['close'].values * adjustment_factor
                 else:
-                    adjustment_factor = current_prices[-1] / most_similar_cycle_data['close'].iloc[
-                        best_start_idx + matched_length - 1]
+                    # Convert to float to avoid Decimal/float issues
+                    current_price_end = float(current_prices[-1])
+                    historical_price_end = float(
+                        most_similar_cycle_data['close'].iloc[best_start_idx + matched_length - 1])
+
+                    adjustment_factor = current_price_end / historical_price_end
                     predicted_continuation = continuation_segment['close'].values * adjustment_factor
 
         # Prepare the return dictionary
@@ -238,9 +311,11 @@ class CryptoCycles:
                 "prices": predicted_continuation.tolist(),
                 "duration_days": len(continuation_segment),
                 "based_on_cycle": most_similar_cycle_id,
-                "confidence_score": sorted_scores[most_similar_cycle_id]["similarity"]
+                "confidence_score": float(sorted_scores[most_similar_cycle_id]["similarity"])
+                # Ensure we're using float
             }
 
+        self.logger.info(f"Comparison complete. Found {len(sorted_scores)} similar cycles.")
         return comparison_results
 
     def predict_cycle_turning_points(self, processed_data: pd.DataFrame,
@@ -248,6 +323,9 @@ class CryptoCycles:
                                      cycle_type: str = 'auto',
                                      confidence_interval: float = 0.9) -> pd.DataFrame:
 
+        self.logger.info(f"Predicting cycle turning points for {symbol} with cycle_type={cycle_type}")
+
+        # Clean symbol format
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
 
         # Determine the appropriate cycle type if 'auto' is specified
@@ -261,22 +339,33 @@ class CryptoCycles:
             else:
                 cycle_type = 'bull_bear'
 
+        self.logger.debug(f"Using cycle_type={cycle_type} for {symbol}")
+
         # Ensure the DataFrame has a datetime index
         if not isinstance(processed_data.index, pd.DatetimeIndex):
+            self.logger.error("DataFrame index must be a DatetimeIndex")
             raise ValueError("DataFrame index must be a DatetimeIndex")
 
-        # Create a copy of the processed data
-        df = processed_data.copy()
+        # Create a copy of the processed data and ensure float type for all numeric columns
+        df = self._ensure_float_df(processed_data.copy())
 
         # Get historical cycles comparison for context
-        cycle_comparison = self.compare_current_to_historical_cycles(
-            processed_data=df,
-            symbol=symbol,
-            cycle_type=cycle_type,
-            normalize=True
-        )
+        try:
+            cycle_comparison = self.compare_current_to_historical_cycles(
+                processed_data=df,
+                symbol=symbol,
+                cycle_type=cycle_type,
+                normalize=True
+            )
+            self.logger.debug(f"Historical cycle comparison completed for {symbol}")
+        except Exception as e:
+            self.logger.error(f"Error in historical cycle comparison: {str(e)}")
+            self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+            cycle_comparison = {}
 
         # Initialize technical indicators for turning point detection
+        self.logger.debug("Calculating technical indicators for turning point detection")
+
         # Moving averages
         df['sma_20'] = df['close'].rolling(window=20).mean()
         df['sma_50'] = df['close'].rolling(window=50).mean()
@@ -290,7 +379,8 @@ class CryptoCycles:
         avg_gain = gain.rolling(window=14).mean()
         avg_loss = loss.rolling(window=14).mean()
 
-        rs = avg_gain / avg_loss.replace(0, 0.00001)  # Avoid division by zero
+        # Avoid division by zero with a small epsilon value
+        rs = avg_gain / avg_loss.replace(0, 0.00001)
         df['rsi'] = 100 - (100 / (1 + rs))
 
         # Calculate MACD
@@ -398,6 +488,7 @@ class CryptoCycles:
 
         # Get cycle-specific information based on cycle_type
         if cycle_type == 'halving' and symbol == 'BTC':
+            self.logger.debug("Adding BTC halving-specific indicators")
             # For BTC halving cycles, add halving-specific indicators
             if 'halving_cycle_phase' in df.columns:
                 # Historical analysis shows tops tend to occur 300-500 days after halving
@@ -414,8 +505,12 @@ class CryptoCycles:
 
         # Define lookback window for turning point detection
         lookback_window = 30
+        self.logger.debug(f"Using lookback window of {lookback_window} days for turning point detection")
 
         # Process each data point, skipping the first lookback_window points
+        self.logger.debug(f"Analyzing {len(df) - lookback_window} data points for turning points")
+        turning_points_count = 0
+
         for i in range(lookback_window, len(df)):
             row = df.iloc[i]
             prev_rows = df.iloc[i - lookback_window:i]
@@ -428,8 +523,9 @@ class CryptoCycles:
 
             # Adjust strength based on cycle-specific factors
             if cycle_type == 'halving' and symbol == 'BTC' and 'halving_top_probability' in df.columns:
-                top_strength *= (1 + row['halving_top_probability'])
-                bottom_strength *= (1 + row.get('halving_bottom_probability', 0))
+                # Ensure all values are float to prevent Decimal/float type issues
+                top_strength = float(top_strength) * (1 + float(row['halving_top_probability']))
+                bottom_strength = float(bottom_strength) * (1 + float(row.get('halving_bottom_probability', 0)))
 
             # Determine if this is a significant turning point
             if bottom_signals and bottom_strength >= 3:
@@ -446,21 +542,23 @@ class CryptoCycles:
                 if 'market_phase' in row:
                     cycle_phase = row['market_phase']
                 elif 'halving_cycle_phase' in row:
-                    cycle_phase = f"Halving cycle: {row['halving_cycle_phase']:.2f}"
+                    cycle_phase = f"Halving cycle: {float(row['halving_cycle_phase']):.2f}"
                 else:
                     cycle_phase = "Unknown"
 
                 # Add to turning points dataframe
                 turning_points = pd.concat([turning_points, pd.DataFrame([{
                     'date': row.name,
-                    'price': row['close'],
+                    'price': float(row['close']),  # Convert to float to prevent Decimal issues
                     'direction': 'bottom',
-                    'strength': bottom_strength,
-                    'confidence': confidence,
+                    'strength': float(bottom_strength),  # Convert to float
+                    'confidence': float(confidence),  # Convert to float
                     'indicators': ', '.join(bottom_signals),
                     'days_since_last_tp': days_since_last_tp,
                     'cycle_phase': cycle_phase
                 }])], ignore_index=True)
+
+                turning_points_count += 1
 
             elif top_signals and top_strength >= 3:
                 # Calculate days since last turning point
@@ -476,27 +574,33 @@ class CryptoCycles:
                 if 'market_phase' in row:
                     cycle_phase = row['market_phase']
                 elif 'halving_cycle_phase' in row:
-                    cycle_phase = f"Halving cycle: {row['halving_cycle_phase']:.2f}"
+                    cycle_phase = f"Halving cycle: {float(row['halving_cycle_phase']):.2f}"
                 else:
                     cycle_phase = "Unknown"
 
                 # Add to turning points dataframe
                 turning_points = pd.concat([turning_points, pd.DataFrame([{
                     'date': row.name,
-                    'price': row['close'],
+                    'price': float(row['close']),  # Convert to float
                     'direction': 'top',
-                    'strength': top_strength,
-                    'confidence': confidence,
+                    'strength': float(top_strength),  # Convert to float
+                    'confidence': float(confidence),  # Convert to float
                     'indicators': ', '.join(top_signals),
                     'days_since_last_tp': days_since_last_tp,
                     'cycle_phase': cycle_phase
                 }])], ignore_index=True)
 
+                turning_points_count += 1
+
+        self.logger.debug(f"Detected {turning_points_count} preliminary turning points")
+
         # Filter turning points by the confidence interval
         turning_points = turning_points[turning_points['confidence'] >= confidence_interval]
+        self.logger.debug(f"After confidence filtering: {len(turning_points)} turning points remain")
 
         # Use historical cycle comparison to predict future turning points
         if 'potential_continuation' in cycle_comparison:
+            self.logger.debug("Using historical pattern to project future turning points")
             potential_prices = cycle_comparison['potential_continuation']['prices']
 
             if len(potential_prices) > 10:
@@ -506,7 +610,7 @@ class CryptoCycles:
 
                 # Create a DataFrame with projected prices
                 projected_df = pd.DataFrame({
-                    'close': potential_prices,
+                    'close': [float(p) for p in potential_prices],  # Ensure float type
                     'date': future_dates
                 })
                 projected_df.set_index('date', inplace=True)
@@ -516,50 +620,61 @@ class CryptoCycles:
 
                 # Detect potential future turning points
                 lookback = min(10, len(projected_df))
+                projected_tops = 0
+                projected_bottoms = 0
+
                 for i in range(lookback, len(projected_df)):
-                    curr_price = projected_df['close'].iloc[i]
-                    prev_prices = projected_df['close'].iloc[i - lookback:i]
+                    curr_price = float(projected_df['close'].iloc[i])  # Ensure float
+                    prev_prices = projected_df['close'].iloc[i - lookback:i].astype(float)  # Ensure float type
 
                     # Simple peak detection
                     if all(curr_price > prev_prices):
                         # Possible future top
-                        confidence = min(0.8, cycle_comparison['potential_continuation']['confidence_score'])
+                        confidence = min(0.8,
+                                         float(cycle_comparison['potential_continuation'].get('confidence_score', 0.5)))
 
                         turning_points = pd.concat([turning_points, pd.DataFrame([{
                             'date': projected_df.index[i],
                             'price': curr_price,
                             'direction': 'projected_top',
-                            'strength': 3,  # Default value
-                            'confidence': confidence,
+                            'strength': 3.0,  # Default value as float
+                            'confidence': float(confidence),  # Ensure float
                             'indicators': 'Historical pattern projection',
                             'days_since_last_tp': (projected_df.index[i] - turning_points['date'].iloc[-1]).days if len(
                                 turning_points) > 0 else None,
                             'cycle_phase': f"Projected ({cycle_comparison['most_similar_cycle']})"
                         }])], ignore_index=True)
+                        projected_tops += 1
 
                     # Simple valley detection
                     elif all(curr_price < prev_prices):
                         # Possible future bottom
-                        confidence = min(0.8, cycle_comparison['potential_continuation']['confidence_score'])
+                        confidence = min(0.8,
+                                         float(cycle_comparison['potential_continuation'].get('confidence_score', 0.5)))
 
                         turning_points = pd.concat([turning_points, pd.DataFrame([{
                             'date': projected_df.index[i],
                             'price': curr_price,
                             'direction': 'projected_bottom',
-                            'strength': 3,  # Default value
-                            'confidence': confidence,
+                            'strength': 3.0,  # Default value as float
+                            'confidence': float(confidence),  # Ensure float
                             'indicators': 'Historical pattern projection',
                             'days_since_last_tp': (projected_df.index[i] - turning_points['date'].iloc[-1]).days if len(
                                 turning_points) > 0 else None,
                             'cycle_phase': f"Projected ({cycle_comparison['most_similar_cycle']})"
                         }])], ignore_index=True)
+                        projected_bottoms += 1
+
+                self.logger.debug(f"Added {projected_tops} projected tops and {projected_bottoms} projected bottoms")
 
         # Sort turning points by date
         turning_points = turning_points.sort_values('date')
 
         # For BTC halving cycles, add known future halving dates as significant turning points
         if symbol == 'BTC' and cycle_type == 'halving':
+            self.logger.debug("Adding future BTC halving dates as turning points")
             current_date = df.index[-1]
+            halving_events_added = 0
 
             for halving_date_str in self.btc_halving_dates:
                 halving_date = pd.Timestamp(halving_date_str)
@@ -570,16 +685,21 @@ class CryptoCycles:
                         'date': halving_date,
                         'price': None,  # Unknown future price
                         'direction': 'halving_event',
-                        'strength': 5,  # High significance
-                        'confidence': 0.99,  # Very high confidence for the event (though not for price)
+                        'strength': 5.0,  # High significance (as float)
+                        'confidence': 0.99,  # Very high confidence for the event
                         'indicators': 'Bitcoin halving event',
                         'days_since_last_tp': None,
                         'cycle_phase': 'Halving event'
                     }])], ignore_index=True)
+                    halving_events_added += 1
+
+            self.logger.debug(f"Added {halving_events_added} future BTC halving events")
 
         # For ETH and SOL, add upcoming network events if available
         elif symbol == 'ETH' and cycle_type == 'network_upgrade':
+            self.logger.debug("Adding future ETH network upgrade events as turning points")
             current_date = df.index[-1]
+            eth_events_added = 0
 
             for event in self.eth_significant_events:
                 event_date = pd.Timestamp(event['date'])
@@ -590,15 +710,20 @@ class CryptoCycles:
                         'date': event_date,
                         'price': None,  # Unknown future price
                         'direction': 'network_event',
-                        'strength': 4,  # High significance
+                        'strength': 4.0,  # High significance (as float)
                         'confidence': 0.9,  # High confidence for the event
                         'indicators': f"Ethereum {event['name']}: {event['description']}",
                         'days_since_last_tp': None,
                         'cycle_phase': 'Network upgrade'
                     }])], ignore_index=True)
+                    eth_events_added += 1
+
+            self.logger.debug(f"Added {eth_events_added} future ETH network events")
 
         elif symbol == 'SOL' and cycle_type == 'ecosystem_event':
+            self.logger.debug("Adding future SOL ecosystem events as turning points")
             current_date = df.index[-1]
+            sol_events_added = 0
 
             for event in self.sol_significant_events:
                 event_date = pd.Timestamp(event['date'])
@@ -609,234 +734,538 @@ class CryptoCycles:
                         'date': event_date,
                         'price': None,  # Unknown future price
                         'direction': 'ecosystem_event',
-                        'strength': 4,  # High significance
+                        'strength': 4.0,  # High significance (as float)
                         'confidence': 0.9,  # High confidence for the event
                         'indicators': f"Solana {event['name']}: {event['description']}",
                         'days_since_last_tp': None,
                         'cycle_phase': 'Ecosystem event'
                     }])], ignore_index=True)
+                    sol_events_added += 1
+
+            self.logger.debug(f"Added {sol_events_added} future SOL ecosystem events")
 
         # Sort by date again after adding events
         turning_points = turning_points.sort_values('date')
 
+        self.logger.info(f"Completed turning point prediction for {symbol}. Found {len(turning_points)} points.")
         return turning_points
-
 
     def update_features_with_new_data(self, processed_data: pd.DataFrame,
                                       symbol: str) -> pd.DataFrame:
 
+        self.logger.info(f"Updating features for {symbol} with new data")
+
         if len(processed_data) == 0:
+            self.logger.error("No data provided for update")
             raise ValueError("No data provided for update.")
 
         # Ensure we have a datetime index
         if not isinstance(processed_data.index, pd.DatetimeIndex):
+            self.logger.error("DataFrame index must be a DatetimeIndex")
             raise ValueError("DataFrame index must be a DatetimeIndex")
+
+        # Ensure all numeric data is float type
+        processed_data = self._ensure_float_df(processed_data)
 
         # Clean symbol
         symbol_clean = symbol.upper().replace('USDT', '').replace('USD', '')
+        self.logger.debug(f"Working with clean symbol: {symbol_clean}")
 
         # Get the last date in the processed data
         last_date = processed_data.index[-1]
+        self.logger.debug(f"Last date in data: {last_date}")
 
-        # Retrieve the existing cycle features from the database
-        # This is a placeholder - actual implementation would depend on your DB schema
-        existing_features = self.db_connection.get_latest_cycle_features(symbol=symbol)
+        try:
+            # Retrieve the existing cycle features from the database
+            self.logger.debug(f"Retrieving existing cycle features for {symbol}")
+            existing_features = self.db_connection.get_latest_cycle_features(symbol=symbol)
 
-        # If no existing features, process all data
-        if existing_features is None or len(existing_features) == 0:
-            return self.create_cyclical_features(processed_data, symbol)
+            # If no existing features, process all data
+            if existing_features is None or len(existing_features) == 0:
+                self.logger.info(f"No existing features found for {symbol}, processing all data")
+                return self.features.create_cyclical_features(processed_data, symbol)
 
-        # Determine which specific updates are needed based on the symbol
-        updated_features = processed_data.copy()
+            # Update features with new data
+            self.logger.debug("Updating general market phase detection")
+            updated_features = processed_data.copy()
 
-        # Update general market phase detection
-        updated_features = self.marketplace.detect_market_phase(updated_features)
+            # Ensure updated_features is using float values
+            updated_features = self._ensure_float_df(updated_features)
 
-        # Update bull/bear cycle identification
-        updated_features = self.marketplace.identify_bull_bear_cycles(updated_features)
+            try:
+                # Update general market phase detection
+                updated_features = self.marketplace.detect_market_phase(updated_features)
+                self.logger.debug("Market phase detection completed")
+            except Exception as e:
+                self.logger.error(f"Error in market phase detection: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
 
-        # Update token-specific cycle features
-        if symbol_clean == 'BTC':
-            updated_features = self.btcycle.calculate_btc_halving_cycle_features(updated_features)
-        elif symbol_clean == 'ETH':
-            updated_features = self.ethcycle.calculate_eth_event_cycle_features(updated_features)
-        elif symbol_clean == 'SOL':
-            updated_features = self.solanacycle.calculate_sol_event_cycle_features(updated_features)
+            try:
+                # Update bull/bear cycle identification
+                updated_features = self.marketplace.identify_bull_bear_cycles(updated_features)
+                self.logger.debug("Bull/bear cycle identification completed")
+            except Exception as e:
+                self.logger.error(f"Error in bull/bear cycle identification: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
 
-        # Check for new cycle turning points
-        turning_points = self.predict_cycle_turning_points(updated_features, symbol)
+            # Update token-specific cycle features
+            try:
+                if symbol_clean == 'BTC':
+                    self.logger.debug("Calculating BTC halving cycle features")
+                    updated_features = self.btcycle.calculate_btc_halving_cycle_features(updated_features)
+                elif symbol_clean == 'ETH':
+                    self.logger.debug("Calculating ETH event cycle features")
+                    updated_features = self.ethcycle.calculate_eth_event_cycle_features(updated_features)
+                elif symbol_clean == 'SOL':
+                    self.logger.debug("Calculating SOL event cycle features")
+                    updated_features = self.solanacycle.calculate_sol_event_cycle_features(updated_features)
+            except Exception as e:
+                self.logger.error(f"Error in token-specific cycle features calculation: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
 
-        # Save any new turning points to the database
-        if turning_points is not None and len(turning_points) > 0:
-            # This is a placeholder - actual implementation depends on your DB schema
-            for _, point in turning_points.iterrows():
-                self.db_connection.save_predicted_turning_point(
+            # Check for new cycle turning points
+            try:
+                self.logger.debug("Predicting cycle turning points")
+                turning_points = self.predict_cycle_turning_points(updated_features, symbol)
+
+                # Save any new turning points to the database
+                if turning_points is not None and len(turning_points) > 0:
+                    self.logger.info(f"Saving {len(turning_points)} turning points to database")
+                    for _, point in turning_points.iterrows():
+                        try:
+                            # Ensure we're using the right column names
+                            point_type = point.get('direction', 'unknown')
+                            confidence = float(point.get('confidence', 0.0))
+                            description = point.get('indicators', 'No description')
+
+                            self.db_connection.save_predicted_turning_point(
+                                symbol=symbol,
+                                date=point['date'],
+                                point_type=point_type,
+                                confidence=confidence,
+                                description=description
+                            )
+                        except Exception as save_error:
+                            self.logger.error(f"Error saving turning point: {str(save_error)}")
+            except Exception as e:
+                self.logger.error(f"Error predicting turning points: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+
+            # Check for cycle anomalies
+            try:
+                self.logger.debug("Detecting cycle anomalies")
+                anomalies = self.features.detect_cycle_anomalies(updated_features, symbol)
+
+                # Add anomaly information to features
+                if anomalies is not None and len(anomalies) > 0:
+                    self.logger.info(f"Found {len(anomalies)} anomalies")
+                    for col in anomalies.columns:
+                        if col not in updated_features.columns:
+                            updated_features[col] = anomalies[col]
+            except Exception as e:
+                self.logger.error(f"Error detecting cycle anomalies: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+
+            # Compare to historical cycles
+            try:
+                self.logger.debug("Comparing to historical cycles")
+                historical_comparison = self.compare_current_to_historical_cycles(
+                    self._ensure_float_df(updated_features), symbol)
+
+                # Save the comparison results
+                if historical_comparison and 'similarity_scores' in historical_comparison:
+                    self.logger.info("Saving historical cycle comparison results")
+                    # Iterate through similarity scores
+                    for ref_cycle, similarity_data in historical_comparison['similarity_scores'].items():
+                        self.db_connection.save_cycle_similarity(
+                            symbol=symbol,
+                            reference_cycle=ref_cycle,
+                            current_cycle=historical_comparison.get('current_cycle_start', 'Unknown'),
+                            similarity_score=float(similarity_data.get('similarity', 0.0)),
+                            date=last_date
+                        )
+            except Exception as e:
+                self.logger.error(f"Error comparing to historical cycles: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+
+            # Save the updated features to the database
+            try:
+                self.logger.info(f"Saving updated features for {symbol} to database")
+                self.db_connection.save_cycle_feature(
                     symbol=symbol,
-                    date=point['date'],
-                    point_type=point['type'],
-                    confidence=point['confidence'],
-                    description=point['description']
-                )
-
-        # Check for cycle anomalies
-        anomalies = self.detect_cycle_anomalies(updated_features, symbol)
-
-        # Add anomaly information to features
-        if anomalies is not None and len(anomalies) > 0:
-            for col in anomalies.columns:
-                if col not in updated_features.columns:
-                    updated_features[col] = anomalies[col]
-
-        # Compare to historical cycles
-        historical_comparison = self.compare_current_to_historical_cycles(updated_features, symbol)
-
-        # Save the comparison results
-        if historical_comparison:
-            # This is a placeholder - actual implementation depends on your DB schema
-            for ref_cycle, similarity in historical_comparison.get('similarities', {}).items():
-                self.db_connection.save_cycle_similarity(
-                    symbol=symbol,
-                    reference_cycle=ref_cycle,
-                    current_cycle=historical_comparison.get('current_cycle'),
-                    similarity_score=similarity,
+                    timeframe=processed_data.attrs.get('timeframe', '1d'),
+                    features=updated_features,
                     date=last_date
                 )
+            except Exception as e:
+                self.logger.error(f"Error saving cycle features: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
 
-        # Save the updated features to the database
-        # This is a placeholder - actual implementation depends on your DB schema
-        self.db_connection.save_cycle_feature(
-            symbol=symbol,
-            timeframe=processed_data.attrs.get('timeframe', '1d'),
-            features=updated_features,
-            date=last_date
-        )
+            self.logger.info(f"Feature update completed for {symbol}")
+            return updated_features
 
-        return updated_features
+        except Exception as e:
+            self.logger.error(f"Error in update_features_with_new_data: {str(e)}")
+            self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+            raise
 
     def run_full_pipeline(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> dict:
 
-            results = {}
+        self.logger.info(f"Running full pipeline for {symbol} from {start_date} to {end_date} on {timeframe} timeframe")
+        results = {}
 
-            # 1. Завантаження даних
+        try:
+            # 1. Load data
+            self.logger.debug(f"Loading data for {symbol}")
             data = self.load_processed_data(
                 symbol=symbol,
                 timeframe=timeframe,
-
+                start_date=start_date,
+                end_date=end_date
             )
+
+            if data is None:
+                self.logger.error(f"No data found for {symbol}")
+                raise ValueError(f"No data found for {symbol}")
+
             results['raw_data'] = data.copy()
 
-            # === ВАЖЛИВО: переконайся, що індекс має тип DatetimeIndex ===
+            # Ensure DatetimeIndex
             if not isinstance(data.index, pd.DatetimeIndex):
-                # Спроба встановити індекс за колонкою open_time
+                self.logger.debug("Converting index to DatetimeIndex")
+                # Try to set index from open_time column
                 if 'open_time' in data.columns:
-                    data['open_time'] = pd.to_datetime(data['open_time'])  # Конвертуємо в datetime
-                    data.set_index('open_time', inplace=True)  # Ставимо індекс
+                    data['open_time'] = pd.to_datetime(data['open_time'])
+                    data.set_index('open_time', inplace=True)
                 else:
+                    self.logger.error("No 'open_time' column found in data")
                     raise ValueError("No 'open_time' column found in data")
 
-            # Перевірка після обробки
+            # Verify after processing
             if not isinstance(data.index, pd.DatetimeIndex):
-                raise ValueError("DataFrame index must be a DatetimeIndex after conversion.")
+                self.logger.error("DataFrame index must be a DatetimeIndex after conversion")
+                raise ValueError("DataFrame index must be a DatetimeIndex after conversion")
 
             if len(data) == 0:
+                self.logger.error(
+                    f"No data found for {symbol} in {timeframe} timeframe from {start_date} to {end_date}")
                 raise ValueError(f"No data found for {symbol} in {timeframe} timeframe from {start_date} to {end_date}")
 
-            # 2. Створення циклічних фіч
-            features = self.create_cyclical_features(data, symbol)
+            # Ensure all data is float type to avoid Decimal/float issues
+            data = self._ensure_float_df(data)
+
+            # 2. Create cyclical features
+            self.logger.debug("Creating cyclical features")
+            features = self.features.create_cyclical_features(data, symbol)
             results['features'] = features.copy()
 
-            # 3. Аналіз ROI по циклах
-            roi_analysis = self.calculate_cycle_roi(features, symbol)
-            results['roi_analysis'] = roi_analysis.copy()
+            # 3. Analyze ROI by cycles
+            self.logger.debug("Calculating cycle ROI")
+            try:
+                roi_analysis = self.features.calculate_cycle_roi(features, symbol)
+                results['roi_analysis'] = roi_analysis.copy()
+            except Exception as e:
+                self.logger.error(f"Error calculating cycle ROI: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                results['roi_analysis'] = pd.DataFrame()
 
-            # 4. Виявлення аномалій
-            anomalies = self.detect_cycle_anomalies(features, symbol)
-            results['anomalies'] = anomalies.copy()
+            # 4. Detect anomalies
+            self.logger.debug("Detecting cycle anomalies")
+            try:
+                anomalies = self.features.detect_cycle_anomalies(features, symbol)
+                results['anomalies'] = anomalies.copy() if anomalies is not None else pd.DataFrame()
+            except Exception as e:
+                self.logger.error(f"Error detecting cycle anomalies: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                results['anomalies'] = pd.DataFrame()
 
-            # 5. Порівняння з історичними циклами
-            historical_comparison = self.compare_current_to_historical_cycles(features, symbol)
-            results['historical_comparison'] = historical_comparison.copy()
+            # 5. Compare with historical cycles
+            self.logger.debug("Comparing with historical cycles")
+            try:
+                historical_comparison = self.compare_current_to_historical_cycles(features, symbol)
+                results['historical_comparison'] = historical_comparison.copy() if isinstance(historical_comparison,
+                                                                                              pd.DataFrame) else historical_comparison
+            except Exception as e:
+                self.logger.error(f"Error comparing with historical cycles: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                results['historical_comparison'] = {}
 
-            # 6. Прогнозування точок розвороту
-            turning_points = self.predict_cycle_turning_points(features, symbol)
-            results['turning_points'] = turning_points.copy()
+            # 6. Predict turning points
+            self.logger.debug("Predicting turning points")
+            try:
+                turning_points = self.predict_cycle_turning_points(features, symbol)
+                results['turning_points'] = turning_points.copy()
+            except Exception as e:
+                self.logger.error(f"Error predicting turning points: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                results['turning_points'] = pd.DataFrame()
 
-            # 7. Оновлення фіч з новими даними
-            updated_features = self.update_features_with_new_data(features, symbol)
-            results['updated_features'] = updated_features.copy()
+            # 7. Update features with new data
+            self.logger.debug("Updating features with new data")
+            try:
+                updated_features = self.update_features_with_new_data(features, symbol)
+                results['updated_features'] = updated_features.copy()
+            except Exception as e:
+                self.logger.error(f"Error updating features: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                results['updated_features'] = features.copy()
 
+            self.logger.info(f"Full pipeline completed for {symbol}")
             return results
+
+        except Exception as e:
+            self.logger.error(f"Error in run_full_pipeline: {str(e)}")
+            self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+            raise
 
     def analyze_multiple_symbols(self, symbols: list, timeframe: str, start_date: str, end_date: str) -> dict:
 
-            results = {}
+        self.logger.info(f"Analyzing multiple symbols: {symbols} from {start_date} to {end_date}")
+        results = {}
 
-            for symbol in symbols:
-                try:
-                    print(f"Processing {symbol}...")
-                    results[symbol] = self.run_full_pipeline(symbol, timeframe, start_date, end_date)
-                except Exception as e:
-                    print(f"Error processing {symbol}: {str(e)}")
-                    results[symbol] = {"error": str(e)}
+        for symbol in symbols:
+            try:
+                self.logger.info(f"Processing {symbol}...")
+                results[symbol] = self.run_full_pipeline(symbol, timeframe, start_date, end_date)
+            except Exception as e:
+                self.logger.error(f"Error processing {symbol}: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                results[symbol] = {"error": str(e)}
 
-            return results
+        self.logger.info(f"Completed analysis of {len(symbols)} symbols")
+        return results
 
+    def save_cycle_metrics(self, processed_data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
+        """
+        Save comprehensive cycle metrics to the database.
+
+        Args:
+            processed_data: DataFrame containing processed cycle data
+            symbol: Trading symbol (e.g., 'BTC', 'ETH', 'SOL')
+            timeframe: Data timeframe (e.g., '1d', '1h')
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        self.logger.info(f"Saving cycle metrics for {symbol} on {timeframe} timeframe")
+
+        try:
+            # Get the latest data point
+            if len(processed_data) == 0:
+                self.logger.error("No data to save")
+                return False
+
+            latest_data = processed_data.iloc[-1]
+            timestamp = latest_data.name if isinstance(processed_data.index, pd.DatetimeIndex) else datetime.now()
+
+            # Extract metrics based on the symbol
+            symbol_clean = symbol.upper().replace('USDT', '').replace('USD', '')
+
+            # Default values
+            days_since_last_halving = 0
+            days_to_next_halving = 0
+            halving_cycle_phase = 0.0
+            days_since_last_eth_upgrade = 0
+            days_to_next_eth_upgrade = 0
+            eth_upgrade_cycle_phase = 0.0
+            days_since_last_sol_event = 0
+            sol_network_stability_score = 0.0
+
+            # Extract BTC-specific metrics
+            if symbol_clean == 'BTC' and 'days_since_last_halving' in processed_data.columns:
+                days_since_last_halving = int(latest_data.get('days_since_last_halving', 0))
+                days_to_next_halving = int(latest_data.get('days_to_next_halving', 0))
+                halving_cycle_phase = float(latest_data.get('halving_cycle_phase', 0.0))
+
+            # Extract ETH-specific metrics
+            elif symbol_clean == 'ETH' and 'days_since_last_eth_upgrade' in processed_data.columns:
+                days_since_last_eth_upgrade = int(latest_data.get('days_since_last_eth_upgrade', 0))
+                days_to_next_eth_upgrade = int(latest_data.get('days_to_next_eth_upgrade', 0))
+                eth_upgrade_cycle_phase = float(latest_data.get('eth_upgrade_cycle_phase', 0.0))
+
+            # Extract SOL-specific metrics
+            elif symbol_clean == 'SOL' and 'days_since_last_sol_event' in processed_data.columns:
+                days_since_last_sol_event = int(latest_data.get('days_since_last_sol_event', 0))
+                sol_network_stability_score = float(latest_data.get('sol_network_stability_score', 0.0))
+
+            # Extract general metrics that should be available for all symbols
+            weekly_cycle_position = float(latest_data.get('weekly_cycle_position', 0.0))
+            monthly_seasonality_factor = float(latest_data.get('monthly_seasonality_factor', 0.0))
+            market_phase = str(latest_data.get('market_phase', 'unknown'))
+            optimal_cycle_length = int(latest_data.get('optimal_cycle_length', 0))
+
+            # Extract correlation metrics
+            btc_correlation = float(latest_data.get('btc_correlation', 0.0))
+            eth_correlation = float(latest_data.get('eth_correlation', 0.0))
+            sol_correlation = float(latest_data.get('sol_correlation', 0.0))
+
+            # Extract volatility metric
+            volatility_metric = float(latest_data.get('volatility', 0.0))
+
+            # Check if the current point is an anomaly
+            is_anomaly = bool(latest_data.get('is_anomaly', False))
+
+            # Save cycle features to the database
+            cycle_id = self.db_connection.save_cycle_feature(
+                symbol=symbol,
+                timestamp=timestamp,
+                timeframe=timeframe,
+                days_since_last_halving=days_since_last_halving,
+                days_to_next_halving=days_to_next_halving,
+                halving_cycle_phase=halving_cycle_phase,
+                days_since_last_eth_upgrade=days_since_last_eth_upgrade,
+                days_to_next_eth_upgrade=days_to_next_eth_upgrade,
+                eth_upgrade_cycle_phase=eth_upgrade_cycle_phase,
+                days_since_last_sol_event=days_since_last_sol_event,
+                sol_network_stability_score=sol_network_stability_score,
+                weekly_cycle_position=weekly_cycle_position,
+                monthly_seasonality_factor=monthly_seasonality_factor,
+                market_phase=market_phase,
+                optimal_cycle_length=optimal_cycle_length,
+                btc_correlation=btc_correlation,
+                eth_correlation=eth_correlation,
+                sol_correlation=sol_correlation,
+                volatility_metric=volatility_metric,
+                is_anomaly=is_anomaly
+            )
+
+            self.logger.info(f"Saved cycle features with ID: {cycle_id}")
+
+            # Save cycle similarity data if available
+            try:
+                # Compare current cycle with historical ones
+                historical_comparison = self.compare_current_to_historical_cycles(
+                    processed_data=processed_data,
+                    symbol=symbol,
+                    normalize=True
+                )
+
+                if historical_comparison and 'similarity_scores' in historical_comparison:
+                    self.logger.debug(f"Saving {len(historical_comparison['similarity_scores'])} similarity scores")
+
+                    for cycle_id, similarity_data in historical_comparison['similarity_scores'].items():
+                        similarity_id = self.db_connection.save_cycle_similarity(
+                            symbol=symbol,
+                            reference_cycle_id=int(cycle_id) if cycle_id.isdigit() else 0,
+                            compared_cycle_id=int(historical_comparison.get('current_cycle', '0'))
+                            if historical_comparison.get('current_cycle', '0').isdigit() else 0,
+                            similarity_score=float(similarity_data.get('similarity', 0.0)),
+                            normalized=True
+                        )
+                        self.logger.debug(f"Saved similarity record with ID: {similarity_id}")
+
+            except Exception as e:
+                self.logger.error(f"Error saving cycle similarity data: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+
+            # Save turning points predictions if available
+            try:
+                turning_points = self.predict_cycle_turning_points(processed_data, symbol)
+
+                if turning_points is not None and len(turning_points) > 0:
+                    # Only save future turning points
+                    current_date = datetime.now()
+                    future_points = turning_points[turning_points['date'] > current_date]
+
+                    self.logger.debug(f"Saving {len(future_points)} future turning points")
+
+                    for _, point in future_points.iterrows():
+                        point_type = point.get('direction', 'unknown')
+                        confidence = float(point.get('confidence', 0.0))
+                        predicted_date = point['date']
+                        predicted_price = float(point.get('price', 0.0)) if pd.notna(point.get('price')) else None
+
+                        tp_id = self.db_connection.save_predicted_turning_point(
+                            symbol=symbol,
+                            prediction_date=timestamp,
+                            predicted_point_date=predicted_date,
+                            point_type=point_type,
+                            confidence=confidence,
+                            price_prediction=predicted_price
+                        )
+                        self.logger.debug(f"Saved turning point prediction with ID: {tp_id}")
+
+            except Exception as e:
+                self.logger.error(f"Error saving turning point predictions: {str(e)}")
+                self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error saving cycle metrics: {str(e)}")
+            self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+            return False
 
 def main():
-    from datetime import datetime, timedelta
+        from datetime import datetime, timedelta
+        import logging
 
-    # === Налаштування параметрів ===
-    symbol = 'BTC'
-    timeframe = '1d'
-    lookback = '1 year'
-    end_date = datetime.now().strftime('%Y-%m-%d')
-
-    # Обчислення start_date на основі lookback
-    lookback_value, lookback_unit = lookback.split()
-    lookback_value = int(lookback_value)
-
-    if 'year' in lookback_unit:
-        delta = timedelta(days=365 * lookback_value)
-    elif 'month' in lookback_unit:
-        delta = timedelta(days=30 * lookback_value)
-    elif 'week' in lookback_unit:
-        delta = timedelta(weeks=lookback_value)
-    elif 'day' in lookback_unit:
-        delta = timedelta(days=lookback_value)
-    else:
-        delta = timedelta(days=365)
-
-    start_date = (datetime.now() - delta).strftime('%Y-%m-%d')
-
-    # === Запуск пайплайну ===
-    print(f"Running analysis for {symbol} from {start_date} to {end_date} on {timeframe} timeframe...")
-
-    try:
-        crypto_cycles = CryptoCycles()
-        results = crypto_cycles.run_full_pipeline(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler("crypto_cycles.log"),
+                logging.StreamHandler()
+            ]
         )
+        logger = logging.getLogger("CryptoCycles")
+        logger.info("Starting CryptoCycles analysis")
 
-        # Виведення результатів
-        print("\n=== Analysis Results ===")
-        print(f"Processed {len(results['raw_data'])} data points")
+        # === Parameters setup ===
+        symbol = 'BTC'
+        timeframe = '1d'
+        lookback = '1 year'
+        end_date = datetime.now().strftime('%Y-%m-%d')
 
-        if not results['anomalies'].empty:
-            print(f"\nDetected {len(results['anomalies'])} anomalies:")
-            print(results['anomalies'][['date', 'anomaly_type', 'description']].head())
+        # Calculate start_date based on lookback
+        lookback_value, lookback_unit = lookback.split()
+        lookback_value = int(lookback_value)
 
-        if not results['turning_points'].empty:
-            print(f"\nDetected {len(results['turning_points'])} turning points:")
-            print(results['turning_points'][['date', 'direction', 'confidence', 'indicators']])
+        if 'year' in lookback_unit:
+            delta = timedelta(days=365 * lookback_value)
+        elif 'month' in lookback_unit:
+            delta = timedelta(days=30 * lookback_value)
+        elif 'week' in lookback_unit:
+            delta = timedelta(weeks=lookback_value)
+        elif 'day' in lookback_unit:
+            delta = timedelta(days=lookback_value)
+        else:
+            delta = timedelta(days=365)
 
-        if 'historical_comparison' in results and 'most_similar_cycle' in results['historical_comparison']:
-            print(f"\nMost similar historical cycle: {results['historical_comparison']['most_similar_cycle']}")
+        start_date = (datetime.now() - delta).strftime('%Y-%m-%d')
 
-    except Exception as e:
-        print(f"Error during analysis: {str(e)}")
+        # === Run pipeline ===
+        logger.info(f"Running analysis for {symbol} from {start_date} to {end_date} on {timeframe} timeframe...")
+
+        try:
+            crypto_cycles = CryptoCycles()
+            results = crypto_cycles.run_full_pipeline(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
+
+            # Print results
+            logger.info("\n=== Analysis Results ===")
+            logger.info(f"Processed {len(results['raw_data'])} data points")
+
+            if 'anomalies' in results and not results['anomalies'].empty:
+                logger.info(f"\nDetected {len(results['anomalies'])} anomalies:")
+                logger.info(results['anomalies'][['date', 'anomaly_type', 'description']].head())
+
+            if 'turning_points' in results and not results['turning_points'].empty:
+                logger.info(f"\nDetected {len(results['turning_points'])} turning points:")
+                logger.info(results['turning_points'][['date', 'direction', 'confidence', 'indicators']])
+
+            if 'historical_comparison' in results and 'most_similar_cycle' in results['historical_comparison']:
+                logger.info(
+                    f"\nMost similar historical cycle: {results['historical_comparison']['most_similar_cycle']}")
+
+        except Exception as e:
+            logger.error(f"Error during analysis: {str(e)}")
+            logger.debug(f"Exception traceback: {traceback.format_exc()}")
 
 if __name__ == "__main__":
     main()
