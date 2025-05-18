@@ -5,11 +5,11 @@ from typing import Dict, List, Tuple, Optional, Any
 from data.db import DatabaseManager
 from utils.config import *
 class CryptoCycles:
-
+from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtractor
     def __init__(self):
 
         self.db_connection = DatabaseManager()
-
+        self.btcycle = BitcoinCycleFeatureExtractor()
         # Bitcoin halving dates
         self.btc_halving_dates = btc_halving_dates
         # Ethereum significant network upgrades/events

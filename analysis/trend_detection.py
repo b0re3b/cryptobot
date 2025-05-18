@@ -11,8 +11,8 @@ from data.db import DatabaseManager
 import pandas_ta as ta
 
 from utils.logger import CryptoLogger
-import talib
-print(talib.get_functions())
+# Removed talib import
+# Removed print(talib.get_functions())
 
 
 class TrendDetection:
@@ -343,7 +343,6 @@ class TrendDetection:
         breakouts = sorted(breakouts, key=lambda x: x['date'])
 
         return breakouts
-
     def find_swing_points(self, data: pd.DataFrame, window_size: int = 5) -> Dict[str, List[Dict]]:
 
         if data.empty or len(data) < window_size * 2:
