@@ -524,7 +524,7 @@ class MarketCorrelation:
             logger.error(f"Error detecting correlation breakdowns: {str(e)}")
             raise
 
-    def calculate_market_beta(self, symbol: str, market_symbol: str = 'BTCUSDT',
+    def calculate_market_beta(self, symbol: str, market_symbol: str = 'BTC',
                               timeframe: str = None,
                               start_time: Optional[datetime] = None,
                               end_time: Optional[datetime] = None,

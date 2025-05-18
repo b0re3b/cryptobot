@@ -680,3 +680,81 @@ LINE 2:         INSERT OR REPLACE INTO leading_indicators
 2025-05-18 12:04:39 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
 2025-05-18 12:04:39 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
 2025-05-18 12:04:39 - __main__ - ERROR - [logger.py:112] - Error in full volatility analysis for BTC: unhashable type: 'Series'
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Ініціалізація аналізатора ринкової кореляції
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції цін для 3 символів з таймфреймом 1d
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Матриця кореляції цін успішно розрахована з використанням методу pearson
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Saving price correlation matrix to database
+2025-05-18 15:19:04 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Found 3 highly correlated pairs with threshold 0.7
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Found 0 highly anti-correlated pairs with threshold -0.3
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції доходності для 3 символів з таймфреймом 1h та періодом 1
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Матриця кореляції доходності успішно розрахована з використанням методу pearson
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Saving returns correlation matrix to database
+2025-05-18 15:19:04 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції волатильності для 3 символів з таймфреймом 1h та вікном 30
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Матриця кореляції волатильності успішно розрахована з використанням методу pearson
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Saving volatility correlation matrix to database
+2025-05-18 15:19:04 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції об'ємів торгівлі для 3 символів з таймфреймом 1h
+2025-05-18 15:19:04 - __main__ - WARNING - [logger.py:108] - Виявлено 16 викидів об'єму для BTC. Заміна значеннями за медіаною
+2025-05-18 15:19:04 - __main__ - WARNING - [logger.py:108] - Виявлено 11 викидів об'єму для ETH. Заміна значеннями за медіаною
+2025-05-18 15:19:04 - __main__ - WARNING - [logger.py:108] - Виявлено 14 викидів об'єму для SOL. Заміна значеннями за медіаною
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Матриця кореляції об'ємів торгівлі успішно розрахована з використанням методу pearson
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Saving volume correlation matrix to database
+2025-05-18 15:19:04 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Calculating rolling correlation between ETH and SOL with window=24
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Successfully calculated rolling correlation with 701 data points
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Detecting correlation breakdowns between ETH and SOL with threshold 0.2
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Calculating rolling correlation between ETH and SOL with window=30
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Successfully calculated rolling correlation with 701 data points
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Found 1 correlation breakdown points
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Calculating market beta for ETH relative to BTC
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Calculating market beta for SOL relative to BTC
+2025-05-18 15:19:04 - __main__ - INFO - [logger.py:104] - Finding leading indicators for BTC among 2 candidates
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Predicting movement for BTC using 2 correlated symbols with horizon 24
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Prediction model R² score: -0.0047
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Successfully generated prediction for BTC with 24 periods horizon
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Analyzing market regime correlations for 3 symbols across 2 regimes
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Analyzing regime 'Перша половина періоду' from 2025-04-18 15:19:04.745913 to 2025-05-03 15:19:04.745913
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції цін для 3 символів з таймфреймом 1d
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції цін успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving price correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції доходності для 3 символів з таймфреймом 1h та періодом 1
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції доходності успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving returns correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції волатильності для 3 символів з таймфреймом 1h та вікном 30
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції волатильності успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving volatility correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції об'ємів торгівлі для 3 символів з таймфреймом 1h
+2025-05-18 15:19:05 - __main__ - WARNING - [logger.py:108] - Виявлено 8 викидів об'єму для BTC. Заміна значеннями за медіаною
+2025-05-18 15:19:05 - __main__ - WARNING - [logger.py:108] - Виявлено 5 викидів об'єму для ETH. Заміна значеннями за медіаною
+2025-05-18 15:19:05 - __main__ - WARNING - [logger.py:108] - Виявлено 5 викидів об'єму для SOL. Заміна значеннями за медіаною
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції об'ємів торгівлі успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving volume correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Regime Перша половина періоду - Average correlation: 0.7738
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Analyzing regime 'Друга половина періоду' from 2025-05-03 15:19:04.745913 to 2025-05-18 15:19:04.745913
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції цін для 3 символів з таймфреймом 1d
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції цін успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving price correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції доходності для 3 символів з таймфреймом 1h та періодом 1
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції доходності успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving returns correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції волатильності для 3 символів з таймфреймом 1h та вікном 30
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції волатильності успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving volatility correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Розрахунок кореляції об'ємів торгівлі для 3 символів з таймфреймом 1h
+2025-05-18 15:19:05 - __main__ - WARNING - [logger.py:108] - Виявлено 8 викидів об'єму для BTC. Заміна значеннями за медіаною
+2025-05-18 15:19:05 - __main__ - WARNING - [logger.py:108] - Виявлено 6 викидів об'єму для ETH. Заміна значеннями за медіаною
+2025-05-18 15:19:05 - __main__ - WARNING - [logger.py:108] - Виявлено 7 викидів об'єму для SOL. Заміна значеннями за медіаною
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Матриця кореляції об'ємів торгівлі успішно розрахована з використанням методу pearson
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Saving volume correlation matrix to database
+2025-05-18 15:19:05 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'start_time'
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Regime Друга половина періоду - Average correlation: 0.7011
+2025-05-18 15:19:05 - __main__ - INFO - [logger.py:104] - Market regime correlation analysis complete for 2 regimes
