@@ -16,7 +16,7 @@ from utils.logger import CryptoLogger
 class ModelEvaluator:
     def __init__(self):
         self.models = {}
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('ModelEvaluator')
         self.db_manager = DatabaseManager()
         self.analyzer = TimeSeriesAnalyzer()
     def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:

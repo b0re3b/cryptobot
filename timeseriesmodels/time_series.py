@@ -1,30 +1,26 @@
 import pandas as pd
-import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union, Tuple
 from datetime import datetime, timedelta
 from data.db import DatabaseManager
 from timeseriesmodels.ModelEvaluator import ModelEvaluator
 from timeseriesmodels.TimeSeriesTransformer import TimeSeriesTransformer
 from timeseriesmodels.Forecaster import Forecaster
+from utils.logger import CryptoLogger
+
+
 class TimeSeriesModels:
 
-    def __init__(self, log_level=logging.INFO):
-
+    def __init__(self):
         self.db_manager = DatabaseManager()
-        self.models = {}  # Словник для збереження навчених моделей
-        self.transformations = {}  # Словник для збереження параметрів трансформацій
+        self.models = {}  # Dictionary for storing trained models
+        self.transformations = {}  # Dictionary for storing transformation parameters
         self.modeler = ModelEvaluator()
-        self.transfromer = TimeSeriesTransformer()
-        # Налаштування логування
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(log_level)
-        self.forecaster = Forecaster()
-        # Якщо немає обробників логів, додаємо обробник для виведення в консоль
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+        self.transformer = TimeSeriesTransformer()  # Fixed attribute name
+        # Logging setup
+        self.forecaster = Forecaster()  # Fixed attribute name (capitalization)
+        self.logger = CryptoLogger('TimeSeriesModels')
+        self.analyzer = self.forecaster  # Assuming analyzer functionality is in Forecaster
+        self.evaluator = self.modeler  # Assuming evaluation functionality is in ModelEvaluator
 
         self.logger.info("TimeSeriesModels initialized")
 
@@ -43,34 +39,24 @@ class TimeSeriesModels:
                 self.logger.error("db_manager not initialized in TimeSeriesModels class")
                 raise ValueError("db_manager not available. Please initialize db_manager.")
 
-            # Визначаємо data_id для логування
+            # Define data_id for logging
             data_id = None
             if start_date and end_date:
                 data_id = f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
                 self.logger.info(f"Using data_id: {data_id}")
 
-            # Завантаження ARIMA-даних відповідно до символу
+            # Load ARIMA data according to symbol
             klines_data = None
-            if symbol.upper() == 'BTC':
-                klines_data = self.db_manager.get_btc_arima_data(timeframe=timeframe)
-            elif symbol.upper() == 'ETH':
-                klines_data = self.db_manager.get_eth_arima_data(timeframe=timeframe)
-            elif symbol.upper() == 'SOL':
-                klines_data = self.db_manager.get_sol_arima_data(timeframe=timeframe)
+            # Use get_symbol_arima method as requested
+            method_name = f"get_{symbol.lower()}_arima_data"
+
+            if hasattr(self.db_manager, method_name):
+                get_data_method = getattr(self.db_manager, method_name)
+                klines_data = get_data_method(timeframe=timeframe)
+            elif hasattr(self.db_manager, "get_crypto_arima_data"):
+                klines_data = self.db_manager.get_crypto_arima_data(symbol.upper(), timeframe)
             else:
-                self.logger.warning(f"Symbol {symbol} not directly supported. Attempting generic method.")
-                try:
-                    method_name = f"get_{symbol.lower()}_arima_data"
-                    if hasattr(self.db_manager, method_name):
-                        get_data_method = getattr(self.db_manager, method_name)
-                        klines_data = get_data_method(timeframe=timeframe)
-                    elif hasattr(self.db_manager, "get_crypto_arima_data"):
-                        klines_data = self.db_manager.get_crypto_arima_data(symbol.upper(), timeframe)
-                    else:
-                        raise AttributeError(f"No method available to fetch data for {symbol}")
-                except Exception as symbol_error:
-                    self.logger.error(f"Failed to get data for {symbol}: {str(symbol_error)}")
-                    raise
+                raise AttributeError(f"No method available to fetch data for {symbol}")
 
             if klines_data is None or (isinstance(klines_data, pd.DataFrame) and klines_data.empty):
                 self.logger.warning(f"No data found for {symbol} with interval {timeframe}")
@@ -123,7 +109,7 @@ class TimeSeriesModels:
                 self.logger.error("No forecast data provided")
                 return False
 
-            # Перевіряємо чи forecast_data є pd.Series
+            # Check if forecast_data is pd.Series
             if not isinstance(forecast_data, pd.Series):
                 try:
                     forecast_data = pd.Series(forecast_data)
@@ -132,7 +118,7 @@ class TimeSeriesModels:
                     self.logger.error(f"Could not convert forecast data to pandas Series: {str(convert_error)}")
                     return False
 
-            # Використовуємо переданий db_manager або збережений в класі
+            # Use the provided db_manager or the one saved in the class
             manager = db_manager if db_manager is not None else self.db_manager
 
             if manager is None:
@@ -140,14 +126,14 @@ class TimeSeriesModels:
                 self.logger.error(error_msg)
                 return False
 
-            # Перевіряємо наявність моделі в базі даних
+            # Check if the model exists in the database
             model_info = manager.get_model_by_key(model_key)
 
             if model_info is None:
                 self.logger.error(f"Model with key {model_key} not found in database")
                 return False
 
-            # Перетворюємо дані прогнозу у формат для збереження
+            # Convert forecast data to a format for saving
             forecast_dict = {
                 "model_key": model_key,
                 "symbol": symbol,
@@ -163,7 +149,7 @@ class TimeSeriesModels:
                 else str(forecast_data.index[-1])
             }
 
-            # Зберігаємо прогноз у базі даних
+            # Save forecast to database
             success = manager.save_model_forecasts(model_key, forecast_dict)
 
             if success:
@@ -182,7 +168,7 @@ class TimeSeriesModels:
         try:
             self.logger.info(f"Loading forecast for {symbol} from model {model_key}")
 
-            # Використовуємо переданий db_manager або збережений в класі
+            # Use the provided db_manager or the one saved in the class
             manager = db_manager if db_manager is not None else self.db_manager
 
             if manager is None:
@@ -190,48 +176,48 @@ class TimeSeriesModels:
                 self.logger.error(error_msg)
                 return None
 
-            # Перевіряємо наявність моделі в базі даних
+            # Check if the model exists in the database
             model_info = manager.get_model_by_key(model_key)
 
             if model_info is None:
                 self.logger.warning(f"Model with key {model_key} not found in database")
                 return None
 
-            # Отримуємо прогнози з бази даних
+            # Get forecasts from database
             forecast_dict = manager.get_model_forecasts(model_key)
 
             if not forecast_dict:
                 self.logger.warning(f"No forecasts found for model {model_key}")
                 return None
 
-            # Перевіряємо, чи є прогнози для заданого символу
+            # Check if there are forecasts for the given symbol
             if symbol.upper() != forecast_dict.get('symbol', '').upper():
                 self.logger.warning(f"Forecast for symbol {symbol} not found in model {model_key}")
                 return None
 
-            # Перетворюємо словник прогнозів на pd.Series
+            # Convert forecast dictionary to pd.Series
             try:
                 forecast_data = forecast_dict.get('forecast_data', {})
 
-                # Перетворюємо ключі на datetime, якщо вони є датами
+                # Convert keys to datetime if they are dates
                 index = []
                 values = []
 
                 for timestamp_str, value in forecast_data.items():
                     try:
-                        # Спробуємо перетворити на datetime
+                        # Try to convert to datetime
                         timestamp = pd.to_datetime(timestamp_str)
                     except:
-                        # Якщо не вийшло, використовуємо як є
+                        # If conversion fails, use as is
                         timestamp = timestamp_str
 
                     index.append(timestamp)
                     values.append(float(value))
 
-                # Створюємо pandas Series з правильним індексом
+                # Create pandas Series with correct index
                 forecast_series = pd.Series(values, index=index)
 
-                # Сортуємо за індексом
+                # Sort by index
                 forecast_series = forecast_series.sort_index()
 
                 self.logger.info(f"Successfully loaded forecast with {len(forecast_series)} points for {symbol}")
@@ -251,7 +237,7 @@ class TimeSeriesModels:
         try:
             self.logger.info("Getting available cryptocurrency symbols from database")
 
-            # Використовуємо переданий db_manager або збережений в класі
+            # Use the provided db_manager or the one saved in the class
             manager = db_manager if db_manager is not None else self.db_manager
 
             if manager is None:
@@ -259,14 +245,14 @@ class TimeSeriesModels:
                 self.logger.error(error_msg)
                 return []
 
-            # Отримуємо список доступних символів
+            # Get list of available symbols
             symbols = manager.get_available_symbols()
 
             if symbols is None:
                 self.logger.warning("No symbols returned from database")
                 return []
 
-            # Перевіряємо, що отримані дані є списком
+            # Check that the data is a list
             if not isinstance(symbols, list):
                 try:
                     symbols = list(symbols)
@@ -274,10 +260,10 @@ class TimeSeriesModels:
                     self.logger.error(f"Could not convert symbols to list: {str(e)}")
                     return []
 
-            # Перевіряємо, що символи не порожні
+            # Check that symbols are not empty
             symbols = [s for s in symbols if s]
 
-            # Видаляємо дублікати і сортуємо
+            # Remove duplicates and sort
             symbols = sorted(set(symbols))
 
             self.logger.info(f"Found {len(symbols)} available cryptocurrency symbols")
@@ -298,45 +284,45 @@ class TimeSeriesModels:
             return None
 
         try:
-            # Перевіряємо, чи переданий db_manager був заданий при ініціалізації класу
-            # якщо ні, використовуємо переданий
+            # Check if the db_manager was passed during class initialization
+            # if not, use the provided one
             db = self.db_manager if self.db_manager is not None else db_manager
 
-            # Припускаємо, що в db_manager є метод для отримання останніх даних свічок
+            # Assume db_manager has a method to get the latest candlestick data
             latest_kline = db.get_latest_kline(symbol=symbol, interval=interval)
 
             if latest_kline is not None and hasattr(latest_kline, 'timestamp'):
-                # Якщо отримали дані і є відмітка часу
+                # If we got data and there is a timestamp
                 self.logger.info(f"Last update time for {symbol} ({interval}): {latest_kline.timestamp}")
                 return latest_kline.timestamp
 
-            # Якщо немає прямого методу, спробуємо отримати через оброблені свічки
+            # If there is no direct method, try to get through processed candles
             klines_data = db.get_klines_processed(
                 symbol=symbol,
                 interval=interval,
-                limit=1,  # Беремо тільки одну (останню) свічку
-                sort_order="DESC"  # Сортуємо за спаданням дати
+                limit=1,  # Take only one (latest) candle
+                sort_order="DESC"  # Sort by descending date
             )
 
             if klines_data is not None and not klines_data.empty:
-                # Отримуємо індекс останньої свічки (який повинен бути datetime)
+                # Get the index of the last candle (which should be datetime)
                 if isinstance(klines_data.index[0], datetime):
                     last_update = klines_data.index[0]
                 else:
-                    # Якщо індекс не datetime, спробуємо знайти стовпець з часовою міткою
+                    # If the index is not datetime, try to find a column with the timestamp
                     for col in ['timestamp', 'time', 'date', 'datetime']:
                         if col in klines_data.columns:
                             last_update = klines_data[col].iloc[0]
                             if not isinstance(last_update, datetime):
-                                # Конвертуємо в datetime, якщо це не datetime
+                                # Convert to datetime if it's not datetime
                                 if isinstance(last_update, (int, float)):
-                                    # Припускаємо, що це UNIX timestamp в мілісекундах або секундах
-                                    if last_update > 1e11:  # Якщо в мілісекундах
+                                    # Assume it's a UNIX timestamp in milliseconds or seconds
+                                    if last_update > 1e11:  # If in milliseconds
                                         last_update = datetime.fromtimestamp(last_update / 1000)
-                                    else:  # Якщо в секундах
+                                    else:  # If in seconds
                                         last_update = datetime.fromtimestamp(last_update)
                                 else:
-                                    # Якщо це строка, пробуємо парсити
+                                    # If it's a string, try to parse
                                     try:
                                         from dateutil import parser
                                         last_update = parser.parse(str(last_update))
@@ -369,20 +355,20 @@ class TimeSeriesModels:
             self.logger.error("Database manager is not provided")
             return {"status": "error", "message": "Database manager is not provided"}
 
-        # Ініціалізуємо словник для результатів
+        # Initialize dictionary for results
         results = {}
 
-        # Встановлюємо значення за замовчуванням для дат
+        # Set default values for dates
         if end_date is None:
             end_date = datetime.now()
             self.logger.info(f"End date not provided, using current time: {end_date}")
 
-        # Обробляємо кожен символ
+        # Process each symbol
         for symbol in symbols:
             self.logger.info(f"Processing symbol: {symbol}")
 
             try:
-                # Перевіряємо, чи є дані для цього символу
+                # Check if there is data for this symbol
                 if not self._check_symbol_data_available(db_manager, symbol, interval):
                     self.logger.warning(f"No data available for {symbol}, skipping")
                     results[symbol] = {
@@ -392,33 +378,33 @@ class TimeSeriesModels:
                     }
                     continue
 
-                # Якщо початкова дата не вказана, отримуємо останню дату оновлення
-                # і віднімаємо певний період (наприклад, 365 днів для денних даних)
+                # If the start date is not specified, get the last update date
+                # and subtract a certain period (e.g., 365 days for daily data)
                 if start_date is None:
                     last_update = self.get_last_update_time(db_manager, symbol, interval)
                     if last_update is not None:
                         if interval == '1d':
-                            start_date = last_update - timedelta(days=365)  # Рік даних для денного інтервалу
+                            start_date = last_update - timedelta(days=365)  # Year of data for daily interval
                         elif interval == '1h':
-                            start_date = last_update - timedelta(days=30)  # 30 днів для годинного інтервалу
+                            start_date = last_update - timedelta(days=30)  # 30 days for hourly interval
                         elif interval in ['15m', '5m', '1m']:
-                            start_date = last_update - timedelta(days=7)  # Тиждень для хвилинних інтервалів
+                            start_date = last_update - timedelta(days=7)  # Week for minute intervals
                         else:
-                            start_date = last_update - timedelta(days=180)  # Півроку за замовчуванням
+                            start_date = last_update - timedelta(days=180)  # Six months by default
 
                         self.logger.info(f"Calculated start date for {symbol}: {start_date}")
                     else:
                         self.logger.warning(f"Cannot determine last update time for {symbol}, using default")
-                        # За замовчуванням, беремо дані за останній рік
+                        # By default, take data for the last year
                         start_date = end_date - timedelta(days=365)
 
-                # Завантажуємо дані для аналізу
+                # Load data for analysis
                 data = self.load_crypto_data(
                     db_manager=db_manager,
                     symbol=symbol,
                     start_date=start_date,
                     end_date=end_date,
-                    interval=interval
+                    timeframe=interval
                 )
 
                 if data is None or data.empty:
@@ -430,17 +416,17 @@ class TimeSeriesModels:
                     }
                     continue
 
-                # Вибираємо цільову колонку для аналізу (зазвичай 'close')
+                # Select target column for analysis (usually 'close')
                 target_column = 'close'
                 if target_column not in data.columns:
-                    # Шукаємо альтернативу, якщо 'close' немає
+                    # Look for alternatives if 'close' is not present
                     possible_columns = ['Close', 'price', 'Price', 'value', 'Value']
                     for col in possible_columns:
                         if col in data.columns:
                             target_column = col
                             break
                     else:
-                        # Якщо немає відповідної колонки, використовуємо першу колонку з числовими даними
+                        # If there is no corresponding column, use the first column with numeric data
                         for col in data.columns:
                             if pd.api.types.is_numeric_dtype(data[col]):
                                 target_column = col
@@ -456,19 +442,19 @@ class TimeSeriesModels:
 
                 self.logger.info(f"Using column '{target_column}' for analysis of {symbol}")
 
-                # Запускаємо автоматичне прогнозування
+                # Run automatic forecasting
                 forecast_result = self.forecaster.run_auto_forecast(
                     data=data[target_column],
-                    test_size=0.2,  # 20% даних для тестування
-                    forecast_steps=24,  # Прогноз на 24 періоди вперед
+                    test_size=0.2,  # 20% of data for testing
+                    forecast_steps=24,  # Forecast 24 periods ahead
                     symbol=symbol
                 )
 
-                # Зберігаємо результати прогнозування
+                # Save forecasting results
                 if forecast_result.get("status") == "success" and "model_key" in forecast_result:
                     model_key = forecast_result["model_key"]
 
-                    # Зберігаємо комплексну інформацію про модель в БД
+                    # Save comprehensive model information to the database
                     if self.db_manager is not None:
                         try:
                             self.db_manager.save_complete_model(model_key, forecast_result.get("model_info", {}))
@@ -476,7 +462,7 @@ class TimeSeriesModels:
                         except Exception as db_error:
                             self.logger.error(f"Error saving model for {symbol} to database: {str(db_error)}")
 
-                    # Додаємо результат до загального словника
+                    # Add result to the general dictionary
                     results[symbol] = {
                         "status": "success",
                         "message": f"Successfully processed {symbol}",
@@ -485,7 +471,7 @@ class TimeSeriesModels:
                         **forecast_result
                     }
                 else:
-                    # Якщо прогнозування не вдалося, додаємо інформацію про помилку
+                    # If forecasting failed, add error information
                     results[symbol] = {
                         "status": "error",
                         "message": forecast_result.get("message", f"Error processing {symbol}"),
@@ -500,7 +486,7 @@ class TimeSeriesModels:
                     "timestamp": datetime.now()
                 }
 
-        # Додаємо загальну статистику
+        # Add general statistics
         success_count = sum(1 for symbol, result in results.items() if result.get("status") == "success")
         error_count = len(symbols) - success_count
 
@@ -521,13 +507,13 @@ class TimeSeriesModels:
     def _check_symbol_data_available(self, db_manager: Any, symbol: str, interval: str) -> bool:
 
         try:
-            # Перевіряємо, чи є такий символ у списку доступних
+            # Check if this symbol is in the list of available symbols
             available_symbols = self.get_available_crypto_symbols(db_manager)
             if symbol not in available_symbols:
                 self.logger.warning(f"Symbol {symbol} not in available symbols list")
                 return False
 
-            # Перевіряємо, чи є хоча б деякі дані для цього символу
+            # Check if there is at least some data for this symbol
             last_update = self.get_last_update_time(db_manager, symbol, interval)
             if last_update is None:
                 self.logger.warning(f"No last update time for {symbol}")
@@ -538,6 +524,216 @@ class TimeSeriesModels:
         except Exception as e:
             self.logger.error(f"Error checking data availability for {symbol}: {str(e)}")
             return False
+
+    def preprocess_data(self, data: pd.Series, operations: List[Dict]) -> pd.Series:
+        """Preprocessing of time series"""
+        return self.transformer.apply_preprocessing_pipeline(data, operations)
+
+    def check_stationarity(self, data: pd.Series) -> Dict:
+        """Check stationarity of time series"""
+        return self.forecaster._check_stationarity(data)
+
+    def analyze_series(self, data: pd.Series) -> Dict:
+        """Complete analysis of time series"""
+        analysis = {}
+
+        # Stationarity
+        analysis['stationarity'] = self.check_stationarity(data)
+
+        # Seasonality
+        analysis['seasonality'] = self.analyzer.detect_seasonality(data)
+
+        # Volatility
+        analysis['volatility'] = self.transformer.extract_volatility(data).describe().to_dict()
+
+        return analysis
+
+    def find_optimal_model(self, data: pd.Series, seasonal: bool = False) -> Dict:
+        """Find optimal model parameters"""
+        return self.analyzer.find_optimal_params(data, seasonal=seasonal)
+
+    def train_model(self, data: pd.Series, model_type: str = 'arima',
+                    order: Tuple = None, seasonal_order: Tuple = None,
+                    symbol: str = 'default') -> Dict:
+        """Train ARIMA/SARIMA model"""
+        if model_type == 'arima':
+            if order is None:
+                order = (1, 1, 1)  # Default values
+            return self.modeler.fit_arima(data, order=order, symbol=symbol)
+        elif model_type == 'sarima':
+            if order is None or seasonal_order is None:
+                # Auto-determine parameters
+                params = self.find_optimal_model(data, seasonal=True)
+                if params['status'] != 'success':
+                    raise ValueError("Failed to determine optimal parameters")
+                order = params['parameters']['order']
+                seasonal_order = params['parameters']['seasonal_order']
+            return self.modeler.fit_sarima(data, order=order,
+                                           seasonal_order=seasonal_order,
+                                           symbol=symbol)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+    def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:
+        """Evaluate model quality"""
+        return self.evaluator.evaluate_model(model_key, test_data)
+
+    def forecast(self, model_key: str, steps: int = 24,
+                 with_intervals: bool = False, alpha: float = 0.05) -> Union[pd.Series, Dict]:
+        """Generate forecast"""
+        if with_intervals:
+            return self.forecaster.forecast_with_intervals(model_key, steps=steps, alpha=alpha)
+        else:
+            return self.forecaster.forecast(model_key, steps=steps)
+
+    def residual_analysis(self, model_key: str) -> Dict:
+        """Analyze model residuals"""
+        return self.evaluator.residual_analysis(model_key)
+
+    def compare_models(self, model_keys: List[str], test_data: pd.Series) -> Dict:
+        """Compare multiple models"""
+        return self.evaluator.compare_models(model_keys, test_data)
+
+    def save_model(self, model_key: str, path: str) -> bool:
+        """Save model to disk"""
+        return self.modeler.save_model(model_key, path)
+
+    def load_model(self, model_key: str, path: str) -> bool:
+        """Load model from disk"""
+        return self.modeler.load_model(model_key, path)
+
+    def full_pipeline(self, symbol: str, interval: str = '1d',
+                      forecast_steps: int = 24) -> Dict:
+        """Complete pipeline from data to forecast"""
+        try:
+            # 1. Load data
+            data = self.load_crypto_data(db_manager=self.db_manager, symbol=symbol, timeframe=interval)
+            if data.empty:
+                return {"status": "error", "message": "No data loaded"}
+
+            # Select target variable (closing)
+            target = data['close']
+
+            # 2. Data analysis
+            analysis = self.analyze_series(target)
+
+            # 3. Preprocessing
+            operations = []
+            if not analysis['stationarity']['is_stationary']:
+                operations.append({"op": "diff", "order": 1})
+
+            processed_data = self.preprocess_data(target, operations)
+
+            # 4. Model selection and training
+            # ARIMA
+            arima_result = self.train_model(processed_data, 'arima', symbol=symbol)
+            if arima_result['status'] != 'success':
+                return arima_result
+
+            # SARIMA (if seasonality is detected)
+            sarima_result = None
+            if analysis['seasonality']['has_seasonality']:
+                sarima_result = self.train_model(
+                    processed_data, 'sarima',
+                    symbol=symbol,
+                    seasonal_order=(1, 1, 1, analysis['seasonality']['primary_period'])
+                )
+
+            # 5. Model evaluation
+            # Split into training and test sets
+            train_size = int(len(processed_data) * 0.8)
+            train_data = processed_data[:train_size]
+            test_data = processed_data[train_size:]
+
+            # Evaluate ARIMA
+            arima_eval = self.evaluate_model(arima_result['model_key'], test_data)
+
+            # Evaluate SARIMA (if available)
+            sarima_eval = None
+            if sarima_result and sarima_result['status'] == 'success':
+                sarima_eval = self.evaluate_model(sarima_result['model_key'], test_data)
+
+            # 6. Select the best model
+            best_model_key = arima_result['model_key']
+            if sarima_eval and sarima_eval['metrics']['rmse'] < arima_eval['metrics']['rmse']:
+                best_model_key = sarima_result['model_key']
+
+            # 7. Forecasting
+            forecast = self.forecast(best_model_key, forecast_steps)
+
+            # 8. Residual analysis
+            residuals = self.residual_analysis(best_model_key)
+
+            # 9. Save results
+            result = {
+                "status": "success",
+                "symbol": symbol,
+                "interval": interval,
+                "data_analysis": analysis,
+                "models": {
+                    "arima": {
+                        "model_key": arima_result['model_key'],
+                        "evaluation": arima_eval
+                    },
+                    "sarima": {
+                        "model_key": sarima_result['model_key'] if sarima_result else None,
+                        "evaluation": sarima_eval
+                    } if sarima_result else None
+                },
+                "best_model": best_model_key,
+                "forecast": forecast,
+                "residual_analysis": residuals,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error in full pipeline: {str(e)}")
+            return {
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    def batch_process(self, symbols: List[str], interval: str = '1d') -> Dict:
+        """Batch processing of multiple symbols"""
+        results = {}
+
+        for symbol in symbols:
+            self.logger.info(f"Processing {symbol}...")
+            try:
+                result = self.full_pipeline(symbol, interval)
+                results[symbol] = result
+
+                # Save forecast if available
+                if result['status'] == 'success' and 'forecast' in result:
+                    self.save_forecast_to_db(
+                        self.db_manager,
+                        symbol,
+                        result['forecast'],
+                        result['best_model']
+                    )
+
+            except Exception as e:
+                results[symbol] = {
+                    "status": "error",
+                    "message": str(e)
+                }
+
+        # Processing statistics
+        success = sum(1 for r in results.values() if r['status'] == 'success')
+        failed = len(symbols) - success
+
+        return {
+            "results": results,
+            "summary": {
+                "total": len(symbols),
+                "success": success,
+                "failed": failed,
+                "success_rate": success / len(symbols) if symbols else 0
+            }
+        }
 def main():
     import pprint
     from datetime import datetime, timedelta
@@ -578,7 +774,7 @@ def main():
     price_series = df["close"]
 
     # Run auto forecast using the forecaster
-    forecast_result = model.forecaster.run_auto_forecast(
+    forecast_result = model.Forecaster.run_auto_forecast(
         data=price_series,
         test_size=0.2,
         forecast_steps=forecast_steps,

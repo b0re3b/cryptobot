@@ -10,7 +10,7 @@ from utils.logger import CryptoLogger
 class Forecaster:
     def __init__(self):
         self.models = {}
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('Forecaster')
         self.db_manager = DatabaseManager()
 
         # Import these classes only when needed to avoid circular imports

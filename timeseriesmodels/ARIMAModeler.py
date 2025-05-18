@@ -32,7 +32,7 @@ class ARIMAModeler:
         db_manager : об'єкт, optional
             Об'єкт для взаємодії з базою даних. За замовчуванням None.
         """
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('ArimaModeler')
         self.db_manager = DatabaseManager()
         self.models = {}
         self.transformations = {}

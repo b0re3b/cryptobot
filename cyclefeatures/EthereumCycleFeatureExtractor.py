@@ -1,28 +1,34 @@
 import numpy as np
 import pandas as pd
+import decimal
 from utils.config import *
+from utils.logger import CryptoLogger
+
 
 class EthereumCycleFeatureExtractor:
     def __init__(self):
         self.eth_significant_events = eth_significant_events
+        self.logger = CryptoLogger('EthereumCycleFeatureExtractor')
+
     def calculate_eth_event_cycle_features(self, processed_data: pd.DataFrame) -> pd.DataFrame:
+        self.logger.info("Starting calculation of Ethereum cycle features")
 
         # Create a copy of the input DataFrame to avoid modifying the original
         result_df = processed_data.copy()
+        self.logger.debug(f"Input DataFrame shape: {result_df.shape}")
 
         # Ensure the DataFrame has a datetime index
         if not isinstance(result_df.index, pd.DatetimeIndex):
+            self.logger.error("DataFrame index is not a DatetimeIndex")
             raise ValueError("DataFrame index must be a DatetimeIndex")
 
         # Convert Ethereum events to datetime objects and sort them
         eth_events = sorted(self.eth_significant_events, key=lambda x: pd.Timestamp(x["date"]))
         eth_event_dates = [pd.Timestamp(event["date"]) for event in eth_events]
+        self.logger.info(f"Found {len(eth_events)} Ethereum significant events")
 
         # Add known future Ethereum upgrades if they exist
-        # For example, add placeholder for next upcoming upgrade if officially announced
-        # This would normally come from a database or external source
         next_known_upgrade = None
-        # Check if there's an officially announced next upgrade that's not in our list
         # This logic would be replaced with actual lookup logic in a real implementation
 
         # Initialize features
@@ -31,6 +37,7 @@ class EthereumCycleFeatureExtractor:
         result_df['upgrade_cycle_phase'] = None
         result_df['eth2_phase_indicator'] = 0  # ETH 2.0 phase indicator (0-4)
         result_df['pos_transition_indicator'] = 0  # Proof of Stake transition progress (0-1)
+        self.logger.debug("Initialized feature columns")
 
         # The Merge date (transition to PoS)
         merge_date = pd.Timestamp("2022-09-15")
@@ -46,9 +53,16 @@ class EthereumCycleFeatureExtractor:
             {"phase": 3, "date": pd.Timestamp("2024-03-13"), "name": "Dencun"}  # Phase 3
             # Phase 4 would be future sharding upgrades or other major changes
         ]
+        self.logger.info(f"Defined {len(eth2_phases)} ETH 2.0 phases")
 
         # Calculate features for each date in the DataFrame
+        total_dates = len(result_df.index)
+        self.logger.info(f"Processing {total_dates} dates")
+
         for idx, date in enumerate(result_df.index):
+            if idx % 1000 == 0:  # Log progress every 1000 entries
+                self.logger.debug(f"Processing date {idx + 1}/{total_dates}: {date}")
+
             # Find the previous and next upgrade dates
             previous_upgrade = None
             previous_upgrade_name = None
@@ -85,10 +99,24 @@ class EthereumCycleFeatureExtractor:
 
             # Calculate upgrade cycle phase (0-1 value representing position in cycle)
             if previous_upgrade is not None and next_upgrade is not None:
-                cycle_length = (next_upgrade - previous_upgrade).days
-                days_into_cycle = (date - previous_upgrade).days
-                cycle_phase = days_into_cycle / cycle_length if cycle_length > 0 else 0
-                result_df.at[date, 'upgrade_cycle_phase'] = cycle_phase
+                try:
+                    # Convert to float explicitly to avoid decimal/float incompatibility
+                    cycle_length = float((next_upgrade - previous_upgrade).days)
+                    days_into_cycle = float((date - previous_upgrade).days)
+
+                    # Check for division by zero
+                    if cycle_length > 0:
+                        cycle_phase = days_into_cycle / cycle_length
+                    else:
+                        self.logger.warning(f"Zero cycle length detected for date {date}")
+                        cycle_phase = 0.0
+
+                    result_df.at[date, 'upgrade_cycle_phase'] = cycle_phase
+                except (TypeError, ValueError, decimal.InvalidOperation) as e:
+                    self.logger.error(f"Error calculating cycle phase for date {date}: {str(e)}")
+                    self.logger.debug(
+                        f"cycle_length type: {type(cycle_length)}, days_into_cycle type: {type(days_into_cycle)}")
+                    result_df.at[date, 'upgrade_cycle_phase'] = np.nan
             else:
                 # If we can't determine cycle phase, set to NaN
                 result_df.at[date, 'upgrade_cycle_phase'] = np.nan
@@ -110,13 +138,27 @@ class EthereumCycleFeatureExtractor:
             elif date >= merge_date:
                 result_df.at[date, 'pos_transition_indicator'] = 1
             else:
-                # Linear progression between Beacon Chain and Merge
-                total_transition_days = (merge_date - beacon_chain_date).days
-                days_since_beacon = (date - beacon_chain_date).days
-                transition_progress = days_since_beacon / total_transition_days if total_transition_days > 0 else 0
-                result_df.at[date, 'pos_transition_indicator'] = transition_progress
+                try:
+                    # Convert to float explicitly to avoid decimal/float incompatibility
+                    total_transition_days = float((merge_date - beacon_chain_date).days)
+                    days_since_beacon = float((date - beacon_chain_date).days)
+
+                    # Check for division by zero
+                    if total_transition_days > 0:
+                        transition_progress = days_since_beacon / total_transition_days
+                    else:
+                        self.logger.warning(f"Zero transition days detected for date {date}")
+                        transition_progress = 0.0
+
+                    result_df.at[date, 'pos_transition_indicator'] = transition_progress
+                except (TypeError, ValueError, decimal.InvalidOperation) as e:
+                    self.logger.error(f"Error calculating PoS transition for date {date}: {str(e)}")
+                    self.logger.debug(
+                        f"total_transition_days type: {type(total_transition_days)}, days_since_beacon type: {type(days_since_beacon)}")
+                    result_df.at[date, 'pos_transition_indicator'] = 0.0
 
         # Convert features to appropriate data types
+        self.logger.debug("Converting features to appropriate data types")
         result_df['days_since_last_upgrade'] = result_df['days_since_last_upgrade'].astype('float64')
         result_df['days_to_next_known_upgrade'] = result_df['days_to_next_known_upgrade'].astype('float64')
         result_df['upgrade_cycle_phase'] = result_df['upgrade_cycle_phase'].astype('float64')
@@ -124,18 +166,24 @@ class EthereumCycleFeatureExtractor:
         result_df['pos_transition_indicator'] = result_df['pos_transition_indicator'].astype('float64')
 
         # Add additional derived features
+        self.logger.info("Calculating derived features")
 
         # Log-transformed days since last upgrade (useful for machine learning)
         result_df['log_days_since_upgrade'] = np.log1p(result_df['days_since_last_upgrade'])
 
         # Sine and cosine transformation for cyclical features (better for neural networks)
-        cycle_phase = result_df['upgrade_cycle_phase'] * 2 * np.pi
-        result_df['upgrade_cycle_sin'] = np.sin(cycle_phase)
-        result_df['upgrade_cycle_cos'] = np.cos(cycle_phase)
+        try:
+            cycle_phase = result_df['upgrade_cycle_phase'] * 2 * np.pi
+            result_df['upgrade_cycle_sin'] = np.sin(cycle_phase)
+            result_df['upgrade_cycle_cos'] = np.cos(cycle_phase)
+            self.logger.debug("Calculated sine and cosine cyclical features")
+        except Exception as e:
+            self.logger.error(f"Error calculating cyclical features: {str(e)}")
+            # Set default values if calculation fails
+            result_df['upgrade_cycle_sin'] = 0.0
+            result_df['upgrade_cycle_cos'] = 0.0
 
         # Add upgrade importance weight based on historical price impact
-        # This is a simplified implementation - in reality you'd want to analyze
-        # historical price movements around each upgrade
         result_df['upgrade_importance'] = 0.0
 
         upgrade_importance = {
@@ -152,13 +200,18 @@ class EthereumCycleFeatureExtractor:
             "DAO Fork": 0.9,  # Very significant but for negative reasons
             "Capella": 0.5  # Significant for stakers
         }
+        self.logger.debug(f"Defined importance values for {len(upgrade_importance)} upgrades")
 
         # Apply importance values based on the most recent upgrade
         for idx, date in enumerate(result_df.index):
+            if idx % 1000 == 0:  # Log progress every 1000 entries
+                self.logger.debug(f"Processing importance for date {idx + 1}/{total_dates}")
+
             for event in eth_events:
                 event_date = pd.Timestamp(event["date"])
                 if date >= event_date:
                     importance = upgrade_importance.get(event["name"], 0.3)  # Default to 0.3
                     result_df.at[date, 'upgrade_importance'] = importance
 
+        self.logger.info(f"Finished calculating Ethereum cycle features. Result DataFrame shape: {result_df.shape}")
         return result_df

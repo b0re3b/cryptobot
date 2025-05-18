@@ -11,7 +11,7 @@ from utils.logger import CryptoLogger
 
 class TimeSeriesAnalyzer:
     def __init__(self):
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('TimeseriesAnalyzer')
 
 
 

@@ -10,7 +10,7 @@ from utils.logger import CryptoLogger
 
 class TimeSeriesTransformer:
     def __init__(self):
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('TimeseriesModelEvaluator')
         self.transformations = {}
         self.db_manager = DatabaseManager()
     def difference_series(self, data: pd.Series, order: int = 1) -> pd.Series:
