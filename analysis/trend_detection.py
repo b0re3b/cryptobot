@@ -10,10 +10,15 @@ from scipy import stats
 from data.db import DatabaseManager
 import pandas_ta as ta
 
+from utils.logger import CryptoLogger
+import talib
+print(talib.get_functions())
+
+
 class TrendDetection:
 
 
-    def __init__(self, config=None, logger=None):
+    def __init__(self, config=None):
 
         self.db_manager = DatabaseManager()
 
@@ -26,18 +31,9 @@ class TrendDetection:
         self.min_points_for_level = self.config.get('min_points_for_level', 3)
 
         # Ініціалізація логера
-        self.logger = logger or self._setup_default_logger()
+        self.logger = CryptoLogger('INFO')
 
-    def _setup_default_logger(self) -> logging.Logger:
 
-        logger = logging.getLogger('trend_detection')
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-            logger.setLevel(logging.INFO)
-        return logger
 
     def detect_trend(self, data: pd.DataFrame, window_size: int = 14) -> str:
 
@@ -1833,14 +1829,12 @@ def main():
     # Get real market data from exchange
     symbol = "BTC"
     timeframe = "1d"
-    limit = 200  # Number of candles to fetch
 
     try:
         # Fetch klines data (assuming db_manager has get_klines method)
         klines = trend_detector.db_manager.get_klines(
             symbol=symbol,
             timeframe=timeframe,
-            limit=limit
         )
 
         # Convert to DataFrame
