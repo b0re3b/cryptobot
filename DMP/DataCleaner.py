@@ -14,7 +14,7 @@ from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
 class DataCleaner:
     def __init__(self, logger=None):
         self.logger = logger if logger else self._setup_default_logger()
-        self.anomaly_detector = AnomalyDetector(logger=self.logger)
+        self.anomaly_detector = AnomalyDetector()
         self.data_resampler = DataResampler(logger=self.logger)
 
     @staticmethod

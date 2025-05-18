@@ -11,10 +11,9 @@ from DMP.DataCleaner import DataCleaner
 from timeseriesmodels.time_series import TimeSeriesModels
 from DMP.AnomalyDetector import AnomalyDetector
 from featureengineering.feature_engineering import FeatureEngineering
-from utils.logger import get_logger
+from utils.logger import CryptoLogger
 import decimal
 
-logger = get_logger(__name__)
 
 
 class VolatilityAnalysis:
@@ -24,10 +23,10 @@ class VolatilityAnalysis:
         self.volatility_models = {}
         self.regime_models = {}
         self.data_cleaner = DataCleaner()
-        self.anomaly_detector = AnomalyDetector(logger=logger)
+        self.anomaly_detector = AnomalyDetector()
         self.feature_engineer = FeatureEngineering()
         self.time_series = TimeSeriesModels()
-
+        self.logger = CryptoLogger('INFO')
         # Оптимізація: налаштування паралельних обчислень
         self.use_parallel = use_parallel
         self.max_workers = max_workers
@@ -52,7 +51,7 @@ class VolatilityAnalysis:
                 try:
                     results[item] = future.result()
                 except Exception as e:
-                    logger.error(f"Помилка при паралельній обробці для {item}: {e}")
+                    self.logger.error(f"Помилка при паралельній обробці для {item}: {e}")
                     results[item] = None
         return results
 
@@ -67,7 +66,7 @@ class VolatilityAnalysis:
 
     def get_market_phases(self, volatility_data, lookback_window=90, n_regimes=4):
         try:
-            logger.info(f"Визначення фаз ринку за допомогою {n_regimes} режимів")
+            self.logger.info(f"Визначення фаз ринку за допомогою {n_regimes} режимів")
 
             # Отримати останні дані в межах вікна аналізу (векторизовано)
             recent_data = volatility_data.iloc[-lookback_window:] if len(
@@ -87,7 +86,7 @@ class VolatilityAnalysis:
 
             # Якщо даних недостатньо — повертаємо порожню серію
             if len(features) < 10:
-                logger.warning("Недостатньо даних для визначення фаз ринку")
+                self.logger.warning("Недостатньо даних для визначення фаз ринку")
                 return pd.Series(index=volatility_data.index)
 
             # Нормалізуємо ознаки для кластеризації
@@ -120,7 +119,7 @@ class VolatilityAnalysis:
 
             # Розширюємо серію на повний період вхідних даних, заповнюючи пропуски
             full_phase_series = pd.Series(index=volatility_data.index)
-            full_phase_series.loc[phase_series.index] = phase_series
+            full_phase_series = full_phase_series.astype('object')
             full_phase_series = full_phase_series.ffill().bfill()  # Заповнення в обидва боки
 
             # Зберігаємо модель для подальшого використання
@@ -131,11 +130,11 @@ class VolatilityAnalysis:
                 'mapping': phase_mapping
             }
 
-            logger.info(f"Успішно визначено {n_regimes} фази ринку")
+            self.logger.info(f"Успішно визначено {n_regimes} фази ринку")
             return full_phase_series
 
         except Exception as e:
-            logger.error(f"Помилка при визначенні фаз ринку: {e}")
+            self.logger.error(f"Помилка при визначенні фаз ринку: {e}")
             return pd.Series(index=volatility_data.index)
 
     def calculate_historical_volatility(self, price_data, window=14, trading_periods=365, annualize=True):
@@ -149,13 +148,13 @@ class VolatilityAnalysis:
 
             # Перевірка на нульові або від'ємні значення
             if (price_data <= 0).any():
-                logger.warning("Знайдено нульові або від'ємні ціни - замінюються на попередні значення")
+                self.logger.warning("Знайдено нульові або від'ємні ціни - замінюються на попередні значення")
                 price_data = price_data.replace(0, np.nan).replace([np.inf, -np.inf], np.nan)
                 price_data = price_data.ffill().bfill()
 
                 # Якщо все ще є нульові значення, повертаємо серію з NaN
                 if (price_data <= 0).any():
-                    logger.error("Не вдалося виправити нульові/від'ємні ціни")
+                    self.logger.error("Не вдалося виправити нульові/від'ємні ціни")
                     return pd.Series(index=price_data.index, dtype=float)
 
             # Векторизовані обчислення з захистом від 0 та від'ємних значень
@@ -171,14 +170,14 @@ class VolatilityAnalysis:
             return rolling_vol
 
         except Exception as e:
-            logger.error(f"Помилка при обчисленні історичної волатильності: {e}")
+            self.logger.error(f"Помилка при обчисленні історичної волатильності: {e}")
             return pd.Series(index=price_data.index if isinstance(price_data, pd.Series) else range(len(price_data)))
 
     def calculate_parkinson_volatility(self, ohlc_data, window=14, trading_periods=365):
         """Розраховує волатильність Паркінсона (оптимізовано)"""
         # Перевірка, чи є ohlc_data DataFrame
         if not isinstance(ohlc_data, pd.DataFrame):
-            logger.error("Дані OHLC повинні бути DataFrame")
+            self.logger.error("Дані OHLC повинні бути DataFrame")
             return pd.Series()
 
         try:
@@ -189,7 +188,7 @@ class VolatilityAnalysis:
             # Перевірка на нульові або від'ємні значення
             mask = (high > 0) & (low > 0)
             if (~mask).any():
-                logger.warning("Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені")
+                self.logger.warning("Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені")
 
             # Векторизований розрахунок нормалізованого діапазону high-low з обробкою проблемних значень
             hl_range = np.zeros(len(high))
@@ -202,7 +201,7 @@ class VolatilityAnalysis:
 
             return rolling_parkinson
         except KeyError:
-            logger.error("Дані OHLC повинні містити стовпці 'high' і 'low'")
+            self.logger.error("Дані OHLC повинні містити стовпці 'high' і 'low'")
             return pd.Series()
 
     def calculate_garman_klass_volatility(self, ohlc_data, window=14, trading_periods=365):
@@ -217,7 +216,7 @@ class VolatilityAnalysis:
             # Перевірка на нульові або від'ємні значення
             mask = (high > 0) & (low > 0) & (close > 0) & (open_price > 0)
             if (~mask).any():
-                logger.warning("Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені")
+                self.logger.warning("Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені")
 
             # Створення масивів для результатів
             log_hl = np.zeros(len(high))
@@ -236,7 +235,7 @@ class VolatilityAnalysis:
 
             return rolling_gk
         except KeyError:
-            logger.error("Дані OHLC повинні містити стовпці 'high', 'low', 'close' і 'open'")
+            self.logger.error("Дані OHLC повинні містити стовпці 'high', 'low', 'close' і 'open'")
             return pd.Series()
 
     def calculate_yang_zhang_volatility(self, ohlc_data, window=14, trading_periods=365):
@@ -252,7 +251,7 @@ class VolatilityAnalysis:
             # Перевірка на нульові або від'ємні значення
             valid_data = (high > 0) & (low > 0) & (close > 0) & (open_price > 0) & (close_prev > 0)
             if (~valid_data).any():
-                logger.warning("Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені")
+                self.logger.warning("Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені")
 
             # Маскування невалідних даних як NaN для безпечних обчислень
             high_masked = pd.Series(np.where(valid_data, high, np.nan), index=ohlc_data.index)
@@ -287,11 +286,10 @@ class VolatilityAnalysis:
 
             return yang_zhang
         except KeyError:
-            logger.error("Дані OHLC повинні містити стовпці 'high', 'low', 'close' і 'open'")
+            self.logger.error("Дані OHLC повинні містити стовпці 'high', 'low', 'close' і 'open'")
             return pd.Series()
 
     # Оптимізація: кешування результатів GARCH моделей
-    @lru_cache(maxsize=32)
     def fit_garch_model(self, returns_key, p=1, q=1, model_type='GARCH'):
         """
         Підгонка GARCH моделі з кешуванням для покращення продуктивності
@@ -301,7 +299,7 @@ class VolatilityAnalysis:
             # Перетворюємо ключ назад на серію і конвертуємо в float
             returns = self._safe_convert_to_float(pd.Series(returns_key))
 
-            logger.info(f"Підгонка {model_type}({p},{q}) моделі")
+            self.logger.info(f"Підгонка {model_type}({p},{q}) моделі")
 
             # Очистка та підготовка даних
             clean_returns = self.data_cleaner.clean_data(returns)
@@ -323,17 +321,17 @@ class VolatilityAnalysis:
             # Зберігання моделі для подальшого використання
             self.volatility_models[f"{model_type}_{p}_{q}"] = fitted_model
 
-            logger.info(f"Модель {model_type}({p},{q}) успішно підігнана")
+            self.logger.info(f"Модель {model_type}({p},{q}) успішно підігнана")
             return fitted_model, forecast
 
         except Exception as e:
-            logger.error(f"Помилка підгонки GARCH моделі: {e}")
+            self.logger.error(f"Помилка підгонки GARCH моделі: {e}")
             return None, None
 
     def detect_volatility_regimes(self, volatility_series, n_regimes=3, method='kmeans'):
         """Виявлення режимів волатильності (оптимізовано)"""
         try:
-            logger.info(f"Виявлення {n_regimes} режимів волатильності за методом {method}")
+            self.logger.info(f"Виявлення {n_regimes} режимів волатильності за методом {method}")
 
             # Конвертація в float для безпечних обчислень
             volatility_series = self._safe_convert_to_float(volatility_series)
@@ -380,11 +378,11 @@ class VolatilityAnalysis:
                 'thresholds': thresholds if method == 'threshold' else None
             }
 
-            logger.info(f"Успішно виявлено {n_regimes} режимів волатильності")
+            self.logger.info(f"Успішно виявлено {n_regimes} режимів волатильності")
             return regime_series
 
         except Exception as e:
-            logger.error(f"Помилка при виявленні режимів волатильності: {e}")
+            self.logger.error(f"Помилка при виявленні режимів волатильності: {e}")
             return None
 
     def analyze_volatility_clustering(self, returns, max_lag=30):
@@ -401,7 +399,7 @@ class VolatilityAnalysis:
             clean_squared_returns = squared_returns.dropna()
 
             if len(clean_squared_returns) < max_lag + 1:
-                logger.warning(f"Недостатньо даних для обчислення автокореляції з {max_lag} лагами")
+                self.logger.warning(f"Недостатньо даних для обчислення автокореляції з {max_lag} лагами")
                 return pd.DataFrame({'lag': range(len(clean_squared_returns)), 'autocorrelation': 0})
 
             acf_values = acf(clean_squared_returns, nlags=max_lag, fft=True)  # FFT для швидкої обробки
@@ -414,13 +412,13 @@ class VolatilityAnalysis:
 
             return acf_df
         except Exception as e:
-            logger.error(f"Помилка при аналізі кластеризації волатильності: {e}")
+            self.logger.error(f"Помилка при аналізі кластеризації волатильності: {e}")
             return pd.DataFrame({'lag': [0], 'autocorrelation': [0]})
 
     def calculate_volatility_risk_metrics(self, returns, volatility):
         """Обчислення метрик ризику волатильності (оптимізовано для великих наборів даних)"""
         try:
-            logger.info("Обчислення метрик ризику волатильності")
+            self.logger.info("Обчислення метрик ризику волатильності")
 
             # Конвертація в float для безпечних обчислень
             returns = self._safe_convert_to_float(returns)
@@ -462,7 +460,7 @@ class VolatilityAnalysis:
             }
 
         except Exception as e:
-            logger.error(f"Помилка при обчисленні метрик ризику волатильності: {e}")
+            self.logger.error(f"Помилка при обчисленні метрик ризику волатильності: {e}")
             return {
                 'var_95': None,
                 'var_99': None,
@@ -476,7 +474,7 @@ class VolatilityAnalysis:
     def compare_volatility_metrics(self, ohlc_data, windows=[14, 30, 60]):
         """Порівняння метрик волатильності (оптимізовано паралельними обчисленнями)"""
         try:
-            logger.info(f"Порівняння метрик волатильності для вікон {windows}")
+            self.logger.info(f"Порівняння метрик волатильності для вікон {windows}")
 
             result = pd.DataFrame(index=ohlc_data.index)
 
@@ -526,7 +524,7 @@ class VolatilityAnalysis:
                             try:
                                 result[col_name] = future.result()
                             except Exception as e:
-                                logger.error(f"Помилка при обчисленні {col_name}: {e}")
+                                self.logger.error(f"Помилка при обчисленні {col_name}: {e}")
             else:
                 # Послідовне обчислення для менших наборів даних
                 for window in windows:
@@ -543,11 +541,11 @@ class VolatilityAnalysis:
                     result[f'yz_{window}d'] = self.calculate_yang_zhang_volatility(
                         ohlc_data_float, window=window)
 
-            logger.info("Успішно порівняно метрики волатильності")
+            self.logger.info("Успішно порівняно метрики волатильності")
             return result
 
         except Exception as e:
-            logger.error(f"Помилка при порівнянні метрик волатильності: {e}")
+            self.logger.error(f"Помилка при порівнянні метрик волатильності: {e}")
             return pd.DataFrame(index=ohlc_data.index)
 
     def identify_volatility_breakouts(self, volatility_series, window=20, std_dev=2):
@@ -563,17 +561,17 @@ class VolatilityAnalysis:
             # Виявлення проривів
             breakouts = volatility_series > upper_threshold
 
-            logger.info(f"Виявлено {breakouts.sum()} проривів волатильності з {len(breakouts)} точок")
+            self.logger.info(f"Виявлено {breakouts.sum()} проривів волатильності з {len(breakouts)} точок")
             return breakouts
 
         except Exception as e:
-            logger.error(f"Помилка при виявленні проривів волатильності: {e}")
+            self.logger.error(f"Помилка при виявленні проривів волатильності: {e}")
             return pd.Series(False, index=volatility_series.index)
 
     def analyze_cross_asset_volatility(self, asset_dict, window=14):
         """Аналіз волатильності між активами (оптимізовано для великої кількості активів)"""
         try:
-            logger.info(f"Аналіз кросс-активної волатильності для {len(asset_dict)} активів")
+            self.logger.info(f"Аналіз кросс-активної волатильності для {len(asset_dict)} активів")
 
             volatility_dict = {}
 
@@ -597,11 +595,11 @@ class VolatilityAnalysis:
             # Обчислення кореляційної матриці
             corr_matrix = vol_df.corr()
 
-            logger.info("Успішно проаналізовано кросс-активну волатильність")
+            self.logger.info("Успішно проаналізовано кросс-активну волатильність")
             return corr_matrix
 
         except Exception as e:
-            logger.error(f"Помилка при аналізі кросс-активної волатильності: {e}")
+            self.logger.error(f"Помилка при аналізі кросс-активної волатильності: {e}")
             return pd.DataFrame()
 
     def extract_seasonality_in_volatility(self, volatility_series, period=7):
@@ -635,13 +633,13 @@ class VolatilityAnalysis:
                 return month_of_year
 
         except Exception as e:
-            logger.error(f"Помилка при вилученні сезонності з волатильності: {e}")
+            self.logger.error(f"Помилка при вилученні сезонності з волатильності: {e}")
             return pd.Series()
 
     def analyze_volatility_term_structure(self, symbol, timeframes=['1h', '4h', '1d', '1w']):
         """Аналіз терміну структури волатильності (оптимізовано)"""
         try:
-            logger.info(f"Аналіз терміну структури волатильності для {symbol} на {timeframes}")
+            self.logger.info(f"Аналіз терміну структури волатильності для {symbol} на {timeframes}")
             results = {}
 
             # Оптимізація: паралельний збір даних для різних часових проміжків
@@ -660,7 +658,7 @@ class VolatilityAnalysis:
                             'std_vol': vol.std()
                         }
                     except Exception as e:
-                        logger.error(f"Помилка при обробці таймфрейму {tf}: {e}")
+                        self.logger.error(f"Помилка при обробці таймфрейму {tf}: {e}")
                         return tf, None
 
                 # Паралельне виконання для кожного часового проміжку
@@ -694,17 +692,17 @@ class VolatilityAnalysis:
                 if base_vol > 0:
                     term_structure['rel_to_daily'] = term_structure['mean_vol'] / base_vol
 
-            logger.info(f"Успішно проаналізовано термін структури волатильності для {symbol}")
+            self.logger.info(f"Успішно проаналізовано термін структури волатильності для {symbol}")
             return term_structure
 
         except Exception as e:
-            logger.error(f"Помилка при аналізі терміну структури волатильності: {e}")
+            self.logger.error(f"Помилка при аналізі терміну структури волатильності: {e}")
             return pd.DataFrame()
 
     def volatility_impulse_response(self, returns, shock_size=3, days=30):
         """Аналіз імпульсного відгуку волатильності (оптимізовано)"""
         try:
-            logger.info(f"Обчислення імпульсного відгуку волатильності з розміром шоку {shock_size}")
+            self.logger.info(f"Обчислення імпульсного відгуку волатильності з розміром шоку {shock_size}")
 
             # Перетворення вхідних даних на серію, якщо це не серія
             returns = pd.Series(returns) if not isinstance(returns, pd.Series) else returns
@@ -716,7 +714,7 @@ class VolatilityAnalysis:
             model, _ = self.fit_garch_model(returns_key, p=1, q=1, model_type='GARCH')
 
             if model is None:
-                logger.warning("Не вдалося підігнати GARCH модель для імпульсного відгуку")
+                self.logger.warning("Не вдалося підігнати GARCH модель для імпульсного відгуку")
                 return None
 
             # Створення базового прогнозу
@@ -750,7 +748,7 @@ class VolatilityAnalysis:
                         half_life = i + 1
                         break
 
-            logger.info(f"Успішно обчислено імпульсний відгук волатильності, час напіврозпаду: {half_life}")
+            self.logger.info(f"Успішно обчислено імпульсний відгук волатильності, час напіврозпаду: {half_life}")
 
             # Повертаємо імпульсний відгук з додатковими метаданими
             return {
@@ -762,13 +760,13 @@ class VolatilityAnalysis:
             }
 
         except Exception as e:
-            logger.error(f"Помилка при обчисленні імпульсного відгуку волатильності: {e}")
+            self.logger.error(f"Помилка при обчисленні імпульсного відгуку волатильності: {e}")
             return None
 
     def prepare_volatility_features_for_ml(self, ohlc_data, window_sizes=[7, 14, 30], include_regimes=True):
         """Підготовка функцій волатильності для машинного навчання (оптимізовано)"""
         try:
-            logger.info(f"Підготовка функцій волатильності для ML з вікнами {window_sizes}")
+            self.logger.info(f"Підготовка функцій волатильності для ML з вікнами {window_sizes}")
 
             # Ініціалізація результуючого DataFrame
             features = pd.DataFrame(index=ohlc_data.index)
@@ -829,7 +827,7 @@ class VolatilityAnalysis:
 
                         return window_features
                     except Exception as e:
-                        logger.error(f"Помилка при обчисленні функцій для вікна {window}: {e}")
+                        self.logger.error(f"Помилка при обчисленні функцій для вікна {window}: {e}")
                         return {}
 
                 # Паралельне обчислення для різних розмірів вікон
@@ -921,18 +919,18 @@ class VolatilityAnalysis:
                 # Індикатор аномальної волатильності (>2 стандартних відхилень)
                 features['vol_outlier'] = (np.abs(features['vol_zscore']) > 2).astype(int)
 
-            logger.info(f"Успішно підготовлено {len(features.columns)} функцій волатильності для ML")
+            self.logger.info(f"Успішно підготовлено {len(features.columns)} функцій волатильності для ML")
             return features
 
         except Exception as e:
-            logger.error(f"Помилка при підготовці функцій волатильності для ML: {e}")
+            self.logger.error(f"Помилка при підготовці функцій волатильності для ML: {e}")
             return pd.DataFrame(index=ohlc_data.index)
 
     def save_volatility_analysis_to_db(self, symbol, timeframe, volatility_data, model_data=None, regime_data=None,
                                        features_data=None, cross_asset_data=None):
         """Збереження аналізу волатильності до бази даних (оптимізовано)"""
         try:
-            logger.info(f"Збереження аналізу волатильності для {symbol} на таймфреймі {timeframe}")
+            self.logger.info(f"Збереження аналізу волатильності для {symbol} на таймфреймі {timeframe}")
             results = {}
             success = True
 
@@ -994,9 +992,9 @@ class VolatilityAnalysis:
                             task_success = future.result()
                             results[task_name] = task_success
                             success = success and task_success
-                            logger.info(f"Збережено {task_name}: {task_success}")
+                            self.logger.info(f"Збережено {task_name}: {task_success}")
                         except Exception as e:
-                            logger.error(f"Помилка при збереженні {task_name}: {e}")
+                            self.logger.error(f"Помилка при збереженні {task_name}: {e}")
                             results[task_name] = False
                             success = False
             else:
@@ -1010,7 +1008,7 @@ class VolatilityAnalysis:
                     )
                     results['metrics'] = metrics_success
                     success = success and metrics_success
-                    logger.info(f"Збережено метрики волатильності: {metrics_success}")
+                    self.logger.info(f"Збережено метрики волатильності: {metrics_success}")
 
                 # 2. Збереження моделей волатильності (GARCH тощо)
                 if model_data is not None:
@@ -1024,7 +1022,7 @@ class VolatilityAnalysis:
                     )
                     results['model'] = model_success
                     success = success and model_success
-                    logger.info(f"Збережено модель волатильності: {model_success}")
+                    self.logger.info(f"Збережено модель волатильності: {model_success}")
 
                 # 3. Збереження даних режиму
                 if regime_data is not None:
@@ -1037,7 +1035,7 @@ class VolatilityAnalysis:
                     )
                     results['regime'] = regime_success
                     success = success and regime_success
-                    logger.info(f"Збережено режими волатильності: {regime_success}")
+                    self.logger.info(f"Збережено режими волатильності: {regime_success}")
 
                 # 4. Збереження ML функцій
                 if features_data is not None and not features_data.empty:
@@ -1048,7 +1046,7 @@ class VolatilityAnalysis:
                     )
                     results['features'] = features_success
                     success = success and features_success
-                    logger.info(f"Збережено функції волатильності: {features_success}")
+                    self.logger.info(f"Збережено функції волатильності: {features_success}")
 
                 # 5. Збереження даних крос-активної волатильності
                 if cross_asset_data is not None and not cross_asset_data.empty:
@@ -1059,18 +1057,18 @@ class VolatilityAnalysis:
                     )
                     results['cross_asset'] = cross_asset_success
                     success = success and cross_asset_success
-                    logger.info(f"Збережено крос-активну волатильність: {cross_asset_success}")
+                    self.logger.info(f"Збережено крос-активну волатильність: {cross_asset_success}")
 
             return {'overall_success': success, 'detailed_results': results}
 
         except Exception as e:
-            logger.error(f"Помилка при збереженні аналізу волатильності до бази даних: {e}")
+            self.logger.error(f"Помилка при збереженні аналізу волатильності до бази даних: {e}")
             return {'overall_success': False, 'error': str(e)}
 
     def load_volatility_analysis_from_db(self, symbol, timeframe, start_date=None, end_date=None):
         """Завантаження аналізу волатильності з бази даних (оптимізовано)"""
         try:
-            logger.info(f"Завантаження аналізу волатильності для {symbol} на таймфреймі {timeframe}")
+            self.logger.info(f"Завантаження аналізу волатильності для {symbol} на таймфреймі {timeframe}")
 
             # Оптимізація: паралельне завантаження різних типів даних
             results = {}
@@ -1102,7 +1100,7 @@ class VolatilityAnalysis:
                         try:
                             results[task_name] = future.result()
                         except Exception as e:
-                            logger.error(f"Помилка при завантаженні {task_name}: {e}")
+                            self.logger.error(f"Помилка при завантаженні {task_name}: {e}")
                             results[task_name] = None
             else:
                 # Послідовне завантаження
@@ -1180,11 +1178,11 @@ class VolatilityAnalysis:
 
                     analysis_results['summary'] = summary
 
-            logger.info(f"Успішно завантажено аналіз волатильності для {symbol}")
+            self.logger.info(f"Успішно завантажено аналіз волатильності для {symbol}")
             return analysis_results
 
         except Exception as e:
-            logger.error(f"Помилка при завантаженні аналізу волатильності з бази даних: {e}")
+            self.logger.error(f"Помилка при завантаженні аналізу волатильності з бази даних: {e}")
             return {
                 'symbol': symbol,
                 'timeframe': timeframe,
@@ -1198,7 +1196,7 @@ class VolatilityAnalysis:
 
             # Get volatility for each symbol
             for symbol in symbols:
-                data = self.db_manager.get_klines(f"{symbol}USDT", timeframe=timeframe)
+                data = self.db_manager.get_klines(f"{symbol}", timeframe=timeframe)
                 vol = self.calculate_historical_volatility(data['close'], window=window)
                 volatilities[symbol] = vol
 
@@ -1235,13 +1233,13 @@ class VolatilityAnalysis:
             }
 
         except Exception as e:
-            logger.error(f"Error analyzing crypto market conditions: {e}")
+            self.logger.error(f"Error analyzing crypto market conditions: {e}")
             return None
 
     def run_full_volatility_analysis(self, symbol, timeframe='1d', save_to_db=True):
 
         try:
-            logger.info(f"Running full volatility analysis for {symbol} on {timeframe} timeframe")
+            self.logger.info(f"Running full volatility analysis for {symbol} on {timeframe} timeframe")
 
             # Load data
             data = self.db_manager.get_klines(symbol, timeframe=timeframe)
@@ -1345,7 +1343,7 @@ class VolatilityAnalysis:
 
             # Get market-wide conditions for context
             market_conditions = self.analyze_crypto_market_conditions(
-                symbols=[symbol, 'BTC', 'ETH'], timeframe=timeframe)
+                symbols=[symbol, 'BTC', 'ETH', 'SOL'], timeframe=timeframe)
             # Ensure market_conditions values are serializable
             if market_conditions:
                 for key, value in market_conditions.items():
@@ -1353,10 +1351,10 @@ class VolatilityAnalysis:
                         market_conditions[key] = value.tolist()
 
             # Get cross-asset correlation data
-            cross_asset_symbols = ['BTC', 'ETH']
+            cross_asset_symbols = ['BTC', 'ETH', 'SOL']
             asset_dict = {}
             for asset in cross_asset_symbols:
-                asset_data = self.db_manager.get_klines(f"{asset}USDT", timeframe=timeframe)
+                asset_data = self.db_manager.get_klines(f"{asset}", timeframe=timeframe)
                 if asset_data is not None and not asset_data.empty:
                     asset_dict[asset] = asset_data['close']
 
@@ -1456,7 +1454,7 @@ class VolatilityAnalysis:
 
             # Save to database if requested
             if save_to_db:
-                logger.info(f"Saving volatility analysis for {symbol} to database")
+                self.logger.info(f"Saving volatility analysis for {symbol} to database")
                 save_success = self.save_volatility_analysis_to_db(
                     symbol=symbol,
                     timeframe=timeframe,
@@ -1471,7 +1469,7 @@ class VolatilityAnalysis:
             return analysis_results
 
         except Exception as e:
-            logger.error(f"Error in full volatility analysis for {symbol}: {e}")
+            self.logger.error(f"Error in full volatility analysis for {symbol}: {e}")
             # Return partial results if available
             return {
                 'symbol': symbol,
@@ -1484,7 +1482,7 @@ class VolatilityAnalysis:
 
 def main():
     # Параметри для тесту
-    symbol = 'BTC'
+    symbol = ['BTC','SOL','ETH']
     timeframe = '1d'
 
     print(f"=== Стартує аналіз волатильності для {symbol} на таймфреймі {timeframe} ===")
@@ -1505,8 +1503,8 @@ def main():
     print(f"Поточний режим: {result['current_regime']}")
     print(f"Кількість проривів за 30 днів: {result['recent_breakouts']}")
     print(f"Sharpe ratio: {result['risk_metrics'].get('sharpe_ratio')}")
-    print(f"Режими волатильності: {set(result['volatility_data']['regime'].dropna())}")
-
+    vol_df = pd.DataFrame(result['volatility_data'])
+    print(f"Режими волатильності: {set(vol_df['regime'].dropna())}")
     if 'summary' in result:
         print("\n=== Статистика ===")
         for key, value in result['summary'].items():

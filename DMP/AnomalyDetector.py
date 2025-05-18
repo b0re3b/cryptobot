@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import decimal
 import warnings
-
+from utils.logger import CryptoLogger
 try:
     from sklearn.ensemble import IsolationForest
 
@@ -13,14 +13,13 @@ except ImportError:
 
 
 class AnomalyDetector:
-    def __init__(self, logger: Any, preserve_original_columns: bool = True):
+    def __init__(self, preserve_original_columns: bool = True):
         """
         Ініціалізація детектора аномалій.
 
-        :param logger: Об'єкт логування
         :param preserve_original_columns: Зберігати всі оригінальні колонки під час обробки
         """
-        self.logger = logger
+        self.logger = CryptoLogger('INFO')
         self.preserve_original_columns = preserve_original_columns
 
     def ensure_float(self, df: pd.DataFrame) -> pd.DataFrame:

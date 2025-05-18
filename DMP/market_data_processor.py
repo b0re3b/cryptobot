@@ -45,7 +45,7 @@ class MarketDataProcessor:
         self.data_cleaner = DataCleaner(logger=self.logger)
         self.data_resampler = DataResampler(logger=self.logger)
         self.data_storage = DataStorageManager(logger=self.logger)
-        self.anomaly_detector = AnomalyDetector(logger=self.logger)
+        self.anomaly_detector = AnomalyDetector()
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
         self.logger.info(f"Підтримувані символи: {', '.join(self.supported_symbols)}")

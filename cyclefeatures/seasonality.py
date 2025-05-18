@@ -5,8 +5,6 @@ import pandas as pd
 
 
 class TemporalSeasonalityAnalyzer:
-    def __init__(self, market_features):
-        self.market_features = market_features
 
     def analyze_weekly_cycle(self, processed_data: pd.DataFrame) -> Dict:
         # Ensure we have the required data

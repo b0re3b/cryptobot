@@ -4,8 +4,7 @@ import numpy as np
 
 
 class SolanaCycleFeatureExtractor:
-    def __init__(self, market_features):
-        self.market_features = market_features
+    def __init__(self):
         self.sol_significant_events = sol_significant_events
 
     def calculate_sol_event_cycle_features(self, processed_data: pd.DataFrame) -> pd.DataFrame:

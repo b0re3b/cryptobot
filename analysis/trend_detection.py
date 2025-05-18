@@ -11,8 +11,7 @@ from data.db import DatabaseManager
 import pandas_ta as ta
 
 from utils.logger import CryptoLogger
-# Removed talib import
-# Removed print(talib.get_functions())
+
 
 
 class TrendDetection:
@@ -434,15 +433,13 @@ class TrendDetection:
                 self.logger.error("Data must contain 'close' column for trend strength calculation")
                 raise ValueError("Data must contain 'close' column")
 
-
-
             # Створюємо копію DataFrame для уникнення попереджень
             df = data.copy()
 
             # 1. Розрахунок ADX (Average Directional Index) - основний індикатор сили тренду
             if all(col in df.columns for col in ['high', 'low']):
                 # Використовуємо pandas_ta для розрахунку ADX
-                adx_result = ta.adx(df['high'], df['low'], df['close'], length=14)
+                adx_result = df.ta.adx(length=14)
                 adx_value = adx_result['ADX_14'].iloc[-1] / 100.0  # Нормалізація до 0-1
             else:
                 # Якщо немає даних high/low, використовуємо нейтральне значення
@@ -458,7 +455,7 @@ class TrendDetection:
 
             # 3. Розрахунок Aroon-індикатору (показує силу і напрямок тренду)
             if all(col in df.columns for col in ['high', 'low']):
-                aroon = ta.aroon(df['high'], df['low'], length=14)
+                aroon = df.ta.aroon(length=14)
                 aroon_up = aroon['AROONU_14'].iloc[-1] / 100.0
                 aroon_down = aroon['AROOND_14'].iloc[-1] / 100.0
                 aroon_oscillator = aroon_up - aroon_down  # від -1 до 1
@@ -467,7 +464,7 @@ class TrendDetection:
                 aroon_strength = 0.5
 
             # 4. Розрахунок MACD для визначення імпульсу тренду
-            macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+            macd = df.ta.macd(fast=12, slow=26, signal=9)
             macd_value = macd['MACD_12_26_9'].iloc[-1]
             macd_signal = macd['MACDs_12_26_9'].iloc[-1]
             macd_hist = macd['MACDh_12_26_9'].iloc[-1]
@@ -478,7 +475,7 @@ class TrendDetection:
             macd_strength = min(1.0, macd_norm * 100)  # Обмежуємо до 1.0
 
             # 5. Розрахунок RSI для визначення сили тренду через перекупленість/перепроданість
-            rsi = ta.rsi(df['close'], length=14)
+            rsi = df.ta.rsi(length=14)
             rsi_value = rsi.iloc[-1]
 
             # Перетворюємо RSI на індикатор сили тренду (екстремальні значення = сильний тренд)
@@ -516,7 +513,7 @@ class TrendDetection:
             volume_factor = 0.5  # Нейтральне значення за замовчуванням
             if 'volume' in df.columns:
                 # Розраховуємо тренд об'єму
-                volume_sma = ta.sma(df['volume'], length=20)
+                volume_sma = df.ta.sma(df['volume'], length=20)
                 recent_volume = df['volume'].tail(5).mean()
                 historical_volume = volume_sma.iloc[-1]
 
@@ -719,7 +716,7 @@ class TrendDetection:
 
             # Перевіряємо бичачі свічкові патерни
             elif current_trend == 'downtrend':
-                for pattern_name in ['bullish_engulfing', 'morning_star', 'hammer', 'piercing_line']:
+                for pattern_name in ['bullish_engulfing', 'morning_star', 'hammer']:
                     if df[pattern_name].iloc[i] > 0:
                         if not reversal_signal:
                             reversal_signal = 'bullish_candlestick'
@@ -800,22 +797,30 @@ class TrendDetection:
             start_price = recent_data['high'].max()
             end_price = recent_data['low'].min()
 
-        # Розраховуємо рівні Фібоначчі використовуючи pandas-ta
-        fib_levels = ta.fibonacci(start_price, end_price,
-                                  retrace=[0, 0.236, 0.382, 0.5, 0.618, 0.786, 1],
-                                  extensions=[1.272, 1.618, 2.618])
+        # Використовуємо власну функцію для розрахунку рівнів Фібоначчі замість panads_ta
+        # оскільки pandas_ta може не мати прямого еквіваленту для fibonacci
+        retracement_levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
+        extension_levels = [1.272, 1.618, 2.618]
 
-        # Перетворюємо результат на словник
+        # Розрахунок цінових рівнів на основі відрізка [start_price, end_price]
+        price_range = end_price - start_price
+
         result = {}
-        for level, price in zip(fib_levels.index, fib_levels.values):
-            # Конвертуємо рівень до рядка
-            level_str = str(level) if level == 0 or level == 1 else f"{level:.3f}"
-            # Конвертуємо у формат, що відповідає оригінальному методу
-            if level == 0:
-                level_str = '0.0'
-            elif level == 1:
-                level_str = '1.0'
-            result[level_str] = float(price)
+        # Додаємо рівні ретрейсменту
+        for level in retracement_levels:
+            level_str = f"{level:.3f}" if level != 0 and level != 1 else f"{level:.1f}"
+            if trend_type == 'uptrend':
+                result[level_str] = end_price - (price_range * level)
+            else:
+                result[level_str] = start_price - (price_range * level)
+
+        # Додаємо рівні екстенжн
+        for level in extension_levels:
+            level_str = f"{level:.3f}"
+            if trend_type == 'uptrend':
+                result[level_str] = end_price + (price_range * (level - 1))
+            else:
+                result[level_str] = start_price - (price_range * level)
 
         # Додаємо інформацію про використані екстремуми
         result['swing_high'] = recent_data['high'].max()

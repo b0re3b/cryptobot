@@ -32,61 +32,86 @@ class TimeSeriesModels:
                          symbol: str,
                          start_date: Optional[datetime] = None,
                          end_date: Optional[datetime] = None,
-                         interval: str = '1d') -> pd.DataFrame:
+                         timeframe: str = '1d') -> pd.DataFrame:
 
         try:
-            self.logger.info(f"Loading {symbol} data with interval {interval} from database")
+            self.logger.info(f"Loading {symbol} data with interval {timeframe} from database")
 
-            # Якщо кінцева дата не вказана, використовуємо поточну дату
-            if end_date is None:
-                end_date = datetime.now()
-                self.logger.debug(f"End date not specified, using current date: {end_date}")
+            self.db_manager = db_manager
 
-            # Використовуємо переданий db_manager або збережений в класі
-            manager = db_manager if db_manager is not None else self.db_manager
+            if not hasattr(self, 'db_manager') or self.db_manager is None:
+                self.logger.error("db_manager not initialized in TimeSeriesModels class")
+                raise ValueError("db_manager not available. Please initialize db_manager.")
 
-            if manager is None:
-                error_msg = "Database manager not available. Please provide a valid db_manager."
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
+            # Визначаємо data_id для логування
+            data_id = None
+            if start_date and end_date:
+                data_id = f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
+                self.logger.info(f"Using data_id: {data_id}")
 
-            # Отримуємо дані з бази даних
-            klines_data = manager.get_klines_processed(
-                symbol=symbol,
-                interval=interval,
-                start_date=start_date,
-                end_date=end_date
-            )
+            # Завантаження ARIMA-даних відповідно до символу
+            klines_data = None
+            if symbol.upper() == 'BTC':
+                klines_data = self.db_manager.get_btc_arima_data(timeframe=timeframe)
+            elif symbol.upper() == 'ETH':
+                klines_data = self.db_manager.get_eth_arima_data(timeframe=timeframe)
+            elif symbol.upper() == 'SOL':
+                klines_data = self.db_manager.get_sol_arima_data(timeframe=timeframe)
+            else:
+                self.logger.warning(f"Symbol {symbol} not directly supported. Attempting generic method.")
+                try:
+                    method_name = f"get_{symbol.lower()}_arima_data"
+                    if hasattr(self.db_manager, method_name):
+                        get_data_method = getattr(self.db_manager, method_name)
+                        klines_data = get_data_method(timeframe=timeframe)
+                    elif hasattr(self.db_manager, "get_crypto_arima_data"):
+                        klines_data = self.db_manager.get_crypto_arima_data(symbol.upper(), timeframe)
+                    else:
+                        raise AttributeError(f"No method available to fetch data for {symbol}")
+                except Exception as symbol_error:
+                    self.logger.error(f"Failed to get data for {symbol}: {str(symbol_error)}")
+                    raise
 
-            if klines_data is None or klines_data.empty:
-                self.logger.warning(f"No data found for {symbol} with interval {interval}")
+            if klines_data is None or (isinstance(klines_data, pd.DataFrame) and klines_data.empty):
+                self.logger.warning(f"No data found for {symbol} with interval {timeframe}")
                 return pd.DataFrame()
 
-            # Перевіряємо наявність часового індексу
-            if not isinstance(klines_data.index, pd.DatetimeIndex):
-                # Шукаємо колонку з часовим індексом (timestamp, time, date, etc.)
-                time_cols = [col for col in klines_data.columns if any(
-                    time_str in col.lower() for time_str in ['time', 'date', 'timestamp'])]
+            if not isinstance(klines_data, pd.DataFrame):
+                klines_data = pd.DataFrame(klines_data)
+                self.logger.info("Converted data to DataFrame")
 
+            if not isinstance(klines_data.index, pd.DatetimeIndex):
+                time_cols = [col for col in klines_data.columns if any(
+                    time_str in str(col).lower() for time_str in ['time', 'date', 'timestamp'])]
                 if time_cols:
-                    # Використовуємо першу знайдену колонку часу
-                    klines_data = klines_data.set_index(pd.DatetimeIndex(pd.to_datetime(klines_data[time_cols[0]])))
-                    self.logger.info(f"Set index using column: {time_cols[0]}")
+                    try:
+                        klines_data[time_cols[0]] = pd.to_datetime(klines_data[time_cols[0]])
+                        klines_data = klines_data.set_index(time_cols[0])
+                        self.logger.info(f"Set index using column: {time_cols[0]}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to convert {time_cols[0]} to datetime index: {str(e)}")
                 else:
                     self.logger.warning("No time column found in data. Using default index.")
 
-            # Сортуємо дані за часовим індексом
-            klines_data = klines_data.sort_index()
+            if isinstance(klines_data.index, pd.DatetimeIndex):
+                klines_data = klines_data.sort_index()
+                if start_date:
+                    klines_data = klines_data[klines_data.index >= start_date]
+                if end_date:
+                    klines_data = klines_data[klines_data.index <= end_date]
 
-            # Виводимо інформацію про отримані дані
-            self.logger.info(f"Loaded {len(klines_data)} records for {symbol} "
-                             f"from {klines_data.index.min()} to {klines_data.index.max()}")
+            if not klines_data.empty and isinstance(klines_data.index, pd.DatetimeIndex):
+                self.logger.info(f"Loaded {len(klines_data)} records for {symbol} "
+                                 f"from {klines_data.index.min()} to {klines_data.index.max()}")
+            else:
+                self.logger.info(f"Loaded {len(klines_data)} records for {symbol}")
 
             return klines_data
 
         except Exception as e:
-            self.logger.error(f"Error loading crypto data: {str(e)}")
-            raise
+            self.logger.error(f"Error loading crypto data for {symbol}: {str(e)}")
+            self.logger.exception("Stack trace:")
+            return pd.DataFrame()
 
     def save_forecast_to_db(self, db_manager: Any, symbol: str,
                             forecast_data: pd.Series, model_key: str) -> bool:
@@ -515,80 +540,73 @@ class TimeSeriesModels:
             return False
 def main():
     import pprint
+    from datetime import datetime, timedelta
 
-    symbol = "BTCUSDT"
-    interval = "1d"
+    symbol = "BTC"
+    timeframe = "1d"
     forecast_steps = 7
 
+    # Initialize TimeSeriesModels
     model = TimeSeriesModels()
     db = model.db_manager
 
     if db is None:
-        print(" Менеджер бази даних не налаштований.")
+        print("❌ Database manager is not configured.")
         return
 
+    # Get current date and calculate start date (1 year ago)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+
     try:
-        df = db.get_klines_processed(symbol, interval)
+        # Load data using the correct method from TimeSeriesModels
+        df = model.load_crypto_data(
+            db_manager=db,
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=timeframe
+        )
     except Exception as e:
-        print(f" Помилка при отриманні даних: {e}")
+        print(f"❌ Error while retrieving data: {e}")
         return
 
     if df is None or df.empty or "close" not in df.columns:
-        print(" Немає даних для тренування моделі.")
+        print("❌ No data available for model training.")
         return
 
     price_series = df["close"]
 
-    stat_info = model.check_stationarity(price_series)
-    if not stat_info["is_stationary"]:
-        price_series = self.transformer.difference_series(price_series)
+    # Run auto forecast using the forecaster
+    forecast_result = model.forecaster.run_auto_forecast(
+        data=price_series,
+        test_size=0.2,
+        forecast_steps=forecast_steps,
+        symbol=symbol
+    )
 
-    #  ARIMA
-    arima_key = None
-    arima_params = model.find_optimal_params(price_series, seasonal=False)
-    if arima_params["status"] == "success":
-        arima_result = model.fit_arima(price_series, arima_params["parameters"]["order"], symbol=symbol)
-        arima_key = arima_result["model_key"]
-        print(f" ARIMA збережено як {arima_key}")
-    else:
-        print("️ ARIMA: не вдалося підібрати параметри")
+    if forecast_result.get("status") == "success" and "model_key" in forecast_result:
+        model_key = forecast_result["model_key"]
+        print(f"✅ Model created and saved with key: {model_key}")
 
-    #  SARIMA
-    sarima_key = None
-    sarima_params = model.find_optimal_params(price_series, seasonal=True)
-    if sarima_params["status"] == "success":
-        sarima_result = model.fit_sarima(
-            price_series,
-            order=sarima_params["parameters"]["order"],
-            seasonal_order=sarima_params["parameters"]["seasonal_order"],
-            symbol=symbol
-        )
-        sarima_key = sarima_result["model_key"]
-        print(f" SARIMA збережено як {sarima_key}")
-    else:
-        print(" SARIMA: не вдалося підібрати параметри")
+        # Save the model to database
+        try:
+            model.db_manager.save_complete_model(model_key, forecast_result.get("model_info", {}))
+            print(f"✅ Model for {symbol} saved to database")
+        except Exception as db_error:
+            print(f"❌ Error saving model to database: {str(db_error)}")
 
-    #  Порівняння моделей
-    if arima_key and sarima_key:
-        aic_arima = arima_result["model_info"]["stats"]["aic"]
-        aic_sarima = sarima_result["model_info"]["stats"]["aic"]
-        better_key = arima_key if aic_arima < aic_sarima else sarima_key
-        print(f"🏆 Краща модель за AIC: {better_key}")
-    else:
-        better_key = arima_key or sarima_key
-
-    #  Прогнозування
-    if better_key:
-        forecast = model.forecast(better_key, steps=forecast_steps)
-        if not forecast.empty:
-            print("\n Прогноз:")
+        # Get forecast from the model
+        forecast = model.load_forecast_from_db(db, symbol, model_key)
+        if forecast is not None:
+            print("\n📊 Forecast:")
             pprint.pprint(forecast.to_dict())
         else:
-            print(" Прогнозування не вдалося.")
+            print("❌ Failed to retrieve forecast.")
     else:
-        print(" Немає доступної моделі для прогнозування.")
+        print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
 
-    print("\n Завершено.")
+    print("\n✅ Completed.")
 
 if __name__ == "__main__":
     main()

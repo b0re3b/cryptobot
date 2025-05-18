@@ -4,12 +4,20 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
 from data.db import DatabaseManager
 from utils.config import *
-class CryptoCycles:
 from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtractor
+from cyclefeatures.EthereumCycleFeatureExtractor import EthereumCycleFeatureExtractor
+from cyclefeatures.SolanaCycleFeatureExtractor import SolanaCycleFeatureExtractor
+from cyclefeatures.seasonality import TemporalSeasonalityAnalyzer
+from cyclefeatures.MarketPhaseFeatureExtractor import MarketPhaseFeatureExtractor
+class CryptoCycles:
     def __init__(self):
 
         self.db_connection = DatabaseManager()
         self.btcycle = BitcoinCycleFeatureExtractor()
+        self.ethcycle = EthereumCycleFeatureExtractor()
+        self.solanacycle = SolanaCycleFeatureExtractor()
+        self.seasonality = TemporalSeasonalityAnalyzer()
+        self.marketplace = MarketPhaseFeatureExtractor()
         # Bitcoin halving dates
         self.btc_halving_dates = btc_halving_dates
         # Ethereum significant network upgrades/events
@@ -35,7 +43,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
             return self.cached_processed_data[cache_key]
 
         # Load pre-processed data from storage manager
-        processed_data = self.db_connection.get_btc_arima_data(
+        processed_data = self.db_connection.get_klines(
             symbol=symbol,
             timeframe=timeframe,
             start_date=start_date,
@@ -54,11 +62,11 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
 
         if symbol == 'BTC':
-            return self.calculate_btc_halving_cycle_features(processed_data)
+            return self.btcycle.calculate_btc_halving_cycle_features(processed_data)
         elif symbol == 'ETH':
-            return self.calculate_eth_event_cycle_features(processed_data)
+            return self.ethcycle.calculate_eth_event_cycle_features(processed_data)
         elif symbol == 'SOL':
-            return self.calculate_sol_event_cycle_features(processed_data)
+            return self.solanacycle.calculate_sol_event_cycle_features(processed_data)
         else:
             # For other tokens, return the original data without specific features
             print(f"Warning: No specific cycle features available for {symbol}. Returning original data.")
@@ -104,7 +112,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         result_df['week_of_year_cos'] = np.cos(result_df['week_of_year'] * (2 * np.pi / 52))
 
         # Add market phase features
-        market_phase_df = self.detect_market_phase(result_df)
+        market_phase_df = self.marketplace.detect_market_phase(result_df)
         # Get only the market_phase column
         if 'market_phase' in market_phase_df.columns:
             result_df['market_phase'] = market_phase_df['market_phase']
@@ -114,7 +122,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
 
         # Identify bull/bear cycles
         try:
-            bull_bear_df = self.identify_bull_bear_cycles(result_df)
+            bull_bear_df = self.marketplace.identify_bull_bear_cycles(result_df)
             # Add cycle state and ID
             if 'cycle_state' in bull_bear_df.columns:
                 result_df['cycle_state'] = bull_bear_df['cycle_state']
@@ -257,7 +265,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         # Calculate ROI based on cycle type
         if cycle_type == 'halving':
             # For BTC halving cycles
-            halving_df = self.calculate_btc_halving_cycle_features(df)
+            halving_df = self.btcycle.calculate_btc_halving_cycle_features(df)
 
             # Group by cycle number
             for cycle_num in halving_df['cycle_number'].unique():
@@ -360,7 +368,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         elif cycle_type == 'bull_bear':
             # For general bull/bear cycles
             try:
-                bull_bear_df = self.identify_bull_bear_cycles(df)
+                bull_bear_df = self.marketplace.identify_bull_bear_cycles(df)
 
                 # Process cycle summary if available
                 if hasattr(bull_bear_df, 'cycles_summary') and len(bull_bear_df.cycles_summary) > 0:
@@ -579,7 +587,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         # Add cycle-specific features based on cycle_type
         if cycle_type == 'halving':
             # Get halving cycle features
-            halving_df = self.calculate_btc_halving_cycle_features(result_df)
+            halving_df = self.btcycle.calculate_btc_halving_cycle_features(result_df)
 
             # Merge the relevant columns with result_df
             for col in ['halving_cycle_phase', 'days_since_last_halving', 'days_to_next_halving', 'cycle_number']:
@@ -651,7 +659,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
 
         elif cycle_type == 'bull_bear':
             # Get bull/bear cycle information
-            bull_bear_df = self.identify_bull_bear_cycles(result_df)
+            bull_bear_df = self.marketplace.identify_bull_bear_cycles(result_df)
 
             # Merge the relevant columns with result_df
             for col in ['cycle_state', 'cycle_id', 'days_in_cycle', 'cycle_max_roi', 'cycle_max_drawdown']:
@@ -897,11 +905,11 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         # Identify cycles in the data based on cycle_type
         if cycle_type == 'bull_bear':
             # Use the bull_bear cycle identification logic
-            cycles_data = self.identify_bull_bear_cycles(processed_data)
+            cycles_data = self.marketplace.identify_bull_bear_cycles(processed_data)
             cycle_column = 'cycle_id'
         elif cycle_type == 'halving' and symbol == 'BTC':
             # Use halving cycles for BTC
-            cycles_data = self.calculate_btc_halving_cycle_features(processed_data)
+            cycles_data = self.btcycle.calculate_btc_halving_cycle_features(processed_data)
             cycle_column = 'cycle_number'
         elif cycle_type == 'network_upgrade' and symbol == 'ETH':
             # For ETH, use network upgrades as cycle boundaries
@@ -919,7 +927,7 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
             cycle_column = 'cycle_id'
         else:
             # Default to bull/bear cycles for unknown combinations
-            cycles_data = self.identify_bull_bear_cycles(processed_data)
+            cycles_data = self.marketplace.identify_bull_bear_cycles(processed_data)
             cycle_column = 'cycle_id'
 
         # Extract the current cycle
@@ -1440,126 +1448,6 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         return turning_points
 
 
-
-    def analyze_token_correlations(self, symbols: List[str],
-                                   timeframe: str = '1d',
-                                   lookback_period: str = '1 year') -> pd.DataFrame:
-
-        # Calculate end date (current date) and start date based on lookback period
-        end_date = datetime.now().strftime('%Y-%m-%d')
-
-        # Parse the lookback period
-        value, unit = lookback_period.split()
-        value = int(value)
-
-        if 'year' in unit:
-            start_date = (datetime.now() - timedelta(days=365 * value)).strftime('%Y-%m-%d')
-        elif 'month' in unit:
-            start_date = (datetime.now() - timedelta(days=30 * value)).strftime('%Y-%m-%d')
-        elif 'week' in unit:
-            start_date = (datetime.now() - timedelta(weeks=value)).strftime('%Y-%m-%d')
-        elif 'day' in unit:
-            start_date = (datetime.now() - timedelta(days=value)).strftime('%Y-%m-%d')
-        else:
-            raise ValueError(f"Invalid lookback period format: {lookback_period}")
-
-        # Dictionary to store price data for each symbol
-        price_data = {}
-        returns_data = {}
-
-        # Load data for each symbol
-        for symbol in symbols:
-            # Load processed data
-            data = self.load_processed_data(
-                symbol=symbol,
-                timeframe=timeframe,
-                start_date=start_date,
-                end_date=end_date
-            )
-
-            if len(data) == 0:
-                print(f"No data available for {symbol}. Skipping.")
-                continue
-
-            # Store close prices
-            price_data[symbol] = data['close']
-
-            # Calculate daily returns
-            returns_data[symbol] = data['close'].pct_change().fillna(0)
-
-        # Create DataFrames
-        prices_df = pd.DataFrame(price_data)
-        returns_df = pd.DataFrame(returns_data)
-
-        # Calculate correlation matrices
-        price_correlation = prices_df.corr()
-        returns_correlation = returns_df.corr()
-
-        # Create a more detailed correlation analysis
-        result = {
-            'price_correlation': price_correlation,
-            'returns_correlation': returns_correlation
-        }
-
-        # Analyze correlations during different market phases
-        # We'll use BTC as a reference for market phases if available
-        if 'BTC' in symbols or 'BTCUSDT' in symbols:
-            btc_symbol = 'BTC' if 'BTC' in symbols else 'BTCUSDT'
-            btc_data = self.load_processed_data(
-                symbol=btc_symbol,
-                timeframe=timeframe,
-                start_date=start_date,
-                end_date=end_date
-            )
-
-            # Detect market phases
-            btc_phases = self.detect_market_phase(btc_data)
-
-            # Create phase-specific correlation matrices
-            for phase in ['accumulation', 'uptrend', 'distribution', 'downtrend']:
-                phase_dates = btc_phases[btc_phases['market_phase'] == phase].index
-
-                if len(phase_dates) > 0:
-                    # Filter returns for this phase
-                    phase_returns = returns_df.loc[phase_dates].dropna(how='all')
-
-                    if len(phase_returns) > 1:  # Need at least 2 data points for correlation
-                        phase_corr = phase_returns.corr()
-                        result[f'{phase}_correlation'] = phase_corr
-
-        # Convert to DataFrame with multi-level columns for better output
-        correlation_types = list(result.keys())
-        symbols_list = list(price_data.keys())
-
-        # Create empty DataFrame with multi-level columns
-        multi_idx = pd.MultiIndex.from_product([correlation_types, symbols_list],
-                                               names=['correlation_type', 'symbol'])
-        final_df = pd.DataFrame(index=symbols_list, columns=multi_idx)
-
-        # Fill the DataFrame
-        for corr_type in correlation_types:
-            if corr_type in result:
-                for sym1 in symbols_list:
-                    for sym2 in symbols_list:
-                        if sym1 in result[corr_type].index and sym2 in result[corr_type].columns:
-                            final_df.loc[sym1, (corr_type, sym2)] = result[corr_type].loc[sym1, sym2]
-
-        # Save to database
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        correlation_data = {
-            'timestamp': timestamp,
-            'lookback_period': lookback_period,
-            'timeframe': timeframe,
-            'symbols': symbols,
-            'correlation_matrices': result
-        }
-
-        # Save correlation data to the database
-        # This is just a placeholder - actual implementation would depend on your DB schema
-        # self.db_connection.save_correlation_analysis(correlation_data)
-
-        return final_df
-
     def update_features_with_new_data(self, processed_data: pd.DataFrame,
                                       symbol: str) -> pd.DataFrame:
 
@@ -1588,18 +1476,18 @@ from cyclefeatures.BitcoinCycleFeatureExtractor import BitcoinCycleFeatureExtrac
         updated_features = processed_data.copy()
 
         # Update general market phase detection
-        updated_features = self.detect_market_phase(updated_features)
+        updated_features = self.marketplace.detect_market_phase(updated_features)
 
         # Update bull/bear cycle identification
-        updated_features = self.identify_bull_bear_cycles(updated_features)
+        updated_features = self.marketplace.identify_bull_bear_cycles(updated_features)
 
         # Update token-specific cycle features
         if symbol_clean == 'BTC':
-            updated_features = self.calculate_btc_halving_cycle_features(updated_features)
+            updated_features = self.btcycle.calculate_btc_halving_cycle_features(updated_features)
         elif symbol_clean == 'ETH':
-            updated_features = self.calculate_eth_event_cycle_features(updated_features)
+            updated_features = self.ethcycle.calculate_eth_event_cycle_features(updated_features)
         elif symbol_clean == 'SOL':
-            updated_features = self.calculate_sol_event_cycle_features(updated_features)
+            updated_features = self.solanacycle.calculate_sol_event_cycle_features(updated_features)
 
         # Check for new cycle turning points
         turning_points = self.predict_cycle_turning_points(updated_features, symbol)
