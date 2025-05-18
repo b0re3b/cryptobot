@@ -10,7 +10,6 @@ from scipy import stats
 from data.db import DatabaseManager
 import pandas_ta as ta
 
-
 class TrendDetection:
 
 
@@ -574,15 +573,20 @@ class TrendDetection:
             return 0.0
 
     def detect_trend_reversal(self, data: pd.DataFrame) -> List[Dict]:
+        """
+        Виявляє можливі сигнали розвороту тренду на основі технічних індикаторів з використанням pandas_ta.
 
-        from ta.trend import SMAIndicator
-        from ta.momentum import RSIIndicator
+        Args:
+            data (pd.DataFrame): DataFrame з даними ціни, повинен містити стовпці 'open', 'high', 'low', 'close'
 
+        Returns:
+            List[Dict]: Список словників з інформацією про виявлені сигнали розвороту
+        """
         if data.empty or len(data) < 30:  # Потрібно достатньо історичних даних
             return []
 
         # Перевіряємо наявність необхідних колонок
-        required_columns = ['close', 'high', 'low']
+        required_columns = ['close', 'high', 'low', 'open']
         if not all(col in data.columns for col in required_columns):
             raise ValueError(f"Дані повинні містити колонки: {', '.join(required_columns)}")
 
@@ -595,53 +599,44 @@ class TrendDetection:
         # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
         df = data.copy()
 
-        # Обчислюємо індикатори з використанням бібліотек TA
+        # Обчислюємо індикатори з використанням pandas_ta
         # 1. Ковзні середні для визначення тренду
-        sma20 = SMAIndicator(close=df['close'], window=20)
-        sma50 = SMAIndicator(close=df['close'], window=50)
-        df['sma20'] = sma20.sma_indicator()
-        df['sma50'] = sma50.sma_indicator()
+        df['sma20'] = df.ta.sma(length=20)
+        df['sma50'] = df.ta.sma(length=50)
 
         # 2. RSI для визначення перекупленості/перепроданості
-        rsi = RSIIndicator(close=df['close'], window=14)
-        df['rsi'] = rsi.rsi()
+        df['rsi'] = df.ta.rsi(length=14)
 
-        # 3. Додаємо патерни свічкового аналізу з pandas-ta
+        # 3. Додаємо патерни свічкового аналізу з pandas_ta
         candle_patterns = {}
+
         # Патерни розвороту висхідного тренду
-        candle_patterns['bearish_engulfing'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
-                                                              name="engulfing", mode="bearish")
-        candle_patterns['evening_star'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'], name="star",
-                                                         mode="evening")
-        candle_patterns['shooting_star'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
-                                                          name="shootingstar")
-        candle_patterns['dark_cloud_cover'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
-                                                             name="darkcloudcover")
+        candle_patterns['bearish_engulfing'] = df.ta.cdl_pattern(name="engulfing", mode="bearish")
+        candle_patterns['evening_star'] = df.ta.cdl_pattern(name="star", mode="evening")
+        candle_patterns['shooting_star'] = df.ta.cdl_pattern(name="shootingstar")
+        candle_patterns['dark_cloud_cover'] = df.ta.cdl_pattern(name="darkcloudcover")
 
         # Патерни розвороту низхідного тренду
-        candle_patterns['bullish_engulfing'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
-                                                              name="engulfing", mode="bullish")
-        candle_patterns['morning_star'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'], name="star",
-                                                         mode="morning")
-        candle_patterns['hammer'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'], name="hammer")
-        candle_patterns['piercing_line'] = ta.cdl_pattern(df['open'], df['high'], df['low'], df['close'],
-                                                          name="piercingline")
+        candle_patterns['bullish_engulfing'] = df.ta.cdl_pattern(name="engulfing", mode="bullish")
+        candle_patterns['morning_star'] = df.ta.cdl_pattern(name="star", mode="morning")
+        candle_patterns['hammer'] = df.ta.cdl_pattern(name="hammer")
+        candle_patterns['piercing_line'] = df.ta.cdl_pattern(name="piercingline")
 
         # Додаємо патерни до DataFrame
         for pattern_name, pattern_values in candle_patterns.items():
             df[pattern_name] = pattern_values
 
         # 4. Додаємо MACD для підтвердження розвороту
-        macd = ta.macd(df['close'])
-        df['macd'] = macd['MACD_12_26_9']
-        df['macd_signal'] = macd['MACDs_12_26_9']
-        df['macd_hist'] = macd['MACDh_12_26_9']
+        macd = df.ta.macd(fast=12, slow=26, signal=9)
+        df['macd'] = macd[f'MACD_{12}_{26}_{9}']
+        df['macd_signal'] = macd[f'MACDs_{12}_{26}_{9}']
+        df['macd_hist'] = macd[f'MACDh_{12}_{26}_{9}']
 
         # 5. Додаємо рівні підтримки/опору за допомогою Bollinger Bands
-        bbands = ta.bbands(df['close'], length=20)
-        df['bb_upper'] = bbands['BBU_20_2.0']
-        df['bb_middle'] = bbands['BBM_20_2.0']
-        df['bb_lower'] = bbands['BBL_20_2.0']
+        bbands = df.ta.bbands(length=20, std=2)
+        df['bb_upper'] = bbands[f'BBU_{20}_2.0']
+        df['bb_middle'] = bbands[f'BBM_{20}_2.0']
+        df['bb_lower'] = bbands[f'BBL_{20}_2.0']
 
         reversals = []
 
@@ -1165,10 +1160,15 @@ class TrendDetection:
         return result
 
     def identify_market_regime(self, data: pd.DataFrame) -> str:
+        """
+        Визначає поточний режим ринку на основі технічних індикаторів з використанням pandas_ta.
 
-        from ta.volatility import BollingerBands, AverageTrueRange
-        from ta.trend import ADXIndicator
+        Args:
+            data (pd.DataFrame): DataFrame з даними ціни, повинен містити стовпці 'open', 'high', 'low', 'close'
 
+        Returns:
+            str: Ідентифікований режим ринку
+        """
         # Перевірка наявності необхідних даних
         if 'close' not in data.columns:
             raise ValueError("DataFrame повинен містити стовпець 'close'")
@@ -1179,44 +1179,44 @@ class TrendDetection:
         # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
         df = data.copy()
 
-        # 1. Розрахунок індикаторів за допомогою бібліотек TA
+        # 1. Розрахунок індикаторів за допомогою pandas_ta
 
         # Розрахунок волатильності (ATR - Average True Range)
-        atr = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14)
-        df['atr14'] = atr.average_true_range()
+        df['atr14'] = df.ta.atr(length=14)
 
         # Нормалізована волатильність (ATR / Ціна)
         df['norm_volatility'] = df['atr14'] / df['close'] * 100
 
         # Смуги Боллінджера
-        bollinger = BollingerBands(close=df['close'], window=20, window_dev=2)
-        df['bb_upper'] = bollinger.bollinger_hband()
-        df['bb_lower'] = bollinger.bollinger_lband()
-        df['bb_middle'] = bollinger.bollinger_mavg()
+        bb = df.ta.bbands(length=20, std=2)
+        df['bb_upper'] = bb[f'BBU_{20}_2.0']
+        df['bb_lower'] = bb[f'BBL_{20}_2.0']
+        df['bb_middle'] = bb[f'BBM_{20}_2.0']
+
         # Ширина смуг Боллінджера відносно ціни
         df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'] * 100
 
         # ADX - Індекс спрямованого руху
-        adx_indicator = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14)
-        df['adx'] = adx_indicator.adx()
-        df['+di'] = adx_indicator.adx_pos()
-        df['-di'] = adx_indicator.adx_neg()
+        adx = df.ta.adx(length=14)
+        df['adx'] = adx[f'ADX_{14}']
+        df['+di'] = adx[f'DMP_{14}']
+        df['-di'] = adx[f'DMN_{14}']
 
         # 2. Додаткові індикатори для визначення ринкового стану
 
         # Додаємо RSI для визначення перекупленості/перепроданості
-        df['rsi'] = ta.rsi(df['close'], length=14)
+        df['rsi'] = df.ta.rsi(length=14)
 
         # Додаємо MACD для визначення моментуму
-        macd = ta.macd(df['close'])
-        df['macd'] = macd['MACD_12_26_9']
-        df['macd_signal'] = macd['MACDs_12_26_9']
-        df['macd_hist'] = macd['MACDh_12_26_9']
+        macd = df.ta.macd(fast=12, slow=26, signal=9)
+        df['macd'] = macd[f'MACD_{12}_{26}_{9}']
+        df['macd_signal'] = macd[f'MACDs_{12}_{26}_{9}']
+        df['macd_hist'] = macd[f'MACDh_{12}_{26}_{9}']
 
         # Додаємо Stochastic oscillator для визначення моментуму
-        stoch = ta.stoch(df['high'], df['low'], df['close'])
-        df['stoch_k'] = stoch['STOCHk_14_3_3']
-        df['stoch_d'] = stoch['STOCHd_14_3_3']
+        stoch = df.ta.stoch(k=14, d=3, smooth_k=3)
+        df['stoch_k'] = stoch[f'STOCHk_{14}_{3}_{3}']
+        df['stoch_d'] = stoch[f'STOCHd_{14}_{3}_{3}']
 
         # 3. Аналіз поточного стану ринку
 
@@ -1228,7 +1228,6 @@ class TrendDetection:
             return "insufficient_data"
 
         # Визначаємо сучасний стан індикаторів
-        last_idx = df_clean.index[-1]
 
         # Отримуємо останні значення індикаторів
         adx_value = df_clean['adx'].iloc[-1]
@@ -1333,12 +1332,6 @@ class TrendDetection:
 
             else:
                 return "choppy_market"
-
-        # Примітка: для простішої класифікації можна використовувати:
-        # - "trend" - для всіх типів тренду
-        # - "consolidation" - для консолідацій
-        # - "choppy" - для невизначених ринків
-        # - "high_volatility" - для ринків з високою волатильністю
 
     def detect_divergence(self, price_data: pd.DataFrame, indicator_data: pd.DataFrame) -> List[Dict]:
 

@@ -643,3 +643,38 @@ LINE 2:         INSERT OR REPLACE INTO leading_indicators
 2025-05-18 01:28:31 - __main__ - ERROR - [logger.py:112] - Error saving correlation to database: DatabaseManager.save_correlation_matrix() missing 1 required positional argument: 'end_time'
 2025-05-18 01:28:31 - __main__ - INFO - [logger.py:104] - Regime Друга половина періоду - Average correlation: 0.6675
 2025-05-18 01:28:31 - __main__ - INFO - [logger.py:104] - Market regime correlation analysis complete for 2 regimes
+2025-05-18 01:56:32 - __main__ - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 01:56:32 - __main__ - ERROR - [logger.py:112] - Error in full volatility analysis for BTC: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 01:59:42 - __main__ - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 01:59:42 - __main__ - ERROR - [logger.py:112] - Помилка при обчисленні історичної волатильності: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 01:59:42 - __main__ - ERROR - [logger.py:112] - Помилка при обчисленні історичної волатильності: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 01:59:42 - __main__ - ERROR - [logger.py:112] - Помилка при обчисленні історичної волатильності: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 01:59:42 - __main__ - ERROR - [logger.py:112] - Помилка при обчисленні історичної волатильності: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 01:59:42 - __main__ - ERROR - [logger.py:112] - Error in full volatility analysis for BTC: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-18 02:08:30 - __main__ - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 02:08:30 - __main__ - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 02:08:30 - __main__ - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 02:08:30 - __main__ - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 02:08:30 - __main__ - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 02:08:30 - __main__ - INFO - [logger.py:104] - Виявлено 188 проривів волатильності з 2831 точок
+2025-05-18 02:08:30 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 02:08:30 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 02:08:30 - __main__ - ERROR - [logger.py:112] - Error in full volatility analysis for BTC: unhashable type: 'Series'
+2025-05-18 02:11:51 - __main__ - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 02:11:51 - __main__ - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 02:11:51 - __main__ - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 02:11:51 - __main__ - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 02:11:51 - __main__ - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 02:11:51 - __main__ - INFO - [logger.py:104] - Виявлено 188 проривів волатильності з 2831 точок
+2025-05-18 02:11:51 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 02:11:51 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 02:11:51 - __main__ - ERROR - [logger.py:112] - Error in full volatility analysis for BTC: unhashable type: 'Series'
+2025-05-18 12:04:39 - __main__ - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 12:04:39 - __main__ - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 12:04:39 - __main__ - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 12:04:39 - __main__ - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 12:04:39 - __main__ - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 12:04:39 - __main__ - INFO - [logger.py:104] - Виявлено 188 проривів волатильності з 2831 точок
+2025-05-18 12:04:39 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 12:04:39 - __main__ - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 12:04:39 - __main__ - ERROR - [logger.py:112] - Error in full volatility analysis for BTC: unhashable type: 'Series'

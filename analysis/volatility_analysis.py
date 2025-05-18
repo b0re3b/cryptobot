@@ -12,6 +12,7 @@ from timeseriesmodels.time_series import TimeSeriesModels
 from DMP.AnomalyDetector import AnomalyDetector
 from featureengineering.feature_engineering import FeatureEngineering
 from utils.logger import get_logger
+import decimal
 
 logger = get_logger(__name__)
 
@@ -54,6 +55,15 @@ class VolatilityAnalysis:
                     logger.error(f"Помилка при паралельній обробці для {item}: {e}")
                     results[item] = None
         return results
+
+    def _safe_convert_to_float(self, series):
+        """Безпечне перетворення різних типів даних у float64 для обчислень"""
+        if isinstance(series, pd.Series):
+            return series.astype(float)
+        elif isinstance(series, np.ndarray):
+            return series.astype(float)
+        else:
+            return np.array(series, dtype=float)
 
     def get_market_phases(self, volatility_data, lookback_window=90, n_regimes=4):
         try:
@@ -130,20 +140,39 @@ class VolatilityAnalysis:
 
     def calculate_historical_volatility(self, price_data, window=14, trading_periods=365, annualize=True):
         """Розраховує історичну волатильність (оптимізовано векторизацією)"""
-        # Обробка вхідних даних
-        price_data = pd.Series(price_data) if not isinstance(price_data, pd.Series) else price_data
+        try:
+            # Обробка вхідних даних
+            price_data = pd.Series(price_data) if not isinstance(price_data, pd.Series) else price_data
 
-        # Векторизовані обчислення
-        log_returns = np.log(price_data / price_data.shift(1)).dropna()
+            # Конвертація в float для уникнення проблем з decimal.Decimal
+            price_data = self._safe_convert_to_float(price_data)
 
-        # Оптимізоване обчислення волатильності
-        rolling_vol = log_returns.rolling(window=window).std()
+            # Перевірка на нульові або від'ємні значення
+            if (price_data <= 0).any():
+                logger.warning("Знайдено нульові або від'ємні ціни - замінюються на попередні значення")
+                price_data = price_data.replace(0, np.nan).replace([np.inf, -np.inf], np.nan)
+                price_data = price_data.ffill().bfill()
 
-        # Анулізація за потреби
-        if annualize:
-            rolling_vol = rolling_vol * np.sqrt(trading_periods)
+                # Якщо все ще є нульові значення, повертаємо серію з NaN
+                if (price_data <= 0).any():
+                    logger.error("Не вдалося виправити нульові/від'ємні ціни")
+                    return pd.Series(index=price_data.index, dtype=float)
 
-        return rolling_vol
+            # Векторизовані обчислення з захистом від 0 та від'ємних значень
+            log_returns = np.log(price_data / price_data.shift(1)).dropna()
+
+            # Оптимізоване обчислення волатильності
+            rolling_vol = log_returns.rolling(window=window).std()
+
+            # Анулізація за потреби
+            if annualize:
+                rolling_vol = rolling_vol * np.sqrt(trading_periods)
+
+            return rolling_vol
+
+        except Exception as e:
+            logger.error(f"Помилка при обчисленні історичної волатильності: {e}")
+            return pd.Series(index=price_data.index if isinstance(price_data, pd.Series) else range(len(price_data)))
 
     def calculate_parkinson_volatility(self, ohlc_data, window=14, trading_periods=365):
         """Розраховує волатильність Паркінсона (оптимізовано)"""
@@ -153,8 +182,19 @@ class VolatilityAnalysis:
             return pd.Series()
 
         try:
-            # Векторизований розрахунок нормалізованого діапазону high-low
-            hl_range = np.log(ohlc_data['high'] / ohlc_data['low'])
+            # Конвертація в float для безпечних обчислень
+            high = self._safe_convert_to_float(ohlc_data['high'])
+            low = self._safe_convert_to_float(ohlc_data['low'])
+
+            # Перевірка на нульові або від'ємні значення
+            mask = (high > 0) & (low > 0)
+            if (~mask).any():
+                logger.warning("Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені")
+
+            # Векторизований розрахунок нормалізованого діапазону high-low з обробкою проблемних значень
+            hl_range = np.zeros(len(high))
+            hl_range[mask] = np.log(high[mask] / low[mask])
+
             parkinson = pd.Series(hl_range ** 2 / (4 * np.log(2)), index=ohlc_data.index)
 
             # Обчислення волатильності та анулізація
@@ -168,9 +208,25 @@ class VolatilityAnalysis:
     def calculate_garman_klass_volatility(self, ohlc_data, window=14, trading_periods=365):
         """Розраховує волатильність Гарман-Класс (оптимізовано)"""
         try:
-            # Векторизоване обчислення компонентів
-            log_hl = np.log(ohlc_data['high'] / ohlc_data['low']) ** 2 * 0.5
-            log_co = np.log(ohlc_data['close'] / ohlc_data['open']) ** 2 * (2 * np.log(2) - 1)
+            # Конвертація в float для безпечних обчислень
+            high = self._safe_convert_to_float(ohlc_data['high'])
+            low = self._safe_convert_to_float(ohlc_data['low'])
+            close = self._safe_convert_to_float(ohlc_data['close'])
+            open_price = self._safe_convert_to_float(ohlc_data['open'])
+
+            # Перевірка на нульові або від'ємні значення
+            mask = (high > 0) & (low > 0) & (close > 0) & (open_price > 0)
+            if (~mask).any():
+                logger.warning("Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені")
+
+            # Створення масивів для результатів
+            log_hl = np.zeros(len(high))
+            log_co = np.zeros(len(high))
+
+            # Векторизоване обчислення компонентів тільки для валідних даних
+            log_hl[mask] = np.log(high[mask] / low[mask]) ** 2 * 0.5
+            valid_co = (close > 0) & (open_price > 0)
+            log_co[valid_co] = np.log(close[valid_co] / open_price[valid_co]) ** 2 * (2 * np.log(2) - 1)
 
             # Комбінування компонентів
             gk = pd.Series(log_hl - log_co, index=ohlc_data.index)
@@ -186,20 +242,38 @@ class VolatilityAnalysis:
     def calculate_yang_zhang_volatility(self, ohlc_data, window=14, trading_periods=365):
         """Розраховує волатильність Янг Чжанг (оптимізовано)"""
         try:
-            # Оптимізація: обчислюємо всі компоненти одночасно
+            # Конвертація в float для безпечних обчислень
+            high = self._safe_convert_to_float(ohlc_data['high'])
+            low = self._safe_convert_to_float(ohlc_data['low'])
+            close = self._safe_convert_to_float(ohlc_data['close'])
+            open_price = self._safe_convert_to_float(ohlc_data['open'])
+            close_prev = close.shift(1)
+
+            # Перевірка на нульові або від'ємні значення
+            valid_data = (high > 0) & (low > 0) & (close > 0) & (open_price > 0) & (close_prev > 0)
+            if (~valid_data).any():
+                logger.warning("Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені")
+
+            # Маскування невалідних даних як NaN для безпечних обчислень
+            high_masked = pd.Series(np.where(valid_data, high, np.nan), index=ohlc_data.index)
+            low_masked = pd.Series(np.where(valid_data, low, np.nan), index=ohlc_data.index)
+            close_masked = pd.Series(np.where(valid_data, close, np.nan), index=ohlc_data.index)
+            open_masked = pd.Series(np.where(valid_data, open_price, np.nan), index=ohlc_data.index)
+            close_prev_masked = pd.Series(np.where(valid_data, close_prev, np.nan), index=ohlc_data.index)
+
             # Нічна волатильність (close to open)
-            overnight_returns = np.log(ohlc_data['open'] / ohlc_data['close'].shift(1))
+            overnight_returns = np.log(open_masked / close_prev_masked)
             overnight_vol = overnight_returns.rolling(window=window).var()
 
             # Волатильність open-close
-            open_close_returns = np.log(ohlc_data['close'] / ohlc_data['open'])
+            open_close_returns = np.log(close_masked / open_masked)
             open_close_vol = open_close_returns.rolling(window=window).var()
 
             # Волатильність Rogers-Satchell
-            log_ho = np.log(ohlc_data['high'] / ohlc_data['open'])
-            log_lo = np.log(ohlc_data['low'] / ohlc_data['open'])
-            log_hc = np.log(ohlc_data['high'] / ohlc_data['close'])
-            log_lc = np.log(ohlc_data['low'] / ohlc_data['close'])
+            log_ho = np.log(high_masked / open_masked)
+            log_lo = np.log(low_masked / open_masked)
+            log_hc = np.log(high_masked / close_masked)
+            log_lc = np.log(low_masked / close_masked)
 
             rs_vol = log_ho * (log_ho - log_lo) + log_lc * (log_lc - log_hc)
             rs_vol = rs_vol.rolling(window=window).mean()
@@ -224,8 +298,8 @@ class VolatilityAnalysis:
         returns_key: кортеж для кешування (хеш-значення серії повернення)
         """
         try:
-            # Перетворюємо ключ назад на серію
-            returns = pd.Series(returns_key)
+            # Перетворюємо ключ назад на серію і конвертуємо в float
+            returns = self._safe_convert_to_float(pd.Series(returns_key))
 
             logger.info(f"Підгонка {model_type}({p},{q}) моделі")
 
@@ -260,6 +334,9 @@ class VolatilityAnalysis:
         """Виявлення режимів волатильності (оптимізовано)"""
         try:
             logger.info(f"Виявлення {n_regimes} режимів волатильності за методом {method}")
+
+            # Конвертація в float для безпечних обчислень
+            volatility_series = self._safe_convert_to_float(volatility_series)
 
             # Очистка даних та перетворення для кластеризації
             clean_vol = volatility_series.dropna().values.reshape(-1, 1)
@@ -313,6 +390,9 @@ class VolatilityAnalysis:
     def analyze_volatility_clustering(self, returns, max_lag=30):
         """Аналіз кластеризації волатильності (оптимізовано)"""
         try:
+            # Конвертація в float для безпечних обчислень
+            returns = self._safe_convert_to_float(returns)
+
             # Обчислення квадратів прибутку
             squared_returns = returns ** 2
 
@@ -341,6 +421,10 @@ class VolatilityAnalysis:
         """Обчислення метрик ризику волатильності (оптимізовано для великих наборів даних)"""
         try:
             logger.info("Обчислення метрик ризику волатильності")
+
+            # Конвертація в float для безпечних обчислень
+            returns = self._safe_convert_to_float(returns)
+            volatility = self._safe_convert_to_float(volatility)
 
             # Видалення пропусків для точних обчислень
             clean_returns = returns.dropna()
@@ -396,8 +480,14 @@ class VolatilityAnalysis:
 
             result = pd.DataFrame(index=ohlc_data.index)
 
+            # Конвертація OHLC даних у float для безпечних обчислень
+            ohlc_data_float = ohlc_data.copy()
+            for col in ['open', 'high', 'low', 'close']:
+                if col in ohlc_data.columns:
+                    ohlc_data_float[col] = self._safe_convert_to_float(ohlc_data[col])
+
             # Обчислення прибутків
-            ohlc_data['returns'] = ohlc_data['close'].pct_change()
+            ohlc_data_float['returns'] = ohlc_data_float['close'].pct_change()
 
             # Оптимізація: паралельне обчислення для різних вікон у великих наборах даних
             if self.use_parallel and len(windows) > 2:
@@ -405,28 +495,28 @@ class VolatilityAnalysis:
                     # Обчислення історичної волатильності
                     hist_vol_futures = {
                         executor.submit(self.calculate_historical_volatility,
-                                        ohlc_data['close'], window=window): f'historical_{window}d'
+                                        ohlc_data_float['close'], window=window): f'historical_{window}d'
                         for window in windows
                     }
 
                     # Обчислення волатильності Паркінсона
                     park_vol_futures = {
                         executor.submit(self.calculate_parkinson_volatility,
-                                        ohlc_data, window=window): f'parkinson_{window}d'
+                                        ohlc_data_float, window=window): f'parkinson_{window}d'
                         for window in windows
                     }
 
                     # Обчислення волатильності Гарман-Класс
                     gk_vol_futures = {
                         executor.submit(self.calculate_garman_klass_volatility,
-                                        ohlc_data, window=window): f'gk_{window}d'
+                                        ohlc_data_float, window=window): f'gk_{window}d'
                         for window in windows
                     }
 
                     # Обчислення волатильності Янг Чжанг
                     yz_vol_futures = {
                         executor.submit(self.calculate_yang_zhang_volatility,
-                                        ohlc_data, window=window): f'yz_{window}d'
+                                        ohlc_data_float, window=window): f'yz_{window}d'
                         for window in windows
                     }
 
@@ -442,16 +532,16 @@ class VolatilityAnalysis:
                 for window in windows:
                     # Обчислення різних метрик волатильності
                     result[f'historical_{window}d'] = self.calculate_historical_volatility(
-                        ohlc_data['close'], window=window)
+                        ohlc_data_float['close'], window=window)
 
                     result[f'parkinson_{window}d'] = self.calculate_parkinson_volatility(
-                        ohlc_data, window=window)
+                        ohlc_data_float, window=window)
 
                     result[f'gk_{window}d'] = self.calculate_garman_klass_volatility(
-                        ohlc_data, window=window)
+                        ohlc_data_float, window=window)
 
                     result[f'yz_{window}d'] = self.calculate_yang_zhang_volatility(
-                        ohlc_data, window=window)
+                        ohlc_data_float, window=window)
 
             logger.info("Успішно порівняно метрики волатильності")
             return result
@@ -715,7 +805,10 @@ class VolatilityAnalysis:
 
                         # Додавання відносної волатильності
                         moving_avg_vol = hist_vol.rolling(window=window * 2).mean()
-                        rel_vol = hist_vol / moving_avg_vol
+                        # Перевірка на нульові значення перед діленням
+                        rel_vol = pd.Series(np.nan, index=hist_vol.index)
+                        mask = (moving_avg_vol > 0)
+                        rel_vol.loc[mask] = hist_vol.loc[mask] / moving_avg_vol.loc[mask]
                         window_features[f'rel_vol_{window}d'] = rel_vol
 
                         # Додавання волатильності волатильності
@@ -728,7 +821,11 @@ class VolatilityAnalysis:
 
                         # Відношення діапазону High-Low до волатильності
                         hl_range = (ohlc_data['high'] - ohlc_data['low']) / ohlc_data['close']
-                        window_features[f'hl_range_to_vol_{window}d'] = hl_range / hist_vol
+                        # Перевірка на нульові значення перед діленням
+                        hl_range_to_vol = pd.Series(np.nan, index=hist_vol.index)
+                        valid_mask = (hist_vol > 0)
+                        hl_range_to_vol.loc[valid_mask] = hl_range.loc[valid_mask] / hist_vol.loc[valid_mask]
+                        window_features[f'hl_range_to_vol_{window}d'] = hl_range_to_vol
 
                         return window_features
                     except Exception as e:
@@ -761,7 +858,11 @@ class VolatilityAnalysis:
 
                     # Додавання відносної волатильності
                     moving_avg_vol = features[f'hist_vol_{window}d'].rolling(window=window * 2).mean()
-                    features[f'rel_vol_{window}d'] = features[f'hist_vol_{window}d'] / moving_avg_vol
+                    # Перевірка на нульові значення перед діленням
+                    rel_vol = pd.Series(np.nan, index=features.index)
+                    mask = (moving_avg_vol > 0)
+                    rel_vol.loc[mask] = features[f'hist_vol_{window}d'].loc[mask] / moving_avg_vol.loc[mask]
+                    features[f'rel_vol_{window}d'] = rel_vol
 
                     # Додавання волатильності волатильності
                     features[f'vol_of_vol_{window}d'] = features[f'hist_vol_{window}d'].rolling(window=window).std()
@@ -771,7 +872,12 @@ class VolatilityAnalysis:
 
                     # Відношення діапазону High-Low до волатильності
                     hl_range = (ohlc_data['high'] - ohlc_data['low']) / ohlc_data['close']
-                    features[f'hl_range_to_vol_{window}d'] = hl_range / features[f'hist_vol_{window}d']
+                    # Перевірка на нульові значення перед діленням
+                    hl_range_to_vol = pd.Series(np.nan, index=features.index)
+                    valid_mask = (features[f'hist_vol_{window}d'] > 0)
+                    hl_range_to_vol.loc[valid_mask] = hl_range.loc[valid_mask] / features[f'hist_vol_{window}d'].loc[
+                        valid_mask]
+                    features[f'hl_range_to_vol_{window}d'] = hl_range_to_vol
 
             # Додавання ідентифікації режимів, якщо вказано
             if include_regimes:
@@ -793,13 +899,24 @@ class VolatilityAnalysis:
 
             # Додавання додаткових функцій із перетвореннями
             if 'hist_vol_14d' in features.columns:
-                # Логарифмовані значення волатильності для лінеаризації
-                features['log_vol'] = np.log1p(features['hist_vol_14d'])
+                # Конвертуємо decimal.Decimal в float перед застосуванням log1p
+                hist_vol_float = features['hist_vol_14d'].astype(float)
 
-                # Нормалізована волатильність (z-score)
-                roll_mean = features['hist_vol_14d'].rolling(window=30).mean()
-                roll_std = features['hist_vol_14d'].rolling(window=30).std()
-                features['vol_zscore'] = (features['hist_vol_14d'] - roll_mean) / roll_std
+                # Обробка нульових або від'ємних значень перед логарифмуванням
+                positive_mask = (hist_vol_float > 0)
+                log_vol = pd.Series(np.nan, index=features.index)
+                log_vol.loc[positive_mask] = np.log1p(hist_vol_float.loc[positive_mask])
+                features['log_vol'] = log_vol
+
+                # Нормалізована волатильність (z-score) з обробкою нульового стандартного відхилення
+                roll_mean = hist_vol_float.rolling(window=30).mean()
+                roll_std = hist_vol_float.rolling(window=30).std()
+
+                vol_zscore = pd.Series(np.nan, index=features.index)
+                valid_std_mask = (roll_std > 0)
+                vol_zscore.loc[valid_std_mask] = (hist_vol_float.loc[valid_std_mask] - roll_mean.loc[valid_std_mask]) / \
+                                                 roll_std.loc[valid_std_mask]
+                features['vol_zscore'] = vol_zscore
 
                 # Індикатор аномальної волатильності (>2 стандартних відхилень)
                 features['vol_outlier'] = (np.abs(features['vol_zscore']) > 2).astype(int)
@@ -1151,9 +1268,9 @@ class VolatilityAnalysis:
             # Detect volatility regimes
             vol_df['regime'] = self.detect_volatility_regimes(vol_df['hist_vol_14d'])
 
-            # Create regime data dictionary for database
+            # Create regime data dictionary for database - Convert Series to list
             regime_data = {
-                'regimes': vol_df['regime'],
+                'regimes': vol_df['regime'].tolist(),  # Convert to list
                 'method': 'kmeans',
                 'params': {
                     'n_regimes': 3,
@@ -1173,16 +1290,30 @@ class VolatilityAnalysis:
 
             # Get seasonality patterns
             seasonality = {}
-            seasonality['dow'] = self.extract_seasonality_in_volatility(vol_df['hist_vol_14d'], period=7)
-            seasonality['month'] = self.extract_seasonality_in_volatility(vol_df['hist_vol_14d'], period=12)
+            dow_seasonality = self.extract_seasonality_in_volatility(vol_df['hist_vol_14d'], period=7)
+            month_seasonality = self.extract_seasonality_in_volatility(vol_df['hist_vol_14d'], period=12)
+
+            # Ensure seasonality data is serializable (convert Series to lists/dicts)
+            if isinstance(dow_seasonality, pd.Series):
+                seasonality['dow'] = dow_seasonality.to_dict()
+            else:
+                seasonality['dow'] = dow_seasonality
+
+            if isinstance(month_seasonality, pd.Series):
+                seasonality['month'] = month_seasonality.to_dict()
+            else:
+                seasonality['month'] = month_seasonality
 
             # Fit GARCH model
             garch_model, garch_forecast = self.fit_garch_model(data['returns'])
 
             # Extract forecast values if model was successfully fit
             forecast_values = None
-            if garch_model is not None:
-                forecast_values = garch_forecast.variance.iloc[-1].values
+            if garch_model is not None and garch_forecast is not None:
+                if isinstance(garch_forecast.variance.iloc[-1], pd.Series):
+                    forecast_values = garch_forecast.variance.iloc[-1].tolist()
+                else:
+                    forecast_values = garch_forecast.variance.iloc[-1]
 
             # Create model data dictionary for database
             model_data = {
@@ -1202,13 +1333,24 @@ class VolatilityAnalysis:
 
             # Calculate volatility impulse response
             impulse_response = self.volatility_impulse_response(data['returns'])
+            # Convert impulse_response to list if it's a Series
+            if isinstance(impulse_response, pd.Series):
+                impulse_response = impulse_response.tolist()
 
             # Prepare features for ML models
             ml_features = self.prepare_volatility_features_for_ml(data)
+            # Ensure ml_features is serializable
+            if isinstance(ml_features, pd.DataFrame):
+                ml_features = ml_features.to_dict(orient='records')
 
             # Get market-wide conditions for context
             market_conditions = self.analyze_crypto_market_conditions(
                 symbols=[symbol, 'BTC', 'ETH'], timeframe=timeframe)
+            # Ensure market_conditions values are serializable
+            if market_conditions:
+                for key, value in market_conditions.items():
+                    if isinstance(value, pd.Series):
+                        market_conditions[key] = value.tolist()
 
             # Get cross-asset correlation data
             cross_asset_symbols = ['BTC', 'ETH']
@@ -1219,41 +1361,97 @@ class VolatilityAnalysis:
                     asset_dict[asset] = asset_data['close']
 
             cross_asset_vol = self.analyze_cross_asset_volatility(asset_dict) if asset_dict else None
+            # Ensure cross_asset_vol is serializable
+            if isinstance(cross_asset_vol, pd.DataFrame):
+                cross_asset_vol = cross_asset_vol.to_dict(orient='records')
+            elif isinstance(cross_asset_vol, pd.Series):
+                cross_asset_vol = cross_asset_vol.to_dict()
+
+            # Extract scalar values from Series where needed to prevent 'unhashable type: Series' errors
+            latest_hist_vol = None
+            latest_parkinson = None
+            latest_gk = None
+            latest_yz = None
+            current_regime = None
+
+            if not vol_df.empty:
+                latest_hist_vol = vol_df['hist_vol_14d'].iloc[-1]
+                latest_hist_vol = latest_hist_vol.item() if hasattr(latest_hist_vol, 'item') else latest_hist_vol
+
+                latest_parkinson = vol_df['parkinson_vol'].iloc[-1]
+                latest_parkinson = latest_parkinson.item() if hasattr(latest_parkinson, 'item') else latest_parkinson
+
+                latest_gk = vol_df['gk_vol'].iloc[-1]
+                latest_gk = latest_gk.item() if hasattr(latest_gk, 'item') else latest_gk
+
+                latest_yz = vol_df['yz_vol'].iloc[-1]
+                latest_yz = latest_yz.item() if hasattr(latest_yz, 'item') else latest_yz
+
+                current_regime = vol_df['regime'].iloc[-1]
+                current_regime = current_regime.item() if hasattr(current_regime, 'item') else current_regime
+
+            # Process autocorrelation data to ensure it's serializable
+            significant_lags = []
+            max_autocorr = 0
+            if isinstance(acf_data,
+                          pd.DataFrame) and 'autocorrelation' in acf_data.columns and 'lag' in acf_data.columns:
+                filtered_lags = acf_data[acf_data['autocorrelation'] > 0.1]['lag']
+                significant_lags = filtered_lags.tolist() if isinstance(filtered_lags, pd.Series) else filtered_lags
+                max_autocorr = acf_data['autocorrelation'].max()
+                max_autocorr = max_autocorr.item() if hasattr(max_autocorr, 'item') else max_autocorr
 
             # Combine all results
             analysis_results = {
                 'symbol': symbol,
                 'timeframe': timeframe,
-                'volatility_data': vol_df,
+                'volatility_data': vol_df.to_dict(orient='records') if isinstance(vol_df, pd.DataFrame) else vol_df,
                 'latest_volatility': {
-                    'hist_vol_14d': vol_df['hist_vol_14d'].iloc[-1] if not vol_df.empty else None,
-                    'parkinson': vol_df['parkinson_vol'].iloc[-1] if not vol_df.empty else None,
-                    'garman_klass': vol_df['gk_vol'].iloc[-1] if not vol_df.empty else None,
-                    'yang_zhang': vol_df['yz_vol'].iloc[-1] if not vol_df.empty else None
+                    'hist_vol_14d': latest_hist_vol,
+                    'parkinson': latest_parkinson,
+                    'garman_klass': latest_gk,
+                    'yang_zhang': latest_yz
                 },
-                'current_regime': vol_df['regime'].iloc[-1] if not vol_df.empty else None,
+                'current_regime': current_regime,
                 'volatility_clustering': {
-                    'significant_lags': acf_data[acf_data['autocorrelation'] > 0.1]['lag'].tolist(),
-                    'max_autocorrelation': acf_data['autocorrelation'].max()
+                    'significant_lags': significant_lags,
+                    'max_autocorrelation': max_autocorr
                 },
                 'risk_metrics': risk_metrics,
                 'seasonality': seasonality,
-                'recent_breakouts': vol_df['breakout'].iloc[-30:].sum() if len(vol_df) >= 30 else 0,
+                'recent_breakouts': int(vol_df['breakout'].iloc[-30:].sum()) if len(vol_df) >= 30 else 0,
                 'garch_forecast': forecast_values,
                 'impulse_response': impulse_response,
                 'market_conditions': market_conditions
             }
 
-            # Calculate summary stats
+            # Calculate summary stats ensuring scalar values
+            avg_volatility = vol_df['hist_vol_14d'].mean()
+            avg_volatility = avg_volatility.item() if hasattr(avg_volatility, 'item') else avg_volatility
+
+            volatility_trend = 'increasing' if vol_df['hist_vol_14d'].iloc[-1] > vol_df['hist_vol_14d'].iloc[
+                -7] else 'decreasing'
+
+            regime_changes = vol_df['regime'].diff().abs().sum()
+            regime_changes = regime_changes.item() if hasattr(regime_changes, 'item') else regime_changes
+
+            vol_of_vol = None
+            if len(vol_df) >= 14:
+                vol_of_vol = vol_df['hist_vol_14d'].rolling(window=14).std().iloc[-1]
+                vol_of_vol = vol_of_vol.item() if hasattr(vol_of_vol, 'item') else vol_of_vol
+
+            current_vs_hist = None
+            if not vol_df.empty:
+                mean_vol = vol_df['hist_vol_14d'].mean()
+                mean_vol = mean_vol.item() if hasattr(mean_vol, 'item') else mean_vol
+                if mean_vol != 0:
+                    current_vs_hist = latest_hist_vol / mean_vol
+
             analysis_results['summary'] = {
-                'avg_volatility': vol_df['hist_vol_14d'].mean(),
-                'volatility_trend': 'increasing' if vol_df['hist_vol_14d'].iloc[-1] > vol_df['hist_vol_14d'].iloc[
-                    -7] else 'decreasing',
-                'regime_changes': vol_df['regime'].diff().abs().sum(),
-                'volatility_of_volatility': vol_df['hist_vol_14d'].rolling(window=14).std().iloc[-1] if len(
-                    vol_df) >= 14 else None,
-                'current_vs_historical': vol_df['hist_vol_14d'].iloc[-1] / vol_df[
-                    'hist_vol_14d'].mean() if not vol_df.empty else None
+                'avg_volatility': avg_volatility,
+                'volatility_trend': volatility_trend,
+                'regime_changes': regime_changes,
+                'volatility_of_volatility': vol_of_vol,
+                'current_vs_historical': current_vs_hist
             }
 
             # Save to database if requested
@@ -1262,14 +1460,13 @@ class VolatilityAnalysis:
                 save_success = self.save_volatility_analysis_to_db(
                     symbol=symbol,
                     timeframe=timeframe,
-                    volatility_data=vol_df,
+                    volatility_data=vol_df.to_dict(orient='records') if isinstance(vol_df, pd.DataFrame) else vol_df,
                     model_data=model_data,
                     regime_data=regime_data,
                     features_data=ml_features,
                     cross_asset_data=cross_asset_vol
                 )
                 analysis_results['saved_to_db'] = save_success
-
 
             return analysis_results
 
@@ -1280,13 +1477,14 @@ class VolatilityAnalysis:
                 'symbol': symbol,
                 'timeframe': timeframe,
                 'error': str(e),
-                'partial_results': locals().get('vol_df', None)
+                'partial_results': locals().get('vol_df', {}).to_dict(orient='records') if isinstance(
+                    locals().get('vol_df'), pd.DataFrame) else None
             }
 
 
 def main():
     # Параметри для тесту
-    symbol = 'BTCUSDT'
+    symbol = 'BTC'
     timeframe = '1d'
 
     print(f"=== Стартує аналіз волатильності для {symbol} на таймфреймі {timeframe} ===")
