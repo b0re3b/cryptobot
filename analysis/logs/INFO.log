@@ -156,3 +156,179 @@
 2025-05-18 17:25:16 - INFO - INFO - [logger.py:104] - Identified 2 support and 2 resistance levels
 2025-05-18 17:27:47 - INFO - INFO - [logger.py:104] - Identified 2 support and 2 resistance levels
 2025-05-18 17:27:48 - INFO - ERROR - [logger.py:112] - Error generating trend summary: 0
+2025-05-18 17:38:14 - INFO - INFO - [logger.py:104] - Running full volatility analysis for ['BTC', 'SOL', 'ETH'] on 1d timeframe
+2025-05-18 17:38:14 - INFO - ERROR - [logger.py:112] - Error in full volatility analysis for ['BTC', 'SOL', 'ETH']: 'list' object has no attribute 'upper'
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 18:12:47 - INFO - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлено 188 проривів волатильності з 2831 точок
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: 'Series' object has no attribute 'columns'
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Обчислення імпульсного відгуку волатильності з розміром шоку 3
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: 'Series' object has no attribute 'columns'
+2025-05-18 18:12:47 - INFO - WARNING - [logger.py:108] - Не вдалося підігнати GARCH модель для імпульсного відгуку
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Підготовка функцій волатильності для ML з вікнами [7, 14, 30]
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Створення ознак волатильності...
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка при підготовці функцій волатильності для ML: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Визначення фаз ринку за допомогою 4 режимів
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно визначено 4 фази ринку
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Аналіз кросс-активної волатильності для 3 активів
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно проаналізовано кросс-активну волатильність
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Running full volatility analysis for SOL on 1d timeframe
+2025-05-18 18:12:47 - INFO - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлено 123 проривів волатильності з 1725 точок
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: 'Series' object has no attribute 'columns'
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Обчислення імпульсного відгуку волатильності з розміром шоку 3
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: 'Series' object has no attribute 'columns'
+2025-05-18 18:12:47 - INFO - WARNING - [logger.py:108] - Не вдалося підігнати GARCH модель для імпульсного відгуку
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Підготовка функцій волатильності для ML з вікнами [7, 14, 30]
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Створення ознак волатильності...
+2025-05-18 18:12:47 - INFO - ERROR - [logger.py:112] - Помилка при підготовці функцій волатильності для ML: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Визначення фаз ринку за допомогою 4 режимів
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно визначено 4 фази ринку
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Аналіз кросс-активної волатильності для 3 активів
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Успішно проаналізовано кросс-активну волатильність
+2025-05-18 18:12:47 - INFO - INFO - [logger.py:104] - Running full volatility analysis for ETH on 1d timeframe
+2025-05-18 18:12:48 - INFO - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Виявлено 172 проривів волатильності з 2831 точок
+2025-05-18 18:12:48 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 18:12:48 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:12:48 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: 'Series' object has no attribute 'columns'
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Обчислення імпульсного відгуку волатильності з розміром шоку 3
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:12:48 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: 'Series' object has no attribute 'columns'
+2025-05-18 18:12:48 - INFO - WARNING - [logger.py:108] - Не вдалося підігнати GARCH модель для імпульсного відгуку
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Підготовка функцій волатильності для ML з вікнами [7, 14, 30]
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Створення ознак волатильності...
+2025-05-18 18:12:48 - INFO - ERROR - [logger.py:112] - Помилка при підготовці функцій волатильності для ML: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Визначення фаз ринку за допомогою 4 режимів
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно визначено 4 фази ринку
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Аналіз кросс-активної волатильності для 3 активів
+2025-05-18 18:12:48 - INFO - INFO - [logger.py:104] - Успішно проаналізовано кросс-активну волатильність
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Running full volatility analysis for BTC on 1d timeframe
+2025-05-18 18:15:17 - INFO - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Виявлено 188 проривів волатильності з 2831 точок
+2025-05-18 18:15:17 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 18:15:17 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:15:17 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: Вхідні дані не містять обов'язкових колонок: ['open', 'high', 'low', 'close', 'volume']
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Обчислення імпульсного відгуку волатильності з розміром шоку 3
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:15:17 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: Вхідні дані не містять обов'язкових колонок: ['open', 'high', 'low', 'close', 'volume']
+2025-05-18 18:15:17 - INFO - WARNING - [logger.py:108] - Не вдалося підігнати GARCH модель для імпульсного відгуку
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Підготовка функцій волатильності для ML з вікнами [7, 14, 30]
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Створення ознак волатильності...
+2025-05-18 18:15:17 - INFO - ERROR - [logger.py:112] - Помилка при підготовці функцій волатильності для ML: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Визначення фаз ринку за допомогою 4 режимів
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Успішно визначено 4 фази ринку
+2025-05-18 18:15:17 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Аналіз кросс-активної волатильності для 3 активів
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно проаналізовано кросс-активну волатильність
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Running full volatility analysis for SOL on 1d timeframe
+2025-05-18 18:15:18 - INFO - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлено 123 проривів волатильності з 1725 точок
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: Вхідні дані не містять обов'язкових колонок: ['open', 'high', 'low', 'close', 'volume']
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Обчислення імпульсного відгуку волатильності з розміром шоку 3
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: Вхідні дані не містять обов'язкових колонок: ['open', 'high', 'low', 'close', 'volume']
+2025-05-18 18:15:18 - INFO - WARNING - [logger.py:108] - Не вдалося підігнати GARCH модель для імпульсного відгуку
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Підготовка функцій волатильності для ML з вікнами [7, 14, 30]
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Створення ознак волатильності...
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка при підготовці функцій волатильності для ML: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Визначення фаз ринку за допомогою 4 режимів
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно визначено 4 фази ринку
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Аналіз кросс-активної волатильності для 3 активів
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно проаналізовано кросс-активну волатильність
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Running full volatility analysis for ETH on 1d timeframe
+2025-05-18 18:15:18 - INFO - WARNING - [logger.py:108] - Знайдено нульові або від'ємні значення в OHLC даних - ці точки будуть пропущені
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Обчислення метрик ризику волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлено 172 проривів волатильності з 2831 точок
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 7 elements
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка при вилученні сезонності з волатильності: Length mismatch: Expected axis has 1 elements, new values have 12 elements
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: Вхідні дані не містять обов'язкових колонок: ['open', 'high', 'low', 'close', 'volume']
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Обчислення імпульсного відгуку волатильності з розміром шоку 3
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Підгонка GARCH(1,1) моделі
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка підгонки GARCH моделі: Вхідні дані не містять обов'язкових колонок: ['open', 'high', 'low', 'close', 'volume']
+2025-05-18 18:15:18 - INFO - WARNING - [logger.py:108] - Не вдалося підігнати GARCH модель для імпульсного відгуку
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Підготовка функцій волатильності для ML з вікнами [7, 14, 30]
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Створення ознак волатильності...
+2025-05-18 18:15:18 - INFO - ERROR - [logger.py:112] - Помилка при підготовці функцій волатильності для ML: loop of ufunc does not support argument 0 of type float which has no callable log method
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Визначення фаз ринку за допомогою 4 режимів
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно визначено 4 фази ринку
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Виявлення 3 режимів волатильності за методом kmeans
+2025-05-18 18:15:18 - INFO - INFO - [logger.py:104] - Успішно виявлено 3 режимів волатильності
+2025-05-18 18:15:19 - INFO - INFO - [logger.py:104] - Аналіз кросс-активної волатильності для 3 активів
+2025-05-18 18:15:19 - INFO - INFO - [logger.py:104] - Успішно проаналізовано кросс-активну волатильність

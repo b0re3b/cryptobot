@@ -302,8 +302,7 @@ class VolatilityAnalysis:
             self.logger.info(f"Підгонка {model_type}({p},{q}) моделі")
 
             # Очистка та підготовка даних
-            clean_returns = self.data_cleaner.clean_data(returns)
-
+            clean_returns = self.data_cleaner.clean_data(returns.to_frame())
             # Налаштування моделі
             if model_type == 'EGARCH':
                 model = arch_model(clean_returns, vol='EGARCH', p=p, q=q)
@@ -1481,36 +1480,40 @@ class VolatilityAnalysis:
 
 
 def main():
-    # Параметри для тесту
-    symbol = ['BTC','SOL','ETH']
+    # Parameters for test
+    symbols = ['BTC', 'SOL', 'ETH']  # List of symbols
     timeframe = '1d'
 
-    print(f"=== Стартує аналіз волатильності для {symbol} на таймфреймі {timeframe} ===")
+    print(f"=== Starting volatility analysis for {', '.join(symbols)} on timeframe {timeframe} ===")
 
-    # Ініціалізація аналізатора волатильності
+    # Initialize volatility analyzer
     va = VolatilityAnalysis(use_parallel=True, max_workers=4)
 
-    # Запуск повного аналізу
-    result = va.run_full_volatility_analysis(symbol, timeframe, save_to_db=False)
+    # Run analysis for each symbol
+    results = {}
+    for symbol in symbols:
+        print(f"\nProcessing {symbol}...")
+        result = va.run_full_volatility_analysis(symbol, timeframe, save_to_db=False)
+        results[symbol] = result
 
-    # Перевірка, чи є результати
-    if result.get('error'):
-        print(f"[ERROR] Аналіз завершився з помилкою: {result['error']}")
-        return
+        # Check if there are results
+        if result.get('error'):
+            print(f"[ERROR] Analysis for {symbol} completed with error: {result['error']}")
+            continue
 
-    print("\n=== Підсумки аналізу ===")
-    print(f"Поточна волатильність (hist_vol_14d): {result['latest_volatility'].get('hist_vol_14d')}")
-    print(f"Поточний режим: {result['current_regime']}")
-    print(f"Кількість проривів за 30 днів: {result['recent_breakouts']}")
-    print(f"Sharpe ratio: {result['risk_metrics'].get('sharpe_ratio')}")
-    vol_df = pd.DataFrame(result['volatility_data'])
-    print(f"Режими волатильності: {set(vol_df['regime'].dropna())}")
-    if 'summary' in result:
-        print("\n=== Статистика ===")
-        for key, value in result['summary'].items():
-            print(f"{key}: {value}")
+        print(f"\n=== Summary for {symbol} ===")
+        print(f"Current volatility (hist_vol_14d): {result['latest_volatility'].get('hist_vol_14d')}")
+        print(f"Current regime: {result['current_regime']}")
+        print(f"Number of breakouts in 30 days: {result['recent_breakouts']}")
+        print(f"Sharpe ratio: {result['risk_metrics'].get('sharpe_ratio')}")
+        vol_df = pd.DataFrame(result['volatility_data'])
+        print(f"Volatility regimes: {set(vol_df['regime'].dropna())}")
+        if 'summary' in result:
+            print("\n=== Statistics ===")
+            for key, value in result['summary'].items():
+                print(f"{key}: {value}")
 
-    print("\n=== Аналіз завершено успішно ===")
+    print("\n=== Analysis completed successfully ===")
 
 
 if __name__ == "__main__":
