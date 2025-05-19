@@ -24,3 +24,108 @@ Traceback (most recent call last):
   File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 65, in load_crypto_data
     raise AttributeError(f"No method available to fetch data for {symbol}")
 AttributeError: No method available to fetch data for btc
+2025-05-19 14:48:51 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 14:48:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 14:48:51 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 14:48:51 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 14:48:51 - TimeSeriesModels - INFO - [logger.py:103] - Using data_id: 20230520_20250519
+2025-05-19 14:48:51 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for btc: No method available to fetch data for btc
+2025-05-19 14:48:51 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 65, in load_crypto_data
+    raise AttributeError(f"No method available to fetch data for {symbol}")
+AttributeError: No method available to fetch data for btc
+2025-05-19 14:54:34 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 14:54:34 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 14:54:34 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 14:54:34 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 14:54:34 - TimeSeriesModels - INFO - [logger.py:103] - Using data_id: 20230520_20250519
+2025-05-19 14:54:34 - TimeSeriesModels - WARNING - [logger.py:107] - No data found for btc with interval 1d
+2025-05-19 14:57:23 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 14:57:23 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 14:57:23 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 14:57:23 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 14:57:23 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: Expecting value: line 1 column 1 (char 0)
+2025-05-19 14:57:23 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 70, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4345, in get_btc_arima_data
+    record['significant_lags'] = json.loads(record['significant_lags'])
+  File "/usr/local/lib/python3.10/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "/usr/local/lib/python3.10/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/local/lib/python3.10/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+2025-05-19 15:29:52 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 15:29:52 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 15:29:52 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 15:29:52 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 15:29:52 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 15:29:52 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4358, in get_btc_arima_data
+    record['significant_lags'] = self.safe_json_loads(record['significant_lags'])
+TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 15:32:10 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 15:32:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 15:32:10 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 15:32:10 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 15:32:10 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 15:32:10 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4358, in get_btc_arima_data
+    record['significant_lags'] = self.safe_json_loads(record['significant_lags'])
+TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 18:09:14 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 18:09:14 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 18:09:14 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 18:09:14 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 18:09:14 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 18:09:14 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4358, in get_btc_arima_data
+    record['significant_lags'] = self.safe_json_loads(record['significant_lags'])
+TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 18:09:18 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 18:09:18 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 18:09:18 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 18:09:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 18:09:18 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 18:09:18 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4358, in get_btc_arima_data
+    record['significant_lags'] = self.safe_json_loads(record['significant_lags'])
+TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 18:24:29 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 18:24:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 18:24:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 18:24:29 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 18:24:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 18:24:29 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4358, in get_btc_arima_data
+    record['significant_lags'] = self.safe_json_loads(record['significant_lags'])
+TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 were given
+2025-05-19 19:12:54 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 19:12:54 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 19:12:54 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 19:12:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 19:12:54 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 729 records for BTC from 2023-05-21 00:00:00 to 2025-05-18 00:00:00
+2025-05-19 19:22:45 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 19:22:45 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 19:22:45 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 19:22:45 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 19:22:46 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 729 records for BTC from 2023-05-21 00:00:00 to 2025-05-18 00:00:00

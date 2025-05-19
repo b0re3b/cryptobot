@@ -837,29 +837,110 @@ def main():
         'SOLUSDT': '2020-08-27'
     }
 
+    # Колекція отриманих через WebSocket свічок для подальшого аналізу
+    received_candles = {symbol: {'1m': [], '1h': [], '1d': []} for symbol in symbols}
+
+    # Функція-обробник WebSocket повідомлень із збереженням свічок
+    def handle_kline_message_with_collection(ws, message):
+        data = json.loads(message)
+        candle = data['k']
+
+        # Базовий вивід інформації
+        print(f"Нова свічка {candle['s']} {candle['i']}:")
+        print(f"Час відкриття: {datetime.fromtimestamp(candle['t'] / 1000)}")
+        print(f"Ціна відкриття: {candle['o']}")
+        print(f"Найвища ціна: {candle['h']}")
+        print(f"Найнижча ціна: {candle['l']}")
+        print(f"Поточна ціна: {candle['c']}")
+        print(f"Обсяг: {candle['v']}")
+        print(f"Ціна закриття: {candle['x']}")
+        print("-----")
+
+        # Збереження свічки для подальшої обробки
+        symbol = candle['s']
+        interval = candle['i']
+
+        # Створюємо структуру даних для збереження свічки
+        candle_data = {
+            'symbol': symbol,
+            'interval': interval,
+            'open_time': datetime.fromtimestamp(candle['t'] / 1000),
+            'open': float(candle['o']),
+            'high': float(candle['h']),
+            'low': float(candle['l']),
+            'close': float(candle['c']),
+            'volume': float(candle['v']),
+            'close_time': datetime.fromtimestamp(candle['T'] / 1000),
+            'quote_asset_volume': float(candle['q']),
+            'number_of_trades': int(candle['n']),
+            'taker_buy_base_volume': float(candle['V']),
+            'taker_buy_quote_volume': float(candle['Q']),
+            'is_closed': bool(candle['x'])
+        }
+
+        # Додаємо свічку до колекції
+        if symbol in received_candles and interval in received_candles[symbol]:
+            received_candles[symbol][interval].append(candle_data)
+
+            # Якщо свічка закрита, виводимо повідомлення і можна додатково обробити
+            if candle_data['is_closed']:
+                print(f"Закрита свічка {symbol} {interval}: {candle_data['open_time']} - {candle_data['close_time']}")
+                # Тут можна додати код для аналізу закритих свічок
+
     try:
         # Збір історичних даних
         print("========== ЗБІР ІСТОРИЧНИХ ДАНИХ ==========")
 
-        # Поточна дата як кінцева
-        end_date = datetime.now().strftime('%Y-%m-%d')
+        # Поточна дата і час як кінцева точка
+        end_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"Збираємо дані до поточного часу: {end_date}")
 
-        # Для кожного символу — збір даних з початкової дати до сьогодні
+        # Для кожного символу — збір даних з початкової дати до поточного часу
         for symbol in symbols:
             print(f"\nЗбираємо історичні дані для {symbol}...")
 
             # Отримати початкову дату для конкретного символу або дефолт
-            start_date = (symbol, '2025-05-03')
+            start_date = (symbol, '2025-05-13')
 
-            # Збір даних для всіх інтервалів: 1 хв, 1 год, 1 день
+            # Збір даних для всіх інтервалів: 1 хв, 1 год, 1 день до поточного моменту
             results = client.save_historical_data_to_db(
                 symbol=symbol,
                 start_date=start_date,
-                end_date=end_date,
+                end_date=datetime.now().strftime('%Y-%m-%d'),  # Поточна дата
                 timeframe=['1m', '1h', '1d']
             )
 
             print(f"Результат для {symbol}: {results}")
+
+            # Перевірка наявності останніх свічок (включаючи поточну незакриту)
+            print(f"\nПеревірка останніх свічок для {symbol}...")
+
+            for timeframe in ['1m', '1h', '1d']:
+                # Отримуємо найсвіжішу свічку
+                latest_kline = client.get_klines(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    limit=1,
+                    use_cache=False
+                )
+
+                if not latest_kline.empty:
+                    last_candle_time = latest_kline.iloc[0]['close_time']
+                    current_time = pd.Timestamp.now()
+                    time_diff = current_time - last_candle_time
+
+                    print(f"{symbol} {timeframe} остання свічка: {last_candle_time}")
+                    print(f"Різниця з поточним часом: {time_diff}")
+
+                    # Якщо різниця більша за очікувану для даного таймфрейму, виводимо попередження
+                    expected_diff = pd.Timedelta(minutes=1)
+                    if timeframe == '1h':
+                        expected_diff = pd.Timedelta(hours=1)
+                    elif timeframe == '1d':
+                        expected_diff = pd.Timedelta(days=1)
+
+                    if time_diff > expected_diff:
+                        print(f"УВАГА: Дані {symbol} {timeframe} можуть бути неповними!")
 
         print("\n========== ОТРИМАННЯ АКТУАЛЬНИХ ДАНИХ ==========")
         # Отримання поточних цін
@@ -880,9 +961,10 @@ def main():
         # Запуск WebSocket для кожного символу (для 1m, 1h, 1d)
         for symbol in symbols:
             try:
-                socket_1m = client.start_kline_socket(symbol, "1m", handle_kline_message, save_to_db=True)
-                socket_1h = client.start_kline_socket(symbol, "1h", handle_kline_message, save_to_db=True)
-                socket_1d = client.start_kline_socket(symbol, "1d", handle_kline_message, save_to_db=True)
+                # Використовуємо оновлений обробник, який також зберігає свічки
+                socket_1m = client.start_kline_socket(symbol, "1m", handle_kline_message_with_collection, save_to_db=True)
+                socket_1h = client.start_kline_socket(symbol, "1h", handle_kline_message_with_collection, save_to_db=True)
+                socket_1d = client.start_kline_socket(symbol, "1d", handle_kline_message_with_collection, save_to_db=True)
 
                 for socket in [socket_1m, socket_1h, socket_1d]:
                     if socket:
@@ -894,20 +976,106 @@ def main():
                 print(f"Помилка створення WebSocket для {symbol}: {e}")
 
         if not active_sockets:
-            print("Не вдалося створити жодне WebSocket з’єднання!")
+            print("Не вдалося створити жодне WebSocket з'єднання!")
             return
 
         print("Очікування ринкових даних у реальному часі. Натисніть Ctrl+C для виходу.")
 
+        # Основний цикл з обробкою отриманих даних
+        collection_interval = 60  # Секунди між обробкою зібраних даних
+        last_collection_time = time.time()
+
         while True:
             time.sleep(5)
             client.check_and_handle_reconnections()
+
+            # Періодична обробка зібраних свічок
+            current_time = time.time()
+            if current_time - last_collection_time >= collection_interval:
+                print("\n===== АНАЛІЗ ЗІБРАНИХ СВІЧОК =====")
+
+                # Для кожного символу аналізуємо зібрані свічки
+                for symbol in symbols:
+                    for timeframe in ['1m', '1h', '1d']:
+                        collected = received_candles[symbol][timeframe]
+                        closed_candles = [c for c in collected if c['is_closed']]
+
+                        if closed_candles:
+                            print(f"Зібрано {len(closed_candles)} закритих свічок {symbol} {timeframe}")
+
+                            # Створюємо DataFrame для аналізу
+                            if closed_candles:
+                                df = pd.DataFrame(closed_candles)
+
+                                # Базовий аналіз: мінімальна, максимальна ціна та середній об'єм
+                                if not df.empty:
+                                    min_price = df['low'].min()
+                                    max_price = df['high'].max()
+                                    avg_volume = df['volume'].mean()
+
+                                    print(f"  Мінімальна ціна: {min_price}")
+                                    print(f"  Максимальна ціна: {max_price}")
+                                    print(f"  Середній об'єм: {avg_volume}")
+
+                                    # Очищаємо оброблені закриті свічки
+                                    received_candles[symbol][timeframe] = [c for c in collected if not c['is_closed']]
+
+                # Скидаємо таймер для наступної обробки
+                last_collection_time = current_time
+
+                # Додатково перевіряємо наявність пропусків в історичних даних
+                # і заповнюємо їх при необхідності
+                for symbol in symbols:
+                    for timeframe in ['1m', '1h', '1d']:
+                        try:
+                            # Отримуємо останню свічку з бази даних
+                            last_db_candle = client.db_manager.get_last_kline(symbol, timeframe)
+
+                            if last_db_candle:
+                                last_time = last_db_candle['close_time']
+                                current_time = datetime.now()
+
+                                # Визначаємо різницю часу
+                                time_diff = (current_time - last_time).total_seconds()
+
+                                # Визначаємо очікувану різницю залежно від таймфрейму
+                                expected_diff = 60  # 1 хвилина в секундах
+                                if timeframe == '1h':
+                                    expected_diff = 3600  # 1 година в секундах
+                                elif timeframe == '1d':
+                                    expected_diff = 86400  # 1 день в секундах
+
+                                # Якщо є значний розрив, заповнюємо відсутні дані
+                                if time_diff > expected_diff * 2:  # Множимо на 2 для запасу
+                                    print(f"Виявлено пропуск даних для {symbol} {timeframe}. Заповнення...")
+
+                                    # Конвертуємо в формат часу для API
+                                    start_ts = int(last_time.timestamp() * 1000)
+                                    end_ts = int(current_time.timestamp() * 1000)
+
+                                    # Заповнюємо пропущені дані
+                                    missing_candles = client._fetch_and_save_historical_interval(
+                                        symbol, timeframe, start_ts, end_ts
+                                    )
+
+                                    print(f"Заповнено {missing_candles} пропущених свічок для {symbol} {timeframe}")
+
+                        except Exception as e:
+                            print(f"Помилка при перевірці пропусків даних для {symbol} {timeframe}: {e}")
 
     except KeyboardInterrupt:
         print("Завершення роботи...")
     except Exception as e:
         print(f"Критична помилка: {e}")
     finally:
+        # Аналіз зібраних свічок перед виходом
+        print("\n===== ФІНАЛЬНИЙ АНАЛІЗ ЗІБРАНИХ СВІЧОК =====")
+        for symbol in symbols:
+            for timeframe in ['1m', '1h', '1d']:
+                collected = received_candles[symbol][timeframe]
+                if collected:
+                    print(f"Всього зібрано {len(collected)} свічок {symbol} {timeframe}")
+
         client.cleanup()
 
 

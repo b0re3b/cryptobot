@@ -32,49 +32,47 @@ class TimeSeriesModels:
                          timeframe: str = '1d') -> pd.DataFrame:
 
         try:
+            symbol = symbol.upper()  # Для стандартизації працюємо з верхнім регістром
             self.logger.info(f"Loading {symbol} data with interval {timeframe} from database")
 
+            # Зберігаємо посилання на db_manager
             self.db_manager = db_manager
 
             if not hasattr(self, 'db_manager') or self.db_manager is None:
                 self.logger.error("db_manager not initialized in TimeSeriesModels class")
                 raise ValueError("db_manager not available. Please initialize db_manager.")
 
-            # Define data_id for logging
-            data_id = None
-            if start_date and end_date:
-                data_id = f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
-                self.logger.info(f"Using data_id: {data_id}")
+            # Мапування криптовалют до методів отримання даних
+            crypto_methods = {
+                'BTC': self.db_manager.get_btc_arima_data,
+                'ETH': self.db_manager.get_eth_arima_data,
+                'SOL': self.db_manager.get_sol_arima_data
+            }
 
-            # Load ARIMA data according to symbol
-            klines_data = None
-            symbol = symbol.lower()
+            # Перевіряємо, чи підтримується вказана криптовалюта
+            if symbol not in crypto_methods:
+                self.logger.error(f"Unsupported cryptocurrency: {symbol}")
+                return pd.DataFrame()
 
-            # Call the specific method for each cryptocurrency
-            if symbol == 'BTC':
-                klines_data = self.db_manager.get_btc_arima_data(timeframe=timeframe)
-            elif symbol == 'ETH':
-                klines_data = self.db_manager.get_eth_arima_data(timeframe=timeframe)
-            elif symbol == 'SOL':
-                klines_data = self.db_manager.get_sol_arima_data(timeframe=timeframe)
-            else:
-                # Fallback method for other symbols if available
-                if hasattr(self.db_manager, "get_crypto_arima_data"):
-                    klines_data = self.db_manager.get_crypto_arima_data(symbol.upper(), timeframe)
-                else:
-                    raise AttributeError(f"No method available to fetch data for {symbol}")
+            # Отримуємо дані через відповідний метод
+            klines_data = crypto_methods[symbol](timeframe=timeframe)
 
+            # Перевіряємо чи є дані
             if klines_data is None or (isinstance(klines_data, pd.DataFrame) and klines_data.empty):
                 self.logger.warning(f"No data found for {symbol} with interval {timeframe}")
                 return pd.DataFrame()
 
+            # Конвертуємо в DataFrame якщо потрібно
             if not isinstance(klines_data, pd.DataFrame):
                 klines_data = pd.DataFrame(klines_data)
                 self.logger.info("Converted data to DataFrame")
 
+            # Обробка часового індексу
             if not isinstance(klines_data.index, pd.DatetimeIndex):
+                # Шукаємо колонку з часом
                 time_cols = [col for col in klines_data.columns if any(
                     time_str in str(col).lower() for time_str in ['time', 'date', 'timestamp'])]
+
                 if time_cols:
                     try:
                         klines_data[time_cols[0]] = pd.to_datetime(klines_data[time_cols[0]])
@@ -85,6 +83,7 @@ class TimeSeriesModels:
                 else:
                     self.logger.warning("No time column found in data. Using default index.")
 
+            # Сортування та фільтрація за датами
             if isinstance(klines_data.index, pd.DatetimeIndex):
                 klines_data = klines_data.sort_index()
                 if start_date:
@@ -92,6 +91,7 @@ class TimeSeriesModels:
                 if end_date:
                     klines_data = klines_data[klines_data.index <= end_date]
 
+            # Логування успішного завантаження
             if not klines_data.empty and isinstance(klines_data.index, pd.DatetimeIndex):
                 self.logger.info(f"Loaded {len(klines_data)} records for {symbol} "
                                  f"from {klines_data.index.min()} to {klines_data.index.max()}")
@@ -871,71 +871,80 @@ class TimeSeriesModels:
 
 
 def main():
-    """Enhanced main function with better error handling but without saving anything to disk"""
-    from datetime import datetime, timedelta
 
-    # Configuration
-    symbol = "BTC"
-    timeframe = "1d"
-    forecast_steps = 30  # Forecast for the next 30 days
+        """Enhanced main function with better error handling but without saving anything to disk"""
+        from datetime import datetime, timedelta
 
-    # Initialize TimeSeriesModels
-    print("🔄 Initializing TimeSeriesModels...")
-    model = TimeSeriesModels()
-    db = model.db_manager
+        # Configuration
+        symbol = "BTC"
+        timeframe = "1d"
+        forecast_steps = 30  # Forecast for the next 30 days
 
-    if db is None:
-        print("❌ Database manager is not configured.")
-        return
+        # Initialize TimeSeriesModels
+        print("🔄 Initializing TimeSeriesModels...")
+        model = TimeSeriesModels()
+        db = model.db_manager
 
-    # Get list of available symbols
-    print("🔄 Getting available symbols...")
-    try:
-        available_symbols = model.get_available_crypto_symbols()
-        if not available_symbols:
-            print("❌ No symbols available in the database.")
+        if db is None:
+            print("❌ Database manager is not configured.")
             return
 
-        if symbol not in available_symbols:
-            print(f"⚠️ Symbol {symbol} not found in database. Available symbols: {', '.join(available_symbols[:5])}...")
-            # Use the first available symbol instead
-            symbol = available_symbols[0]
-            print(f"🔄 Using {symbol} instead.")
-    except Exception as e:
-        print(f"❌ Error retrieving symbols: {e}")
-        return
+        # Get list of available symbols
+        print("🔄 Getting available symbols...")
+        try:
+            available_symbols = model.get_available_crypto_symbols()
+            if not available_symbols:
+                print("❌ No symbols available in the database.")
+                return
 
-    # Get current date and calculate start date (2 years of historical data)
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=730)
+            if symbol not in available_symbols:
+                print(
+                    f"⚠️ Symbol {symbol} not found in database. Available symbols: {', '.join(available_symbols[:5])}...")
+                # Use the first available symbol instead
+                symbol = available_symbols[0]
+                print(f"🔄 Using {symbol} instead.")
+        except Exception as e:
+            print(f"❌ Error retrieving symbols: {e}")
+            return
 
-    print(f"🔄 Loading {symbol} price data from {start_date.date()} to {end_date.date()}...")
+        # Get current date and calculate start date (2 years of historical data)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=730)
 
-    try:
-        # Load data using the correct method from TimeSeriesModels
-        df = model.load_crypto_data(
-            db_manager=db,
-            symbol=symbol,
-            start_date=start_date,
-            end_date=end_date,
-            timeframe=timeframe
-        )
-    except Exception as e:
-        print(f"❌ Error while retrieving data: {e}")
-        return
+        print(f"🔄 Loading {symbol} price data from {start_date.date()} to {end_date.date()}...")
 
-    if df is None or df.empty:
-        print("❌ No data available for model training.")
-        return
+        try:
+            # Load data using the correct method from TimeSeriesModels
+            df = model.load_crypto_data(
+                db_manager=db,
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+                timeframe=timeframe
+            )
+        except Exception as e:
+            print(f"❌ Error while retrieving data: {e}")
+            return
 
-    # Check if 'close' column exists
-    if "close" not in df.columns:
-        # Try to find alternative price column
-        price_cols = ["Close", "price", "Price", "value", "Value"]
-        for col in price_cols:
+        if df is None or df.empty:
+            print("❌ No data available for model training.")
+            return
+
+        # Print available columns to help debug
+        print(f"📊 Available columns in the dataset: {', '.join(df.columns)}")
+
+        # Check for price column with modified logic to handle preprocessed data
+        price_columns = [
+            "close", "Close", "price", "Price", "value", "Value",
+            "original_close",  # Add the column from your database
+            "close_log",  # Alternative preprocessed column
+            "close_diff"  # Another alternative
+        ]
+
+        for col in price_columns:
             if col in df.columns:
-                print(f"⚠️ Using '{col}' instead of 'close' column")
-                df["close"] = df[col]
+                print(f"✅ Using '{col}' as price column")
+                price_series = df[col]
                 break
         else:
             # If no suitable column is found
@@ -943,81 +952,72 @@ def main():
             print(f"Available columns: {', '.join(df.columns)}")
             return
 
-    price_series = df["close"]
+        # Data analysis and preprocessing
+        print("🔄 Analyzing price data...")
+        analysis = model.analyze_series(price_series)
+        print(f"📊 Data analysis results:")
+        print(f"  - Is stationary: {analysis['stationarity']['is_stationary']}")
+        print(f"  - Has seasonality: {analysis['seasonality']['has_seasonality']}")
+        if analysis['seasonality']['has_seasonality']:
+            print(f"  - Primary seasonality period: {analysis['seasonality']['primary_period']}")
+        print(f"  - Volatility (std): {analysis['volatility'].get('std', 'N/A')}")
 
-    # Data analysis and preprocessing
-    print("🔄 Analyzing price data...")
-    analysis = model.analyze_series(price_series)
-    print(f"📊 Data analysis results:")
-    print(f"  - Is stationary: {analysis['stationarity']['is_stationary']}")
-    print(f"  - Has seasonality: {analysis['seasonality']['has_seasonality']}")
-    if analysis['seasonality']['has_seasonality']:
-        print(f"  - Primary seasonality period: {analysis['seasonality']['primary_period']}")
-    print(f"  - Volatility (std): {analysis['volatility'].get('std', 'N/A')}")
+        # Create train/test split for model validation
+        train_size = int(len(price_series) * 0.8)
+        train_data = price_series[:train_size]
+        test_data = price_series[train_size:]
+        print(f"📊 Data split: {train_size} training points, {len(test_data)} testing points")
 
-    # Detect anomalies
-    print("🔄 Detecting anomalies in price data...")
-
-    # Create train/test split for model validation
-    train_size = int(len(price_series) * 0.8)
-    train_data = price_series[:train_size]
-    test_data = price_series[train_size:]
-    print(f"📊 Data split: {train_size} training points, {len(test_data)} testing points")
-
-    # Try ensemble forecast with multiple models
-    print("🔄 Creating ensemble forecast...")
-    ensemble_result = model.ensemble_forecast(
-        data=train_data,
-        models=['arima', 'sarima'],
-        forecast_steps=forecast_steps
-    )
-
-    if ensemble_result.get('status') == 'success':
-        ensemble_forecast = ensemble_result.get('ensemble_forecast')
-        component_models = ensemble_result.get('component_models')
-        print(f"✅ Ensemble forecast created using {len(component_models)} models")
-        print(f"📈 First 5 forecast values: {ensemble_forecast.head().to_dict()}")
-
-        # We could visualize the forecast here, but we'll skip file saving
-        print("✅ Ensemble forecast generated successfully")
-
-        # Print some forecast statistics instead of saving to CSV
-        print(f"📊 Forecast statistics:")
-        print(f"  - Forecast length: {len(ensemble_forecast)} points")
-        print(f"  - Forecast period: {ensemble_forecast.index[0]} to {ensemble_forecast.index[-1]}")
-        print(f"  - Forecast min: {ensemble_forecast.min()}")
-        print(f"  - Forecast max: {ensemble_forecast.max()}")
-        print(f"  - Forecast mean: {ensemble_forecast.mean()}")
-    else:
-        print(f"❌ Ensemble forecast failed: {ensemble_result.get('message', 'Unknown error')}")
-
-        # Fallback to simple ARIMA forecast
-        print("🔄 Falling back to standard ARIMA forecast...")
-        forecast_result = model.forecaster.run_auto_forecast(
-            data=price_series,
-            test_size=0.2,
-            forecast_steps=forecast_steps,
-            symbol=symbol
+        # Try ensemble forecast with multiple models
+        print("🔄 Creating ensemble forecast...")
+        ensemble_result = model.ensemble_forecast(
+            data=train_data,
+            models=['arima', 'sarima'],
+            forecast_steps=forecast_steps
         )
 
-        if forecast_result.get("status") == "success" and "model_key" in forecast_result:
-            model_key = forecast_result["model_key"]
-            print(f"✅ Model created with key: {model_key}")
+        if ensemble_result.get('status') == 'success':
+            ensemble_forecast = ensemble_result.get('ensemble_forecast')
+            component_models = ensemble_result.get('component_models')
+            print(f"✅ Ensemble forecast created using {len(component_models)} models")
+            print(f"📈 First 5 forecast values: {ensemble_forecast.head().to_dict()}")
 
-            # Get forecast
-            forecast = model.forecast(model_key, steps=forecast_steps)
-            if forecast is not None:
-                # Print forecast information instead of saving
-                print(f"📈 Forecast generated successfully")
-                print(f"  - Forecast length: {len(forecast)} points")
-                print(f"  - First 5 values: {forecast.head().to_dict()}")
-            else:
-                print("❌ Failed to generate forecast.")
+            # Print some forecast statistics instead of saving to CSV
+            print(f"📊 Forecast statistics:")
+            print(f"  - Forecast length: {len(ensemble_forecast)} points")
+            print(f"  - Forecast period: {ensemble_forecast.index[0]} to {ensemble_forecast.index[-1]}")
+            print(f"  - Forecast min: {ensemble_forecast.min()}")
+            print(f"  - Forecast max: {ensemble_forecast.max()}")
+            print(f"  - Forecast mean: {ensemble_forecast.mean()}")
         else:
-            print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
+            print(f"❌ Ensemble forecast failed: {ensemble_result.get('message', 'Unknown error')}")
 
-    print("\n✅ Analysis completed.")
+            # Fallback to simple ARIMA forecast
+            print("🔄 Falling back to standard ARIMA forecast...")
+            forecast_result = model.forecaster.run_auto_forecast(
+                data=price_series,
+                test_size=0.2,
+                forecast_steps=forecast_steps,
+                symbol=symbol
+            )
 
+            if forecast_result.get("status") == "success" and "model_key" in forecast_result:
+                model_key = forecast_result["model_key"]
+                print(f"✅ Model created with key: {model_key}")
+
+                # Get forecast
+                forecast = model.forecast(model_key, steps=forecast_steps)
+                if forecast is not None:
+                    # Print forecast information instead of saving
+                    print(f"📈 Forecast generated successfully")
+                    print(f"  - Forecast length: {len(forecast)} points")
+                    print(f"  - First 5 values: {forecast.head().to_dict()}")
+                else:
+                    print("❌ Failed to generate forecast.")
+            else:
+                print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
+
+        print("\n✅ Analysis completed.")
 
 if __name__ == "__main__":
     main()

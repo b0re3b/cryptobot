@@ -664,3 +664,162 @@ class ARIMAModeler:
         except Exception as e:
             self.logger.error(f"Помилка додавання трансформації: {str(e)}")
             return False
+    def select_best_stationary_column(self, data: pd.DataFrame, symbol: str = 'default'):
+        """
+        Вибирає найкращий стаціонарний стовпець для моделювання.
+
+        Параметри:
+        ----------
+        data : pd.DataFrame
+            DataFrame з різними перетвореннями часового ряду
+        symbol : str, optional
+            Ідентифікатор набору даних
+
+        Повертає:
+        ---------
+        str
+            Назва найкращого стовпця для моделювання
+        """
+        # Спочатку перевіряємо стовпці, які вже відзначені як стаціонарні
+        if 'is_stationary' in data.columns:
+            stationary_cols = data.columns[data['is_stationary'] == True]
+            if len(stationary_cols) > 0:
+                # Знаходимо стовпець з найкращими AIC/BIC, якщо вони доступні
+                if 'aic_score' in data.columns and 'bic_score' in data.columns:
+                    best_col = stationary_cols[data.loc[data['is_stationary'] == True, 'aic_score'].idxmin()]
+                    return best_col
+                return stationary_cols[0]
+
+        # Якщо немає колонки is_stationary, перевіряємо p-значення тестів
+        if 'adf_pvalue' in data.columns:
+            stationary_by_adf = data.columns[data['adf_pvalue'] < 0.05]
+            if len(stationary_by_adf) > 0:
+                return stationary_by_adf[0]
+
+        # Якщо аналіз не дав результатів, використовуємо стандартні перетворення в порядку їх ефективності
+        for col in ['close_diff2', 'close_seasonal_diff', 'close_diff', 'close_log_diff', 'close_combo_diff', 'close_log', 'original_close']:
+            if col in data.columns:
+                return col
+
+        # Якщо жоден з бажаних стовпців не знайдено
+        raise ValueError("Не знайдено відповідного стовпця для ARIMA моделювання")
+
+    def auto_determine_order(self, data: pd.Series, max_order: int = 5):
+        """
+        Автоматично визначає порядок ARIMA моделі на основі даних.
+
+        Параметри:
+        ----------
+        data : pd.Series
+            Часовий ряд для аналізу
+        max_order : int, optional
+            Максимальний порядок для розгляду
+
+        Повертає:
+        ---------
+        Tuple[int, int, int]
+            Порядок ARIMA моделі (p, d, q)
+        """
+        from pmdarima import auto_arima
+
+        try:
+            # Використовуємо auto_arima для визначення оптимальних параметрів
+            automodel = auto_arima(
+                data,
+                start_p=0, start_q=0,
+                max_p=max_order, max_q=max_order,
+                d=None,  # auto-detection
+                seasonal=False,
+                trace=False,
+                error_action='ignore',
+                suppress_warnings=True,
+                stepwise=True
+            )
+
+            return automodel.order
+        except Exception as e:
+            self.logger.error(f"Помилка під час автоматичного визначення порядку: {str(e)}")
+            # Повертаємо стандартні параметри у випадку помилки
+            return (1, 1, 1)
+
+    def apply_transformations(self, data: pd.Series, model_key: str) -> pd.Series:
+        """
+        Застосовує збережені трансформації до даних перед прогнозуванням.
+
+        Параметри:
+        ----------
+        data : pd.Series
+            Вхідні дані
+        model_key : str
+            Ключ моделі
+
+        Повертає:
+        ---------
+        pd.Series
+            Трансформовані дані
+        """
+        if model_key not in self.transformations:
+            return data
+
+        transformed_data = data.copy()
+        for transform_id, transform_info in self.transformations[model_key].items():
+            transform_type = transform_info.get('type')
+
+            if transform_type == 'diff':
+                order = transform_info.get('order', 1)
+                transformed_data = transformed_data.diff(order).dropna()
+            elif transform_type == 'log':
+                transformed_data = np.log(transformed_data)
+            elif transform_type == 'seasonal_diff':
+                period = transform_info.get('period', 1)
+                transformed_data = transformed_data.diff(period).dropna()
+
+        return transformed_data
+
+    def inverse_transformations(self, forecasted_data: pd.Series, model_key: str,
+                                original_data: pd.Series) -> pd.Series:
+        """
+        Скасовує трансформації після прогнозування.
+
+        Параметри:
+        ----------
+        forecasted_data : pd.Series
+            Прогнозовані дані
+        model_key : str
+            Ключ моделі
+        original_data : pd.Series
+            Оригінальні дані для інверсії диференціювання
+
+        Повертає:
+        ---------
+        pd.Series
+            Детрансформовані прогнозовані дані
+        """
+        if model_key not in self.transformations:
+            return forecasted_data
+
+        # Трансформації потрібно скасовувати в зворотному порядку
+        inverse_transforms = list(self.transformations[model_key].items())
+        inverse_transforms.reverse()
+
+        result = forecasted_data.copy()
+
+        for transform_id, transform_info in inverse_transforms:
+            transform_type = transform_info.get('type')
+
+            if transform_type == 'diff':
+                order = transform_info.get('order', 1)
+                # Для інверсії диференціювання потрібне початкове значення
+                last_values = original_data.iloc[-order:].values
+                for i in range(len(result)):
+                    result.iloc[i] = result.iloc[i] + last_values[i % order]
+            elif transform_type == 'log':
+                result = np.exp(result)
+            elif transform_type == 'seasonal_diff':
+                period = transform_info.get('period', 1)
+                # Інверсія сезонного диференціювання потребує сезонних значень
+                seasonal_values = original_data.iloc[-period:].values
+                for i in range(len(result)):
+                    result.iloc[i] = result.iloc[i] + seasonal_values[i % period]
+
+        return result

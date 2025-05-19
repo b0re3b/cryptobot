@@ -4311,164 +4311,66 @@ class DatabaseManager:
 
             return result[0] if result else 0
 
-    def get_btc_arima_data(
-            self,
-            timeframe: str | None = None,
-            open_time: datetime | None = None,
-            id: int | None = None
-    ) -> list[dict[str, Any]] | dict[str, Any] | None:
+    def safe_json_loads(value: str) -> dict:
+
+        if not value:
+            return {"acf": [], "pacf": []}
+
         try:
-            self.connect()  # Ініціалізує self.conn та self.cursor
-            query_parts = ["SELECT * FROM btc_arima_data WHERE 1=1"]
-            params = []
+            loaded = json.loads(value)
+            if isinstance(loaded, str):
+                loaded = json.loads(loaded)
+            return loaded
+        except json.JSONDecodeError:
+            return {"acf": [], "pacf": []}
 
-            if id is not None:
-                query_parts.append("AND id = %s")
-                params.append(id)
-            if timeframe is not None:
-                query_parts.append("AND timeframe = %s")
-                params.append(timeframe)
-            if open_time is not None:
-                query_parts.append("AND open_time = %s")
-                params.append(open_time)
+    def get_btc_arima_data(self, timeframe: str, start_date: datetime = None,
+                           end_date: datetime = None) -> pd.DataFrame:
+        query = "SELECT * FROM btc_arima_data WHERE timeframe = %s"
+        params = [timeframe]
+        if start_date:
+            query += " AND open_time >= %s"
+            params.append(start_date)
+        if end_date:
+            query += " AND open_time <= %s"
+            params.append(end_date)
+        query += " ORDER BY open_time"
+        self.cursor.execute(query, params)
+        data = pd.DataFrame(self.cursor.fetchall(), columns=[desc[0] for desc in self.cursor.description])
+        data.set_index('open_time', inplace=True)
+        return data
 
-            query = " ".join(query_parts)
-            self.cursor.execute(query, params)
+    def get_eth_arima_data(self, timeframe: str, start_date: datetime = None,
+                           end_date: datetime = None) -> pd.DataFrame:
+        query = "SELECT * FROM eth_arima_data WHERE timeframe = %s"
+        params = [timeframe]
+        if start_date:
+            query += " AND open_time >= %s"
+            params.append(start_date)
+        if end_date:
+            query += " AND open_time <= %s"
+            params.append(end_date)
+        query += " ORDER BY open_time"
+        self.cursor.execute(query, params)
+        data = pd.DataFrame(self.cursor.fetchall(), columns=[desc[0] for desc in self.cursor.description])
+        data.set_index('open_time', inplace=True)
+        return data
 
-            columns = [desc[0] for desc in self.cursor.description]
-
-            if any([id, timeframe, open_time]):
-                result = self.cursor.fetchone()
-                if result:
-                    record = dict(zip(columns, result))
-                    if record.get('significant_lags'):
-                        record['significant_lags'] = json.loads(record['significant_lags'])
-                    return record
-                else:
-                    return None
-            else:
-                results = self.cursor.fetchall()
-                records = []
-                for result in results:
-                    record = dict(zip(columns, result))
-                    if record.get('significant_lags'):
-                        record['significant_lags'] = json.loads(record['significant_lags'])
-                    records.append(record)
-                return records
-        except psycopg2.Error as e:
-            self.logger.error(f"Помилка отримання BTC ARIMA даних: {e}")
-            return None
-        finally:
-            if hasattr(self, 'cursor') and self.cursor:
-                self.cursor.close()
-            if hasattr(self, 'conn') and self.conn:
-                self.conn.close()
-
-    def get_eth_arima_data(
-            self,
-            timeframe: str | None = None,
-            open_time: datetime | None = None,
-            id: int | None = None
-    ) -> list[dict[str, Any]] | dict[str, Any] | None:
-        try:
-            self.connect()
-            query_parts = ["SELECT * FROM eth_arima_data WHERE 1=1"]
-            params = []
-
-            if id is not None:
-                query_parts.append("AND id = %s")
-                params.append(id)
-            if timeframe is not None:
-                query_parts.append("AND timeframe = %s")
-                params.append(timeframe)
-            if open_time is not None:
-                query_parts.append("AND open_time = %s")
-                params.append(open_time)
-
-            query = " ".join(query_parts)
-            self.cursor.execute(query, params)
-
-            columns = [desc[0] for desc in self.cursor.description]
-
-            if any([id, timeframe, open_time]):
-                result = self.cursor.fetchone()
-                if result:
-                    record = dict(zip(columns, result))
-                    if record.get('significant_lags'):
-                        record['significant_lags'] = json.loads(record['significant_lags'])
-                    return record
-                else:
-                    return None
-            else:
-                results = self.cursor.fetchall()
-                records = []
-                for result in results:
-                    record = dict(zip(columns, result))
-                    if record.get('significant_lags'):
-                        record['significant_lags'] = json.loads(record['significant_lags'])
-                    records.append(record)
-                return records
-        except psycopg2.Error as e:
-            self.logger.error(f"Помилка отримання ETH ARIMA даних: {e}")
-            return None
-        finally:
-            if hasattr(self, 'cursor') and self.cursor:
-                self.cursor.close()
-            if hasattr(self, 'conn') and self.conn:
-                self.conn.close()
-
-    def get_sol_arima_data(
-            self,
-            timeframe: str | None = None,
-            open_time: datetime | None = None,
-            id: int | None = None
-    ) -> list[dict[str, Any]] | dict[str, Any] | None:
-        try:
-            self.connect()
-            query_parts = ["SELECT * FROM sol_arima_data WHERE 1=1"]
-            params = []
-
-            if id is not None:
-                query_parts.append("AND id = %s")
-                params.append(id)
-            if timeframe is not None:
-                query_parts.append("AND timeframe = %s")
-                params.append(timeframe)
-            if open_time is not None:
-                query_parts.append("AND open_time = %s")
-                params.append(open_time)
-
-            query = " ".join(query_parts)
-            self.cursor.execute(query, params)
-
-            columns = [desc[0] for desc in self.cursor.description]
-
-            if any([id, timeframe, open_time]):
-                result = self.cursor.fetchone()
-                if result:
-                    record = dict(zip(columns, result))
-                    if record.get('significant_lags'):
-                        record['significant_lags'] = json.loads(record['significant_lags'])
-                    return record
-                else:
-                    return None
-            else:
-                results = self.cursor.fetchall()
-                records = []
-                for result in results:
-                    record = dict(zip(columns, result))
-                    if record.get('significant_lags'):
-                        record['significant_lags'] = json.loads(record['significant_lags'])
-                    records.append(record)
-                return records
-        except psycopg2.Error as e:
-            self.logger.error(f"Помилка отримання SOL ARIMA даних: {e}")
-            return None
-        finally:
-            if hasattr(self, 'cursor') and self.cursor:
-                self.cursor.close()
-            if hasattr(self, 'conn') and self.conn:
-                self.conn.close()
+    def get_sol_arima_data(self, timeframe: str, start_date: datetime = None,
+                           end_date: datetime = None) -> pd.DataFrame:
+        query = "SELECT * FROM sol_arima_data WHERE timeframe = %s"
+        params = [timeframe]
+        if start_date:
+            query += " AND open_time >= %s"
+            params.append(start_date)
+        if end_date:
+            query += " AND open_time <= %s"
+            params.append(end_date)
+        query += " ORDER BY open_time"
+        self.cursor.execute(query, params)
+        data = pd.DataFrame(self.cursor.fetchall(), columns=[desc[0] for desc in self.cursor.description])
+        data.set_index('open_time', inplace=True)
+        return data
 
 
     # --------- VOLATILITY METRICS ---------
