@@ -1031,7 +1031,8 @@ CREATE TABLE IF NOT EXISTS trend_analysis (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (symbol, timeframe, analysis_date)
 );
-CREATE TABLE technical_indicators (
+
+CREATE TABLE CREATE TABLE IF NOT EXISTS technical_indicators (
     id SERIAL PRIMARY KEY,
     price_data_id INTEGER REFERENCES crypto_price_data(id),
     symbol VARCHAR(10) NOT NULL,
@@ -1057,7 +1058,7 @@ CREATE TABLE technical_indicators (
 
 CREATE INDEX idx_technical_indicators_price_data_id ON technical_indicators(price_data_id);
 CREATE INDEX idx_technical_indicators_symbol_timeframe ON technical_indicators(symbol, timeframe);
-CREATE TABLE ml_sequence_data (
+CREATE TABLE CREATE TABLE IF NOT EXISTS ml_sequence_data (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     timeframe VARCHAR(5) NOT NULL,
@@ -1073,7 +1074,7 @@ CREATE TABLE ml_sequence_data (
 CREATE INDEX idx_ml_sequence_data_symbol_timeframe ON ml_sequence_data(symbol, timeframe);
 
 -- 7. ML Models Table
-CREATE TABLE ml_models (
+CREATE TABLE CREATE TABLE IF NOT EXISTS ml_models (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     timeframe VARCHAR(5) NOT NULL,
@@ -1090,7 +1091,7 @@ CREATE TABLE ml_models (
 );
 
 -- 8. ML Model Metrics Table
-CREATE TABLE ml_model_metrics (
+CREATE TABLE CREATE TABLE IF NOT EXISTS ml_model_metrics (
     id SERIAL PRIMARY KEY,
     model_id INTEGER REFERENCES ml_models(id),
     mse DECIMAL(15, 8) NOT NULL,  -- Mean squared error
@@ -1106,7 +1107,7 @@ CREATE TABLE ml_model_metrics (
 CREATE INDEX idx_ml_model_metrics_model_id ON ml_model_metrics(model_id);
 
 -- 9. Predictions Table
-CREATE TABLE predictions (
+CREATE TABLE CREATE TABLE IF NOT EXISTS predictions (
     id SERIAL PRIMARY KEY,
     model_id INTEGER REFERENCES ml_models(id),
     symbol VARCHAR(10) NOT NULL,
@@ -1125,21 +1126,3 @@ CREATE TABLE predictions (
 CREATE INDEX idx_predictions_model_id ON predictions(model_id);
 CREATE INDEX idx_predictions_symbol_timeframe ON predictions(symbol, timeframe);
 CREATE INDEX idx_predictions_target_timestamp ON predictions(target_timestamp);
-
--- 10. Online Learning Log Table
-CREATE TABLE online_learning_log (
-    id SERIAL PRIMARY KEY,
-    model_id INTEGER REFERENCES ml_models(id),
-    learning_start TIMESTAMP NOT NULL,
-    learning_end TIMESTAMP NOT NULL,
-    data_points_count INTEGER NOT NULL,
-    epochs INTEGER NOT NULL,
-    learning_rate DECIMAL(10, 8) NOT NULL,
-    mse_before DECIMAL(15, 8),
-    mse_after DECIMAL(15, 8),
-    status VARCHAR(20) NOT NULL,  -- 'completed', 'failed', 'in_progress'
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_online_learning_log_model_id ON online_learning_log(model_id);
