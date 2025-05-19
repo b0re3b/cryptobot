@@ -1,4 +1,3 @@
-# Файл model_evaluator.py
 from datetime import datetime
 from typing import Dict, Tuple, List
 
@@ -137,7 +136,15 @@ class ModelEvaluator:
             # Обчислюємо MAPE (Mean Absolute Percentage Error)
             # Вимагає обережності через можливі нульові значення
             try:
-                mape = np.mean(np.abs((y_true - y_pred) / np.abs(y_true))) * 100
+                # Виключаємо нульові значення при розрахунку MAPE
+                mask = np.abs(y_true) > 1e-10  # Значення більше маленького порогу
+                if np.any(mask):
+                    mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / np.abs(y_true[mask]))) * 100
+                else:
+                    self.logger.warning("All true values are close to zero, MAPE might be unreliable")
+                    # Альтернативний розрахунок для запобігання ділення на нуль
+                    epsilon = np.finfo(float).eps  # Дуже мале число
+                    mape = np.mean(np.abs((y_true - y_pred) / (np.abs(y_true) + epsilon))) * 100
             except Exception as e:
                 self.logger.warning(f"Error calculating MAPE: {str(e)}. Using alternative method.")
                 # Альтернативний підхід для запобігання ділення на нуль
@@ -349,14 +356,15 @@ class ModelEvaluator:
                 rmse = np.sqrt(mse)
                 mae = mean_absolute_error(test_data, forecast_values)
 
-                # MAPE (тільки для ненульових значень)
-                if (np.abs(test_data) > 1e-10).all():
-                    mape = np.mean(np.abs((test_data - forecast_values) / test_data)) * 100
+                # MAPE (виключаємо нульові і близькі до нуля значення)
+                mask = np.abs(test_data) > 1e-10
+                if np.any(mask):
+                    mape = np.mean(np.abs((test_data[mask] - forecast_values[mask]) / test_data[mask])) * 100
                 else:
                     # Альтернативний розрахунок для випадків з нульовими значеннями
                     mape = np.mean(np.abs((test_data - forecast_values) / (test_data + 1e-10))) * 100
                     self.logger.warning(
-                        f"Ітерація {i + 1}: Деякі тестові значення близькі до нуля. MAPE може бути ненадійним.")
+                        f"Ітерація {i + 1}: Всі тестові значення близькі до нуля. MAPE може бути ненадійним.")
 
                 # Зберігаємо метрики
                 results["metrics"]["mse"].append(mse)
@@ -667,11 +675,40 @@ class ModelEvaluator:
                 "mse": {},
                 "rmse": {},
                 "mae": {},
-                "mape": {}
+                "mape": {},
+                "volatility": {}  # Додаємо метрику волатильності
             }
         }
 
         try:
+            # Розрахунок волатильності тестових даних для порівняння
+            try:
+                # FIX: Використовуємо np.log замість методу .log()
+                test_returns = test_data.pct_change().dropna()
+
+                if (test_returns <= -1).any():
+                    self.logger.warning(
+                        "Test data contains returns <= -100%, using absolute returns for volatility calculation")
+                    # Використовуємо абсолютні значення змін для уникнення проблем з логарифмом
+                    volatility_test = test_returns.std() * np.sqrt(252)  # Річна волатильність
+                else:
+                    # Безпечне обчислення логарифмічних прибутків
+                    positive_values = test_data.dropna()
+                    positive_values = positive_values[positive_values > 0]
+
+                    if len(positive_values) > 1:
+                        # FIX: Правильне використання np.log замість методу .log()
+                        log_returns = np.log(positive_values / positive_values.shift(1)).dropna()
+                        volatility_test = log_returns.std() * np.sqrt(252)  # Річна волатильність
+                    else:
+                        self.logger.warning("Not enough positive values for log-returns calculation")
+                        volatility_test = test_returns.std() * np.sqrt(252)
+
+                self.logger.info(f"Test data volatility: {volatility_test:.4f}")
+            except Exception as vol_error:
+                self.logger.error(f"Error during volatility calculation for test data: {str(vol_error)}")
+                volatility_test = None
+
             # Отримати прогнози для кожної моделі і порівняти їх з тестовими даними
             for model_key in model_keys:
                 try:
@@ -730,10 +767,51 @@ class ModelEvaluator:
                     else:
                         mape = np.nan
 
+                    # Обчислення волатильності прогнозів
+                    try:
+                        # FIX: Використовуємо той самий виправлений підхід, що й для тестових даних
+                        pred_returns = pred_series.pct_change().dropna()
+
+                        if (pred_returns <= -1).any():
+                            self.logger.warning(
+                                f"Prediction for model {model_key} contains returns <= -100%, using absolute returns")
+                            volatility_pred = pred_returns.std() * np.sqrt(252)
+                        else:
+                            # Безпечне обчислення логарифмічних прибутків
+                            positive_pred = pred_series.dropna()
+                            positive_pred = positive_pred[positive_pred > 0]
+
+                            if len(positive_pred) > 1:
+                                # FIX: Правильне використання np.log замість методу .log()
+                                log_returns_pred = np.log(positive_pred / positive_pred.shift(1)).dropna()
+                                volatility_pred = log_returns_pred.std() * np.sqrt(252)
+                            else:
+                                self.logger.warning(f"Not enough positive values for model {model_key}")
+                                volatility_pred = pred_returns.std() * np.sqrt(252)
+
+                        # Порівняння з волатильністю тестових даних
+                        if volatility_test is not None:
+                            volatility_diff = abs(volatility_pred - volatility_test)
+                            volatility_ratio = volatility_pred / volatility_test if volatility_test != 0 else float('inf')
+                        else:
+                            volatility_diff = None
+                            volatility_ratio = None
+
+                        volatility_metrics = {
+                            "predicted": float(volatility_pred),
+                            "actual": float(volatility_test) if volatility_test is not None else None,
+                            "difference": float(volatility_diff) if volatility_diff is not None else None,
+                            "ratio": float(volatility_ratio) if volatility_ratio is not None else None
+                        }
+                    except Exception as vol_err:
+                        self.logger.error(f"Error calculating volatility for model {model_key}: {str(vol_err)}")
+                        volatility_metrics = {"error": str(vol_err)}
+
                     comparison_results["metrics"]["mse"][model_key] = mse
                     comparison_results["metrics"]["rmse"][model_key] = rmse
                     comparison_results["metrics"]["mae"][model_key] = mae
                     comparison_results["metrics"]["mape"][model_key] = mape
+                    comparison_results["metrics"]["volatility"][model_key] = volatility_metrics
 
                     comparison_results["models"][model_key] = {
                         "forecast": pred_series.to_dict(),
@@ -741,6 +819,7 @@ class ModelEvaluator:
                         "rmse": rmse,
                         "mae": mae,
                         "mape": mape,
+                        "volatility": volatility_metrics,
                         "model_type": model_info["metadata"]["model_type"],
                         "parameters": model_info["parameters"]
                     }
@@ -764,7 +843,8 @@ class ModelEvaluator:
                         "mse": comparison_results["metrics"]["mse"][best_model_key],
                         "rmse": comparison_results["metrics"]["rmse"][best_model_key],
                         "mae": comparison_results["metrics"]["mae"][best_model_key],
-                        "mape": comparison_results["metrics"]["mape"][best_model_key]
+                        "mape": comparison_results["metrics"]["mape"][best_model_key],
+                        "volatility": comparison_results["metrics"]["volatility"][best_model_key]
                     }
                 }
 

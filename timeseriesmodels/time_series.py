@@ -871,48 +871,57 @@ class TimeSeriesModels:
 
 
 def main():
+    """Enhanced main function to use all historical data and train models on multiple currencies"""
+    from datetime import datetime, timedelta
 
-        """Enhanced main function with better error handling but without saving anything to disk"""
-        from datetime import datetime, timedelta
+    # Configure to use all three cryptocurrencies
+    symbols = ["BTC", "ETH", "SOL"]
+    timeframe = "1d"
+    forecast_steps = 30  # Forecast for the next 30 days
 
-        # Configuration
-        symbol = "BTC"
-        timeframe = "1d"
-        forecast_steps = 30  # Forecast for the next 30 days
+    # Initialize TimeSeriesModels
+    print("🔄 Initializing TimeSeriesModels...")
+    model = TimeSeriesModels()
+    db = model.db_manager
 
-        # Initialize TimeSeriesModels
-        print("🔄 Initializing TimeSeriesModels...")
-        model = TimeSeriesModels()
-        db = model.db_manager
+    if db is None:
+        print("❌ Database manager is not configured.")
+        return
 
-        if db is None:
-            print("❌ Database manager is not configured.")
+    # Verify that all required symbols are available
+    print("🔄 Verifying available symbols...")
+    try:
+        available_symbols = model.get_available_crypto_symbols()
+        if not available_symbols:
+            print("❌ No symbols available in the database.")
             return
 
-        # Get list of available symbols
-        print("🔄 Getting available symbols...")
-        try:
-            available_symbols = model.get_available_crypto_symbols()
-            if not available_symbols:
-                print("❌ No symbols available in the database.")
+        # Check if all required symbols are available
+        missing_symbols = [s for s in symbols if s not in available_symbols]
+        if missing_symbols:
+            print(f"⚠️ Some symbols are not available in the database: {', '.join(missing_symbols)}")
+            # Filter out missing symbols
+            symbols = [s for s in symbols if s in available_symbols]
+            if not symbols:
+                print("❌ None of the required symbols are available.")
                 return
+    except Exception as e:
+        print(f"❌ Error retrieving symbols: {e}")
+        return
 
-            if symbol not in available_symbols:
-                print(
-                    f"⚠️ Symbol {symbol} not found in database. Available symbols: {', '.join(available_symbols[:5])}...")
-                # Use the first available symbol instead
-                symbol = available_symbols[0]
-                print(f"🔄 Using {symbol} instead.")
-        except Exception as e:
-            print(f"❌ Error retrieving symbols: {e}")
-            return
+    # Use earliest possible start date (for all available data)
+    end_date = datetime.now()
+    # Instead of 2 years, we'll try to get all data from 2017
+    start_date = datetime(2017, 1, 1)
 
-        # Get current date and calculate start date (2 years of historical data)
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=730)
+    print(f"🔄 Loading data for {', '.join(symbols)} from {start_date.date()} to {end_date.date()}...")
 
-        print(f"🔄 Loading {symbol} price data from {start_date.date()} to {end_date.date()}...")
+    # Dictionary to store data for each symbol
+    data_dict = {}
+    price_series_dict = {}
 
+    # Load data for each symbol
+    for symbol in symbols:
         try:
             # Load data using the correct method from TimeSeriesModels
             df = model.load_crypto_data(
@@ -922,40 +931,54 @@ def main():
                 end_date=end_date,
                 timeframe=timeframe
             )
+
+            if df is None or df.empty:
+                print(f"⚠️ No data available for {symbol}. Skipping.")
+                continue
+
+            # Print data range for each symbol
+            if isinstance(df.index, pd.DatetimeIndex):
+                print(f"📊 Loaded {len(df)} records for {symbol} from {df.index.min()} to {df.index.max()}")
+            else:
+                print(f"📊 Loaded {len(df)} records for {symbol}")
+
+            data_dict[symbol] = df
+
+            # Check for price column with modified logic to handle preprocessed data
+            price_columns = [
+                "close", "Close", "price", "Price", "value", "Value",
+                "original_close",  # Add the column from your database
+                "close_log",  # Alternative preprocessed column
+                "close_diff"  # Another alternative
+            ]
+
+            for col in price_columns:
+                if col in df.columns:
+                    print(f"✅ Using '{col}' as price column for {symbol}")
+                    price_series_dict[symbol] = df[col]
+                    break
+            else:
+                # If no suitable column is found
+                print(f"❌ No suitable price column found in data for {symbol}.")
+                print(f"Available columns: {', '.join(df.columns)}")
+
         except Exception as e:
-            print(f"❌ Error while retrieving data: {e}")
-            return
+            print(f"❌ Error while retrieving data for {symbol}: {e}")
 
-        if df is None or df.empty:
-            print("❌ No data available for model training.")
-            return
+    if not price_series_dict:
+        print("❌ No price data available for any symbol. Exiting.")
+        return
 
-        # Print available columns to help debug
-        print(f"📊 Available columns in the dataset: {', '.join(df.columns)}")
+    # Process each symbol
+    results = {}
 
-        # Check for price column with modified logic to handle preprocessed data
-        price_columns = [
-            "close", "Close", "price", "Price", "value", "Value",
-            "original_close",  # Add the column from your database
-            "close_log",  # Alternative preprocessed column
-            "close_diff"  # Another alternative
-        ]
-
-        for col in price_columns:
-            if col in df.columns:
-                print(f"✅ Using '{col}' as price column")
-                price_series = df[col]
-                break
-        else:
-            # If no suitable column is found
-            print("❌ No suitable price column found in data.")
-            print(f"Available columns: {', '.join(df.columns)}")
-            return
+    for symbol, price_series in price_series_dict.items():
+        print(f"\n--- Processing {symbol} ---")
 
         # Data analysis and preprocessing
         print("🔄 Analyzing price data...")
         analysis = model.analyze_series(price_series)
-        print(f"📊 Data analysis results:")
+        print(f"📊 Data analysis results for {symbol}:")
         print(f"  - Is stationary: {analysis['stationarity']['is_stationary']}")
         print(f"  - Has seasonality: {analysis['seasonality']['has_seasonality']}")
         if analysis['seasonality']['has_seasonality']:
@@ -969,7 +992,7 @@ def main():
         print(f"📊 Data split: {train_size} training points, {len(test_data)} testing points")
 
         # Try ensemble forecast with multiple models
-        print("🔄 Creating ensemble forecast...")
+        print(f"🔄 Creating ensemble forecast for {symbol}...")
         ensemble_result = model.ensemble_forecast(
             data=train_data,
             models=['arima', 'sarima'],
@@ -982,18 +1005,17 @@ def main():
             print(f"✅ Ensemble forecast created using {len(component_models)} models")
             print(f"📈 First 5 forecast values: {ensemble_forecast.head().to_dict()}")
 
-            # Print some forecast statistics instead of saving to CSV
-            print(f"📊 Forecast statistics:")
-            print(f"  - Forecast length: {len(ensemble_forecast)} points")
-            print(f"  - Forecast period: {ensemble_forecast.index[0]} to {ensemble_forecast.index[-1]}")
-            print(f"  - Forecast min: {ensemble_forecast.min()}")
-            print(f"  - Forecast max: {ensemble_forecast.max()}")
-            print(f"  - Forecast mean: {ensemble_forecast.mean()}")
+            # Store result
+            results[symbol] = {
+                "status": "success",
+                "forecast": ensemble_forecast,
+                "component_models": component_models
+            }
         else:
             print(f"❌ Ensemble forecast failed: {ensemble_result.get('message', 'Unknown error')}")
 
             # Fallback to simple ARIMA forecast
-            print("🔄 Falling back to standard ARIMA forecast...")
+            print(f"🔄 Falling back to standard ARIMA forecast for {symbol}...")
             forecast_result = model.forecaster.run_auto_forecast(
                 data=price_series,
                 test_size=0.2,
@@ -1008,16 +1030,46 @@ def main():
                 # Get forecast
                 forecast = model.forecast(model_key, steps=forecast_steps)
                 if forecast is not None:
-                    # Print forecast information instead of saving
+                    # Store result
+                    results[symbol] = {
+                        "status": "success",
+                        "forecast": forecast,
+                        "model_key": model_key
+                    }
                     print(f"📈 Forecast generated successfully")
                     print(f"  - Forecast length: {len(forecast)} points")
                     print(f"  - First 5 values: {forecast.head().to_dict()}")
                 else:
+                    results[symbol] = {"status": "error", "message": "Failed to generate forecast"}
                     print("❌ Failed to generate forecast.")
             else:
+                results[symbol] = {
+                    "status": "error",
+                    "message": forecast_result.get('message', 'Unknown error')
+                }
                 print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
 
-        print("\n✅ Analysis completed.")
+    # Process all symbols together using batch processing
+    print("\n--- Batch processing all symbols together ---")
+    batch_results = model.batch_process_symbols(
+        db_manager=db,
+        symbols=symbols,
+        start_date=start_date,
+        end_date=end_date,
+        interval=timeframe
+    )
+
+    # Print batch processing summary
+    if "_summary" in batch_results:
+        summary = batch_results["_summary"]
+        print(f"📊 Batch processing summary:")
+        print(f"  - Total symbols: {summary['total_symbols']}")
+        print(f"  - Success count: {summary['success_count']}")
+        print(f"  - Error count: {summary['error_count']}")
+        print(f"  - Success rate: {summary['success_rate']:.2%}")
+
+    print("\n✅ Analysis completed for all currencies.")
+
 
 if __name__ == "__main__":
     main()

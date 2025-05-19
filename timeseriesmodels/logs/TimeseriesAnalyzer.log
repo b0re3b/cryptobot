@@ -6,3 +6,18 @@
 2025-05-19 23:36:23 - TimeseriesAnalyzer - WARNING - [logger.py:107] - Помилка під час сезонної декомпозиції: unsupported operand type(s) for -: 'float' and 'decimal.Decimal'
 2025-05-19 23:36:23 - TimeseriesAnalyzer - WARNING - [logger.py:107] - Помилка під час спектрального аналізу: unsupported operand type(s) for *: 'float' and 'decimal.Decimal'
 2025-05-19 23:36:23 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: False
+2025-05-20 00:31:38 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-20 00:31:38 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-20 00:31:38 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: False
+2025-05-20 00:38:10 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-20 00:38:10 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-20 00:38:10 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-20 00:38:10 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 354
+2025-05-20 00:43:34 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-20 00:43:34 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-20 00:43:34 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-20 00:43:34 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 354
+2025-05-20 00:52:47 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-20 00:52:47 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-20 00:52:47 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-20 00:52:47 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 354
