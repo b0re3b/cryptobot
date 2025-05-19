@@ -129,3 +129,8 @@ TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 w
 2025-05-19 19:22:45 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
 2025-05-19 19:22:45 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
 2025-05-19 19:22:46 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 729 records for BTC from 2023-05-21 00:00:00 to 2025-05-18 00:00:00
+2025-05-19 23:36:22 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 23:36:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 23:36:22 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 23:36:22 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 23:36:23 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 729 records for BTC from 2023-05-21 00:00:00 to 2025-05-18 00:00:00

@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Union, Tuple, List, Dict
 from data.db import DatabaseManager
 import numpy as np
@@ -13,12 +12,13 @@ class TimeSeriesTransformer:
         self.logger = CryptoLogger('TimeseriesModelEvaluator')
         self.transformations = {}
         self.db_manager = DatabaseManager()
-    def difference_series(self, data: pd.Series, order: int = 1) -> pd.Series:
 
+    def difference_series(self, data: pd.Series, order: int = 1) -> pd.Series:
         if order < 1:
             self.logger.warning("Differencing order must be at least 1, using order=1 instead")
             order = 1
 
+        # Перевірка на нульові значення (не потрібно спеціальної обробки для операції різниці)
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before differencing.")
             data = data.dropna()
@@ -43,15 +43,27 @@ class TimeSeriesTransformer:
         return diff_data
 
     def transform_data(self, data: pd.Series, method: str = 'log') -> Union[pd.Series, Tuple[pd.Series, float]]:
-
         self.logger.info(f"Applying {method} transformation to data")
+
+        # Перевірка на null значення
+        if data.isnull().any():
+            self.logger.warning(f"Data contains NaN values. Removing them before {method} transformation.")
+            data = data.dropna()
 
         # Перевірка наявності нульових та від'ємних значень для певних трансформацій
         if method in ['log', 'boxcox']:
             min_value = data.min()
+
+            # Більш безпечна перевірка на нульові та від'ємні значення
             if min_value <= 0:
-                self.logger.warning(f"Data contains non-positive values, adding offset for {method} transformation")
-                offset = abs(min_value) + 1
+                # Знаходимо мінімальне позитивне значення для більш обґрунтованого зсуву
+                positive_values = data[data > 0]
+                min_positive = positive_values.min() if len(positive_values) > 0 else 1e-6
+
+                # Встановлюємо зсув щоб всі значення були додатними
+                offset = abs(min_value) + min_positive
+                self.logger.warning(
+                    f"Data contains non-positive values ({min_value}), adding offset {offset} for {method} transformation")
                 data = data + offset
 
                 # Зберігаємо інформацію про зсув для подальшої зворотної трансформації
@@ -64,18 +76,36 @@ class TimeSeriesTransformer:
             return data
 
         elif method == 'log':
-            # Логарифмічна трансформація
+            # Логарифмічна трансформація з перевіркою на нульові значення
+            # Null значення вже відфільтровані, а нульові значення зсунуті вище
             transformed_data = np.log(data)
             return transformed_data
 
         elif method == 'sqrt':
             # Квадратний корінь
+            # Перевіряємо наявність від'ємних значень
+            if (data < 0).any():
+                min_value = data.min()
+                offset = abs(min_value) + 1e-6
+                self.logger.warning(
+                    f"Data contains negative values ({min_value}), adding offset {offset} for sqrt transformation")
+                data = data + offset
+                self.transformations['sqrt'] = {'offset': offset}
+            else:
+                self.transformations['sqrt'] = {'offset': 0}
+
             transformed_data = np.sqrt(data)
             return transformed_data
 
         elif method == 'boxcox':
             # Трансформація Бокса-Кокса
-            transformed_data, lambda_param = stats.boxcox(data)
+            # Нульові та від'ємні значення вже оброблені вище
+            try:
+                transformed_data, lambda_param = stats.boxcox(data)
+            except Exception as e:
+                self.logger.error(f"BoxCox transformation error: {str(e)}. Using log transformation instead.")
+                transformed_data = np.log(data)
+                lambda_param = 0  # log transform is boxcox with lambda=0
 
             # Зберігаємо lambda параметр для зворотної трансформації
             if method in self.transformations:
@@ -90,6 +120,7 @@ class TimeSeriesTransformer:
             # Трансформація Йео-Джонсона (працює з від'ємними значеннями)
             from sklearn.preprocessing import PowerTransformer
 
+            # Перевірка на нульові значення не потрібна для Yeo-Johnson
             # Підготовка даних для трансформації
             data_reshaped = data.values.reshape(-1, 1)
 
@@ -111,7 +142,6 @@ class TimeSeriesTransformer:
             raise ValueError(error_msg)
 
     def inverse_transform(self, data: pd.Series, method: str = 'log', lambda_param: float = None) -> pd.Series:
-
         self.logger.info(f"Applying inverse {method} transformation")
 
         if method == 'none':
@@ -155,7 +185,16 @@ class TimeSeriesTransformer:
                     raise ValueError(error_msg)
 
             # Застосовуємо зворотну трансформацію
-            inverse_data = stats.inv_boxcox(data, lambda_param)
+            try:
+                inverse_data = stats.inv_boxcox(data, lambda_param)
+            except Exception as e:
+                self.logger.error(f"Error in inverse BoxCox transformation: {str(e)}")
+                # Якщо lambda близька до 0, використовуємо експоненційну функцію (зворотну до log)
+                if abs(lambda_param) < 1e-5:
+                    self.logger.info("Lambda is close to 0, using exp as inverse transformation")
+                    inverse_data = np.exp(data)
+                else:
+                    raise
 
             # Відновлюємо зсув, якщо він був застосований
             if offset > 0:
@@ -188,12 +227,12 @@ class TimeSeriesTransformer:
             self.logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def apply_preprocessing_pipeline(self, data: pd.Series, operations: List[Dict]) -> pd.Series:
-
+    def apply_preprocessing_pipeline(self, data: pd.Series, operations: List[Dict], model_id: int = None) -> pd.Series:
         self.logger.info(f"Applying preprocessing pipeline with {len(operations)} operations")
 
+        # Спочатку перевіряємо наявність NaN значень
         if data.isnull().any():
-            self.logger.warning("Data contains NaN values. Removing them before preprocessing.")
+            self.logger.warning(f"Data contains {data.isnull().sum()} NaN values. Removing them before preprocessing.")
             data = data.dropna()
 
         if len(data) == 0:
@@ -217,35 +256,48 @@ class TimeSeriesTransformer:
                 if op_type == 'log':
                     # Перевірка на наявність нульових або від'ємних значень
                     if (processed_data <= 0).any():
-                        min_positive = processed_data[processed_data > 0].min() if (processed_data > 0).any() else 1e-6
-                        offset = abs(processed_data.min()) + min_positive if processed_data.min() <= 0 else 0
-                        self.logger.warning(f"Negative or zero values found in data. Adding offset {offset}")
+                        min_value = processed_data.min()
+                        # Знаходимо найменше позитивне значення для кращого зсуву
+                        positive_values = processed_data[processed_data > 0]
+                        min_positive = positive_values.min() if len(positive_values) > 0 else 1e-6
+
+                        # Встановлюємо зсув щоб усі значення стали позитивними
+                        offset = abs(min_value) + min_positive if min_value <= 0 else 0
+                        self.logger.warning(
+                            f"Negative or zero values found in data. Min value: {min_value}. Adding offset {offset}")
+
                         processed_data = processed_data + offset
                         transformations_info.append({
-                            "method": "log",
-                            "params": {"offset": offset}
+                            "type": "log",
+                            "params": {"offset": offset},
+                            "order": i + 1
                         })
                     else:
                         transformations_info.append({
-                            "method": "log",
-                            "params": {}
+                            "type": "log",
+                            "params": {},
+                            "order": i + 1
                         })
                     processed_data = np.log(processed_data)
 
                 elif op_type == 'sqrt':
                     # Перевірка на наявність від'ємних значень
                     if (processed_data < 0).any():
-                        offset = abs(processed_data.min()) + 1e-6
-                        self.logger.warning(f"Negative values found in data. Adding offset {offset}")
+                        min_value = processed_data.min()
+                        offset = abs(min_value) + 1e-6
+                        self.logger.warning(
+                            f"Negative values found in data. Min value: {min_value}. Adding offset {offset}")
                         processed_data = processed_data + offset
                         transformations_info.append({
-                            "method": "sqrt",
-                            "params": {"offset": offset}
+                            "type": "sqrt",
+                            "params": {"offset": offset},
+                            "order": i + 1
                         })
                     else:
                         transformations_info.append({
-                            "method": "sqrt",
-                            "params": {}
+                            "type": "sqrt",
+                            "params": {},
+                            "order": i + 1
                         })
                     processed_data = np.sqrt(processed_data)
 
@@ -253,26 +305,55 @@ class TimeSeriesTransformer:
                     from scipy import stats
                     # BoxCox працює тільки з додатними значеннями
                     if (processed_data <= 0).any():
-                        min_positive = processed_data[processed_data > 0].min() if (processed_data > 0).any() else 1e-6
-                        offset = abs(processed_data.min()) + min_positive
-                        self.logger.warning(f"Non-positive values found in data. Adding offset {offset}")
+                        min_value = processed_data.min()
+                        # Знаходимо найменше позитивне значення для кращого зсуву
+                        positive_values = processed_data[processed_data > 0]
+                        min_positive = positive_values.min() if len(positive_values) > 0 else 1e-6
+
+                        offset = abs(min_value) + min_positive
+                        self.logger.warning(
+                            f"Non-positive values found in data. Min value: {min_value}. Adding offset {offset}")
+
                         processed_data = processed_data + offset
-                        processed_data, lambda_param = stats.boxcox(processed_data)
-                        transformations_info.append({
-                            "method": "boxcox",
-                            "params": {
-                                "lambda": lambda_param,
-                                "offset": offset
-                            }
-                        })
+
+                        try:
+                            processed_data, lambda_param = stats.boxcox(processed_data)
+                            transformations_info.append({
+                                "type": "boxcox",
+                                "params": {
+                                    "lambda": lambda_param,
+                                    "offset": offset
+                                },
+                                "order": i + 1
+                            })
+                        except Exception as e:
+                            self.logger.error(f"BoxCox error: {str(e)}. Using log transformation instead.")
+                            processed_data = np.log(processed_data)
+                            transformations_info.append({
+                                "type": "log",
+                                "params": {
+                                    "offset": offset
+                                },
+                                "order": i + 1
+                            })
                     else:
-                        processed_data, lambda_param = stats.boxcox(processed_data)
-                        transformations_info.append({
-                            "method": "boxcox",
-                            "params": {
-                                "lambda": lambda_param
-                            }
-                        })
+                        try:
+                            processed_data, lambda_param = stats.boxcox(processed_data)
+                            transformations_info.append({
+                                "type": "boxcox",
+                                "params": {
+                                    "lambda": lambda_param
+                                },
+                                "order": i + 1
+                            })
+                        except Exception as e:
+                            self.logger.error(f"BoxCox error: {str(e)}. Using log transformation instead.")
+                            processed_data = np.log(processed_data)
+                            transformations_info.append({
+                                "type": "log",
+                                "params": {},
+                                "order": i + 1
+                            })
 
                 elif op_type == 'diff':
                     order = operation.get('order', 1)
@@ -282,8 +363,9 @@ class TimeSeriesTransformer:
 
                     processed_data = processed_data.diff(order).dropna()
                     transformations_info.append({
-                        "method": "diff",
-                        "params": {"order": order}
+                        "type": "diff",
+                        "params": {"order": order},
+                        "order": i + 1
                     })
 
                 elif op_type == 'seasonal_diff':
@@ -294,8 +376,9 @@ class TimeSeriesTransformer:
 
                     processed_data = processed_data.diff(lag).dropna()
                     transformations_info.append({
-                        "method": "seasonal_diff",
-                        "params": {"lag": lag}
+                        "type": "seasonal_diff",
+                        "params": {"lag": lag},
+                        "order": i + 1
                     })
 
                 elif op_type == 'remove_outliers':
@@ -319,7 +402,7 @@ class TimeSeriesTransformer:
                         processed_data = processed_data.clip(lower=lower_bound, upper=upper_bound)
 
                         transformations_info.append({
-                            "method": "remove_outliers",
+                            "type": "remove_outliers",
                             "params": {
                                 "method": method,
                                 "threshold": threshold,
@@ -327,7 +410,8 @@ class TimeSeriesTransformer:
                                     "indices": outlier_indices,
                                     "values": outlier_values
                                 }
-                            }
+                            },
+                            "order": i + 1
                         })
 
                     elif method == 'zscore':
@@ -344,7 +428,7 @@ class TimeSeriesTransformer:
                         processed_data = processed_data.interpolate(method='linear')
 
                         transformations_info.append({
-                            "method": "remove_outliers",
+                            "type": "remove_outliers",
                             "params": {
                                 "method": method,
                                 "threshold": threshold,
@@ -352,7 +436,8 @@ class TimeSeriesTransformer:
                                     "indices": outlier_indices,
                                     "values": outlier_values
                                 }
-                            }
+                            },
+                            "order": i + 1
                         })
 
                     else:
@@ -368,11 +453,12 @@ class TimeSeriesTransformer:
 
                     processed_data = processed_data.rolling(window=window, center=center).mean().dropna()
                     transformations_info.append({
-                        "method": "moving_average",
+                        "type": "moving_average",
                         "params": {
                             "window": window,
                             "center": center
-                        }
+                        },
+                        "order": i + 1
                     })
 
                 elif op_type == 'ewm':
@@ -385,8 +471,9 @@ class TimeSeriesTransformer:
 
                     processed_data = processed_data.ewm(span=span).mean()
                     transformations_info.append({
-                        "method": "ewm",
-                        "params": {"span": span}
+                        "type": "ewm",
+                        "params": {"span": span},
+                        "order": i + 1
                     })
 
                 elif op_type == 'normalize':
@@ -396,36 +483,46 @@ class TimeSeriesTransformer:
                         # Min-Max масштабування
                         min_val = processed_data.min()
                         max_val = processed_data.max()
+
+                        # Захист від однакових значень (max=min)
                         if max_val > min_val:
                             processed_data = (processed_data - min_val) / (max_val - min_val)
                         else:
-                            processed_data = processed_data * 0  # Якщо всі значення однакові
+                            self.logger.warning(
+                                "All values are the same (max=min). Setting all values to 0.5 for minmax scaling.")
+                            processed_data = pd.Series(0.5, index=processed_data.index)
 
                         transformations_info.append({
-                            "method": "normalize",
+                            "type": "normalize",
                             "params": {
                                 "method": method,
                                 "min": min_val,
                                 "max": max_val
-                            }
+                            },
+                            "order": i + 1
                         })
 
                     elif method == 'zscore':
                         # Z-score стандартизація
                         mean_val = processed_data.mean()
                         std_val = processed_data.std()
+
+                        # Захист від нульового стандартного відхилення
                         if std_val > 0:
                             processed_data = (processed_data - mean_val) / std_val
                         else:
-                            processed_data = processed_data * 0  # Якщо стандартне відхилення нульове
+                            self.logger.warning(
+                                "Standard deviation is zero. Setting all values to 0 for z-score normalization.")
+                            processed_data = pd.Series(0, index=processed_data.index)
 
                         transformations_info.append({
-                            "method": "normalize",
+                            "type": "normalize",
                             "params": {
                                 "method": method,
                                 "mean": mean_val,
                                 "std": std_val
-                            }
+                            },
+                            "order": i + 1
                         })
 
                     else:
@@ -438,24 +535,23 @@ class TimeSeriesTransformer:
                     self.logger.error(f"No data left after operation {i + 1}: {op_type}")
                     return pd.Series([], index=pd.DatetimeIndex([]))
 
-            # Зберігаємо інформацію про трансформації, якщо є db_manager
-            if self.db_manager is not None and transformations_info:
+            # Зберігаємо інформацію про трансформації, якщо є model_id
+            if self.db_manager is not None and transformations_info and model_id is not None:
                 try:
-                    transformation_key = f"transform_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    self.db_manager.save_data_transformations(
-                        key=transformation_key,
-                        transformations=transformations_info,
-                        metadata={
-                            "original_length": len(original_data),
-                            "processed_length": len(processed_data),
-                            "timestamp": datetime.now().isoformat(),
-                            "operations": operations
-                        }
+                    # Викликаємо метод збереження трансформацій з правильними параметрами
+                    save_result = self.db_manager.save_data_transformations(
+                        model_id=model_id,
+                        transformations=transformations_info
                     )
-                    # Зберігаємо трансформації в локальному словнику також
-                    self.transformations[transformation_key] = transformations_info
 
-                    self.logger.info(f"Saved transformation pipeline with key: {transformation_key}")
+                    if save_result:
+                        self.logger.info(f"Successfully saved transformation pipeline for model_id: {model_id}")
+                    else:
+                        self.logger.error(f"Failed to save transformation pipeline for model_id: {model_id}")
+
+                    # Зберігаємо трансформації в локальному словнику також
+                    self.transformations[f"model_{model_id}"] = transformations_info
+
                 except Exception as db_error:
                     self.logger.error(f"Error saving transformation pipeline to database: {str(db_error)}")
 
@@ -468,12 +564,19 @@ class TimeSeriesTransformer:
             return pd.Series([], index=pd.DatetimeIndex([]))
 
     def extract_volatility(self, data: pd.Series, window: int = 20) -> pd.Series:
-
         self.logger.info(f"Calculating volatility with window size {window}")
 
+        # Перевірка на нульові значення
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before volatility calculation.")
             data = data.dropna()
+
+        # Перевірка на нульові або негативні значення
+        if (data <= 0).any():
+            min_value = data.min()
+            self.logger.warning(
+                f"Data contains zero or negative values (min={min_value}). These points will be excluded from volatility calculation.")
+            data = data[data > 0]  # Відфільтровуємо всі нульові та від'ємні значення
 
         if len(data) < window:
             self.logger.error(f"Not enough data points for volatility calculation with window={window}")
@@ -481,6 +584,7 @@ class TimeSeriesTransformer:
 
         try:
             # Розрахунок логарифмічних прибутків
+            # Захист від ділення на нуль при розрахунку відношення
             log_returns = np.log(data / data.shift(1)).dropna()
 
             # Розрахунок волатильності як ковзного стандартного відхилення логарифмічних прибутків
@@ -493,24 +597,28 @@ class TimeSeriesTransformer:
             # - Хвилинні дані: множник = sqrt(252 * 24 * 60)
 
             # За замовчуванням припускаємо денні дані
+            annualization_factor = np.sqrt(252)  # За замовчуванням
+
             if isinstance(data.index, pd.DatetimeIndex):
                 # Визначаємо частоту даних
                 if len(data) >= 2:
-                    time_diff = data.index[1:] - data.index[:-1]
-                    median_diff = pd.Series(time_diff).median()
+                    try:
+                        time_diff = data.index[1:] - data.index[:-1]
+                        median_diff = pd.Series(time_diff).median()
 
-                    if median_diff <= pd.Timedelta(minutes=5):
-                        annualization_factor = np.sqrt(252 * 24 * 12)  # 5-хвилинні дані
-                    elif median_diff <= pd.Timedelta(hours=1):
-                        annualization_factor = np.sqrt(252 * 24)  # Годинні дані
-                    elif median_diff <= pd.Timedelta(days=1):
-                        annualization_factor = np.sqrt(252)  # Денні дані
-                    else:
-                        annualization_factor = 1  # Не анулізуємо для нестандартних інтервалів
-                else:
-                    annualization_factor = np.sqrt(252)  # За замовчуванням
-            else:
-                annualization_factor = np.sqrt(252)  # За замовчуванням
+                        if median_diff <= pd.Timedelta(minutes=5):
+                            annualization_factor = np.sqrt(252 * 24 * 12)  # 5-хвилинні дані
+                        elif median_diff <= pd.Timedelta(hours=1):
+                            annualization_factor = np.sqrt(252 * 24)  # Годинні дані
+                        elif median_diff <= pd.Timedelta(days=1):
+                            annualization_factor = np.sqrt(252)  # Денні дані
+                        else:
+                            # Не анулізуємо для нестандартних інтервалів
+                            self.logger.warning(
+                                f"Non-standard time interval detected ({median_diff}). Using default annualization factor.")
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Error determining time frequency: {str(e)}. Using default annualization factor.")
 
             volatility = volatility * annualization_factor
 
