@@ -1932,6 +1932,53 @@ class TrendDetection:
                 'message': str(e)
             }
 
+    def prepare_ml_trend_features(self, data: pd.DataFrame, lookback_window: int = 30) -> pd.DataFrame:
+
+        try:
+            # Копіюємо дані щоб уникнути попереджень
+            df = data.copy()
+
+            # 1. Розраховуємо технічні індикатори
+            df = self.calculate_adx(df)  # ADX, +DI, -DI
+            df['rsi'] = ta.rsi(df['close'])  # RSI
+            macd = ta.macd(df['close'])  # MACD
+            df = pd.concat([df, macd], axis=1)
+
+            # 2. Додаємо метрики тренду
+            metrics = self.calculate_trend_metrics(df)
+            for k, v in metrics.items():
+                if v is not None:
+                    df[k] = v
+
+            # 3. Додаємо інші важливі ознаки
+            df['trend_strength'] = self.calculate_trend_strength(df)
+            df['market_regime'] = self.identify_market_regime(df)  # Можна закодувати як число
+
+            # 4. Нормалізація даних (важливо для LSTM/GRU)
+            from sklearn.preprocessing import MinMaxScaler
+            scaler = MinMaxScaler()
+            feature_cols = ['close', 'volume', 'adx', '+di', '-di', 'rsi',
+                            'MACD_12_26_9', 'MACDs_12_26_9', 'trend_strength',
+                            'speed_20', 'volatility_20']
+
+            # Залишаємо тільки потрібні колонки
+            df = df[feature_cols + ['market_regime']]
+
+            # Нормалізуємо числові ознаки
+            df[feature_cols] = scaler.fit_transform(df[feature_cols])
+
+            # 5. Створюємо часові вікна для LSTM/GRU
+            X, y = [], []
+            for i in range(lookback_window, len(df)):
+                X.append(df[feature_cols].values[i - lookback_window:i])
+                y.append(df['close'].values[i])  # Можна змінити на прогноз зміни ціни
+
+            # 6. Повертаємо дані у вигляді numpy масивів
+            return np.array(X), np.array(y), df['market_regime'].values[lookback_window:]
+
+        except Exception as e:
+            self.logger.error(f"Error preparing ML features: {str(e)}")
+            return None, None, None
 
 def main():
     # Initialize TrendDetection

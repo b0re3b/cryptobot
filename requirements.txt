@@ -31,4 +31,3 @@ pytest~=8.3.5
 scipy~=1.15.3
 scikit-learn~=1.6.1
 torch~=2.7.0
-candlestick~=0.0.8

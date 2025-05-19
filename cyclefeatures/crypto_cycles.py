@@ -1245,6 +1245,85 @@ class CryptoCycles:
             self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
             return False
 
+    def prepare_cycle_ml_features(processed_data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+
+        logger = CryptoLogger('FeaturePreparation')
+
+        try:
+            # Create a copy of the input data
+            features_df = processed_data.copy()
+
+            # Clean symbol
+            clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
+            logger.info(f"Preparing ML features for {clean_symbol}")
+
+            # 1. Add token-specific cycle features
+            if clean_symbol == 'BTC':
+                btc_extractor = BitcoinCycleFeatureExtractor()
+                features_df = btc_extractor.calculate_btc_halving_cycle_features(features_df)
+            elif clean_symbol == 'ETH':
+                eth_extractor = EthereumCycleFeatureExtractor()
+                features_df = eth_extractor.calculate_eth_event_cycle_features(features_df)
+            elif clean_symbol == 'SOL':
+                sol_extractor = SolanaCycleFeatureExtractor()
+                features_df = sol_extractor.calculate_sol_event_cycle_features(features_df)
+
+            # 2. Add market phase features
+            market_phase_extractor = MarketPhaseFeatureExtractor()
+            features_df = market_phase_extractor.detect_market_phase(features_df)
+            features_df = market_phase_extractor.identify_bull_bear_cycles(features_df)
+
+            # 3. Add seasonality features
+            seasonality_analyzer = TemporalSeasonalityAnalyzer()
+
+            # Weekly features
+            weekly_stats = seasonality_analyzer.analyze_weekly_cycle(features_df)
+            if 'day_of_week' not in features_df.columns:
+                features_df['day_of_week'] = features_df.index.dayofweek
+            features_df['day_of_week_sin'] = np.sin(features_df['day_of_week'] * (2 * np.pi / 7))
+            features_df['day_of_week_cos'] = np.cos(features_df['day_of_week'] * (2 * np.pi / 7))
+
+            # Monthly features
+            monthly_stats = seasonality_analyzer.analyze_monthly_seasonality(features_df)
+            features_df['month'] = features_df.index.month
+            features_df['month_sin'] = np.sin(features_df['month'] * (2 * np.pi / 12))
+            features_df['month_cos'] = np.cos(features_df['month'] * (2 * np.pi / 12))
+
+            # 4. Add technical indicators
+            features_df['returns'] = features_df['close'].pct_change()
+            features_df['volatility'] = features_df['returns'].rolling(14).std()
+
+            # RSI
+            delta = features_df['close'].diff()
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+            avg_gain = gain.rolling(14).mean()
+            avg_loss = loss.rolling(14).mean()
+            rs = avg_gain / avg_loss.replace(0, 0.00001)
+            features_df['rsi'] = 100 - (100 / (1 + rs))
+
+            # MACD
+            features_df['ema12'] = features_df['close'].ewm(span=12, adjust=False).mean()
+            features_df['ema26'] = features_df['close'].ewm(span=26, adjust=False).mean()
+            features_df['macd'] = features_df['ema12'] - features_df['ema26']
+            features_df['macd_signal'] = features_df['macd'].ewm(span=9, adjust=False).mean()
+
+            # 5. Create lagged features for time series
+            for lag in [1, 2, 3, 5, 7, 14]:
+                features_df[f'close_lag_{lag}'] = features_df['close'].shift(lag)
+                features_df[f'volume_lag_{lag}'] = features_df['volume'].shift(lag)
+                features_df[f'returns_lag_{lag}'] = features_df['returns'].shift(lag)
+
+            # 6. Drop unnecessary columns and handle missing values
+            features_df = features_df.dropna()
+            features_df = features_df.drop(columns=['day_of_week', 'month'], errors='ignore')
+
+            logger.info(f"Successfully prepared {len(features_df.columns)} features for ML model")
+            return features_df
+
+        except Exception as e:
+            logger.error(f"Error preparing ML features: {str(e)}")
+            raise
 def main():
         from datetime import datetime, timedelta
         import logging

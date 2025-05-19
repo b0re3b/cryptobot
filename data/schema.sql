@@ -1031,3 +1031,115 @@ CREATE TABLE IF NOT EXISTS trend_analysis (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (symbol, timeframe, analysis_date)
 );
+CREATE TABLE technical_indicators (
+    id SERIAL PRIMARY KEY,
+    price_data_id INTEGER REFERENCES crypto_price_data(id),
+    symbol VARCHAR(10) NOT NULL,
+    timeframe VARCHAR(5) NOT NULL,
+    timestamp TIMESTAMP NOT NULL,
+    rsi_14 DECIMAL(10, 4),
+    macd DECIMAL(10, 4),
+    macd_signal DECIMAL(10, 4),
+    macd_histogram DECIMAL(10, 4),
+    bollinger_upper DECIMAL(24, 8),
+    bollinger_middle DECIMAL(24, 8),
+    bollinger_lower DECIMAL(24, 8),
+    sma_50 DECIMAL(24, 8),
+    sma_200 DECIMAL(24, 8),
+    ema_12 DECIMAL(24, 8),
+    ema_26 DECIMAL(24, 8),
+    atr_14 DECIMAL(10, 4),
+    stoch_k DECIMAL(10, 4),
+    stoch_d DECIMAL(10, 4),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, timeframe, timestamp)
+);
+
+CREATE INDEX idx_technical_indicators_price_data_id ON technical_indicators(price_data_id);
+CREATE INDEX idx_technical_indicators_symbol_timeframe ON technical_indicators(symbol, timeframe);
+CREATE TABLE ml_sequence_data (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    timeframe VARCHAR(5) NOT NULL,
+    sequence_start_time TIMESTAMP NOT NULL,
+    sequence_end_time TIMESTAMP NOT NULL,
+    data_json JSONB NOT NULL,  -- Store feature vectors as JSON
+    target_json JSONB NOT NULL,  -- Store target values as JSON
+    sequence_length INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, timeframe, sequence_start_time)
+);
+
+CREATE INDEX idx_ml_sequence_data_symbol_timeframe ON ml_sequence_data(symbol, timeframe);
+
+-- 7. ML Models Table
+CREATE TABLE ml_models (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(10) NOT NULL,
+    timeframe VARCHAR(5) NOT NULL,
+    model_type VARCHAR(10) NOT NULL,  -- 'lstm', 'gru'
+    model_version VARCHAR(20) NOT NULL,
+    model_path TEXT NOT NULL,  -- Path to the saved model file
+    input_features TEXT[] NOT NULL,  -- Array of feature names used
+    hidden_dim INTEGER NOT NULL,
+    num_layers INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    active BOOLEAN DEFAULT TRUE,
+    UNIQUE(symbol, timeframe, model_type, model_version)
+);
+
+-- 8. ML Model Metrics Table
+CREATE TABLE ml_model_metrics (
+    id SERIAL PRIMARY KEY,
+    model_id INTEGER REFERENCES ml_models(id),
+    mse DECIMAL(15, 8) NOT NULL,  -- Mean squared error
+    rmse DECIMAL(15, 8) NOT NULL,  -- Root mean squared error
+    mae DECIMAL(15, 8) NOT NULL,  -- Mean absolute error
+    r2_score DECIMAL(5, 4) NOT NULL,  -- R-squared score
+    test_date TIMESTAMP NOT NULL,  -- When the model was tested
+    training_duration_seconds INTEGER,  -- How long training took
+    epochs_completed INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_ml_model_metrics_model_id ON ml_model_metrics(model_id);
+
+-- 9. Predictions Table
+CREATE TABLE predictions (
+    id SERIAL PRIMARY KEY,
+    model_id INTEGER REFERENCES ml_models(id),
+    symbol VARCHAR(10) NOT NULL,
+    timeframe VARCHAR(5) NOT NULL,
+    prediction_timestamp TIMESTAMP NOT NULL,  -- When the prediction was made
+    target_timestamp TIMESTAMP NOT NULL,  -- The time the prediction is for
+    predicted_value DECIMAL(24, 8) NOT NULL,
+    confidence_interval_low DECIMAL(24, 8),
+    confidence_interval_high DECIMAL(24, 8),
+    actual_value DECIMAL(24, 8),  -- To be filled when actual value becomes available
+    prediction_error DECIMAL(24, 8),  -- To be calculated when actual value becomes available
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(model_id, symbol, timeframe, target_timestamp)
+);
+
+CREATE INDEX idx_predictions_model_id ON predictions(model_id);
+CREATE INDEX idx_predictions_symbol_timeframe ON predictions(symbol, timeframe);
+CREATE INDEX idx_predictions_target_timestamp ON predictions(target_timestamp);
+
+-- 10. Online Learning Log Table
+CREATE TABLE online_learning_log (
+    id SERIAL PRIMARY KEY,
+    model_id INTEGER REFERENCES ml_models(id),
+    learning_start TIMESTAMP NOT NULL,
+    learning_end TIMESTAMP NOT NULL,
+    data_points_count INTEGER NOT NULL,
+    epochs INTEGER NOT NULL,
+    learning_rate DECIMAL(10, 8) NOT NULL,
+    mse_before DECIMAL(15, 8),
+    mse_after DECIMAL(15, 8),
+    status VARCHAR(20) NOT NULL,  -- 'completed', 'failed', 'in_progress'
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_online_learning_log_model_id ON online_learning_log(model_id);

@@ -3453,7 +3453,7 @@ class DatabaseManager:
                     FROM eth_lstm_data
                     WHERE timeframe = %s \
                       AND sequence_id = %s
-                    ORDER BY sequence_position \
+                    ORDER BY open_time \
                     """
             cursor.execute(query, (timeframe, sequence_id))
             results = cursor.fetchall()
@@ -3546,7 +3546,7 @@ class DatabaseManager:
                                       FROM eth_lstm_data
                                       WHERE timeframe = %s \
                                         AND sequence_id = %s
-                                      ORDER BY sequence_position \
+                                      ORDER BY open_time \
                                       """
                 cursor.execute(sequence_data_query, (timeframe, seq_id))
                 rows = cursor.fetchall()
@@ -3814,7 +3814,7 @@ class DatabaseManager:
                     FROM btc_lstm_data
                     WHERE timeframe = %s \
                       AND sequence_id = %s
-                    ORDER BY sequence_position \
+                    ORDER BY open_time \
                     """
             cursor.execute(query, (timeframe, sequence_id))
             results = cursor.fetchall()
@@ -4070,7 +4070,7 @@ class DatabaseManager:
                     FROM sol_lstm_data
                     WHERE timeframe = %s \
                       AND sequence_id = %s
-                    ORDER BY sequence_position \
+                    ORDER BY open_time \
                     """
             cursor.execute(query, (timeframe, sequence_id))
             results = cursor.fetchall()
