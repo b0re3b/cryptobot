@@ -1,5 +1,5 @@
-# Файл time_series_analyzer.py
 from typing import Dict
+import decimal
 
 import numpy as np
 import pandas as pd
@@ -13,9 +13,20 @@ class TimeSeriesAnalyzer:
     def __init__(self):
         self.logger = CryptoLogger('TimeseriesAnalyzer')
 
-
-
     def detect_seasonality(self, data: pd.Series) -> Dict:
+        """
+        Виявляє сезонність у часовому ряді.
+
+        Рекомендовані колонки для використання:
+        - original_close - для аналізу оригінальних цін
+        - close_log - для аналізу логарифмованих цін (рекомендовано для фінансових даних)
+
+        Args:
+            data: Часовий ряд у форматі pd.Series
+
+        Returns:
+            Dict: Результати аналізу сезонності
+        """
 
         self.logger.info("Початок аналізу сезонності")
 
@@ -34,6 +45,11 @@ class TimeSeriesAnalyzer:
                 "seasonal_periods": [],
                 "details": {}
             }
+
+        # Конвертуємо decimal.Decimal в float
+        if isinstance(data.iloc[0], decimal.Decimal):
+            self.logger.info("Перетворення decimal.Decimal значень у float для обчислень")
+            data = data.astype(float)
 
         # Ініціалізація результату
         result = {
@@ -261,12 +277,37 @@ class TimeSeriesAnalyzer:
 
     def find_optimal_params(self, data: pd.Series, max_p: int = 5, max_d: int = 2,
                             max_q: int = 5, seasonal: bool = False) -> Dict:
+        """
+        Знаходить оптимальні параметри для моделей ARIMA/SARIMA.
+
+        Рекомендовані колонки для використання:
+        - close_diff - для диференційованих цін
+        - close_log_diff - для диференційованих логарифмованих цін (найкраще для фінансових даних)
+        - close_pct_change - для відсоткових змін
+
+        Важливо: колонки мають бути стаціонарними (перевірте is_stationary)
+
+        Args:
+            data: Стаціонарний часовий ряд у форматі pd.Series
+            max_p: Максимальний порядок авторегресійного компонента (AR)
+            max_d: Максимальний порядок інтеграції (I)
+            max_q: Максимальний порядок ковзного середнього (MA)
+            seasonal: Чи включати сезонний компонент
+
+        Returns:
+            Dict: Оптимальні параметри та інформація про модель
+        """
 
         self.logger.info("Starting optimal parameters search")
 
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before parameter search.")
             data = data.dropna()
+
+        # Конвертуємо decimal.Decimal в float, якщо потрібно
+        if isinstance(data.iloc[0], decimal.Decimal):
+            self.logger.info("Converting decimal.Decimal values to float for calculations")
+            data = data.astype(float)
 
         if len(data) < 10:
             self.logger.error("Not enough data points for parameter search")
