@@ -751,7 +751,7 @@ class CryptoCycles:
         return turning_points
 
     def update_features_with_new_data(self, processed_data: pd.DataFrame,
-                                      symbol: str) -> pd.DataFrame:
+                                      symbol: str, timeframe: str) -> pd.DataFrame:
 
         self.logger.info(f"Updating features for {symbol} with new data")
 
@@ -778,7 +778,7 @@ class CryptoCycles:
         try:
             # Retrieve the existing cycle features from the database
             self.logger.debug(f"Retrieving existing cycle features for {symbol}")
-            existing_features = self.db_connection.get_latest_cycle_features(symbol=symbol)
+            existing_features = self.db_connection.get_latest_cycle_features(symbol=symbol, timeframe=timeframe)
 
             # If no existing features, process all data
             if existing_features is None or len(existing_features) == 0:
@@ -902,6 +902,12 @@ class CryptoCycles:
                 self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
 
             self.logger.info(f"Feature update completed for {symbol}")
+            self.save_cycle_metrics(
+                symbol=symbol,
+                metrics=updated_features,
+                metric_type='updated_features',
+                date=updated_features.index[-1] if isinstance(updated_features.index, pd.DatetimeIndex) else None
+            )
             return updated_features
 
         except Exception as e:
@@ -1036,97 +1042,124 @@ class CryptoCycles:
         return results
 
     def save_cycle_metrics(self, processed_data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
-        """
-        Save comprehensive cycle metrics to the database.
-
-        Args:
-            processed_data: DataFrame containing processed cycle data
-            symbol: Trading symbol (e.g., 'BTC', 'ETH', 'SOL')
-            timeframe: Data timeframe (e.g., '1d', '1h')
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
         self.logger.info(f"Saving cycle metrics for {symbol} on {timeframe} timeframe")
 
         try:
-            # Get the latest data point
-            if len(processed_data) == 0:
+            # Validate input data
+            if processed_data is None or len(processed_data) == 0:
                 self.logger.error("No data to save")
                 return False
 
+            # Ensure we're working with float data to prevent Decimal/float type issues
+            processed_data = self._ensure_float_df(processed_data)
+
+            # Get the latest data point
             latest_data = processed_data.iloc[-1]
+
+            # Determine timestamp from index if it's a DatetimeIndex, otherwise use current time
             timestamp = latest_data.name if isinstance(processed_data.index, pd.DatetimeIndex) else datetime.now()
 
-            # Extract metrics based on the symbol
+            # Clean symbol format
             symbol_clean = symbol.upper().replace('USDT', '').replace('USD', '')
 
-            # Default values
-            days_since_last_halving = 0
-            days_to_next_halving = 0
-            halving_cycle_phase = 0.0
-            days_since_last_eth_upgrade = 0
-            days_to_next_eth_upgrade = 0
-            eth_upgrade_cycle_phase = 0.0
-            days_since_last_sol_event = 0
-            sol_network_stability_score = 0.0
+            # Create a metrics dictionary with default values
+            metrics = {
+                # Default values for all cryptos
+                'symbol': symbol,
+                'timestamp': timestamp,
+                'timeframe': timeframe,
+                'weekly_cycle_position': 0.0,
+                'monthly_seasonality_factor': 0.0,
+                'market_phase': 'unknown',
+                'optimal_cycle_length': 0,
+                'btc_correlation': 0.0,
+                'eth_correlation': 0.0,
+                'sol_correlation': 0.0,
+                'volatility_metric': 0.0,
+                'is_anomaly': False,
 
-            # Extract BTC-specific metrics
-            if symbol_clean == 'BTC' and 'days_since_last_halving' in processed_data.columns:
-                days_since_last_halving = int(latest_data.get('days_since_last_halving', 0))
-                days_to_next_halving = int(latest_data.get('days_to_next_halving', 0))
-                halving_cycle_phase = float(latest_data.get('halving_cycle_phase', 0.0))
-
-            # Extract ETH-specific metrics
-            elif symbol_clean == 'ETH' and 'days_since_last_eth_upgrade' in processed_data.columns:
-                days_since_last_eth_upgrade = int(latest_data.get('days_since_last_eth_upgrade', 0))
-                days_to_next_eth_upgrade = int(latest_data.get('days_to_next_eth_upgrade', 0))
-                eth_upgrade_cycle_phase = float(latest_data.get('eth_upgrade_cycle_phase', 0.0))
-
-            # Extract SOL-specific metrics
-            elif symbol_clean == 'SOL' and 'days_since_last_sol_event' in processed_data.columns:
-                days_since_last_sol_event = int(latest_data.get('days_since_last_sol_event', 0))
-                sol_network_stability_score = float(latest_data.get('sol_network_stability_score', 0.0))
+                # Asset-specific metrics (with defaults)
+                'days_since_last_halving': 0,
+                'days_to_next_halving': 0,
+                'halving_cycle_phase': 0.0,
+                'days_since_last_eth_upgrade': 0,
+                'days_to_next_eth_upgrade': 0,
+                'eth_upgrade_cycle_phase': 0.0,
+                'days_since_last_sol_event': 0,
+                'sol_network_stability_score': 0.0,
+            }
 
             # Extract general metrics that should be available for all symbols
-            weekly_cycle_position = float(latest_data.get('weekly_cycle_position', 0.0))
-            monthly_seasonality_factor = float(latest_data.get('monthly_seasonality_factor', 0.0))
-            market_phase = str(latest_data.get('market_phase', 'unknown'))
-            optimal_cycle_length = int(latest_data.get('optimal_cycle_length', 0))
+            for metric in ['weekly_cycle_position', 'monthly_seasonality_factor', 'market_phase',
+                           'optimal_cycle_length', 'btc_correlation', 'eth_correlation',
+                           'sol_correlation', 'volatility', 'is_anomaly']:
+                if metric in processed_data.columns:
+                    # Type conversion based on expected type
+                    if metric in ['optimal_cycle_length']:
+                        metrics[metric] = int(latest_data.get(metric, metrics[metric]))
+                    elif metric in ['is_anomaly']:
+                        metrics[metric] = bool(latest_data.get(metric, metrics[metric]))
+                    elif metric in ['market_phase']:
+                        metrics[metric] = str(latest_data.get(metric, metrics[metric]))
+                    else:
+                        metrics[metric] = float(latest_data.get(metric, metrics[metric]))
 
-            # Extract correlation metrics
-            btc_correlation = float(latest_data.get('btc_correlation', 0.0))
-            eth_correlation = float(latest_data.get('eth_correlation', 0.0))
-            sol_correlation = float(latest_data.get('sol_correlation', 0.0))
+            # For volatility, the column name might be different
+            if 'volatility' in processed_data.columns:
+                metrics['volatility_metric'] = float(latest_data.get('volatility', 0.0))
 
-            # Extract volatility metric
-            volatility_metric = float(latest_data.get('volatility', 0.0))
+            # Extract BTC-specific metrics
+            if symbol_clean == 'BTC':
+                for metric in ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase']:
+                    if metric in processed_data.columns:
+                        if metric in ['days_since_last_halving', 'days_to_next_halving']:
+                            metrics[metric] = int(latest_data.get(metric, metrics[metric]))
+                        else:
+                            metrics[metric] = float(latest_data.get(metric, metrics[metric]))
 
-            # Check if the current point is an anomaly
-            is_anomaly = bool(latest_data.get('is_anomaly', False))
+            # Extract ETH-specific metrics
+            elif symbol_clean == 'ETH':
+                for metric in ['days_since_last_eth_upgrade', 'days_to_next_eth_upgrade', 'eth_upgrade_cycle_phase']:
+                    if metric in processed_data.columns:
+                        if metric in ['days_since_last_eth_upgrade', 'days_to_next_eth_upgrade']:
+                            metrics[metric] = int(latest_data.get(metric, metrics[metric]))
+                        else:
+                            metrics[metric] = float(latest_data.get(metric, metrics[metric]))
 
-            # Save cycle features to the database
+            # Extract SOL-specific metrics
+            elif symbol_clean == 'SOL':
+                for metric in ['days_since_last_sol_event', 'sol_network_stability_score']:
+                    if metric in processed_data.columns:
+                        if metric == 'days_since_last_sol_event':
+                            metrics[metric] = int(latest_data.get(metric, metrics[metric]))
+                        else:
+                            metrics[metric] = float(latest_data.get(metric, metrics[metric]))
+
+            # Log the metrics being saved
+            self.logger.debug(f"Saving metrics for {symbol}: {metrics}")
+
+            # Save cycle features to the database using the provided method
             cycle_id = self.db_connection.save_cycle_feature(
                 symbol=symbol,
                 timestamp=timestamp,
                 timeframe=timeframe,
-                days_since_last_halving=days_since_last_halving,
-                days_to_next_halving=days_to_next_halving,
-                halving_cycle_phase=halving_cycle_phase,
-                days_since_last_eth_upgrade=days_since_last_eth_upgrade,
-                days_to_next_eth_upgrade=days_to_next_eth_upgrade,
-                eth_upgrade_cycle_phase=eth_upgrade_cycle_phase,
-                days_since_last_sol_event=days_since_last_sol_event,
-                sol_network_stability_score=sol_network_stability_score,
-                weekly_cycle_position=weekly_cycle_position,
-                monthly_seasonality_factor=monthly_seasonality_factor,
-                market_phase=market_phase,
-                optimal_cycle_length=optimal_cycle_length,
-                btc_correlation=btc_correlation,
-                eth_correlation=eth_correlation,
-                sol_correlation=sol_correlation,
-                volatility_metric=volatility_metric,
-                is_anomaly=is_anomaly
+                days_since_last_halving=metrics['days_since_last_halving'],
+                days_to_next_halving=metrics['days_to_next_halving'],
+                halving_cycle_phase=metrics['halving_cycle_phase'],
+                days_since_last_eth_upgrade=metrics['days_since_last_eth_upgrade'],
+                days_to_next_eth_upgrade=metrics['days_to_next_eth_upgrade'],
+                eth_upgrade_cycle_phase=metrics['eth_upgrade_cycle_phase'],
+                days_since_last_sol_event=metrics['days_since_last_sol_event'],
+                sol_network_stability_score=metrics['sol_network_stability_score'],
+                weekly_cycle_position=metrics['weekly_cycle_position'],
+                monthly_seasonality_factor=metrics['monthly_seasonality_factor'],
+                market_phase=metrics['market_phase'],
+                optimal_cycle_length=metrics['optimal_cycle_length'],
+                btc_correlation=metrics['btc_correlation'],
+                eth_correlation=metrics['eth_correlation'],
+                sol_correlation=metrics['sol_correlation'],
+                volatility_metric=metrics['volatility_metric'],
+                is_anomaly=metrics['is_anomaly']
             )
 
             self.logger.info(f"Saved cycle features with ID: {cycle_id}")
@@ -1144,12 +1177,21 @@ class CryptoCycles:
                     self.logger.debug(f"Saving {len(historical_comparison['similarity_scores'])} similarity scores")
 
                     for cycle_id, similarity_data in historical_comparison['similarity_scores'].items():
+                        # Better error handling for invalid cycle IDs
+                        ref_cycle_id = int(cycle_id) if isinstance(cycle_id, str) and cycle_id.isdigit() else 0
+
+                        current_cycle = historical_comparison.get('current_cycle', '0')
+                        compared_cycle_id = int(current_cycle) if isinstance(current_cycle,
+                                                                             str) and current_cycle.isdigit() else 0
+
+                        similarity_score = float(similarity_data.get('similarity', 0.0))
+
+                        # Save using the provided method
                         similarity_id = self.db_connection.save_cycle_similarity(
                             symbol=symbol,
-                            reference_cycle_id=int(cycle_id) if cycle_id.isdigit() else 0,
-                            compared_cycle_id=int(historical_comparison.get('current_cycle', '0'))
-                            if historical_comparison.get('current_cycle', '0').isdigit() else 0,
-                            similarity_score=float(similarity_data.get('similarity', 0.0)),
+                            reference_cycle_id=ref_cycle_id,
+                            compared_cycle_id=compared_cycle_id,
+                            similarity_score=similarity_score,
                             normalized=True
                         )
                         self.logger.debug(f"Saved similarity record with ID: {similarity_id}")
@@ -1157,6 +1199,7 @@ class CryptoCycles:
             except Exception as e:
                 self.logger.error(f"Error saving cycle similarity data: {str(e)}")
                 self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                # Continue execution despite similarity saving error
 
             # Save turning points predictions if available
             try:
@@ -1165,7 +1208,7 @@ class CryptoCycles:
                 if turning_points is not None and len(turning_points) > 0:
                     # Only save future turning points
                     current_date = datetime.now()
-                    future_points = turning_points[turning_points['date'] > current_date]
+                    future_points = turning_points[pd.to_datetime(turning_points['date']) > current_date]
 
                     self.logger.debug(f"Saving {len(future_points)} future turning points")
 
@@ -1173,8 +1216,13 @@ class CryptoCycles:
                         point_type = point.get('direction', 'unknown')
                         confidence = float(point.get('confidence', 0.0))
                         predicted_date = point['date']
-                        predicted_price = float(point.get('price', 0.0)) if pd.notna(point.get('price')) else None
 
+                        # Handle None or NaN price values
+                        predicted_price = None
+                        if 'price' in point and pd.notna(point['price']):
+                            predicted_price = float(point['price'])
+
+                        # Save using the provided method
                         tp_id = self.db_connection.save_predicted_turning_point(
                             symbol=symbol,
                             prediction_date=timestamp,
@@ -1188,6 +1236,7 @@ class CryptoCycles:
             except Exception as e:
                 self.logger.error(f"Error saving turning point predictions: {str(e)}")
                 self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
+                # Continue execution despite turning point saving error
 
             return True
 
@@ -1214,7 +1263,7 @@ def main():
 
         # === Parameters setup ===
         symbol = 'BTC'
-        timeframe = '1d'
+        timeframe = '1h'
         lookback = '1 year'
         end_date = datetime.now().strftime('%Y-%m-%d')
 

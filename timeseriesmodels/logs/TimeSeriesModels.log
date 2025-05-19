@@ -1,0 +1,26 @@
+2025-05-19 14:25:22 - TimeSeriesModels - INFO - [logger.py:104] - TimeSeriesModels initialized
+2025-05-19 14:25:22 - TimeSeriesModels - INFO - [logger.py:104] - Getting available cryptocurrency symbols from database
+2025-05-19 14:25:22 - TimeSeriesModels - INFO - [logger.py:104] - Found 0 available cryptocurrency symbols
+2025-05-19 14:29:27 - TimeSeriesModels - INFO - [logger.py:104] - TimeSeriesModels initialized
+2025-05-19 14:29:27 - TimeSeriesModels - INFO - [logger.py:104] - Getting available cryptocurrency symbols from database
+2025-05-19 14:29:27 - TimeSeriesModels - INFO - [logger.py:104] - Found 0 available cryptocurrency symbols
+2025-05-19 14:33:16 - TimeSeriesModels - INFO - [logger.py:104] - TimeSeriesModels initialized
+2025-05-19 14:33:16 - TimeSeriesModels - INFO - [logger.py:104] - Getting available cryptocurrency symbols from database
+2025-05-19 14:33:16 - TimeSeriesModels - INFO - [logger.py:104] - Found 0 available cryptocurrency symbols
+2025-05-19 14:35:19 - TimeSeriesModels - INFO - [logger.py:104] - TimeSeriesModels initialized
+2025-05-19 14:35:19 - TimeSeriesModels - INFO - [logger.py:104] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 14:35:19 - TimeSeriesModels - INFO - [logger.py:104] - Found 3 available cryptocurrency symbols
+2025-05-19 14:35:19 - TimeSeriesModels - INFO - [logger.py:104] - Loading BTC data with interval 1d from database
+2025-05-19 14:35:19 - TimeSeriesModels - INFO - [logger.py:104] - Using data_id: 20230520_20250519
+2025-05-19 14:35:19 - TimeSeriesModels - ERROR - [logger.py:112] - Error loading crypto data for btc: No method available to fetch data for btc
+2025-05-19 14:42:41 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-19 14:42:41 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-19 14:42:41 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-19 14:42:41 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-19 14:42:41 - TimeSeriesModels - INFO - [logger.py:103] - Using data_id: 20230520_20250519
+2025-05-19 14:42:41 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for btc: No method available to fetch data for btc
+2025-05-19 14:42:41 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 65, in load_crypto_data
+    raise AttributeError(f"No method available to fetch data for {symbol}")
+AttributeError: No method available to fetch data for btc

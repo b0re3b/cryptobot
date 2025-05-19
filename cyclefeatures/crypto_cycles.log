@@ -3,3 +3,21 @@
 2025-05-19 02:24:04,129 - CryptoCycles - INFO - 
 === Analysis Results ===
 2025-05-19 02:24:04,129 - CryptoCycles - INFO - Processed 2831 data points
+2025-05-19 13:08:54,991 - CryptoCycles - INFO - Starting CryptoCycles analysis
+2025-05-19 13:08:54,992 - CryptoCycles - INFO - Running analysis for ['BTC', 'ETH', 'SOL'] from 2024-05-19 to 2025-05-19 on 1d timeframe...
+2025-05-19 13:08:55,020 - CryptoCycles - ERROR - Error during analysis: 'list' object has no attribute 'upper'
+2025-05-19 13:09:04,271 - CryptoCycles - INFO - Starting CryptoCycles analysis
+2025-05-19 13:09:04,271 - CryptoCycles - INFO - Running analysis for ['BTC', 'ETH', 'SOL'] from 2024-05-19 to 2025-05-19 on 1d timeframe...
+2025-05-19 13:09:04,283 - CryptoCycles - ERROR - Error during analysis: 'list' object has no attribute 'upper'
+2025-05-19 13:21:49,006 - CryptoCycles - INFO - Starting CryptoCycles analysis
+2025-05-19 13:21:49,006 - CryptoCycles - INFO - Running analysis for BTC from 2024-05-19 to 2025-05-19 on 1d timeframe...
+2025-05-19 13:21:51,944 - CryptoCycles - INFO - 
+=== Analysis Results ===
+2025-05-19 13:21:51,944 - CryptoCycles - INFO - Processed 2831 data points
+2025-05-19 13:22:18,140 - CryptoCycles - INFO - Starting CryptoCycles analysis
+2025-05-19 13:22:18,140 - CryptoCycles - INFO - Running analysis for BTC from 2024-05-19 to 2025-05-19 on 1m timeframe...
+2025-05-19 13:52:20,905 - CryptoCycles - INFO - Starting CryptoCycles analysis
+2025-05-19 13:52:20,905 - CryptoCycles - INFO - Running analysis for BTC from 2024-05-19 to 2025-05-19 on 1h timeframe...
+2025-05-19 13:55:07,703 - CryptoCycles - INFO - 
+=== Analysis Results ===
+2025-05-19 13:55:07,703 - CryptoCycles - INFO - Processed 67810 data points

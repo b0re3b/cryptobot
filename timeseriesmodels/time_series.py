@@ -48,16 +48,21 @@ class TimeSeriesModels:
 
             # Load ARIMA data according to symbol
             klines_data = None
-            # Use get_symbol_arima method as requested
-            method_name = f"get_{symbol.lower()}_arima_data"
+            symbol = symbol.lower()
 
-            if hasattr(self.db_manager, method_name):
-                get_data_method = getattr(self.db_manager, method_name)
-                klines_data = get_data_method(timeframe=timeframe)
-            elif hasattr(self.db_manager, "get_crypto_arima_data"):
-                klines_data = self.db_manager.get_crypto_arima_data(symbol.upper(), timeframe)
+            # Call the specific method for each cryptocurrency
+            if symbol == 'BTC':
+                klines_data = self.db_manager.get_btc_arima_data(timeframe=timeframe)
+            elif symbol == 'ETH':
+                klines_data = self.db_manager.get_eth_arima_data(timeframe=timeframe)
+            elif symbol == 'SOL':
+                klines_data = self.db_manager.get_sol_arima_data(timeframe=timeframe)
             else:
-                raise AttributeError(f"No method available to fetch data for {symbol}")
+                # Fallback method for other symbols if available
+                if hasattr(self.db_manager, "get_crypto_arima_data"):
+                    klines_data = self.db_manager.get_crypto_arima_data(symbol.upper(), timeframe)
+                else:
+                    raise AttributeError(f"No method available to fetch data for {symbol}")
 
             if klines_data is None or (isinstance(klines_data, pd.DataFrame) and klines_data.empty):
                 self.logger.warning(f"No data found for {symbol} with interval {timeframe}")
@@ -233,47 +238,16 @@ class TimeSeriesModels:
             self.logger.error(f"Error loading forecast from database: {str(e)}")
             return None
 
-    def get_available_crypto_symbols(self, db_manager: Any) -> List[str]:
+    def get_available_crypto_symbols(self) -> List[str]:
 
-        try:
-            self.logger.info("Getting available cryptocurrency symbols from database")
+        self.logger.info("Getting available cryptocurrency symbols (fixed implementation)")
 
-            # Use the provided db_manager or the one saved in the class
-            manager = db_manager if db_manager is not None else self.db_manager
+        # Return fixed list of available cryptocurrencies
+        symbols = ["BTC", "ETH", "SOL"]
 
-            if manager is None:
-                error_msg = "Database manager not available. Please provide a valid db_manager."
-                self.logger.error(error_msg)
-                return []
+        self.logger.info(f"Found {len(symbols)} available cryptocurrency symbols")
 
-            # Get list of available symbols
-            symbols = manager.get_available_symbols()
-
-            if symbols is None:
-                self.logger.warning("No symbols returned from database")
-                return []
-
-            # Check that the data is a list
-            if not isinstance(symbols, list):
-                try:
-                    symbols = list(symbols)
-                except Exception as e:
-                    self.logger.error(f"Could not convert symbols to list: {str(e)}")
-                    return []
-
-            # Check that symbols are not empty
-            symbols = [s for s in symbols if s]
-
-            # Remove duplicates and sort
-            symbols = sorted(set(symbols))
-
-            self.logger.info(f"Found {len(symbols)} available cryptocurrency symbols")
-
-            return symbols
-
-        except Exception as e:
-            self.logger.error(f"Error getting available cryptocurrency symbols: {str(e)}")
-            return []
+        return symbols
 
     def get_last_update_time(self, db_manager: Any, symbol: str,
                              interval: str = '1d') -> Optional[datetime]:
@@ -509,7 +483,7 @@ class TimeSeriesModels:
 
         try:
             # Check if this symbol is in the list of available symbols
-            available_symbols = self.get_available_crypto_symbols(db_manager)
+            available_symbols = self.get_available_crypto_symbols()
             if symbol not in available_symbols:
                 self.logger.warning(f"Symbol {symbol} not in available symbols list")
                 return False
@@ -895,23 +869,15 @@ class TimeSeriesModels:
             self.logger.error(f"Error creating visualization: {str(e)}")
             return {"status": "error", "message": str(e)}
 
+
 def main():
-    """Enhanced main function with better error handling and visualization"""
-    import os
-    import pprint
+    """Enhanced main function with better error handling but without saving anything to disk"""
     from datetime import datetime, timedelta
-    import matplotlib.pyplot as plt
 
     # Configuration
     symbol = "BTC"
     timeframe = "1d"
     forecast_steps = 30  # Forecast for the next 30 days
-    output_dir = "forecasts"  # Directory to save outputs
-
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"✅ Created output directory: {output_dir}")
 
     # Initialize TimeSeriesModels
     print("🔄 Initializing TimeSeriesModels...")
@@ -925,7 +891,7 @@ def main():
     # Get list of available symbols
     print("🔄 Getting available symbols...")
     try:
-        available_symbols = model.get_available_crypto_symbols(db)
+        available_symbols = model.get_available_crypto_symbols()
         if not available_symbols:
             print("❌ No symbols available in the database.")
             return
@@ -992,7 +958,6 @@ def main():
     # Detect anomalies
     print("🔄 Detecting anomalies in price data...")
 
-
     # Create train/test split for model validation
     train_size = int(len(price_series) * 0.8)
     train_data = price_series[:train_size]
@@ -1011,36 +976,18 @@ def main():
         ensemble_forecast = ensemble_result.get('ensemble_forecast')
         component_models = ensemble_result.get('component_models')
         print(f"✅ Ensemble forecast created using {len(component_models)} models")
+        print(f"📈 First 5 forecast values: {ensemble_forecast.head().to_dict()}")
 
-        # Visualize the forecast
-        print("🔄 Creating visualization...")
+        # We could visualize the forecast here, but we'll skip file saving
+        print("✅ Ensemble forecast generated successfully")
 
-        # Get historical data and concatenate with forecast
-        historical = price_series
-
-        # Create visualization
-        viz_result = model.visualize_forecast(
-            historical_data=historical,
-            forecast_data=ensemble_forecast,
-            save_path=os.path.join(output_dir, f"{symbol}_forecast.png")
-        )
-
-        if viz_result.get('status') == 'success':
-            print(f"✅ Visualization saved to {output_dir}/{symbol}_forecast.png")
-
-            # Export forecast to CSV
-            csv_path = os.path.join(output_dir, f"{symbol}_forecast.csv")
-            # Export ensemble forecast directly
-            ensemble_df = pd.DataFrame(ensemble_forecast)
-            ensemble_df.columns = ['forecast_value']
-            ensemble_df.index.name = 'date'
-            ensemble_df['symbol'] = symbol
-            ensemble_df['generated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            ensemble_df.to_csv(csv_path)
-
-            print(f"✅ Forecast data saved to {csv_path}")
-        else:
-            print(f"❌ Error creating visualization: {viz_result.get('message', 'Unknown error')}")
+        # Print some forecast statistics instead of saving to CSV
+        print(f"📊 Forecast statistics:")
+        print(f"  - Forecast length: {len(ensemble_forecast)} points")
+        print(f"  - Forecast period: {ensemble_forecast.index[0]} to {ensemble_forecast.index[-1]}")
+        print(f"  - Forecast min: {ensemble_forecast.min()}")
+        print(f"  - Forecast max: {ensemble_forecast.max()}")
+        print(f"  - Forecast mean: {ensemble_forecast.mean()}")
     else:
         print(f"❌ Ensemble forecast failed: {ensemble_result.get('message', 'Unknown error')}")
 
@@ -1055,17 +1002,15 @@ def main():
 
         if forecast_result.get("status") == "success" and "model_key" in forecast_result:
             model_key = forecast_result["model_key"]
-            print(f"✅ Model created and saved with key: {model_key}")
-
-
+            print(f"✅ Model created with key: {model_key}")
 
             # Get forecast
             forecast = model.forecast(model_key, steps=forecast_steps)
             if forecast is not None:
-                # Save forecast
-                csv_path = os.path.join(output_dir, f"{symbol}_forecast.csv")
-                model.export_forecast_to_csv(model_key, symbol, csv_path)
-                print(f"✅ Forecast saved to {csv_path}")
+                # Print forecast information instead of saving
+                print(f"📈 Forecast generated successfully")
+                print(f"  - Forecast length: {len(forecast)} points")
+                print(f"  - First 5 values: {forecast.head().to_dict()}")
             else:
                 print("❌ Failed to generate forecast.")
         else:

@@ -8,7 +8,6 @@ import concurrent.futures
 from functools import lru_cache
 from data.db import DatabaseManager
 from DMP.DataCleaner import DataCleaner
-from timeseriesmodels.time_series import TimeSeriesModels
 from DMP.AnomalyDetector import AnomalyDetector
 from featureengineering.feature_engineering import FeatureEngineering
 from utils.logger import CryptoLogger
@@ -25,7 +24,6 @@ class VolatilityAnalysis:
         self.data_cleaner = DataCleaner()
         self.anomaly_detector = AnomalyDetector()
         self.feature_engineer = FeatureEngineering()
-        self.time_series = TimeSeriesModels()
         self.logger = CryptoLogger('INFO')
         # Оптимізація: налаштування паралельних обчислень
         self.use_parallel = use_parallel
