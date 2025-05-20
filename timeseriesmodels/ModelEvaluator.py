@@ -18,8 +18,18 @@ class ModelEvaluator:
         self.logger = CryptoLogger('ModelEvaluator')
         self.db_manager = DatabaseManager()
         self.analyzer = TimeSeriesAnalyzer()
-    def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:
 
+    def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:
+        """
+        Оцінює модель, порівнюючи її прогнози з тестовими даними.
+
+        Args:
+            model_key: Ключ моделі
+            test_data: Часовий ряд з тестовими даними
+
+        Returns:
+            Dictionary з метриками оцінки моделі
+        """
         self.logger.info(f"Starting evaluation of model {model_key}")
 
         # Перевіряємо, чи є дані для тестування
@@ -134,22 +144,27 @@ class ModelEvaluator:
             mae = mean_absolute_error(y_true, y_pred)
 
             # Обчислюємо MAPE (Mean Absolute Percentage Error)
-            # Вимагає обережності через можливі нульові значення
+            # ВИПРАВЛЕННЯ: Покращена обробка нульових значень для MAPE
             try:
-                # Виключаємо нульові значення при розрахунку MAPE
+                # Створюємо маску для ненульових значень
                 mask = np.abs(y_true) > 1e-10  # Значення більше маленького порогу
+
                 if np.any(mask):
+                    # Розрахунок MAPE лише на ненульових значеннях
                     mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / np.abs(y_true[mask]))) * 100
+                    self.logger.info(f"MAPE calculated on {np.sum(mask)}/{len(mask)} non-zero values")
                 else:
-                    self.logger.warning("All true values are close to zero, MAPE might be unreliable")
-                    # Альтернативний розрахунок для запобігання ділення на нуль
-                    epsilon = np.finfo(float).eps  # Дуже мале число
-                    mape = np.mean(np.abs((y_true - y_pred) / (np.abs(y_true) + epsilon))) * 100
+                    self.logger.warning("All true values are close to zero, using alternative metric to MAPE")
+                    # Альтернативний показник - використовуємо MAE, нормалізований до середнього значення прогнозу
+                    # або деякого малого значення
+                    denominator = max(np.mean(np.abs(y_pred)), 1e-10)
+                    mape = (mae / denominator) * 100
+                    self.logger.info(f"Using alternative to MAPE: (MAE / mean_prediction) * 100 = {mape:.2f}%")
             except Exception as e:
                 self.logger.warning(f"Error calculating MAPE: {str(e)}. Using alternative method.")
                 # Альтернативний підхід для запобігання ділення на нуль
-                epsilon = np.finfo(float).eps  # Дуже мале число
-                mape = np.mean(np.abs((y_true - y_pred) / (np.abs(y_true) + epsilon))) * 100
+                epsilon = max(np.mean(np.abs(y_true)), np.finfo(float).eps)  # Використовуємо середнє або мале число
+                mape = (mae / epsilon) * 100
 
             # Додаткові метрики: коефіцієнт детермінації R²
             try:
@@ -167,6 +182,7 @@ class ModelEvaluator:
                 "mape": float(mape),
                 "r2": float(r2) if r2 is not None else None,
                 "sample_size": len(y_true),
+                "nonzero_sample_size": int(np.sum(mask)) if 'mask' in locals() else None,
                 "evaluation_date": datetime.now().isoformat()
             }
 
@@ -208,7 +224,9 @@ class ModelEvaluator:
                                   order: Tuple = None, seasonal_order: Tuple = None,
                                   window_size: int = 100, step: int = 20,
                                   forecast_horizon: int = 10) -> Dict:
-
+        """
+        Проводить валідацію моделі методом ковзного вікна.
+        """
         self.logger.info(
             f"Початок ковзаючої валідації з вікном={window_size}, кроком={step}, горизонтом={forecast_horizon}")
 
@@ -356,15 +374,23 @@ class ModelEvaluator:
                 rmse = np.sqrt(mse)
                 mae = mean_absolute_error(test_data, forecast_values)
 
-                # MAPE (виключаємо нульові і близькі до нуля значення)
+                # ВИПРАВЛЕННЯ: Покращена обробка MAPE з нульовими значеннями
+                # Створюємо маску для ненульових значень
                 mask = np.abs(test_data) > 1e-10
-                if np.any(mask):
+                nonzero_count = np.sum(mask)
+
+                if nonzero_count > 0:
+                    # Якщо є ненульові значення, розраховуємо MAPE на них
                     mape = np.mean(np.abs((test_data[mask] - forecast_values[mask]) / test_data[mask])) * 100
+                    self.logger.info(
+                        f"Ітерація {i + 1}: MAPE розраховано на {nonzero_count}/{len(test_data)} ненульових значеннях")
                 else:
-                    # Альтернативний розрахунок для випадків з нульовими значеннями
-                    mape = np.mean(np.abs((test_data - forecast_values) / (test_data + 1e-10))) * 100
+                    # Альтернативна метрика, якщо всі значення близькі до нуля
                     self.logger.warning(
-                        f"Ітерація {i + 1}: Всі тестові значення близькі до нуля. MAPE може бути ненадійним.")
+                        f"Ітерація {i + 1}: Всі тестові значення близькі до нуля. Використовуємо альтернативну метрику.")
+                    # Використовуємо MAE, нормалізований до середнього абсолютного значення прогнозу
+                    denominator = max(np.mean(np.abs(forecast_values)), 1e-10)
+                    mape = (mae / denominator) * 100
 
                 # Зберігаємо метрики
                 results["metrics"]["mse"].append(mse)
@@ -389,7 +415,8 @@ class ModelEvaluator:
                             "mse": mse,
                             "rmse": rmse,
                             "mae": mae,
-                            "mape": mape
+                            "mape": mape,
+                            "nonzero_values": int(nonzero_count)  # Додаємо кількість ненульових значень
                         },
                         # Конвертуємо індекси та значення у списки для JSON
                         "actual": list(zip(
@@ -417,7 +444,8 @@ class ModelEvaluator:
                             "mse": float(mse),
                             "rmse": float(rmse),
                             "mae": float(mae),
-                            "mape": float(mape)
+                            "mape": float(mape),
+                            "nonzero_values": int(nonzero_count)  # Додаємо кількість ненульових значень
                         },
                         "actual": test_data.values.tolist(),
                         "forecast": forecast_values.tolist() if hasattr(forecast_values, 'tolist') else list(
@@ -446,6 +474,7 @@ class ModelEvaluator:
                             "rmse": float(rmse),
                             "mae": float(mae),
                             "mape": float(mape),
+                            "nonzero_values": int(nonzero_count),  # Додаємо кількість ненульових значень
                             "timestamp": datetime.now()
                         }
 
@@ -493,7 +522,6 @@ class ModelEvaluator:
             self.logger.warning("Ковзаюча валідація завершена, але немає успішних ітерацій")
 
         return results
-
     def residual_analysis(self, model_key: str, data: pd.Series = None) -> Dict:
 
         self.logger.info(f"Starting residual analysis for model {model_key}")
@@ -676,35 +704,31 @@ class ModelEvaluator:
                 "rmse": {},
                 "mae": {},
                 "mape": {},
-                "volatility": {}  # Додаємо метрику волатильності
+                "volatility": {}
             }
         }
 
         try:
             # Розрахунок волатильності тестових даних для порівняння
             try:
-                # FIX: Використовуємо np.log замість методу .log()
-                test_returns = test_data.pct_change().dropna()
+                # FIXED: Оновлена логіка обробки нульових значень
+                # Видаляємо нульові значення перед розрахунками
+                test_data_no_zeros = test_data[test_data > 0]
 
-                if (test_returns <= -1).any():
-                    self.logger.warning(
-                        "Test data contains returns <= -100%, using absolute returns for volatility calculation")
-                    # Використовуємо абсолютні значення змін для уникнення проблем з логарифмом
-                    volatility_test = test_returns.std() * np.sqrt(252)  # Річна волатильність
+                if len(test_data_no_zeros) < 2:
+                    self.logger.warning("Not enough non-zero values for volatility calculation in test data")
+                    volatility_test = None
                 else:
-                    # Безпечне обчислення логарифмічних прибутків
-                    positive_values = test_data.dropna()
-                    positive_values = positive_values[positive_values > 0]
+                    # Розрахунок волатильності на основі логарифмічних прибутків
+                    log_returns = np.log(test_data_no_zeros / test_data_no_zeros.shift(1)).dropna()
+                    volatility_test = log_returns.std() * np.sqrt(252)  # Річна волатильність
+                    self.logger.info(f"Test data volatility: {volatility_test:.4f}")
 
-                    if len(positive_values) > 1:
-                        # FIX: Правильне використання np.log замість методу .log()
-                        log_returns = np.log(positive_values / positive_values.shift(1)).dropna()
-                        volatility_test = log_returns.std() * np.sqrt(252)  # Річна волатильність
-                    else:
-                        self.logger.warning("Not enough positive values for log-returns calculation")
-                        volatility_test = test_returns.std() * np.sqrt(252)
-
-                self.logger.info(f"Test data volatility: {volatility_test:.4f}")
+                    # Додаткова інформація про пропущені нульові значення
+                    if len(test_data_no_zeros) < len(test_data):
+                        zeros_percentage = (len(test_data) - len(test_data_no_zeros)) / len(test_data) * 100
+                        self.logger.warning(
+                            f"Removed {zeros_percentage:.2f}% zero values from test data for volatility calculation")
             except Exception as vol_error:
                 self.logger.error(f"Error during volatility calculation for test data: {str(vol_error)}")
                 volatility_test = None
@@ -767,42 +791,48 @@ class ModelEvaluator:
                     else:
                         mape = np.nan
 
-                    # Обчислення волатильності прогнозів
+                    # FIXED: Обчислення волатильності прогнозів з покращеною обробкою нульових значень
                     try:
-                        # FIX: Використовуємо той самий виправлений підхід, що й для тестових даних
-                        pred_returns = pred_series.pct_change().dropna()
+                        # Видаляємо нульові та від'ємні значення перед розрахунками
+                        pred_series_no_zeros = pred_series[pred_series > 0]
 
-                        if (pred_returns <= -1).any():
+                        if len(pred_series_no_zeros) < 2:
                             self.logger.warning(
-                                f"Prediction for model {model_key} contains returns <= -100%, using absolute returns")
-                            volatility_pred = pred_returns.std() * np.sqrt(252)
+                                f"Not enough positive values for volatility calculation in model {model_key}")
+                            volatility_pred = None
+                            volatility_metrics = {
+                                "predicted": None,
+                                "actual": float(volatility_test) if volatility_test is not None else None,
+                                "difference": None,
+                                "ratio": None,
+                                "warning": "Insufficient positive values for volatility calculation"
+                            }
                         else:
-                            # Безпечне обчислення логарифмічних прибутків
-                            positive_pred = pred_series.dropna()
-                            positive_pred = positive_pred[positive_pred > 0]
+                            # Розрахунок волатильності на основі логарифмічних прибутків
+                            log_returns_pred = np.log(pred_series_no_zeros / pred_series_no_zeros.shift(1)).dropna()
+                            volatility_pred = log_returns_pred.std() * np.sqrt(252)
 
-                            if len(positive_pred) > 1:
-                                # FIX: Правильне використання np.log замість методу .log()
-                                log_returns_pred = np.log(positive_pred / positive_pred.shift(1)).dropna()
-                                volatility_pred = log_returns_pred.std() * np.sqrt(252)
+                            # Додаткова інформація про пропущені нульові значення
+                            if len(pred_series_no_zeros) < len(pred_series):
+                                zeros_percentage = (len(pred_series) - len(pred_series_no_zeros)) / len(
+                                    pred_series) * 100
+                                self.logger.warning(
+                                    f"Removed {zeros_percentage:.2f}% zero or negative values from prediction for model {model_key}")
+
+                            # Порівняння з волатильністю тестових даних
+                            if volatility_test is not None:
+                                volatility_diff = abs(volatility_pred - volatility_test)
+                                volatility_ratio = volatility_pred / volatility_test if volatility_test != 0 else None
                             else:
-                                self.logger.warning(f"Not enough positive values for model {model_key}")
-                                volatility_pred = pred_returns.std() * np.sqrt(252)
+                                volatility_diff = None
+                                volatility_ratio = None
 
-                        # Порівняння з волатильністю тестових даних
-                        if volatility_test is not None:
-                            volatility_diff = abs(volatility_pred - volatility_test)
-                            volatility_ratio = volatility_pred / volatility_test if volatility_test != 0 else float('inf')
-                        else:
-                            volatility_diff = None
-                            volatility_ratio = None
-
-                        volatility_metrics = {
-                            "predicted": float(volatility_pred),
-                            "actual": float(volatility_test) if volatility_test is not None else None,
-                            "difference": float(volatility_diff) if volatility_diff is not None else None,
-                            "ratio": float(volatility_ratio) if volatility_ratio is not None else None
-                        }
+                            volatility_metrics = {
+                                "predicted": float(volatility_pred) if volatility_pred is not None else None,
+                                "actual": float(volatility_test) if volatility_test is not None else None,
+                                "difference": float(volatility_diff) if volatility_diff is not None else None,
+                                "ratio": float(volatility_ratio) if volatility_ratio is not None else None
+                            }
                     except Exception as vol_err:
                         self.logger.error(f"Error calculating volatility for model {model_key}: {str(vol_err)}")
                         volatility_metrics = {"error": str(vol_err)}
