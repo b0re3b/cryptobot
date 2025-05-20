@@ -1,0 +1,2 @@
+2025-05-20 15:09:16 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-20 15:09:16 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'

@@ -1002,48 +1002,48 @@ class MarketDataProcessor:
             else:
                 self.logger.warning(f"Не вдалося підготувати ARIMA дані")
 
-            # LSTM
-            try:
-                self.logger.info(f"Підготовка даних для LSTM моделі")
-                lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe, sequence_length = sequence_length)
-
-
-                if lstm_df is not None and not lstm_df.empty:
-                    results['lstm_data'] = lstm_df
-
-                    if save_results:
-                        try:
-                            self.logger.info(f"Збереження LSTM даних")
-                            lstm_data_points = lstm_df.reset_index().to_dict('records')
-
-                            timestamp_str = pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
-                            for i, record in enumerate(lstm_data_points):
-                                record.setdefault('sequence_position', i + 1)
-                                record.setdefault('sequence_id', f"{symbol}_{timeframe}_{timestamp_str}_{i}")
-
-                            required_fields = ['sequence_position', 'sequence_id']
-                            for record in lstm_data_points:
-                                missing = [f for f in required_fields if f not in record]
-                                if missing:
-                                    raise ValueError(f"Відсутні обов'язкові поля: {missing}")
-
-                            # Виклик уніфікованого методу
-                            sequence_ids = self.save_lstm_sequence(symbol, lstm_data_points)
-
-                            if sequence_ids:
-                                self.logger.info(
-                                    f"LSTM послідовності збережено ")
-                            else:
-                                self.logger.warning(f"Не вдалося зберегти LSTM послідовності для {symbol}")
-                        except Exception as e:
-                            self.logger.error(f"Помилка збереження LSTM послідовностей для {symbol}: {str(e)}")
-                            self.logger.error(traceback.format_exc())
-                else:
-                    self.logger.warning(f"Не вдалося підготувати LSTM дані")
-
-            except Exception as e:
-                self.logger.error(f"Помилка підготовки LSTM даних: {str(e)}")
-                self.logger.error(traceback.format_exc())
+            # # LSTM
+            # try:
+            #     self.logger.info(f"Підготовка даних для LSTM моделі")
+            #     lstm_df = self.prepare_lstm_data(processed_data, symbol=symbol, timeframe=timeframe, sequence_length = sequence_length)
+            #
+            #
+            #     if lstm_df is not None and not lstm_df.empty:
+            #         results['lstm_data'] = lstm_df
+            #
+            #         if save_results:
+            #             try:
+            #                 self.logger.info(f"Збереження LSTM даних")
+            #                 lstm_data_points = lstm_df.reset_index().to_dict('records')
+            #
+            #                 timestamp_str = pd.Timestamp.now().strftime('%Y%m%d%H%M%S')
+            #                 for i, record in enumerate(lstm_data_points):
+            #                     record.setdefault('sequence_position', i + 1)
+            #                     record.setdefault('sequence_id', f"{symbol}_{timeframe}_{timestamp_str}_{i}")
+            #
+            #                 required_fields = ['sequence_position', 'sequence_id']
+            #                 for record in lstm_data_points:
+            #                     missing = [f for f in required_fields if f not in record]
+            #                     if missing:
+            #                         raise ValueError(f"Відсутні обов'язкові поля: {missing}")
+            #
+            #                 # Виклик уніфікованого методу
+            #                 sequence_ids = self.save_lstm_sequence(symbol, lstm_data_points)
+            #
+            #                 if sequence_ids:
+            #                     self.logger.info(
+            #                         f"LSTM послідовності збережено ")
+            #                 else:
+            #                     self.logger.warning(f"Не вдалося зберегти LSTM послідовності для {symbol}")
+            #             except Exception as e:
+            #                 self.logger.error(f"Помилка збереження LSTM послідовностей для {symbol}: {str(e)}")
+            #                 self.logger.error(traceback.format_exc())
+            #     else:
+            #         self.logger.warning(f"Не вдалося підготувати LSTM дані")
+            #
+            # except Exception as e:
+            #     self.logger.error(f"Помилка підготовки LSTM даних: {str(e)}")
+            #     self.logger.error(traceback.format_exc())
 
         self.logger.info(
             f"Комплексна обробка даних для {symbol} ({timeframe}) завершена ")
@@ -1192,10 +1192,10 @@ def main():
     ALL_TIMEFRAMES = ['1m','1h', '4h', '1d', '1w']
 
     # Базові таймфрейми, які вже існують в базі даних
-    BASE_TIMEFRAMES = ['1h', '1d']
+    BASE_TIMEFRAMES = ['1m']
 
     # Похідні таймфрейми, які будуть створені через ресемплінг
-    DERIVED_TIMEFRAMES = ['4h', '1w']
+    # DERIVED_TIMEFRAMES = ['4h', '1w']
 
     # Ініціалізація процесора
     processor = MarketDataProcessor(log_level=logging.INFO)
@@ -1234,46 +1234,46 @@ def main():
                 print(f"Помилка при обробці {symbol} ({timeframe}): {str(e)}")
                 traceback.print_exc()
 
-    # Після обробки базових таймфреймів обробляємо похідні
-    print("\n=== Обробка похідних таймфреймів ===")
-    for symbol in SYMBOLS:
-        for timeframe in DERIVED_TIMEFRAMES:
-            print(f"\nОбробка {symbol} ({timeframe})...")
-
-            source_timeframe = None
-            if timeframe == '4h':
-                source_timeframe = '1h'
-            elif timeframe == '1w':
-                source_timeframe = '1d'
-
-            print(f"Буде використано ресемплінг із {source_timeframe} до {timeframe}")
-
-            try:
-                results = processor.process_market_data(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    save_results=True,
-                    auto_detect=True,
-                    check_interval_compatibility=True
-                )
-
-                if not results:
-                    print(f"Не вдалося обробити дані для {symbol} {timeframe}")
-                    continue
-
-                # Зберігаємо результати
-                processed_results[f"{symbol}_{timeframe}"] = results
-
-                # Виводимо підсумок результатів
-                for key, data in results.items():
-                    if isinstance(data, pd.DataFrame) and not data.empty:
-                        print(f" - {key}: {len(data)} рядків, {len(data.columns)} колонок")
-
-                print(f"Обробка {symbol} ({timeframe}) завершена успішно")
-
-            except Exception as e:
-                print(f"Помилка при обробці {symbol} ({timeframe}): {str(e)}")
-                traceback.print_exc()
+    # # Після обробки базових таймфреймів обробляємо похідні
+    # print("\n=== Обробка похідних таймфреймів ===")
+    # for symbol in SYMBOLS:
+    #     for timeframe in DERIVED_TIMEFRAMES:
+    #         print(f"\nОбробка {symbol} ({timeframe})...")
+    #
+    #         source_timeframe = None
+    #         if timeframe == '4h':
+    #             source_timeframe = '1h'
+    #         elif timeframe == '1w':
+    #             source_timeframe = '1d'
+    #
+    #         print(f"Буде використано ресемплінг із {source_timeframe} до {timeframe}")
+    #
+    #         try:
+    #             results = processor.process_market_data(
+    #                 symbol=symbol,
+    #                 timeframe=timeframe,
+    #                 save_results=True,
+    #                 auto_detect=True,
+    #                 check_interval_compatibility=True
+    #             )
+    #
+    #             if not results:
+    #                 print(f"Не вдалося обробити дані для {symbol} {timeframe}")
+    #                 continue
+    #
+    #             # Зберігаємо результати
+    #             processed_results[f"{symbol}_{timeframe}"] = results
+    #
+    #             # Виводимо підсумок результатів
+    #             for key, data in results.items():
+    #                 if isinstance(data, pd.DataFrame) and not data.empty:
+    #                     print(f" - {key}: {len(data)} рядків, {len(data.columns)} колонок")
+    #
+    #             print(f"Обробка {symbol} ({timeframe}) завершена успішно")
+    #
+    #         except Exception as e:
+    #             print(f"Помилка при обробці {symbol} ({timeframe}): {str(e)}")
+    #             traceback.print_exc()
 
     print("\nВсі операції обробки даних завершено")
 

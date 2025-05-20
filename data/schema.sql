@@ -1032,9 +1032,8 @@ CREATE TABLE IF NOT EXISTS trend_analysis (
     UNIQUE (symbol, timeframe, analysis_date)
 );
 
-CREATE TABLE CREATE TABLE IF NOT EXISTS technical_indicators (
+CREATE TABLE IF NOT EXISTS technical_indicators (
     id SERIAL PRIMARY KEY,
-    price_data_id INTEGER REFERENCES crypto_price_data(id),
     symbol VARCHAR(10) NOT NULL,
     timeframe VARCHAR(5) NOT NULL,
     timestamp TIMESTAMP NOT NULL,
@@ -1056,9 +1055,8 @@ CREATE TABLE CREATE TABLE IF NOT EXISTS technical_indicators (
     UNIQUE(symbol, timeframe, timestamp)
 );
 
-CREATE INDEX idx_technical_indicators_price_data_id ON technical_indicators(price_data_id);
-CREATE INDEX idx_technical_indicators_symbol_timeframe ON technical_indicators(symbol, timeframe);
-CREATE TABLE CREATE TABLE IF NOT EXISTS ml_sequence_data (
+CREATE INDEX IF NOT EXISTS idx_technical_indicators_symbol_timeframe ON technical_indicators(symbol, timeframe);
+CREATE TABLE IF NOT EXISTS ml_sequence_data (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     timeframe VARCHAR(5) NOT NULL,
@@ -1071,10 +1069,10 @@ CREATE TABLE CREATE TABLE IF NOT EXISTS ml_sequence_data (
     UNIQUE(symbol, timeframe, sequence_start_time)
 );
 
-CREATE INDEX idx_ml_sequence_data_symbol_timeframe ON ml_sequence_data(symbol, timeframe);
+CREATE INDEX IF NOT EXISTS idx_ml_sequence_data_symbol_timeframe ON ml_sequence_data(symbol, timeframe);
 
 -- 7. ML Models Table
-CREATE TABLE CREATE TABLE IF NOT EXISTS ml_models (
+CREATE TABLE IF NOT EXISTS ml_models (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     timeframe VARCHAR(5) NOT NULL,
@@ -1091,7 +1089,7 @@ CREATE TABLE CREATE TABLE IF NOT EXISTS ml_models (
 );
 
 -- 8. ML Model Metrics Table
-CREATE TABLE CREATE TABLE IF NOT EXISTS ml_model_metrics (
+CREATE TABLE IF NOT EXISTS ml_model_metrics (
     id SERIAL PRIMARY KEY,
     model_id INTEGER REFERENCES ml_models(id),
     mse DECIMAL(15, 8) NOT NULL,  -- Mean squared error
@@ -1104,10 +1102,10 @@ CREATE TABLE CREATE TABLE IF NOT EXISTS ml_model_metrics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_ml_model_metrics_model_id ON ml_model_metrics(model_id);
+CREATE INDEX IF NOT EXISTS idx_ml_model_metrics_model_id ON ml_model_metrics(model_id);
 
 -- 9. Predictions Table
-CREATE TABLE CREATE TABLE IF NOT EXISTS predictions (
+CREATE TABLE IF NOT EXISTS predictions (
     id SERIAL PRIMARY KEY,
     model_id INTEGER REFERENCES ml_models(id),
     symbol VARCHAR(10) NOT NULL,
@@ -1123,6 +1121,6 @@ CREATE TABLE CREATE TABLE IF NOT EXISTS predictions (
     UNIQUE(model_id, symbol, timeframe, target_timestamp)
 );
 
-CREATE INDEX idx_predictions_model_id ON predictions(model_id);
-CREATE INDEX idx_predictions_symbol_timeframe ON predictions(symbol, timeframe);
-CREATE INDEX idx_predictions_target_timestamp ON predictions(target_timestamp);
+CREATE INDEX IF NOT EXISTS idx_predictions_model_id ON predictions(model_id);
+CREATE INDEX IF NOT EXISTS idx_predictions_symbol_timeframe ON predictions(symbol, timeframe);
+CREATE INDEX IF NOT EXISTS idx_predictions_target_timestamp ON predictions(target_timestamp);

@@ -566,66 +566,113 @@ class TimeSeriesTransformer:
     def extract_volatility(self, data: pd.Series, window: int = 20) -> pd.Series:
         self.logger.info(f"Calculating volatility with window size {window}")
 
-        # Перевірка на нульові значення
+        # Input validation - ensure data is actually a pandas Series
+        if not isinstance(data, pd.Series):
+            self.logger.error(f"Expected pandas Series but got {type(data)}. Converting to Series.")
+            try:
+                if isinstance(data, (float, int)):
+                    self.logger.error("Input data is a single scalar value, cannot calculate volatility")
+                    return pd.Series([], index=pd.DatetimeIndex([]))
+                elif isinstance(data, pd.DataFrame):
+                    if data.shape[1] == 1:
+                        data = data.iloc[:, 0]
+                        self.logger.warning("Converted DataFrame with one column to Series")
+                    else:
+                        self.logger.error("Input is a DataFrame with multiple columns, using first column")
+                        data = data.iloc[:, 0]
+                else:
+                    data = pd.Series(data)
+                    self.logger.warning(f"Converted {type(data)} to Series")
+            except Exception as conv_err:
+                self.logger.error(f"Could not convert input to Series: {str(conv_err)}")
+                return pd.Series([], index=pd.DatetimeIndex([]))
+
+        # Check for NaN values
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before volatility calculation.")
             data = data.dropna()
 
-        # Перевірка на нульові або негативні значення
+        # Check for empty data
+        if len(data) == 0:
+            self.logger.error("No data points available after filtering")
+            return pd.Series([], index=pd.DatetimeIndex([]))
+
+        # Check for zero or negative values
         if (data <= 0).any():
             min_value = data.min()
             self.logger.warning(
                 f"Data contains zero or negative values (min={min_value}). These points will be excluded from volatility calculation.")
-            data = data[data > 0]  # Відфільтровуємо всі нульові та від'ємні значення
+            data = data[data > 0]  # Filter out all zero and negative values
 
+        # Check if enough data points remain after filtering
         if len(data) < window:
             self.logger.error(f"Not enough data points for volatility calculation with window={window}")
             return pd.Series([], index=pd.DatetimeIndex([]))
 
         try:
-            # Розрахунок логарифмічних прибутків
-            # Захист від ділення на нуль при розрахунку відношення
-            log_returns = np.log(data / data.shift(1)).dropna()
+            # Create a proper Series with appropriate index if needed
+            if not isinstance(data.index, pd.DatetimeIndex) and not data.index.is_numeric():
+                self.logger.warning("Data index is not a DatetimeIndex or numeric index, results may be unexpected")
 
-            # Розрахунок волатильності як ковзного стандартного відхилення логарифмічних прибутків
+            # Calculate log returns
+            data_shifted = data.shift(1)
+            # Ensure we're not dividing by zero
+            valid_indices = (data_shifted != 0) & ~data_shifted.isna()
+
+            # Initialize log_returns with NaN values
+            log_returns = pd.Series(np.nan, index=data.index)
+
+            # Only calculate for valid indices
+            if valid_indices.any():
+                ratio = data[valid_indices] / data_shifted[valid_indices]
+                log_returns[valid_indices] = np.log(ratio)
+
+            log_returns = log_returns.dropna()
+
+            # Check if we have enough data after calculating returns
+            if len(log_returns) < window:
+                self.logger.error(f"Not enough valid log returns for volatility calculation with window={window}")
+                # Return a Series with the same index as the input but filled with NaN
+                return pd.Series(np.nan, index=data.index)
+
+            # Calculate volatility as rolling standard deviation of log returns
             volatility = log_returns.rolling(window=window).std()
 
-            # Переведення стандартного відхилення у волатильність (анулізована)
-            # Для різних частот даних множник буде різним:
-            # - Денні дані: множник = sqrt(252) - кількість торгових днів у році
-            # - Годинні дані: множник = sqrt(252 * 24)
-            # - Хвилинні дані: множник = sqrt(252 * 24 * 60)
+            # Convert standard deviation to annualized volatility
+            # Default to daily data
+            annualization_factor = np.sqrt(252)
 
-            # За замовчуванням припускаємо денні дані
-            annualization_factor = np.sqrt(252)  # За замовчуванням
+            if isinstance(data.index, pd.DatetimeIndex) and len(data) >= 2:
+                try:
+                    time_diff = data.index[1:] - data.index[:-1]
+                    median_diff = pd.Series(time_diff).median()
 
-            if isinstance(data.index, pd.DatetimeIndex):
-                # Визначаємо частоту даних
-                if len(data) >= 2:
-                    try:
-                        time_diff = data.index[1:] - data.index[:-1]
-                        median_diff = pd.Series(time_diff).median()
-
-                        if median_diff <= pd.Timedelta(minutes=5):
-                            annualization_factor = np.sqrt(252 * 24 * 12)  # 5-хвилинні дані
-                        elif median_diff <= pd.Timedelta(hours=1):
-                            annualization_factor = np.sqrt(252 * 24)  # Годинні дані
-                        elif median_diff <= pd.Timedelta(days=1):
-                            annualization_factor = np.sqrt(252)  # Денні дані
-                        else:
-                            # Не анулізуємо для нестандартних інтервалів
-                            self.logger.warning(
-                                f"Non-standard time interval detected ({median_diff}). Using default annualization factor.")
-                    except Exception as e:
+                    if median_diff <= pd.Timedelta(minutes=5):
+                        annualization_factor = np.sqrt(252 * 24 * 12)  # 5-minute data
+                    elif median_diff <= pd.Timedelta(hours=1):
+                        annualization_factor = np.sqrt(252 * 24)  # Hourly data
+                    elif median_diff <= pd.Timedelta(days=1):
+                        annualization_factor = np.sqrt(252)  # Daily data
+                    else:
+                        # Don't annualize for non-standard intervals
                         self.logger.warning(
-                            f"Error determining time frequency: {str(e)}. Using default annualization factor.")
+                            f"Non-standard time interval detected ({median_diff}). Using default annualization factor.")
+                except Exception as e:
+                    self.logger.warning(
+                        f"Error determining time frequency: {str(e)}. Using default annualization factor.")
 
             volatility = volatility * annualization_factor
-
             self.logger.info(f"Volatility calculation completed. Annualization factor: {annualization_factor}")
 
-            return volatility
+            # Make sure the returned Series has the same index length as the input data
+            # Fill NaN values for indices where volatility couldn't be calculated
+            full_volatility = pd.Series(np.nan, index=data.index)
+            full_volatility.loc[volatility.index] = volatility
+
+            return full_volatility
 
         except Exception as e:
             self.logger.error(f"Error during volatility calculation: {str(e)}")
-            return pd.Series([], index=data.index)
+            # Create an empty Series with the same index as the input data
+            # This will prevent the "Length of values does not match length of index" error
+            return pd.Series(np.nan, index=data.index)

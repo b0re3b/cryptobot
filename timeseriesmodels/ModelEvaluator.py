@@ -672,8 +672,18 @@ class ModelEvaluator:
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}
 
-    def compare_models(self, model_keys: List[str], test_data: pd.Series) -> Dict:
+    def compare_models(self, model_keys: List[str], test_data: pd.Series, window_size: int = None) -> Dict:
+        """
+        Порівнює кілька моделей на основі їх прогнозів на тестових даних.
 
+        Args:
+            model_keys: Список ключів моделей для порівняння
+            test_data: Часовий ряд з тестовими даними
+            window_size: Розмір вікна для розрахунку волатильності. Якщо None, використовується вся серія.
+
+        Returns:
+            Dictionary з результатами порівняння
+        """
         self.logger.info(f"Starting comparison of models: {model_keys}")
 
         if len(model_keys) < 2:
@@ -710,28 +720,12 @@ class ModelEvaluator:
 
         try:
             # Розрахунок волатильності тестових даних для порівняння
-            try:
-                # FIXED: Оновлена логіка обробки нульових значень
-                # Видаляємо нульові значення перед розрахунками
-                test_data_no_zeros = test_data[test_data > 0]
+            volatility_test = self._calculate_volatility(test_data, window_size)
 
-                if len(test_data_no_zeros) < 2:
-                    self.logger.warning("Not enough non-zero values for volatility calculation in test data")
-                    volatility_test = None
-                else:
-                    # Розрахунок волатильності на основі логарифмічних прибутків
-                    log_returns = np.log(test_data_no_zeros / test_data_no_zeros.shift(1)).dropna()
-                    volatility_test = log_returns.std() * np.sqrt(252)  # Річна волатильність
-                    self.logger.info(f"Test data volatility: {volatility_test:.4f}")
-
-                    # Додаткова інформація про пропущені нульові значення
-                    if len(test_data_no_zeros) < len(test_data):
-                        zeros_percentage = (len(test_data) - len(test_data_no_zeros)) / len(test_data) * 100
-                        self.logger.warning(
-                            f"Removed {zeros_percentage:.2f}% zero values from test data for volatility calculation")
-            except Exception as vol_error:
-                self.logger.error(f"Error during volatility calculation for test data: {str(vol_error)}")
-                volatility_test = None
+            if volatility_test is not None:
+                self.logger.info(f"Test data volatility: {volatility_test:.4f}")
+            else:
+                self.logger.warning("Could not calculate volatility for test data")
 
             # Отримати прогнози для кожної моделі і порівняти їх з тестовими даними
             for model_key in model_keys:
@@ -791,51 +785,23 @@ class ModelEvaluator:
                     else:
                         mape = np.nan
 
-                    # FIXED: Обчислення волатильності прогнозів з покращеною обробкою нульових значень
-                    try:
-                        # Видаляємо нульові та від'ємні значення перед розрахунками
-                        pred_series_no_zeros = pred_series[pred_series > 0]
+                    # Обчислення волатильності прогнозів з покращеною обробкою
+                    volatility_pred = self._calculate_volatility(pred_series, window_size)
 
-                        if len(pred_series_no_zeros) < 2:
-                            self.logger.warning(
-                                f"Not enough positive values for volatility calculation in model {model_key}")
-                            volatility_pred = None
-                            volatility_metrics = {
-                                "predicted": None,
-                                "actual": float(volatility_test) if volatility_test is not None else None,
-                                "difference": None,
-                                "ratio": None,
-                                "warning": "Insufficient positive values for volatility calculation"
-                            }
-                        else:
-                            # Розрахунок волатильності на основі логарифмічних прибутків
-                            log_returns_pred = np.log(pred_series_no_zeros / pred_series_no_zeros.shift(1)).dropna()
-                            volatility_pred = log_returns_pred.std() * np.sqrt(252)
+                    # Порівняння з волатильністю тестових даних
+                    if volatility_test is not None and volatility_pred is not None:
+                        volatility_diff = abs(volatility_pred - volatility_test)
+                        volatility_ratio = volatility_pred / volatility_test if volatility_test != 0 else None
+                    else:
+                        volatility_diff = None
+                        volatility_ratio = None
 
-                            # Додаткова інформація про пропущені нульові значення
-                            if len(pred_series_no_zeros) < len(pred_series):
-                                zeros_percentage = (len(pred_series) - len(pred_series_no_zeros)) / len(
-                                    pred_series) * 100
-                                self.logger.warning(
-                                    f"Removed {zeros_percentage:.2f}% zero or negative values from prediction for model {model_key}")
-
-                            # Порівняння з волатильністю тестових даних
-                            if volatility_test is not None:
-                                volatility_diff = abs(volatility_pred - volatility_test)
-                                volatility_ratio = volatility_pred / volatility_test if volatility_test != 0 else None
-                            else:
-                                volatility_diff = None
-                                volatility_ratio = None
-
-                            volatility_metrics = {
-                                "predicted": float(volatility_pred) if volatility_pred is not None else None,
-                                "actual": float(volatility_test) if volatility_test is not None else None,
-                                "difference": float(volatility_diff) if volatility_diff is not None else None,
-                                "ratio": float(volatility_ratio) if volatility_ratio is not None else None
-                            }
-                    except Exception as vol_err:
-                        self.logger.error(f"Error calculating volatility for model {model_key}: {str(vol_err)}")
-                        volatility_metrics = {"error": str(vol_err)}
+                    volatility_metrics = {
+                        "predicted": float(volatility_pred) if volatility_pred is not None else None,
+                        "actual": float(volatility_test) if volatility_test is not None else None,
+                        "difference": float(volatility_diff) if volatility_diff is not None else None,
+                        "ratio": float(volatility_ratio) if volatility_ratio is not None else None
+                    }
 
                     comparison_results["metrics"]["mse"][model_key] = mse
                     comparison_results["metrics"]["rmse"][model_key] = rmse
@@ -915,3 +881,60 @@ class ModelEvaluator:
                 "message": f"Error during model comparison: {str(e)}",
                 "results": {}
             }
+
+    def _calculate_volatility(self, data_series: pd.Series, window_size: int = None) -> float | None:
+        """
+        Розраховує волатильність часового ряду з правильною обробкою помилок.
+
+        Args:
+            data_series: Часовий ряд з фінансовими даними
+            window_size: Розмір вікна для розрахунку ковзної волатильності.
+                         Якщо None, розраховується для всієї серії.
+
+        Returns:
+            Значення волатильності або None у випадку помилки
+        """
+        if data_series is None or len(data_series) < 2:
+            self.logger.warning("Insufficient data for volatility calculation")
+            return None
+
+        try:
+            # Видалення пропущених значень
+            clean_data = data_series.dropna()
+
+            # Видалення нульових та від'ємних значень
+            positive_data = clean_data[clean_data > 0]
+
+            if len(positive_data) < 2:
+                self.logger.warning("Insufficient positive values for volatility calculation")
+                return None
+
+            # Переконуємося, що дані у форматі Series
+            if not isinstance(positive_data, pd.Series):
+                positive_data = pd.Series(positive_data)
+
+            # Розрахунок дохідності
+            returns = positive_data / positive_data.shift(1)
+            # Видалення NaN з першого запису
+            returns = returns.dropna()
+
+            # Застосування логарифму до всієї серії (не до окремих значень)
+            log_returns = np.log(returns)
+
+            if window_size and window_size < len(log_returns):
+                # Розрахунок ковзної волатильності
+                self.logger.info(f"Calculating volatility with window size {window_size}")
+                rolling_std = log_returns.rolling(window=window_size).std()
+                # Використовуємо останнє значення ковзного стандартного відхилення
+                volatility = rolling_std.iloc[-1] * np.sqrt(252)  # Річна волатильність
+            else:
+                # Розрахунок загальної волатильності
+                self.logger.info("Calculating overall volatility")
+                volatility = log_returns.std() * np.sqrt(252)  # Річна волатильність
+
+            return float(volatility)
+
+        except Exception as e:
+            # Логування помилки і повернення None
+            self.logger.error(f"Error during volatility calculation: {str(e)}")
+            return None

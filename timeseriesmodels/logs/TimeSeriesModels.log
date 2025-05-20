@@ -166,3 +166,43 @@ TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 w
 2025-05-20 00:52:47 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
 2025-05-20 00:52:47 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
 2025-05-20 00:52:47 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-20 14:02:50 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-20 15:00:17 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:05:44 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 15:05:44 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 15:05:44 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 15:05:44 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-20 15:05:45 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:05:45 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-20 15:05:45 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:05:45 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-20 15:05:45 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-20 15:09:16 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...

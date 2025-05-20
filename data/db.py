@@ -447,15 +447,27 @@ class DatabaseManager:
             self.conn.rollback()
             return False
 
-    def get_klines(self, symbol, timeframe, start_time=None, end_time=None, limit=None):
-        """Отримує свічки для валюти"""
+    def get_klines(
+            self,
+            symbol,
+            timeframe,
+            start_time=None,
+            end_time=None,
+            limit=None,
+            batch_size=10_000
+    ):
+        """Отримує свічки потоково (через серверний курсор)"""
         if symbol.upper() not in self.supported_symbols:
             print(f"Валюта {symbol} не підтримується")
             return pd.DataFrame()
 
         table_name = f"{symbol.lower()}_klines"
+        all_data = []
 
+        # Створюємо іменований курсор (для потокового читання)
+        cursor_name = f"cursor_{symbol}_{timeframe}"
         query = f'''
+        DECLARE {cursor_name} CURSOR FOR
         SELECT * FROM {table_name} 
         WHERE timeframe = %s
         '''
@@ -468,24 +480,46 @@ class DatabaseManager:
             query += ' AND open_time <= %s'
             params.append(end_time)
 
-        query += ' ORDER BY open_time DESC'  # ← сортування за часом
-
-        if limit is not None:
-            query += ' LIMIT %s'
-            params.append(limit)
+        query += ' ORDER BY open_time DESC'
 
         try:
             self.cursor.execute(query, params)
-            rows = self.cursor.fetchall()
-            if not rows:
-                return pd.DataFrame()
-            df = pd.DataFrame(rows)
-            return df
+            fetched = 0
+
+            while True:
+                # Отримуємо наступні `batch_size` записів
+                fetch_query = f"FETCH FORWARD {batch_size} FROM {cursor_name}"
+                self.cursor.execute(fetch_query)
+                rows = self.cursor.fetchall()
+
+                if not rows:
+                    break
+
+                # Обробляємо поточний batch
+                columns = [desc[0] for desc in self.cursor.description]
+                batch_df = pd.DataFrame(rows, columns=columns)
+                all_data.append(batch_df)
+
+                # Перевіряємо ліміт
+                fetched += len(rows)
+                if limit is not None and fetched >= limit:
+                    break
+
+            # Закриваємо курсор
+            self.cursor.execute(f"CLOSE {cursor_name}")
+
         except psycopg2.Error as e:
             print(f"Помилка отримання свічок для {symbol}: {e}")
-            columns = [desc[0] for desc in self.cursor.description]  # витягуємо назви колонок
-            df = pd.DataFrame(rows, columns=columns)
-            return df
+            return pd.DataFrame()
+
+        # Об'єднуємо всі дані
+        if all_data:
+            final_df = pd.concat(all_data)
+            if limit is not None:
+                final_df = final_df.head(limit)
+            return final_df
+        else:
+            return pd.DataFrame()
 
     def log_event(self, log_level, message, component):
         """Додає запис в лог"""
@@ -5509,7 +5543,7 @@ class DatabaseManager:
                 id створеного запису
             """
             fields = [
-                'price_data_id', 'symbol', 'timeframe', 'timestamp', 'rsi_14',
+                 'symbol', 'timeframe', 'timestamp', 'rsi_14',
                 'macd', 'macd_signal', 'macd_histogram', 'bollinger_upper',
                 'bollinger_middle', 'bollinger_lower', 'sma_50', 'sma_200',
                 'ema_12', 'ema_26', 'atr_14', 'stoch_k', 'stoch_d'
