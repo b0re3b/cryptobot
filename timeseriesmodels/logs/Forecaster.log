@@ -28,3 +28,33 @@
 2025-05-21 16:38:31 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
 2025-05-21 16:38:31 - Forecaster - INFO - [logger.py:103] - Applying log transformation
 2025-05-21 16:38:31 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:29:02 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-21 19:29:02 - Forecaster - INFO - [logger.py:103] - Split data: train=2265, test=567
+2025-05-21 19:29:02 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 19:29:02 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 19:29:02 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:29:08 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-21 19:29:08 - Forecaster - INFO - [logger.py:103] - Split data: train=2265, test=567
+2025-05-21 19:29:09 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 19:29:09 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 19:29:09 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:29:10 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-21 19:29:10 - Forecaster - INFO - [logger.py:103] - Split data: train=1380, test=346
+2025-05-21 19:29:10 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 19:29:10 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 19:29:10 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:52:49 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-21 19:52:49 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-21 19:52:49 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 19:52:49 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 19:52:49 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:52:54 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-21 19:52:54 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-21 19:52:55 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 19:52:55 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 19:52:55 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:52:56 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-21 19:52:56 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-21 19:52:57 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 19:52:57 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 19:52:57 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method

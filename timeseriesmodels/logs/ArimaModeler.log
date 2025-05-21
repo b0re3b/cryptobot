@@ -16,3 +16,39 @@
 2025-05-21 16:38:30 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
 2025-05-21 16:38:30 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
 2025-05-21 16:38:31 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA з порядком (0, 1, 0), сезонним порядком (0, 0, 0, 7) для символу default
+2025-05-21 19:28:50 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-21 19:28:50 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-21 19:28:50 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:28:51 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-21 19:28:51 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-21 19:29:02 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:29:03 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-21 19:29:03 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-21 19:29:04 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:29:06 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-21 19:29:06 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-21 19:29:08 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:29:09 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-21 19:29:09 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-21 19:29:09 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:29:09 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-21 19:29:09 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-21 19:29:10 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:52:43 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-21 19:52:43 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-21 19:52:43 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:52:44 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-21 19:52:44 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-21 19:52:49 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:52:50 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-21 19:52:50 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-21 19:52:51 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:52:52 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-21 19:52:52 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-21 19:52:54 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:52:55 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-21 19:52:55 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-21 19:52:55 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:52:55 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-21 19:52:55 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-21 19:52:56 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі SARIMA: 'p'

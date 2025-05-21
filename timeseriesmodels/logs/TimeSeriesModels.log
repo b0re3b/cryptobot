@@ -426,3 +426,178 @@ ValueError: If using all scalar values, you must pass an index
 2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
 2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
 2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-21 19:28:35 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-21 19:28:35 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:28:35 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:28:35 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-21 19:28:35 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:28:35 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:28:36 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: boolean index did not match indexed array along dimension 0; dimension is 2 but corresponding boolean dimension is 8
+2025-05-21 19:28:36 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 165, in load_crypto_data
+    best_column = self.modeler.select_best_stationary_column(stationarity_results, symbol)
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/ARIMAModeler.py", line 758, in select_best_stationary_column
+    stationary_cols = data.columns[data['is_stationary'] == True]
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/indexes/base.py", line 5416, in __getitem__
+    result = getitem(key)
+IndexError: boolean index did not match indexed array along dimension 0; dimension is 2 but corresponding boolean dimension is 8
+2025-05-21 19:28:36 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-21 19:28:36 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:28:36 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:28:36 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for ETH: boolean index did not match indexed array along dimension 0; dimension is 2 but corresponding boolean dimension is 8
+2025-05-21 19:28:36 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 165, in load_crypto_data
+    best_column = self.modeler.select_best_stationary_column(stationarity_results, symbol)
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/ARIMAModeler.py", line 758, in select_best_stationary_column
+    stationary_cols = data.columns[data['is_stationary'] == True]
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/indexes/base.py", line 5416, in __getitem__
+    result = getitem(key)
+IndexError: boolean index did not match indexed array along dimension 0; dimension is 2 but corresponding boolean dimension is 8
+2025-05-21 19:28:36 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-21 19:28:36 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:28:36 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:28:36 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for SOL: boolean index did not match indexed array along dimension 0; dimension is 2 but corresponding boolean dimension is 8
+2025-05-21 19:28:36 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 165, in load_crypto_data
+    best_column = self.modeler.select_best_stationary_column(stationarity_results, symbol)
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/ARIMAModeler.py", line 758, in select_best_stationary_column
+    stationary_cols = data.columns[data['is_stationary'] == True]
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/indexes/base.py", line 5416, in __getitem__
+    result = getitem(key)
+IndexError: boolean index did not match indexed array along dimension 0; dimension is 2 but corresponding boolean dimension is 8
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 19:28:49 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 19:28:50 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-21 19:28:50 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:28:50 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 19:28:50 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 755 for SARIMA model
+2025-05-21 19:28:51 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-21 19:29:02 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:29:02 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 19:29:02 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 19:29:02 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 19:29:03 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-21 19:29:04 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:29:04 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 19:29:04 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-21 19:29:04 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-21 19:29:06 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-21 19:29:08 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:29:08 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 19:29:09 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 19:29:09 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 19:29:09 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-21 19:29:09 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:29:09 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 19:29:09 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-21 19:29:09 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:29:10 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-21 19:29:10 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-21 19:29:10 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-21 19:29:10 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-21 19:29:10 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-21 19:29:10 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Converted 0 columns to float out of 24 total columns
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 19:52:42 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 19:52:43 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-21 19:52:43 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:52:43 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 19:52:43 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-21 19:52:43 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-21 19:52:44 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-21 19:52:49 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:52:49 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 19:52:49 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 19:52:49 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 19:52:50 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-21 19:52:51 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:52:51 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 19:52:51 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-21 19:52:51 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-21 19:52:52 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-21 19:52:54 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:52:54 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 19:52:55 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 19:52:55 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 19:52:55 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-21 19:52:55 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-21 19:52:55 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 19:52:55 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-21 19:52:55 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-21 19:52:56 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Помилка під час навчання моделі SARIMA: 'p'
+2025-05-21 19:52:56 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-21 19:52:57 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 19:52:57 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-21 19:52:57 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-21 19:52:57 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 19:52:57 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-21 19:52:57 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-21 19:52:57 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 19:52:57 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-21 19:52:57 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-21 19:52:57 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3

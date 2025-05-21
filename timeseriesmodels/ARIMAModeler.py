@@ -9,7 +9,7 @@ import pickle
 import os
 from utils.logger import CryptoLogger
 from data.db import DatabaseManager
-from timeseriesmodels.time_series import TimeSeriesAnalyzer
+from timeseriesmodels.TimeSeriesAnalyzer import TimeSeriesAnalyzer
 
 
 class ARIMAModeler:
@@ -385,17 +385,32 @@ class ARIMAModeler:
                 )
 
                 if optimal_params['status'] == 'success':
-                    order = (
-                        optimal_params['parameters']['p'],
-                        optimal_params['parameters']['d'],
-                        optimal_params['parameters']['q']
-                    )
-                    seasonal_order = (
-                        optimal_params['parameters'].get('P', 1),
-                        optimal_params['parameters'].get('D', 1),
-                        optimal_params['parameters'].get('Q', 1),
-                        seasonal_period  # Використовуємо заданий сезонний період
-                    )
+                    # Перевіримо структуру optimal_params
+                    if 'parameters' in optimal_params and 'p' in optimal_params['parameters']:
+                        # Стара структура
+                        order = (
+                            optimal_params['parameters']['p'],
+                            optimal_params['parameters']['d'],
+                            optimal_params['parameters']['q']
+                        )
+                        seasonal_order = (
+                            optimal_params['parameters'].get('P', 1),
+                            optimal_params['parameters'].get('D', 1),
+                            optimal_params['parameters'].get('Q', 1),
+                            seasonal_period  # Використовуємо заданий сезонний період
+                        )
+                    elif 'order' in optimal_params and 'seasonal_order' in optimal_params:
+                        # Нова структура
+                        order = optimal_params['order']
+                        seasonal_order = optimal_params['seasonal_order']
+                    else:
+                        # Якщо структура не відповідає жодному з очікуваних форматів
+                        self.logger.warning(
+                            f"Неочікувана структура optimal_params: {optimal_params}. Використовуємо стандартні параметри."
+                        )
+                        order = (1, 1, 1)
+                        seasonal_order = (1, 1, 1, seasonal_period)
+
                     self.logger.info(f"Визначено оптимальні параметри SARIMA: {order}, сезонні: {seasonal_order}")
                 else:
                     # У випадку помилки використовуємо стандартні параметри

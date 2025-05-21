@@ -900,7 +900,7 @@ def main():
             print(f"\nЗбираємо історичні дані для {symbol}...")
 
             # Отримати початкову дату для конкретного символу або дефолт
-            start_date = (symbol, '2025-05-13')
+            start_date = (symbol, '2025-05-18')
 
             # Збір даних для всіх інтервалів: 1 хв, 1 год, 1 день до поточного моменту
             results = client.save_historical_data_to_db(
@@ -1029,7 +1029,7 @@ def main():
                     for timeframe in ['1m', '1h', '1d']:
                         try:
                             # Отримуємо останню свічку з бази даних
-                            last_db_candle = client.db_manager.get_last_kline(symbol, timeframe)
+                            last_db_candle = client.db_manager.get_klines(symbol, timeframe)
 
                             if last_db_candle:
                                 last_time = last_db_candle['close_time']

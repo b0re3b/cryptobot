@@ -30,3 +30,15 @@
 2025-05-21 16:38:29 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
 2025-05-21 16:38:30 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
 2025-05-21 16:38:30 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:28:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-21 19:28:49 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:29:02 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-21 19:29:02 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:29:09 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-21 19:29:09 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:52:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-21 19:52:42 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:52:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-21 19:52:49 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 19:52:55 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-21 19:52:55 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method

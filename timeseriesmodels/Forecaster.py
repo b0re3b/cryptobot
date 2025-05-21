@@ -7,6 +7,7 @@ from statsmodels.tsa.stattools import adfuller, acf
 from data.db import DatabaseManager
 from utils.logger import CryptoLogger
 
+
 class Forecaster:
     def __init__(self):
         self.models = {}
@@ -153,34 +154,17 @@ class Forecaster:
                 self.logger.error(error_msg)
                 return pd.Series([], dtype=float)
 
-            # Create index for forecast
-            try:
-                # Try to determine data frequency
-                freq = 'D'  # Default to daily
+            # Get training data from fit_result to create forecast index
+            if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
+                train_data = pd.Series(fit_result.model.data.orig_endog)
+                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                    train_data.index = fit_result.model.data.dates
+            else:
+                # Create dummy series with numeric index as fallback
+                train_data = pd.Series(range(100))  # Arbitrary length
 
-                if "seasonal_order" in model_info.get("parameters", {}):
-                    # For seasonal models, use seasonal period
-                    seasonal_period = model_info["parameters"]["seasonal_order"][3]
-
-                    # Map common seasonal periods to frequencies
-                    if seasonal_period == 7:
-                        freq = 'D'  # daily
-                    elif seasonal_period in [12, 24]:
-                        freq = 'H'  # hourly
-                    elif seasonal_period in [30, 31]:
-                        freq = 'D'  # daily
-                    elif seasonal_period == 365:
-                        freq = 'D'  # daily
-
-                # Create DatetimeIndex for forecast
-                forecast_index = pd.date_range(
-                    start=end_date + timedelta(days=1),
-                    periods=steps,
-                    freq=freq
-                )
-            except Exception as e:
-                self.logger.warning(f"Could not create date index: {str(e)}, using numeric index")
-                forecast_index = range(steps)
+            # Create index for forecast using the utility method
+            forecast_index = self._create_forecast_index(train_data, steps)
 
             # Create Series with forecast and index
             forecast_series = pd.Series(forecast_result, index=forecast_index)
@@ -279,46 +263,17 @@ class Forecaster:
                 predicted_mean = forecast_result.predicted_mean
                 confidence_intervals = forecast_result.conf_int(alpha=alpha)
 
-                # Create time indices for forecast
-                # Determine data frequency from original model
-                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
-                    original_index = fit_result.model.data.dates
-
-                    # Determine frequency
-                    if isinstance(original_index, pd.DatetimeIndex):
-                        freq = pd.infer_freq(original_index)
-                        if freq is None:
-                            # Try to guess frequency based on differences
-                            if len(original_index) > 1:
-                                avg_diff = (original_index[-1] - original_index[0]) / (len(original_index) - 1)
-                                if avg_diff.days >= 1:
-                                    freq = f"{avg_diff.days}D"
-                                else:
-                                    hours = avg_diff.seconds // 3600
-                                    if hours >= 1:
-                                        freq = f"{hours}H"
-                                    else:
-                                        minutes = (avg_diff.seconds % 3600) // 60
-                                        if minutes >= 1:
-                                            freq = f"{minutes}min"
-                                        else:
-                                            freq = f"{avg_diff.seconds % 60}S"
-
-                        # Create new indices for forecast
-                        last_date = original_index[-1]
-                        forecast_index = pd.date_range(start=last_date, periods=steps + 1, freq=freq)[1:]
-                    else:
-                        # For non-datetime indices, use numeric indices
-                        last_idx = len(original_index)
-                        forecast_index = pd.RangeIndex(start=last_idx, stop=last_idx + steps)
+                # Get training data from model for index creation
+                if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
+                    train_data = pd.Series(fit_result.model.data.orig_endog)
+                    if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                        train_data.index = fit_result.model.data.dates
                 else:
-                    # If no date information available, use numeric indices
-                    # Try to guess the last index
-                    if hasattr(fit_result.model, 'endog') and hasattr(fit_result.model.endog, 'shape'):
-                        last_idx = fit_result.model.endog.shape[0]
-                        forecast_index = pd.RangeIndex(start=last_idx, stop=last_idx + steps)
-                    else:
-                        forecast_index = pd.RangeIndex(start=0, stop=steps)
+                    # Create dummy series with numeric index
+                    train_data = pd.Series(range(100))  # Arbitrary length
+
+                # Create time indices for forecast using the utility method
+                forecast_index = self._create_forecast_index(train_data, steps)
 
                 # Create Series for forecast and intervals
                 forecast_series = pd.Series(predicted_mean, index=forecast_index)
