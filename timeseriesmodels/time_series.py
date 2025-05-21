@@ -25,6 +25,51 @@ class TimeSeriesModels:
 
         self.logger.info("TimeSeriesModels initialized")
 
+    def convert_dataframe_to_float(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        try:
+            self.logger.info("Converting DataFrame columns to float")
+
+            if df is None or df.empty:
+                self.logger.warning("Empty DataFrame provided for conversion")
+                return df
+
+            # Create a copy to avoid modifying the original DataFrame
+            df_converted = df.copy()
+
+            # Get a list of columns that could be numeric
+            numeric_cols = []
+            for col in df_converted.columns:
+                # Check if the column is already numeric or could be converted
+                try:
+                    # Check first value (or a sample if column is large)
+                    sample = df_converted[col].iloc[0] if len(df_converted) > 0 else None
+                    if sample is not None and (isinstance(sample, (int, float)) or
+                                               (isinstance(sample, str) and sample.replace('.', '', 1).isdigit())):
+                        numeric_cols.append(col)
+                except:
+                    continue
+
+            # Convert each numeric column to float
+            for col in numeric_cols:
+                try:
+                    df_converted[col] = df_converted[col].astype(float)
+                    self.logger.debug(f"Converted column '{col}' to float")
+                except Exception as e:
+                    self.logger.warning(f"Failed to convert column '{col}' to float: {str(e)}")
+
+            # Log conversion results
+            converted_count = len(numeric_cols)
+            self.logger.info(
+                f"Converted {converted_count} columns to float out of {len(df_converted.columns)} total columns")
+
+            return df_converted
+
+        except Exception as e:
+            self.logger.error(f"Error converting DataFrame to float: {str(e)}")
+            # Return original DataFrame if conversion fails
+            return df
+
     def load_crypto_data(self, db_manager: Any,
                          symbol: str,
                          start_date: Optional[datetime] = None,
@@ -90,6 +135,9 @@ class TimeSeriesModels:
                     klines_data = klines_data[klines_data.index >= start_date]
                 if end_date:
                     klines_data = klines_data[klines_data.index <= end_date]
+
+            # Convert numeric columns to float
+            klines_data = self.convert_dataframe_to_float(klines_data)
 
             # Логування успішного завантаження
             if not klines_data.empty and isinstance(klines_data.index, pd.DatetimeIndex):
@@ -391,6 +439,9 @@ class TimeSeriesModels:
                     }
                     continue
 
+                # Ensure numeric columns are properly converted to float
+                data = self.convert_dataframe_to_float(data)
+
                 # Select target column for analysis (usually 'close')
                 target_column = 'close'
                 if target_column not in data.columns:
@@ -506,7 +557,7 @@ class TimeSeriesModels:
 
     def check_stationarity(self, data: pd.Series) -> Dict:
         """Check stationarity of time series"""
-        return self.forecaster._check_stationarity(data)
+        return self.forecaster.check_stationarity(data)
 
     def analyze_series(self, data: pd.Series) -> Dict:
         """Complete analysis of time series"""
@@ -530,18 +581,23 @@ class TimeSeriesModels:
     def train_model(self, data: pd.Series, model_type: str = 'arima',
                     order: Tuple = None, seasonal_order: Tuple = None,
                     symbol: str = 'default') -> Dict:
-        """Train ARIMA/SARIMA model"""
+        """Train ARIMA/SARIMA model with auto-determined order if not specified"""
         if model_type == 'arima':
             if order is None:
-                order = (1, 1, 1)  # Default values
+                # Автоматично визначаємо порядок замість використання стандартних значень
+                order = self.auto_determine_order(data)
+                self.logger.info(f"Auto-determined ARIMA order: {order}")
             return self.modeler.fit_arima(data, order=order, symbol=symbol)
         elif model_type == 'sarima':
-            if order is None or seasonal_order is None:
-                # Auto-determine parameters
+            if order is None:
+                # Автоматично визначаємо порядок для SARIMA
+                order = self.auto_determine_order(data)
+                self.logger.info(f"Auto-determined SARIMA order: {order}")
+            if seasonal_order is None:
+                # Визначаємо сезонний порядок автоматично
                 params = self.find_optimal_model(data, seasonal=True)
                 if params['status'] != 'success':
-                    raise ValueError("Failed to determine optimal parameters")
-                order = params['parameters']['order']
+                    raise ValueError("Failed to determine optimal seasonal parameters")
                 seasonal_order = params['parameters']['seasonal_order']
             return self.modeler.fit_sarima(data, order=order,
                                            seasonal_order=seasonal_order,
@@ -577,6 +633,10 @@ class TimeSeriesModels:
         """Load model from disk"""
         return self.modeler.load_model(model_key, path)
 
+    def auto_determine_order(self, data: pd.Series) -> pd.Series:
+
+        return self.modeler.auto_determine_order(data)
+
     def full_pipeline(self, symbol: str, interval: str = '1d',
                       forecast_steps: int = 24) -> Dict:
         """Complete pipeline from data to forecast"""
@@ -585,6 +645,9 @@ class TimeSeriesModels:
             data = self.load_crypto_data(db_manager=self.db_manager, symbol=symbol, timeframe=interval)
             if data.empty:
                 return {"status": "error", "message": "No data loaded"}
+
+            # Convert DataFrame columns to float
+            data = self.convert_dataframe_to_float(data)
 
             # Select target variable (closing)
             target = data['close']
@@ -600,7 +663,7 @@ class TimeSeriesModels:
             processed_data = self.preprocess_data(target, operations)
 
             # 4. Model selection and training
-            # ARIMA
+            # ARIMA - використовуємо auto_determine_order
             arima_result = self.train_model(processed_data, 'arima', symbol=symbol)
             if arima_result['status'] != 'success':
                 return arima_result
@@ -608,6 +671,7 @@ class TimeSeriesModels:
             # SARIMA (if seasonality is detected)
             sarima_result = None
             if analysis['seasonality']['has_seasonality']:
+                # Використовуємо auto_determine_order для order
                 sarima_result = self.train_model(
                     processed_data, 'sarima',
                     symbol=symbol,
@@ -712,91 +776,236 @@ class TimeSeriesModels:
 
     def ensemble_forecast(self, data: pd.Series, models: List[str],
                           forecast_steps: int = 24, weights: Optional[List[float]] = None) -> Dict:
-        """
-        Create ensemble forecast from multiple models
 
-        Args:
-            data: Time series data
-            models: List of model types to include ('arima', 'sarima', 'prophet', etc.)
-            forecast_steps: Number of steps to forecast
-            weights: List of weights for each model (optional)
-
-        Returns:
-            Dict: Ensemble forecast results
-        """
         try:
             self.logger.info(f"Creating ensemble forecast with models: {models}")
 
+            # Validate input data
+            if data is None:
+                self.logger.error("Input data is None")
+                return {"status": "error", "message": "Input data cannot be None"}
+
+            # Ensure data is a pandas Series with DatetimeIndex
+            if not isinstance(data, pd.Series):
+                self.logger.warning("Input data is not a pandas Series, attempting to convert")
+                try:
+                    data = pd.Series(data)
+                except Exception as e:
+                    self.logger.error(f"Failed to convert input data to pandas Series: {str(e)}")
+                    return {"status": "error", "message": f"Cannot convert input to pandas Series: {str(e)}"}
+
+            # Ensure index is DatetimeIndex
+            if not isinstance(data.index, pd.DatetimeIndex):
+                self.logger.warning("Input data does not have DatetimeIndex, attempting to convert")
+                try:
+                    # Try to identify if there's a datetime column that should be used as index
+                    if any(isinstance(idx, (str, int)) for idx in data.index):
+                        # If index seems to be string dates or timestamps
+                        try:
+                            data.index = pd.to_datetime(data.index)
+                        except Exception as dt_err:
+                            self.logger.warning(f"Could not convert index to datetime: {str(dt_err)}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to convert index to DatetimeIndex: {str(e)}")
+                    # We'll continue anyway, but log the warning
+
+            # Ensure data is sorted by index
+            if isinstance(data.index, pd.DatetimeIndex) and not data.index.is_monotonic_increasing:
+                self.logger.warning("Data index is not sorted, sorting now")
+                data = data.sort_index()
+
+            # Check for NaN values and handle them
+            if data.isnull().any():
+                self.logger.warning(f"Input data contains {data.isnull().sum()} NaN values, interpolating")
+                data = data.interpolate(method='time')
+
+                # If there are still NaN values (e.g., at the beginning), forward/backward fill
+                if data.isnull().any():
+                    data = data.fillna(method='ffill').fillna(method='bfill')
+
+                if data.isnull().any():
+                    self.logger.error("Failed to handle all NaN values in data")
+                    return {"status": "error",
+                            "message": "Cannot process data with NaN values that couldn't be interpolated"}
+
             # Check if models list is valid
-            valid_models = ['arima', 'sarima']
-            if not all(m in valid_models for m in models):
-                invalid = [m for m in models if m not in valid_models]
-                self.logger.error(f"Invalid model types: {invalid}")
-                return {"status": "error", "message": f"Invalid model types: {invalid}"}
+            valid_models = ['arima', 'sarima', 'auto_arima', 'exponential_smoothing', 'prophet']
+            if not models:
+                self.logger.error("No models specified")
+                return {"status": "error", "message": "No models specified for ensemble forecast"}
 
-            if weights is not None and len(weights) != len(models):
-                self.logger.error(f"Number of weights ({len(weights)}) does not match number of models ({len(models)})")
-                return {"status": "error", "message": "Weights and models count mismatch"}
+            invalid_models = [m for m in models if m not in valid_models]
+            if invalid_models:
+                self.logger.error(f"Invalid model types: {invalid_models}")
+                return {"status": "error",
+                        "message": f"Invalid model types: {invalid_models}. Supported models: {valid_models}"}
 
-            # If weights are not provided, use equal weights
-            if weights is None:
+            # Validate weights
+            if weights is not None:
+                if len(weights) != len(models):
+                    self.logger.error(
+                        f"Number of weights ({len(weights)}) does not match number of models ({len(models)})")
+                    return {"status": "error", "message": "Weights and models count mismatch"}
+
+                # Check that weights are numeric
+                if not all(isinstance(w, (int, float)) for w in weights):
+                    self.logger.error("Non-numeric weights provided")
+                    return {"status": "error", "message": "All weights must be numeric values"}
+
+                # Check that weights are non-negative
+                if any(w < 0 for w in weights):
+                    self.logger.error("Negative weights provided")
+                    return {"status": "error", "message": "All weights must be non-negative"}
+            else:
+                # If weights are not provided, use equal weights
                 weights = [1 / len(models)] * len(models)
 
-            # Normalize weights
-            weights = [w / sum(weights) for w in weights]
+            # Validate forecast_steps
+            if not isinstance(forecast_steps, int) or forecast_steps <= 0:
+                self.logger.error(f"Invalid forecast_steps: {forecast_steps}")
+                return {"status": "error", "message": "forecast_steps must be a positive integer"}
 
-            # Train each model and get forecasts
+            # Normalize weights to sum to 1
+            sum_weights = sum(weights)
+            if sum_weights == 0:
+                self.logger.error("Sum of weights is zero")
+                return {"status": "error", "message": "Sum of weights cannot be zero"}
+
+            weights = [w / sum_weights for w in weights]
+
             forecasts = []
             model_keys = []
+            model_info = []
 
             for i, model_type in enumerate(models):
                 self.logger.info(f"Training {model_type} model...")
 
-                # Analyze data for seasonality
-                seasonality = self.analyzer.detect_seasonality(data)
-                has_seasonality = seasonality.get('has_seasonality', False)
+                # Analyze data for seasonality if needed for SARIMA
+                if model_type == 'sarima':
+                    seasonality = self.analyzer.detect_seasonality(data)
+                    has_seasonality = seasonality.get('has_seasonality', False)
 
-                # Train model
-                if model_type == 'arima':
-                    result = self.train_model(data, 'arima')
-                elif model_type == 'sarima' and has_seasonality:
-                    result = self.train_model(
-                        data, 'sarima',
-                        seasonal_order=(1, 1, 1, seasonality.get('primary_period', 12))
-                    )
-                else:
-                    # Skip this model
-                    self.logger.warning(f"Skipping {model_type} model as it's not applicable")
+                    if not has_seasonality:
+                        self.logger.warning(
+                            f"No seasonality detected for {model_type}, using default seasonal parameters")
+                        # If no seasonality detected, we'll use a default period of 7 (weekly) or 12 (monthly)
+                        if len(data) >= 365:  # If we have at least a year of data
+                            seasonal_period = 12  # Monthly seasonality
+                        else:
+                            seasonal_period = 7  # Weekly seasonality
+                    else:
+                        seasonal_period = seasonality.get('primary_period', 12)
+
+                    self.logger.info(f"Using seasonal period of {seasonal_period} for SARIMA model")
+
+                # Train model based on type - використовуємо auto_determine_order
+                try:
+                    if model_type == 'arima':
+                        # Використовуємо auto_determine_order для ARIMA
+                        result = self.train_model(data, 'arima')
+                    elif model_type == 'sarima':
+                        # Використовуємо auto_determine_order для SARIMA
+                        result = self.train_model(
+                            data, 'sarima',
+                            seasonal_order=(1, 1, 1, seasonal_period)
+                        )
+                    elif model_type == 'auto_arima':
+                        # Змінюємо також auto_arima для використання auto_determine_order
+                        order = self.auto_determine_order(data)
+                        result = self.train_model(data, 'arima', order=order)
+                    else:
+                        # Skip this model type as it's not implemented yet
+                        self.logger.warning(f"Model type {model_type} is recognized but not implemented yet")
+                        continue
+
+                    # Решта функції незмінна
+                    if result['status'] == 'success':
+                        # Get forecast
+                        model_key = result['model_key']
+                        model_keys.append(model_key)
+
+
+                        forecast = self.forecast(model_key, steps=forecast_steps)
+
+                        # Ensure forecast is properly formatted
+                        if forecast is None or (isinstance(forecast, pd.Series) and len(forecast) == 0):
+                            self.logger.warning(f"Empty forecast generated for {model_type}")
+                            continue
+
+                        # If forecast is not a pandas Series, try to convert it
+                        if not isinstance(forecast, pd.Series):
+                            try:
+                                if isinstance(forecast, dict) and 'forecast' in forecast:
+                                    forecast = forecast['forecast']
+
+                                if not isinstance(forecast, pd.Series):
+                                    forecast = pd.Series(forecast)
+
+                                self.logger.warning(f"Converted forecast to pandas Series for {model_type}")
+                            except Exception as e:
+                                self.logger.error(f"Failed to convert forecast to pandas Series: {str(e)}")
+                                continue
+
+                        forecasts.append((forecast, weights[i]))
+                        model_info.append({
+                            "type": model_type,
+                            "model_key": model_key,
+                            "weight": weights[i]
+                        })
+                    else:
+                        self.logger.warning(
+                            f"Failed to train {model_type} model: {result.get('message', 'Unknown error')}")
+                except Exception as model_err:
+                    self.logger.error(f"Error training {model_type} model: {str(model_err)}")
                     continue
-
-                if result['status'] == 'success':
-                    # Get forecast
-                    model_key = result['model_key']
-                    model_keys.append(model_key)
-                    forecast = self.forecast(model_key, steps=forecast_steps)
-                    forecasts.append((forecast, weights[i]))
-                else:
-                    self.logger.warning(f"Failed to train {model_type} model: {result.get('message', 'Unknown error')}")
 
             if not forecasts:
                 self.logger.error("No successful forecasts generated")
-                return {"status": "error", "message": "No successful forecasts"}
+                return {"status": "error", "message": "No successful forecasts generated for any model type"}
 
             # Combine forecasts
             ensemble_forecast = None
+
+            # First, we need to create a common index for all forecasts
+            # Get all unique timestamps across all forecasts
+            all_timestamps = set()
+            for forecast, _ in forecasts:
+                all_timestamps.update(forecast.index)
+
+            common_index = sorted(list(all_timestamps))
+
+            # Now combine the forecasts using the weights
             for forecast, weight in forecasts:
+                # Reindex to the common index and fill NaN values
+                reindexed_forecast = forecast.reindex(common_index)
+
+                # Fill NaN values by interpolation when possible
+                if reindexed_forecast.isnull().any():
+                    reindexed_forecast = reindexed_forecast.interpolate(method='time')
+                    # Forward/backward fill any remaining NaNs
+                    reindexed_forecast = reindexed_forecast.fillna(method='ffill').fillna(method='bfill')
+
+                # Apply weight and add to ensemble
                 if ensemble_forecast is None:
-                    ensemble_forecast = forecast * weight
+                    ensemble_forecast = reindexed_forecast * weight
                 else:
-                    # Reindex to ensure indexes match
-                    forecast = forecast.reindex(ensemble_forecast.index)
-                    ensemble_forecast += forecast * weight
+                    ensemble_forecast += reindexed_forecast * weight
+
+            # Create metadata about the ensemble forecast
+            ensemble_metadata = {
+                "num_models": len(model_keys),
+                "model_types": [info["type"] for info in model_info],
+                "weights": [info["weight"] for info in model_info],
+                "forecast_steps": forecast_steps,
+                "created_at": datetime.now().isoformat()
+            }
 
             return {
                 "status": "success",
                 "ensemble_forecast": ensemble_forecast,
                 "component_models": model_keys,
-                "weights": weights[:len(model_keys)]
+                "model_info": model_info,
+                "metadata": ensemble_metadata
             }
 
         except Exception as e:
@@ -805,17 +1014,7 @@ class TimeSeriesModels:
 
     def visualize_forecast(self, historical_data: pd.Series, forecast_data: pd.Series,
                            save_path: Optional[str] = None) -> Dict:
-        """
-        Create visualization of forecast vs historical data
 
-        Args:
-            historical_data: Historical time series data
-            forecast_data: Forecast time series data
-            save_path: Path to save the visualization (optional)
-
-        Returns:
-            Dict: Status of visualization creation
-        """
         try:
             import matplotlib.pyplot as plt
             import matplotlib.dates as mdates

@@ -1,2 +1,18 @@
 2025-05-20 15:09:16 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
 2025-05-20 15:09:16 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:10 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-20 23:58:10 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:21 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA з порядком (1, 1, 1), сезонним порядком (0, 0, 1, 7) для символу default
+2025-05-20 23:58:21 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-20 23:58:21 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:21 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-20 23:58:21 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:22 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA з порядком (0, 1, 0), сезонним порядком (0, 0, 0, 7) для символу default
+2025-05-21 16:38:18 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-21 16:38:18 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-21 16:38:29 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA з порядком (1, 1, 1), сезонним порядком (0, 0, 1, 7) для символу default
+2025-05-21 16:38:29 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-21 16:38:29 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-21 16:38:30 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA з порядком (1, 1, 1) для символу default
+2025-05-21 16:38:30 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-21 16:38:31 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA з порядком (0, 1, 0), сезонним порядком (0, 0, 0, 7) для символу default

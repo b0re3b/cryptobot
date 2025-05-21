@@ -22,7 +22,7 @@ class Forecaster:
         self.analyzer = TimeSeriesAnalyzer()
         self.modeler = ARIMAModeler()
 
-    def _check_stationarity(self, series: pd.Series) -> Dict:
+    def check_stationarity(self, series: pd.Series) -> Dict:
         """Check if a time series is stationary using Augmented Dickey-Fuller test"""
         try:
             # ADF test
@@ -437,7 +437,7 @@ class Forecaster:
             self.logger.info(f"Split data: train={len(train_data)}, test={len(test_data)}")
 
             # 2. Check stationarity and apply transformations
-            stationarity_check = self._check_stationarity(train_data)
+            stationarity_check = self.check_stationarity(train_data)
             transformations = []
             transformed_data = train_data.copy()
 
@@ -452,7 +452,7 @@ class Forecaster:
                     transformations.append({"op": "log"})
 
                     # Check stationarity after log transformation
-                    log_stationary = self._check_stationarity(transformed_data)["is_stationary"]
+                    log_stationary = self.check_stationarity(transformed_data)["is_stationary"]
 
                     if not log_stationary:
                         # b) If still non-stationary, apply differencing

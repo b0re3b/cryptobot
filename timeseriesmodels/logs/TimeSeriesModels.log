@@ -206,3 +206,223 @@ TypeError: DatabaseManager.safe_json_loads() takes 1 positional argument but 2 w
 2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
 2025-05-20 15:09:16 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
 2025-05-20 15:09:16 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-20 23:52:25 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 23:52:25 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:52:25 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:52:25 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:52:25 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: operator does not exist: text = text[]
+LINE 1: SELECT * FROM btc_arima_data WHERE timeframe = ARRAY['1d','1...
+                                                     ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+
+2025-05-20 23:52:25 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4372, in get_btc_arima_data
+    self.cursor.execute(query, params)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+psycopg2.errors.UndefinedFunction: operator does not exist: text = text[]
+LINE 1: SELECT * FROM btc_arima_data WHERE timeframe = ARRAY['1d','1...
+                                                     ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+
+2025-05-20 23:52:25 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:52:25 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for ETH: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-20 23:52:25 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4388, in get_eth_arima_data
+    self.cursor.execute(query, params)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+psycopg2.errors.InFailedSqlTransaction: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-20 23:52:25 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:52:25 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for SOL: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-20 23:52:25 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+  File "/home/b0r3d/Desktop/kursova2/data/db.py", line 4404, in get_sol_arima_data
+    self.cursor.execute(query, params)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/psycopg2/extras.py", line 236, in execute
+    return super().execute(query, vars)
+psycopg2.errors.InFailedSqlTransaction: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-20 23:54:54 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 23:54:54 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:54:54 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:54:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:54:54 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: DatabaseManager.get_btc_arima_data() got an unexpected keyword argument 'timeframe'
+2025-05-20 23:54:54 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+TypeError: DatabaseManager.get_btc_arima_data() got an unexpected keyword argument 'timeframe'
+2025-05-20 23:54:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:54:54 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for ETH: DatabaseManager.get_eth_arima_data() got an unexpected keyword argument 'timeframe'
+2025-05-20 23:54:54 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+TypeError: DatabaseManager.get_eth_arima_data() got an unexpected keyword argument 'timeframe'
+2025-05-20 23:54:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:54:54 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for SOL: DatabaseManager.get_sol_arima_data() got an unexpected keyword argument 'timeframe'
+2025-05-20 23:54:54 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 58, in load_crypto_data
+    klines_data = crypto_methods[symbol](timeframe=timeframe)
+TypeError: DatabaseManager.get_sol_arima_data() got an unexpected keyword argument 'timeframe'
+2025-05-20 23:55:43 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 23:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:55:45 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for BTC: If using all scalar values, you must pass an index
+2025-05-20 23:55:45 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 67, in load_crypto_data
+    klines_data = pd.DataFrame(klines_data)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/frame.py", line 778, in __init__
+    mgr = dict_to_mgr(data, index, columns, dtype=dtype, copy=copy, typ=manager)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 503, in dict_to_mgr
+    return arrays_to_mgr(arrays, columns, index, dtype=dtype, typ=typ, consolidate=copy)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 114, in arrays_to_mgr
+    index = _extract_index(arrays)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 667, in _extract_index
+    raise ValueError("If using all scalar values, you must pass an index")
+ValueError: If using all scalar values, you must pass an index
+2025-05-20 23:55:45 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:55:47 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for ETH: If using all scalar values, you must pass an index
+2025-05-20 23:55:47 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 67, in load_crypto_data
+    klines_data = pd.DataFrame(klines_data)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/frame.py", line 778, in __init__
+    mgr = dict_to_mgr(data, index, columns, dtype=dtype, copy=copy, typ=manager)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 503, in dict_to_mgr
+    return arrays_to_mgr(arrays, columns, index, dtype=dtype, typ=typ, consolidate=copy)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 114, in arrays_to_mgr
+    index = _extract_index(arrays)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 667, in _extract_index
+    raise ValueError("If using all scalar values, you must pass an index")
+ValueError: If using all scalar values, you must pass an index
+2025-05-20 23:55:47 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval ['1d', '1h', '1w', '4h'] from database
+2025-05-20 23:55:48 - TimeSeriesModels - ERROR - [logger.py:111] - Error loading crypto data for SOL: If using all scalar values, you must pass an index
+2025-05-20 23:55:48 - TimeSeriesModels - ERROR - [logger.py:119] - Stack trace:
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/timeseriesmodels/time_series.py", line 67, in load_crypto_data
+    klines_data = pd.DataFrame(klines_data)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/frame.py", line 778, in __init__
+    mgr = dict_to_mgr(data, index, columns, dtype=dtype, copy=copy, typ=manager)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 503, in dict_to_mgr
+    return arrays_to_mgr(arrays, columns, index, dtype=dtype, typ=typ, consolidate=copy)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 114, in arrays_to_mgr
+    index = _extract_index(arrays)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/pandas/core/internals/construction.py", line 667, in _extract_index
+    raise ValueError("If using all scalar values, you must pass an index")
+ValueError: If using all scalar values, you must pass an index
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-20 23:58:09 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-20 23:58:10 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-20 23:58:10 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-20 23:58:10 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:10 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-20 23:58:21 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Pandas data cast to numpy dtype of object. Check input data with np.asarray(data).
+2025-05-20 23:58:21 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-20 23:58:21 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-20 23:58:21 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-20 23:58:21 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:21 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-20 23:58:21 - TimeSeriesModels - WARNING - [logger.py:107] - Skipping sarima model as it's not applicable
+2025-05-20 23:58:21 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-20 23:58:21 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-20 23:58:21 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-20 23:58:21 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-20 23:58:21 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Pandas data cast to numpy dtype of object. Check input data with np.asarray(data).
+2025-05-20 23:58:22 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-20 23:58:22 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-20 23:58:22 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-20 23:58:22 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-20 23:58:22 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-20 23:58:22 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for BTC from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2832 records for ETH from 2017-08-17 00:00:00 to 2025-05-18 00:00:00
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1726 records for SOL from 2020-08-27 00:00:00 to 2025-05-18 00:00:00
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 16:38:18 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-21 16:38:18 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 16:38:29 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Pandas data cast to numpy dtype of object. Check input data with np.asarray(data).
+2025-05-21 16:38:29 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 16:38:29 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 16:38:29 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 16:38:29 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-21 16:38:29 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 16:38:29 - TimeSeriesModels - WARNING - [logger.py:107] - Skipping sarima model as it's not applicable
+2025-05-21 16:38:29 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 16:38:30 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-21 16:38:30 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-21 16:38:30 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-21 16:38:30 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train sarima model: Pandas data cast to numpy dtype of object. Check input data with np.asarray(data).
+2025-05-21 16:38:31 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-21 16:38:31 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-21 16:38:31 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-21 16:38:31 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-21 16:38:31 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-21 16:38:31 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
