@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Dict
 import numpy as np
 import pandas as pd
+from decimal import Decimal
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from statsmodels.tsa.stattools import adfuller, acf
 from data.db import DatabaseManager
@@ -23,9 +24,34 @@ class Forecaster:
         self.analyzer = TimeSeriesAnalyzer()
         self.modeler = ARIMAModeler()
 
+    def _convert_decimal_series(self, series: pd.Series) -> pd.Series:
+        """Convert decimal.Decimal objects to float for numpy compatibility"""
+        try:
+            # Check if series contains Decimal objects
+            if series.dtype == 'object' and len(series) > 0:
+                # Check first non-null value
+                first_val = series.dropna().iloc[0] if len(series.dropna()) > 0 else None
+                if isinstance(first_val, Decimal):
+                    self.logger.info("Converting Decimal objects to float for numpy compatibility")
+                    # Convert Decimal to float
+                    converted_series = series.apply(lambda x: float(x) if isinstance(x, Decimal) else x)
+                    # Ensure numeric dtype
+                    converted_series = pd.to_numeric(converted_series, errors='coerce')
+                    return converted_series
+
+            # If not Decimal objects, ensure numeric dtype anyway
+            return pd.to_numeric(series, errors='coerce')
+        except Exception as e:
+            self.logger.warning(f"Error during decimal conversion: {str(e)}")
+            # Fallback: try to convert to numeric
+            return pd.to_numeric(series, errors='coerce')
+
     def check_stationarity(self, series: pd.Series) -> Dict:
         """Check if a time series is stationary using Augmented Dickey-Fuller test"""
         try:
+            # Convert decimals to float if needed
+            series = self._convert_decimal_series(series)
+
             # ADF test
             result = adfuller(series.dropna())
             adf_stat, p_value = result[0], result[1]
@@ -364,6 +390,9 @@ class Forecaster:
                           forecast_steps: int = 24, symbol: str = 'auto') -> Dict:
         """Automatically analyze time series, fit optimal model, and generate forecasts"""
         self.logger.info(f"Starting auto forecasting process for symbol: {symbol}")
+
+        # Convert decimal objects to float if needed
+        data = self._convert_decimal_series(data)
 
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before auto forecasting.")

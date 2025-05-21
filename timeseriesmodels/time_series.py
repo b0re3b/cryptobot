@@ -25,50 +25,7 @@ class TimeSeriesModels:
 
         self.logger.info("TimeSeriesModels initialized")
 
-    def convert_dataframe_to_float(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        try:
-            self.logger.info("Converting DataFrame columns to float")
-
-            if df is None or df.empty:
-                self.logger.warning("Empty DataFrame provided for conversion")
-                return df
-
-            # Create a copy to avoid modifying the original DataFrame
-            df_converted = df.copy()
-
-            # Get a list of columns that could be numeric
-            numeric_cols = []
-            for col in df_converted.columns:
-                # Check if the column is already numeric or could be converted
-                try:
-                    # Check first value (or a sample if column is large)
-                    sample = df_converted[col].iloc[0] if len(df_converted) > 0 else None
-                    if sample is not None and (isinstance(sample, (int, float)) or
-                                               (isinstance(sample, str) and sample.replace('.', '', 1).isdigit())):
-                        numeric_cols.append(col)
-                except:
-                    continue
-
-            # Convert each numeric column to float
-            for col in numeric_cols:
-                try:
-                    df_converted[col] = df_converted[col].astype(float)
-                    self.logger.debug(f"Converted column '{col}' to float")
-                except Exception as e:
-                    self.logger.warning(f"Failed to convert column '{col}' to float: {str(e)}")
-
-            # Log conversion results
-            converted_count = len(numeric_cols)
-            self.logger.info(
-                f"Converted {converted_count} columns to float out of {len(df_converted.columns)} total columns")
-
-            return df_converted
-
-        except Exception as e:
-            self.logger.error(f"Error converting DataFrame to float: {str(e)}")
-            # Return original DataFrame if conversion fails
-            return df
 
     def load_crypto_data(self, db_manager: Any,
                          symbol: str,
@@ -137,7 +94,7 @@ class TimeSeriesModels:
                     klines_data = klines_data[klines_data.index <= end_date]
 
             # Convert numeric columns to float
-            klines_data = self.convert_dataframe_to_float(klines_data)
+            klines_data = self.transformer.convert_dataframe_to_float(klines_data)
 
             # Логування успішного завантаження
             if not klines_data.empty and isinstance(klines_data.index, pd.DatetimeIndex):
@@ -440,7 +397,7 @@ class TimeSeriesModels:
                     continue
 
                 # Ensure numeric columns are properly converted to float
-                data = self.convert_dataframe_to_float(data)
+                data = self.transformer.convert_dataframe_to_float(data)
 
                 # Select target column for analysis (usually 'close')
                 target_column = 'close'
@@ -647,7 +604,7 @@ class TimeSeriesModels:
                 return {"status": "error", "message": "No data loaded"}
 
             # Convert DataFrame columns to float
-            data = self.convert_dataframe_to_float(data)
+            data = self.transformer.convert_dataframe_to_float(data)
 
             # Select target variable (closing)
             target = data['close']

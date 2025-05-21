@@ -209,8 +209,9 @@ class ARIMAModeler:
 
         # Додаємо інформацію про збіжність
         training_info = {
-            "convergence": True if fit_result.mle_retvals.get('converged', False) else False,
-            "iterations": fit_result.mle_retvals.get('iterations', None)
+            "convergence": True if hasattr(fit_result, 'mle_retvals') and fit_result.mle_retvals.get('converged',
+                                                                                                     False) else False,
+            "iterations": fit_result.mle_retvals.get('iterations', None) if hasattr(fit_result, 'mle_retvals') else None
         }
 
         # Додаємо параметри до загальних параметрів
@@ -231,6 +232,55 @@ class ARIMAModeler:
             "parameters": params,
             "stats": stats
         }
+
+    def _extract_optimal_params(self, optimal_params: Dict) -> Tuple[Tuple[int, int, int], Tuple[int, int, int, int]]:
+        """
+        Витягає параметри ARIMA та SARIMA з результату оптимізації.
+
+        Параметри:
+        ----------
+        optimal_params : Dict
+            Результат роботи find_optimal_params
+
+        Повертає:
+        ---------
+        Tuple[Tuple[int, int, int], Tuple[int, int, int, int]]
+            Кортеж з параметрами ARIMA та SARIMA
+        """
+        # Перевіряємо різні можливі структури результату
+        if 'parameters' in optimal_params:
+            params = optimal_params['parameters']
+
+            # Якщо є окремі параметри p, d, q
+            if all(key in params for key in ['p', 'd', 'q']):
+                order = (params['p'], params['d'], params['q'])
+                seasonal_order = (
+                    params.get('P', 1),
+                    params.get('D', 1),
+                    params.get('Q', 1),
+                    params.get('s', 7)
+                )
+                return order, seasonal_order
+
+        # Якщо є готові order та seasonal_order
+        if 'order' in optimal_params and 'seasonal_order' in optimal_params:
+            return optimal_params['order'], optimal_params['seasonal_order']
+
+        # Якщо результат це сама модель з атрибутом order
+        if hasattr(optimal_params, 'order'):
+            order = optimal_params.order
+            seasonal_order = getattr(optimal_params, 'seasonal_order', (1, 1, 1, 7))
+            return order, seasonal_order
+
+        # Якщо в результаті є ключ 'model'
+        if 'model' in optimal_params and hasattr(optimal_params['model'], 'order'):
+            order = optimal_params['model'].order
+            seasonal_order = getattr(optimal_params['model'], 'seasonal_order', (1, 1, 1, 7))
+            return order, seasonal_order
+
+        # Стандартні параметри за замовчуванням
+        self.logger.warning(f"Не вдалося витягти параметри з структури: {list(optimal_params.keys())}")
+        return (1, 1, 1), (1, 1, 1, 7)
 
     def fit_arima(self, data: pd.Series, order: Tuple[int, int, int] = None,
                   symbol: str = 'default', auto_params: bool = True,
@@ -266,22 +316,29 @@ class ARIMAModeler:
             # Визначаємо оптимальні параметри, якщо потрібно
             if auto_params or order is None:
                 self.logger.info("Автоматичне визначення параметрів ARIMA моделі")
-                optimal_params = self.ts_analyzer.find_optimal_params(
-                    data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=False
-                )
 
-                if optimal_params['status'] == 'success':
-                    order = (
-                        optimal_params['parameters']['p'],
-                        optimal_params['parameters']['d'],
-                        optimal_params['parameters']['q']
+                try:
+                    optimal_params = self.ts_analyzer.find_optimal_params(
+                        data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=False
                     )
-                    self.logger.info(f"Визначено оптимальні параметри ARIMA: {order}")
-                else:
+
+                    if optimal_params['status'] == 'success':
+                        order, _ = self._extract_optimal_params(optimal_params)
+                        self.logger.info(f"Визначено оптимальні параметри ARIMA: {order}")
+                    else:
+                        # У випадку помилки використовуємо стандартні параметри
+                        order = (1, 1, 1)
+                        self.logger.warning(
+                            f"Не вдалося визначити оптимальні параметри: {optimal_params.get('message', 'Unknown error')}. "
+                            f"Використовуємо стандартні: {order}"
+                        )
+
+                except Exception as param_error:
                     # У випадку помилки використовуємо стандартні параметри
                     order = (1, 1, 1)
                     self.logger.warning(
-                        f"Не вдалося визначити оптимальні параметри. Використовуємо стандартні: {order}"
+                        f"Помилка під час визначення оптимальних параметрів: {str(param_error)}. "
+                        f"Використовуємо стандартні: {order}"
                     )
 
             # Валідація даних
@@ -380,44 +437,35 @@ class ARIMAModeler:
             # Визначаємо оптимальні параметри, якщо потрібно
             if auto_params or order is None or seasonal_order is None:
                 self.logger.info("Автоматичне визначення параметрів SARIMA моделі")
-                optimal_params = self.ts_analyzer.find_optimal_params(
-                    data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=True
-                )
 
-                if optimal_params['status'] == 'success':
-                    # Перевіримо структуру optimal_params
-                    if 'parameters' in optimal_params and 'p' in optimal_params['parameters']:
-                        # Стара структура
-                        order = (
-                            optimal_params['parameters']['p'],
-                            optimal_params['parameters']['d'],
-                            optimal_params['parameters']['q']
-                        )
-                        seasonal_order = (
-                            optimal_params['parameters'].get('P', 1),
-                            optimal_params['parameters'].get('D', 1),
-                            optimal_params['parameters'].get('Q', 1),
-                            seasonal_period  # Використовуємо заданий сезонний період
-                        )
-                    elif 'order' in optimal_params and 'seasonal_order' in optimal_params:
-                        # Нова структура
-                        order = optimal_params['order']
-                        seasonal_order = optimal_params['seasonal_order']
+                try:
+                    optimal_params = self.ts_analyzer.find_optimal_params(
+                        data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=True
+                    )
+
+                    if optimal_params['status'] == 'success':
+                        order, seasonal_order = self._extract_optimal_params(optimal_params)
+                        # Оновлюємо сезонний період, якщо він заданий
+                        if seasonal_period != 7:
+                            seasonal_order = (seasonal_order[0], seasonal_order[1], seasonal_order[2], seasonal_period)
+
+                        self.logger.info(f"Визначено оптимальні параметри SARIMA: {order}, сезонні: {seasonal_order}")
                     else:
-                        # Якщо структура не відповідає жодному з очікуваних форматів
-                        self.logger.warning(
-                            f"Неочікувана структура optimal_params: {optimal_params}. Використовуємо стандартні параметри."
-                        )
+                        # У випадку помилки використовуємо стандартні параметри
                         order = (1, 1, 1)
                         seasonal_order = (1, 1, 1, seasonal_period)
+                        self.logger.warning(
+                            f"Не вдалося визначити оптимальні параметри: {optimal_params.get('message', 'Unknown error')}. "
+                            f"Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
+                        )
 
-                    self.logger.info(f"Визначено оптимальні параметри SARIMA: {order}, сезонні: {seasonal_order}")
-                else:
+                except Exception as param_error:
                     # У випадку помилки використовуємо стандартні параметри
                     order = (1, 1, 1)
                     seasonal_order = (1, 1, 1, seasonal_period)
                     self.logger.warning(
-                        f"Не вдалося визначити оптимальні параметри. Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
+                        f"Помилка під час визначення оптимальних параметрів: {str(param_error)}. "
+                        f"Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
                     )
 
             # Валідація даних
@@ -544,16 +592,17 @@ class ARIMAModeler:
 
             # Отримуємо прогноз
             if return_conf_int:
-                forecast, conf_int = fit_result.predict(n_periods=steps, return_conf_int=True, alpha=alpha)
+                forecast = fit_result.forecast(steps=steps)
+                conf_int = fit_result.get_forecast(steps=steps).conf_int(alpha=alpha)
                 result = {
                     "status": "success",
                     "forecast": forecast.tolist() if isinstance(forecast, np.ndarray) else forecast,
-                    "conf_int_lower": conf_int[:, 0].tolist() if isinstance(conf_int, np.ndarray) else conf_int[0],
-                    "conf_int_upper": conf_int[:, 1].tolist() if isinstance(conf_int, np.ndarray) else conf_int[1],
+                    "conf_int_lower": conf_int.iloc[:, 0].tolist(),
+                    "conf_int_upper": conf_int.iloc[:, 1].tolist(),
                     "alpha": alpha
                 }
             else:
-                forecast = fit_result.predict(n_periods=steps, return_conf_int=False)
+                forecast = fit_result.forecast(steps=steps)
                 result = {
                     "status": "success",
                     "forecast": forecast.tolist() if isinstance(forecast, np.ndarray) else forecast

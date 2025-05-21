@@ -58,3 +58,96 @@
 2025-05-21 19:52:57 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
 2025-05-21 19:52:57 - Forecaster - INFO - [logger.py:103] - Applying log transformation
 2025-05-21 19:52:57 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 23:54:00 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-21 23:54:00 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-21 23:54:00 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 23:54:00 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 23:54:00 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 23:54:06 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-21 23:54:06 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-21 23:54:06 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 23:54:06 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 23:54:06 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-21 23:54:08 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-21 23:54:08 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-21 23:54:08 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-21 23:54:08 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-21 23:54:08 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 00:07:23 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 00:07:23 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 00:07:23 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 00:07:23 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 00:07:23 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 00:07:29 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 00:07:29 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 00:07:29 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 00:07:29 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 00:07:29 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 00:07:30 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 00:07:30 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 00:07:30 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 00:07:30 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 00:07:30 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 01:19:23 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 01:19:23 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 01:19:23 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:19:23 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:19:23 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 01:19:29 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 01:19:29 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 01:19:29 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:19:29 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:19:29 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 01:19:31 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 01:19:31 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 01:19:31 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:19:31 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:19:31 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-22 01:25:22 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:25:29 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 01:25:29 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:25:29 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 01:25:29 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:25:29 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:25:29 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 01:25:30 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-22 01:25:30 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:25:35 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 01:25:35 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:25:35 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 01:25:35 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:25:35 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:25:35 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 01:25:39 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-22 01:25:39 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:25:41 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 01:25:41 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:25:41 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 01:25:41 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:25:41 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:25:41 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 01:25:42 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: 'p'
+2025-05-22 01:29:58 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:30:06 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 01:30:06 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:30:06 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 01:30:06 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:30:06 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:30:06 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 01:30:07 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 01:30:07 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:30:13 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 01:30:13 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:30:13 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 01:30:13 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:30:13 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:30:13 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 01:30:18 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 01:30:18 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 01:30:21 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'

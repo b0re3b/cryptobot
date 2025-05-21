@@ -13,6 +13,101 @@ class TimeSeriesTransformer:
         self.transformations = {}
         self.db_manager = DatabaseManager()
 
+    def convert_dataframe_to_float(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        try:
+            self.logger.info("Converting DataFrame columns to float")
+
+            if df is None or df.empty:
+                self.logger.warning("Empty DataFrame provided for conversion")
+                return df
+
+            # Create a copy to avoid modifying the original DataFrame
+            df_converted = df.copy()
+
+            # Get a list of columns that could be numeric
+            numeric_cols = []
+            non_numeric_cols = []
+
+            for col in df_converted.columns:
+                # Skip columns that are already numeric types
+                if pd.api.types.is_numeric_dtype(df_converted[col]):
+                    numeric_cols.append(col)
+                    continue
+
+                # Sample values for large DataFrames to improve performance
+                sample_size = min(100, len(df_converted))
+                if sample_size > 0:
+                    sample = df_converted[col].sample(sample_size) if len(df_converted) > sample_size else df_converted[
+                        col]
+
+                    # Function to check if a string value could be converted to float
+                    def is_convertible_to_float(val):
+                        if pd.isna(val):
+                            return True  # NaN values are acceptable
+                        if not isinstance(val, str):
+                            return False
+
+                        # Clean string: remove spaces, handle commas as decimal separators
+                        cleaned = val.strip().replace(',', '.')
+
+                        # Handle percentage format (e.g., "95%")
+                        if cleaned.endswith('%'):
+                            cleaned = cleaned[:-1]
+
+                        # Handle currency/units (e.g., "$100", "100€", "100 USD")
+                        for currency_symbol in ['$', '€', '£', '¥']:
+                            cleaned = cleaned.replace(currency_symbol, '')
+
+                        # Remove common units or text suffixes after cleaning
+                        cleaned = cleaned.split()[0] if ' ' in cleaned else cleaned
+
+                        # Check if the remaining string is a valid number
+                        # Regular expression to validate number format (handles negatives, decimals)
+                        import re
+                        return bool(re.match(r'^[-+]?\d*\.?\d+$', cleaned))
+
+                    # Check if all non-NaN values in the sample can be converted to float
+                    non_na_sample = sample.dropna()
+                    if non_na_sample.empty:
+                        # All values are NaN, so column can be considered numeric
+                        numeric_cols.append(col)
+                    else:
+                        # Check if at least 90% of non-NaN values are convertible to float
+                        convertible_count = sum(non_na_sample.apply(is_convertible_to_float))
+                        if convertible_count >= 0.9 * len(non_na_sample):
+                            numeric_cols.append(col)
+                        else:
+                            non_numeric_cols.append(col)
+                else:
+                    non_numeric_cols.append(col)
+
+            # Convert each numeric column to float using pandas' built-in error handling
+            for col in numeric_cols:
+                try:
+                    if col in df_converted.columns:  # Ensure column still exists
+                        # Use pandas to_numeric with coerce option to handle invalid values
+                        df_converted[col] = pd.to_numeric(df_converted[col], errors='coerce')
+                        self.logger.debug(f"Converted column '{col}' to float")
+                except Exception as e:
+                    self.logger.warning(f"Failed to convert column '{col}' to float: {str(e)}")
+                    non_numeric_cols.append(col)
+                    if col in numeric_cols:
+                        numeric_cols.remove(col)
+
+            # Log conversion results
+            self.logger.info(
+                f"Converted {len(numeric_cols)} columns to float out of {len(df_converted.columns)} total columns")
+            if non_numeric_cols:
+                self.logger.debug(f"Non-numeric columns: {', '.join(non_numeric_cols)}")
+
+            return df_converted
+
+        except Exception as e:
+            self.logger.error(f"Error converting DataFrame to float: {str(e)}")
+            # Return original DataFrame if conversion fails
+            return df
+
     def difference_series(self, data: pd.Series, order: int = 1) -> pd.Series:
         if order < 1:
             self.logger.warning("Differencing order must be at least 1, using order=1 instead")
@@ -44,6 +139,16 @@ class TimeSeriesTransformer:
 
     def transform_data(self, data: pd.Series, method: str = 'log') -> Union[pd.Series, Tuple[pd.Series, float]]:
         self.logger.info(f"Applying {method} transformation to data")
+
+        # If input is a DataFrame, convert to float and extract Series
+        if isinstance(data, pd.DataFrame):
+            self.logger.info("Input is a DataFrame, converting to float and extracting first column as Series")
+            data = self.convert_dataframe_to_float(data)
+            if data.shape[1] > 0:
+                data = data.iloc[:, 0]
+            else:
+                self.logger.error("DataFrame has no columns after conversion")
+                return pd.Series([], index=pd.DatetimeIndex([]))
 
         # Перевірка на null значення
         if data.isnull().any():
@@ -149,6 +254,16 @@ class TimeSeriesTransformer:
     def inverse_transform(self, data: pd.Series, method: str = 'log', lambda_param: float = None) -> pd.Series:
         self.logger.info(f"Applying inverse {method} transformation")
 
+        # If input is a DataFrame, convert to float and extract Series
+        if isinstance(data, pd.DataFrame):
+            self.logger.info("Input is a DataFrame, converting to float and extracting first column as Series")
+            data = self.convert_dataframe_to_float(data)
+            if data.shape[1] > 0:
+                data = data.iloc[:, 0]
+            else:
+                self.logger.error("DataFrame has no columns after conversion")
+                return pd.Series([], index=pd.DatetimeIndex([]))
+
         if method == 'none':
             # Без трансформації
             return data
@@ -234,6 +349,16 @@ class TimeSeriesTransformer:
 
     def apply_preprocessing_pipeline(self, data: pd.Series, operations: List[Dict], model_id: int = None) -> pd.Series:
         self.logger.info(f"Applying preprocessing pipeline with {len(operations)} operations")
+
+        # If input is a DataFrame, convert to float and extract Series
+        if isinstance(data, pd.DataFrame):
+            self.logger.info("Input is a DataFrame, converting to float before preprocessing")
+            data = self.convert_dataframe_to_float(data)
+            if data.shape[1] > 0:
+                data = data.iloc[:, 0]
+            else:
+                self.logger.error("DataFrame has no columns after conversion")
+                return pd.Series([], index=pd.DatetimeIndex([]))
 
         # Спочатку перевіряємо наявність NaN значень
         if data.isnull().any():
@@ -574,6 +699,17 @@ class TimeSeriesTransformer:
             return pd.Series([], index=pd.DatetimeIndex([]))
 
     def extract_volatility(self, data: pd.Series, window: int = 20) -> pd.Series:
+        self.logger.info(f"Applying inverse  transformation")
+
+        # If input is a DataFrame, convert to float and extract Series
+        if isinstance(data, pd.DataFrame):
+            self.logger.info("Input is a DataFrame, converting to float and extracting first column as Series")
+            data = self.convert_dataframe_to_float(data)
+            if data.shape[1] > 0:
+                data = data.iloc[:, 0]
+            else:
+                self.logger.error("DataFrame has no columns after conversion")
+                return pd.Series([], index=pd.DatetimeIndex([]))
         self.logger.info(f"Calculating volatility with window size {window}")
 
         # Input validation - ensure data is actually a pandas Series
