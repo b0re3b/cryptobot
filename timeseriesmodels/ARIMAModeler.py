@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Tuple, Dict,Any
+from typing import Tuple, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -9,6 +9,7 @@ import pickle
 import os
 from utils.logger import CryptoLogger
 from data.db import DatabaseManager
+from timeseriesmodels.time_series import TimeSeriesAnalyzer
 
 
 class ARIMAModeler:
@@ -36,6 +37,7 @@ class ARIMAModeler:
         self.db_manager = DatabaseManager()
         self.models = {}
         self.transformations = {}
+        self.ts_analyzer = TimeSeriesAnalyzer()
 
     def _validate_data(self, data: pd.Series, min_required: int) -> pd.Series:
         """
@@ -230,8 +232,9 @@ class ARIMAModeler:
             "stats": stats
         }
 
-    def fit_arima(self, data: pd.Series, order: Tuple[int, int, int],
-                  symbol: str = 'default') -> Dict:
+    def fit_arima(self, data: pd.Series, order: Tuple[int, int, int] = None,
+                  symbol: str = 'default', auto_params: bool = True,
+                  max_p: int = 5, max_d: int = 2, max_q: int = 5) -> Dict:
         """
         Підгонка моделі ARIMA до часового ряду.
 
@@ -239,19 +242,48 @@ class ARIMAModeler:
         ----------
         data : pd.Series
             Часовий ряд для моделювання
-        order : Tuple[int, int, int]
-            Порядок моделі ARIMA (p, d, q)
+        order : Tuple[int, int, int], optional
+            Порядок моделі ARIMA (p, d, q). Якщо None і auto_params=True, параметри визначаються автоматично.
         symbol : str, optional
             Ідентифікатор набору даних. За замовчуванням 'default'.
+        auto_params : bool, optional
+            Чи визначати параметри автоматично. За замовчуванням True.
+        max_p : int, optional
+            Максимальне значення параметра p при автоматичному визначенні. За замовчуванням 5.
+        max_d : int, optional
+            Максимальне значення параметра d при автоматичному визначенні. За замовчуванням 2.
+        max_q : int, optional
+            Максимальне значення параметра q при автоматичному визначенні. За замовчуванням 5.
 
         Повертає:
         ---------
         Dict
             Результат підгонки моделі
         """
-        self.logger.info(f"Починаємо навчання моделі ARIMA з порядком {order} для символу {symbol}")
+        self.logger.info(f"Починаємо навчання моделі ARIMA для символу {symbol}")
 
         try:
+            # Визначаємо оптимальні параметри, якщо потрібно
+            if auto_params or order is None:
+                self.logger.info("Автоматичне визначення параметрів ARIMA моделі")
+                optimal_params = self.ts_analyzer.find_optimal_params(
+                    data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=False
+                )
+
+                if optimal_params['status'] == 'success':
+                    order = (
+                        optimal_params['parameters']['p'],
+                        optimal_params['parameters']['d'],
+                        optimal_params['parameters']['q']
+                    )
+                    self.logger.info(f"Визначено оптимальні параметри ARIMA: {order}")
+                else:
+                    # У випадку помилки використовуємо стандартні параметри
+                    order = (1, 1, 1)
+                    self.logger.warning(
+                        f"Не вдалося визначити оптимальні параметри. Використовуємо стандартні: {order}"
+                    )
+
             # Валідація даних
             min_required = sum(order) + 1
             data = self._validate_data(data, min_required)
@@ -277,7 +309,7 @@ class ARIMAModeler:
             # Зберігаємо модель в БД, якщо доступно
             self._save_model_to_db(model_key, model_info)
 
-            self.logger.info(f"Модель ARIMA {model_key} успішно навчена")
+            self.logger.info(f"Модель ARIMA {model_key} успішно навчена з параметрами {order}")
 
             return {
                 "status": "success",
@@ -308,8 +340,11 @@ class ARIMAModeler:
                 "model_info": None
             }
 
-    def fit_sarima(self, data: pd.Series, order: Tuple[int, int, int],
-                   seasonal_order: Tuple[int, int, int, int], symbol: str = 'default') -> Dict:
+    def fit_sarima(self, data: pd.Series, order: Tuple[int, int, int] = None,
+                   seasonal_order: Tuple[int, int, int, int] = None,
+                   symbol: str = 'default', auto_params: bool = True,
+                   max_p: int = 5, max_d: int = 2, max_q: int = 5,
+                   seasonal_period: int = 7) -> Dict:
         """
         Підгонка моделі SARIMA до часового ряду.
 
@@ -317,22 +352,59 @@ class ARIMAModeler:
         ----------
         data : pd.Series
             Часовий ряд для моделювання
-        order : Tuple[int, int, int]
-            Порядок моделі ARIMA (p, d, q)
-        seasonal_order : Tuple[int, int, int, int]
-            Сезонний порядок моделі (P, D, Q, s)
+        order : Tuple[int, int, int], optional
+            Порядок моделі ARIMA (p, d, q). Якщо None і auto_params=True, параметри визначаються автоматично.
+        seasonal_order : Tuple[int, int, int, int], optional
+            Сезонний порядок моделі (P, D, Q, s). Якщо None і auto_params=True, параметри визначаються автоматично.
         symbol : str, optional
             Ідентифікатор набору даних. За замовчуванням 'default'.
+        auto_params : bool, optional
+            Чи визначати параметри автоматично. За замовчуванням True.
+        max_p : int, optional
+            Максимальне значення параметра p при автоматичному визначенні. За замовчуванням 5.
+        max_d : int, optional
+            Максимальне значення параметра d при автоматичному визначенні. За замовчуванням 2.
+        max_q : int, optional
+            Максимальне значення параметра q при автоматичному визначенні. За замовчуванням 5.
+        seasonal_period : int, optional
+            Сезонний період для моделі. За замовчуванням 7 (тижневий).
 
         Повертає:
         ---------
         Dict
             Результат підгонки моделі
         """
-        self.logger.info(
-            f"Починаємо навчання моделі SARIMA з порядком {order}, сезонним порядком {seasonal_order} для символу {symbol}")
+        self.logger.info(f"Починаємо навчання моделі SARIMA для символу {symbol}")
 
         try:
+            # Визначаємо оптимальні параметри, якщо потрібно
+            if auto_params or order is None or seasonal_order is None:
+                self.logger.info("Автоматичне визначення параметрів SARIMA моделі")
+                optimal_params = self.ts_analyzer.find_optimal_params(
+                    data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=True
+                )
+
+                if optimal_params['status'] == 'success':
+                    order = (
+                        optimal_params['parameters']['p'],
+                        optimal_params['parameters']['d'],
+                        optimal_params['parameters']['q']
+                    )
+                    seasonal_order = (
+                        optimal_params['parameters'].get('P', 1),
+                        optimal_params['parameters'].get('D', 1),
+                        optimal_params['parameters'].get('Q', 1),
+                        seasonal_period  # Використовуємо заданий сезонний період
+                    )
+                    self.logger.info(f"Визначено оптимальні параметри SARIMA: {order}, сезонні: {seasonal_order}")
+                else:
+                    # У випадку помилки використовуємо стандартні параметри
+                    order = (1, 1, 1)
+                    seasonal_order = (1, 1, 1, seasonal_period)
+                    self.logger.warning(
+                        f"Не вдалося визначити оптимальні параметри. Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
+                    )
+
             # Валідація даних
             min_required = sum(order) + sum(seasonal_order[:-1]) + 2 * seasonal_order[-1]
             data = self._validate_data(data, min_required)
@@ -375,7 +447,8 @@ class ARIMAModeler:
             # Зберігаємо модель в БД, якщо доступно
             self._save_model_to_db(model_key, model_info)
 
-            self.logger.info(f"Модель SARIMA {model_key} успішно навчена")
+            self.logger.info(
+                f"Модель SARIMA {model_key} успішно навчена з параметрами {order}, сезонними {seasonal_order}")
 
             return {
                 "status": "success",
@@ -664,7 +737,7 @@ class ARIMAModeler:
         except Exception as e:
             self.logger.error(f"Помилка додавання трансформації: {str(e)}")
             return False
-    def select_best_stationary_column(self, data: pd.DataFrame, symbol: str = 'default'):
+    def select_best_stationary_column(self, data: pd.DataFrame, symbol: str):
         """
         Вибирає найкращий стаціонарний стовпець для моделювання.
 

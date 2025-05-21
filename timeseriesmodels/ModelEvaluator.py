@@ -19,13 +19,19 @@ class ModelEvaluator:
         self.db_manager = DatabaseManager()
         self.analyzer = TimeSeriesAnalyzer()
 
-    def evaluate_model(self, model_key: str, test_data: pd.Series) -> Dict:
+    def evaluate_model(self, model_key: str, test_data: pd.Series, use_rolling_validation: bool = True,
+                       window_size: int = 100, step: int = 20, forecast_horizon: int = 10) -> Dict:
         """
         Оцінює модель, порівнюючи її прогнози з тестовими даними.
+        Має можливість додатково оцінити модель за допомогою методу ковзного вікна для більш надійної валідації.
 
         Args:
             model_key: Ключ моделі
             test_data: Часовий ряд з тестовими даними
+            use_rolling_validation: Чи використовувати метод ковзного вікна для валідації
+            window_size: Розмір вікна для валідації методом ковзного вікна
+            step: Крок зсуву для валідації методом ковзного вікна
+            forecast_horizon: Горизонт прогнозування для валідації методом ковзного вікна
 
         Returns:
             Dictionary з метриками оцінки моделі
@@ -90,123 +96,121 @@ class ModelEvaluator:
                     "metrics": None
                 }
 
-            # Отримуємо прогноз для тестового періоду
-            steps = len(test_data)
-            self.logger.info(f"Generating in-sample forecasts for {steps} test points")
-
             # Визначаємо тип моделі
             model_type = model_info.get("metadata", {}).get("model_type", "ARIMA")
+            model_params = model_info.get("parameters", {})
 
-            # Генеруємо прогноз в залежності від типу моделі
-            if model_type == "ARIMA":
-                # Для ARIMA використовуємо прямий метод forecast
-                forecast = fit_result.forecast(steps=steps)
-            elif model_type == "SARIMA":
-                # Для SARIMA використовуємо get_forecast
-                forecast_result = fit_result.get_forecast(steps=steps)
-                forecast = forecast_result.predicted_mean
-            else:
-                error_msg = f"Unknown model type: {model_type}"
-                self.logger.error(error_msg)
-                return {
-                    "status": "error",
-                    "message": error_msg,
-                    "metrics": None
-                }
+            # Базова оцінка на тестових даних
+            base_evaluation_result = self._evaluate_on_test_data(model_key, fit_result, test_data, model_type)
 
-            # Приводимо прогноз до формату Series з тим же індексом, що і тестові дані
-            try:
-                if len(forecast) != len(test_data):
-                    # Якщо довжини не збігаються, обрізаємо прогноз
-                    self.logger.warning(
-                        f"Forecast length ({len(forecast)}) does not match test data length ({len(test_data)})")
-                    min_len = min(len(forecast), len(test_data))
-                    forecast = forecast[:min_len]
-                    test_data = test_data[:min_len]
-
-                # Створюємо Series з тим же індексом, що і тестові дані
-                forecast_series = pd.Series(forecast, index=test_data.index)
-            except Exception as e:
-                self.logger.warning(f"Error creating forecast series: {str(e)}")
-                # Спробуємо створити Series без індексу
-                forecast_series = pd.Series(forecast)
-
-            # Обчислюємо метрики
-            self.logger.info("Computing evaluation metrics")
-
-            # Перетворюємо дані в numpy масиви для розрахунків
-            y_true = test_data.values
-            y_pred = forecast_series.values
-
-            # Обчислюємо основні метрики
-            mse = mean_squared_error(y_true, y_pred)
-            rmse = np.sqrt(mse)
-            mae = mean_absolute_error(y_true, y_pred)
-
-            # Обчислюємо MAPE (Mean Absolute Percentage Error)
-            # ВИПРАВЛЕННЯ: Покращена обробка нульових значень для MAPE
-            try:
-                # Створюємо маску для ненульових значень
-                mask = np.abs(y_true) > 1e-10  # Значення більше маленького порогу
-
-                if np.any(mask):
-                    # Розрахунок MAPE лише на ненульових значеннях
-                    mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / np.abs(y_true[mask]))) * 100
-                    self.logger.info(f"MAPE calculated on {np.sum(mask)}/{len(mask)} non-zero values")
-                else:
-                    self.logger.warning("All true values are close to zero, using alternative metric to MAPE")
-                    # Альтернативний показник - використовуємо MAE, нормалізований до середнього значення прогнозу
-                    # або деякого малого значення
-                    denominator = max(np.mean(np.abs(y_pred)), 1e-10)
-                    mape = (mae / denominator) * 100
-                    self.logger.info(f"Using alternative to MAPE: (MAE / mean_prediction) * 100 = {mape:.2f}%")
-            except Exception as e:
-                self.logger.warning(f"Error calculating MAPE: {str(e)}. Using alternative method.")
-                # Альтернативний підхід для запобігання ділення на нуль
-                epsilon = max(np.mean(np.abs(y_true)), np.finfo(float).eps)  # Використовуємо середнє або мале число
-                mape = (mae / epsilon) * 100
-
-            # Додаткові метрики: коефіцієнт детермінації R²
-            try:
-                from sklearn.metrics import r2_score
-                r2 = r2_score(y_true, y_pred)
-            except Exception as e:
-                self.logger.warning(f"Error calculating R2: {str(e)}")
-                r2 = None
-
-            # Збираємо метрики в словник
-            metrics = {
-                "mse": float(mse),
-                "rmse": float(rmse),
-                "mae": float(mae),
-                "mape": float(mape),
-                "r2": float(r2) if r2 is not None else None,
-                "sample_size": len(y_true),
-                "nonzero_sample_size": int(np.sum(mask)) if 'mask' in locals() else None,
-                "evaluation_date": datetime.now().isoformat()
+            result = {
+                "status": "success",
+                "message": "Model evaluation completed successfully",
+                "metrics": base_evaluation_result["metrics"],
+                "visual_data": base_evaluation_result["visual_data"]
             }
+
+            # Додаткова оцінка за допомогою методу ковзного вікна, якщо вказано
+            if use_rolling_validation:
+                self.logger.info(f"Performing additional rolling window validation for model {model_key}")
+
+                # Отримуємо параметри моделі для ковзної валідації
+                if model_type.upper() == "ARIMA":
+                    order = model_params.get("order", (1, 1, 1))
+                    seasonal_order = None
+                    rolling_model_type = "arima"
+                elif model_type.upper() == "SARIMA":
+                    order = model_params.get("order", (1, 1, 1))
+                    seasonal_order = model_params.get("seasonal_order", (1, 0, 1, 7))
+                    rolling_model_type = "sarima"
+                else:
+                    self.logger.warning(f"Unknown model type for rolling validation: {model_type}, using ARIMA")
+                    order = (1, 1, 1)
+                    seasonal_order = None
+                    rolling_model_type = "arima"
+
+                # Виконуємо валідацію методом ковзного вікна
+                rolling_validation_result = self.rolling_window_validation(
+                    data=test_data,
+                    model_type=rolling_model_type,
+                    order=order,
+                    seasonal_order=seasonal_order,
+                    window_size=window_size,
+                    step=step,
+                    forecast_horizon=forecast_horizon
+                )
+
+                if rolling_validation_result["status"] == "success" or rolling_validation_result["status"] == "warning":
+                    # Додаємо результати ковзної валідації до загального результату
+                    result["rolling_validation"] = {
+                        "status": rolling_validation_result["status"],
+                        "message": rolling_validation_result["message"],
+                        "iterations": rolling_validation_result["iterations"],
+                        "aggregated_metrics": rolling_validation_result.get("aggregated_metrics", {})
+                    }
+
+                    # Зберігаємо інформацію про найкращу та найгіршу ітерації
+                    if "metrics" in rolling_validation_result and "rmse" in rolling_validation_result["metrics"]:
+                        rmse_values = rolling_validation_result["metrics"]["rmse"]
+                        if rmse_values:
+                            best_iter_idx = np.argmin(rmse_values)
+                            worst_iter_idx = np.argmax(rmse_values)
+
+                            result["rolling_validation"]["best_iteration"] = {
+                                "index": int(best_iter_idx),
+                                "rmse": float(rmse_values[best_iter_idx])
+                            }
+
+                            result["rolling_validation"]["worst_iteration"] = {
+                                "index": int(worst_iter_idx),
+                                "rmse": float(rmse_values[worst_iter_idx])
+                            }
+
+                    # Збагачуємо основні метрики інформацією про стабільність моделі
+                    if "aggregated_metrics" in rolling_validation_result:
+                        agg_metrics = rolling_validation_result["aggregated_metrics"]
+                        result["metrics"].update({
+                            "stability": {
+                                "rmse_std": agg_metrics.get("std_rmse"),
+                                "rmse_range": agg_metrics.get("max_rmse") - agg_metrics.get("min_rmse"),
+                                "coefficient_of_variation": agg_metrics.get("std_rmse") / agg_metrics.get("mean_rmse")
+                                if agg_metrics.get("mean_rmse") else None
+                            }
+                        })
+
+                        # Додаємо порівняння з базовою оцінкою
+                        if "rmse" in result["metrics"]:
+                            base_rmse = result["metrics"]["rmse"]
+                            rolling_mean_rmse = agg_metrics.get("mean_rmse")
+
+                            if rolling_mean_rmse:
+                                rmse_ratio = base_rmse / rolling_mean_rmse
+                                result["metrics"]["stability"]["base_to_rolling_rmse_ratio"] = rmse_ratio
+
+                                # Оцінка надійності моделі
+                                if rmse_ratio < 0.8:
+                                    reliability_assessment = "Основна оцінка оптимістична порівняно з ковзною валідацією"
+                                elif rmse_ratio > 1.2:
+                                    reliability_assessment = "Основна оцінка песимістична порівняно з ковзною валідацією"
+                                else:
+                                    reliability_assessment = "Оцінки узгоджені, модель стабільна"
+
+                                result["metrics"]["stability"]["reliability_assessment"] = reliability_assessment
+                else:
+                    self.logger.warning(f"Rolling validation failed: {rolling_validation_result['message']}")
+                    result["rolling_validation"] = {
+                        "status": "error",
+                        "message": rolling_validation_result["message"]
+                    }
 
             # Зберігаємо метрики в БД, якщо є підключення
             if self.db_manager is not None:
                 try:
                     self.logger.info(f"Saving metrics for model {model_key} to database")
-                    self.db_manager.save_model_metrics(model_key, metrics)
+                    self.db_manager.save_model_metrics(model_key, result["metrics"])
                     self.logger.info(f"Metrics for model {model_key} saved successfully")
                 except Exception as e:
                     self.logger.error(f"Error saving metrics to database: {str(e)}")
-
-            # Формуємо результат
-            result = {
-                "status": "success",
-                "message": "Model evaluation completed successfully",
-                "metrics": metrics,
-                # Додаємо графічне представлення для можливого відображення
-                "visual_data": {
-                    "actuals": test_data.tolist(),
-                    "predictions": forecast_series.tolist(),
-                    "dates": [str(idx) for idx in test_data.index]
-                }
-            }
 
             self.logger.info(f"Evaluation of model {model_key} completed successfully")
             return result
@@ -219,6 +223,120 @@ class ModelEvaluator:
                 "message": error_msg,
                 "metrics": None
             }
+
+    def _evaluate_on_test_data(self, model_key: str, fit_result, test_data: pd.Series, model_type: str) -> Dict:
+        """
+        Допоміжний метод для оцінки моделі на тестових даних.
+
+        Args:
+            model_key: Ключ моделі
+            fit_result: Результат навчання моделі
+            test_data: Тестові дані
+            model_type: Тип моделі (ARIMA, SARIMA, тощо)
+
+        Returns:
+            Dictionary з результатами оцінки
+        """
+        # Отримуємо прогноз для тестового періоду
+        steps = len(test_data)
+        self.logger.info(f"Generating in-sample forecasts for {steps} test points")
+
+        # Генеруємо прогноз в залежності від типу моделі
+        if model_type.upper() == "ARIMA":
+            # Для ARIMA використовуємо прямий метод forecast
+            forecast = fit_result.forecast(steps=steps)
+        elif model_type.upper() == "SARIMA":
+            # Для SARIMA використовуємо get_forecast
+            forecast_result = fit_result.get_forecast(steps=steps)
+            forecast = forecast_result.predicted_mean
+        else:
+            self.logger.warning(f"Unknown model type: {model_type}, trying generic forecast method")
+            try:
+                forecast = fit_result.forecast(steps=steps)
+            except Exception as e:
+                self.logger.error(f"Error using generic forecast: {str(e)}")
+                raise ValueError(f"Unable to generate forecast for model type: {model_type}")
+
+        # Приводимо прогноз до формату Series з тим же індексом, що і тестові дані
+        try:
+            if len(forecast) != len(test_data):
+                # Якщо довжини не збігаються, обрізаємо прогноз
+                self.logger.warning(
+                    f"Forecast length ({len(forecast)}) does not match test data length ({len(test_data)})")
+                min_len = min(len(forecast), len(test_data))
+                forecast = forecast[:min_len]
+                test_data = test_data[:min_len]
+
+            # Створюємо Series з тим же індексом, що і тестові дані
+            forecast_series = pd.Series(forecast, index=test_data.index)
+        except Exception as e:
+            self.logger.warning(f"Error creating forecast series: {str(e)}")
+            # Спробуємо створити Series без індексу
+            forecast_series = pd.Series(forecast)
+
+        # Обчислюємо метрики
+        self.logger.info("Computing evaluation metrics")
+
+        # Перетворюємо дані в numpy масиви для розрахунків
+        y_true = test_data.values
+        y_pred = forecast_series.values
+
+        # Обчислюємо основні метрики
+        mse = mean_squared_error(y_true, y_pred)
+        rmse = np.sqrt(mse)
+        mae = mean_absolute_error(y_true, y_pred)
+
+        # Обчислюємо MAPE (Mean Absolute Percentage Error)
+        # Покращена обробка нульових значень для MAPE
+        try:
+            # Створюємо маску для ненульових значень
+            mask = np.abs(y_true) > 1e-10  # Значення більше маленького порогу
+
+            if np.any(mask):
+                # Розрахунок MAPE лише на ненульових значеннях
+                mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / np.abs(y_true[mask]))) * 100
+                self.logger.info(f"MAPE calculated on {np.sum(mask)}/{len(mask)} non-zero values")
+            else:
+                self.logger.warning("All true values are close to zero, using alternative metric to MAPE")
+                # Альтернативний показник - використовуємо MAE, нормалізований до середнього значення прогнозу
+                # або деякого малого значення
+                denominator = max(np.mean(np.abs(y_pred)), 1e-10)
+                mape = (mae / denominator) * 100
+                self.logger.info(f"Using alternative to MAPE: (MAE / mean_prediction) * 100 = {mape:.2f}%")
+        except Exception as e:
+            self.logger.warning(f"Error calculating MAPE: {str(e)}. Using alternative method.")
+            # Альтернативний підхід для запобігання ділення на нуль
+            epsilon = max(np.mean(np.abs(y_true)), np.finfo(float).eps)  # Використовуємо середнє або мале число
+            mape = (mae / epsilon) * 100
+
+        # Додаткові метрики: коефіцієнт детермінації R²
+        try:
+            from sklearn.metrics import r2_score
+            r2 = r2_score(y_true, y_pred)
+        except Exception as e:
+            self.logger.warning(f"Error calculating R2: {str(e)}")
+            r2 = None
+
+        # Збираємо метрики в словник
+        metrics = {
+            "mse": float(mse),
+            "rmse": float(rmse),
+            "mae": float(mae),
+            "mape": float(mape),
+            "r2": float(r2) if r2 is not None else None,
+            "sample_size": len(y_true),
+            "nonzero_sample_size": int(np.sum(mask)) if 'mask' in locals() else None,
+            "evaluation_date": datetime.now().isoformat()
+        }
+
+        return {
+            "metrics": metrics,
+            "visual_data": {
+                "actuals": test_data.tolist(),
+                "predictions": forecast_series.tolist(),
+                "dates": [str(idx) for idx in test_data.index]
+            }
+        }
 
     def rolling_window_validation(self, data: pd.Series, model_type: str = 'arima',
                                   order: Tuple = None, seasonal_order: Tuple = None,

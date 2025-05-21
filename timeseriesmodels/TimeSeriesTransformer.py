@@ -136,6 +136,11 @@ class TimeSeriesTransformer:
             self.logger.info(f"Yeo-Johnson transformation applied with lambda = {lambda_param}")
             return transformed_data, lambda_param
 
+        elif method == 'diff':
+            # Додано виклик методу difference_series для диференціювання
+            order = 1  # За замовчуванням першого порядку
+            return self.difference_series(data, order)
+
         else:
             error_msg = f"Unknown transformation method: {method}"
             self.logger.error(error_msg)
@@ -361,7 +366,9 @@ class TimeSeriesTransformer:
                         self.logger.warning(f"Invalid differencing order {order}, using 1 instead")
                         order = 1
 
-                    processed_data = processed_data.diff(order).dropna()
+                    # Використовуємо наш спеціалізований метод різниці замість простого diff
+                    processed_data = self.difference_series(processed_data, order)
+
                     transformations_info.append({
                         "type": "diff",
                         "params": {"order": order},
@@ -374,7 +381,10 @@ class TimeSeriesTransformer:
                         self.logger.warning(f"Invalid seasonal lag {lag}, using 7 instead")
                         lag = 7
 
+                    # Для сезонної різниці використовуємо стандартний метод diff,
+                    # оскільки difference_series не підтримує lag
                     processed_data = processed_data.diff(lag).dropna()
+
                     transformations_info.append({
                         "type": "seasonal_diff",
                         "params": {"lag": lag},
