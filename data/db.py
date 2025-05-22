@@ -1132,7 +1132,7 @@ class DatabaseManager:
         except Exception as e:
             raise
 
-    def save_model_parameters(self, model_id: int, parameters: Dict) -> bool:
+    def save_model_parameters(self, model_id: str, parameters: Dict) -> bool:
 
         try:
             conn = self.conn()
@@ -1204,7 +1204,7 @@ class DatabaseManager:
 
             return False
 
-    def save_model_binary(self, model_id: int, model_obj: Any) -> bool:
+    def save_model_binary(self, model_id: str, model_obj: Any) -> bool:
 
         try:
             conn = self.conn()
@@ -1225,7 +1225,7 @@ class DatabaseManager:
         except Exception as e:
             return False
 
-    def save_data_transformations(self, model_id: int, transformations: List[Dict]) -> bool:
+    def save_data_transformations(self, model_id: str, transformations: List[Dict]) -> bool:
 
         try:
             conn = self.conn()

@@ -235,3 +235,51 @@
 2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Applying log transformation
 2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
 2025-05-22 19:13:32 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:27:11 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:27:12 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250522192712 with 30 steps
+2025-05-22 19:27:12 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250522192712 not found in memory, trying to load from database
+2025-05-22 19:27:12 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250522192712 successfully loaded from database
+2025-05-22 19:27:12 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_arima_20250522192712: 'default_arima_20250522192712'
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250522192719 with 30 steps
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522192719 not found in memory, trying to load from database
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522192719 successfully loaded from database
+2025-05-22 19:27:20 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_sarima_20250522192719: 'default_sarima_20250522192719'
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 19:27:20 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 19:27:22 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: 'BTC_arima_20250522192721'
+2025-05-22 19:27:22 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:27:24 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250522192724 with 30 steps
+2025-05-22 19:27:24 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250522192724 not found in memory, trying to load from database
+2025-05-22 19:27:24 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250522192724 successfully loaded from database
+2025-05-22 19:27:24 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_arima_20250522192724: 'default_arima_20250522192724'
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250522192727 with 30 steps
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522192727 not found in memory, trying to load from database
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522192727 successfully loaded from database
+2025-05-22 19:27:28 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_sarima_20250522192727: 'default_sarima_20250522192727'
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 19:27:28 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 19:27:33 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: 'ETH_arima_20250522192733'
+2025-05-22 19:27:33 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:27:33 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250522192733 with 30 steps
+2025-05-22 19:27:33 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250522192733 not found in memory, trying to load from database
+2025-05-22 19:27:33 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250522192733 successfully loaded from database
+2025-05-22 19:27:33 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_arima_20250522192733: 'default_arima_20250522192733'
+2025-05-22 19:27:35 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250522192735 with 30 steps
+2025-05-22 19:27:35 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522192735 not found in memory, trying to load from database
+2025-05-22 19:27:35 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522192735 successfully loaded from database
+2025-05-22 19:27:35 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_sarima_20250522192735: 'default_sarima_20250522192735'
+2025-05-22 19:27:35 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 19:27:35 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:27:35 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 19:27:36 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 19:27:36 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 19:27:36 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 19:27:36 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: 'SOL_arima_20250522192736'

@@ -13,3 +13,8 @@ DMP/logs/*
 cyclefeatures/logs/*
 analysis/logs/*
 data_collection/logs/*
+timeseriesmodels/logs/ArimaModeler.log
+timeseriesmodels/logs/Forecaster.log
+timeseriesmodels/logs/TimeSeriesModels.log
+timeseriesmodels/logs/TimeseriesAnalyzer.log
+timeseriesmodels/logs/TimeseriesModelEvaluator.log
