@@ -8,8 +8,8 @@ utils/__pycache__
 .idea/misc.xml
 models/__pycache__
 data_collection/models/cache/
-timeseriesmodels/logs
-DMP/logs
-cyclefeatures/logs
-analysis/logs
-data_collection/logs
+timeseriesmodels/logs/*
+DMP/logs/*
+cyclefeatures/logs/*
+analysis/logs/*
+data_collection/logs/*
