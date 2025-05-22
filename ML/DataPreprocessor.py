@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 import torch
 
+from analysis import VolatilityAnalysis
+from analysis.trend_detection import TrendDetection
+from cyclefeatures import CryptoCycles
+from featureengineering.feature_engineering import FeatureEngineering
+
+
 class DataPreprocessor:
     """Клас для завантаження, підготовки, нормалізації та обробки даних для моделей"""
 
@@ -12,7 +18,10 @@ class DataPreprocessor:
     def __init__(self):
         self.scalers = {}  # Словник для зберігання скейлерів
         self.feature_configs = {}  # Конфігурації ознак
-
+        self.trend = TrendDetection()
+        self.vol = VolatilityAnalysis()
+        self.cycle = CryptoCycles()
+        self.indicators = FeatureEngineering()
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
         """
         Отримати функцію для завантаження даних
@@ -45,11 +54,11 @@ class DataPreprocessor:
         Returns:
             DataFrame з ознаками
         """
-        trend_features = prepare_ml_trend_features(df, symbol)
-        volatility_features = prepare_volatility_features_for_ml(df, symbol)
-        cycle_features = prepare_cycle_ml_features(df, symbol)
+        trend_features = self.trend.prepare_ml_trend_features(df, symbol)
+        volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
+        cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
 
-        final_features = prepare_features_pipeline(
+        final_features = self.indicators.prepare_features_pipeline(
             df,
             trend_features=trend_features,
             volatility_features=volatility_features,

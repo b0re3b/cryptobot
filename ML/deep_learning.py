@@ -25,7 +25,7 @@ from analysis.volatility_analysis import prepare_volatility_features_for_ml  # �
 from cyclefeatures.crypto_cycles import prepare_cycle_ml_features  # Для отримання циклічних ознак
 from featureengineering.feature_engineering import prepare_features_pipeline  # Для підготовки всіх ознак
 from utils.logger import CryptoLogger
-
+from ML.DataPreprocessor import DataPreprocessor
 
 class DeepLearning:
     """
@@ -42,8 +42,8 @@ class DeepLearning:
         Ініціалізація класу DeepLearning
         Створення структур для зберігання моделей, їх конфігурацій та метрик
         """
+        self.logger = CryptoLogger('deep_learning')
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.info(f"Using device: {self.device}")
 
         # Ініціалізація компонентів
         self.data_preprocessor = DataPreprocessor()
@@ -54,172 +54,13 @@ class DeepLearning:
         self.models = {}  # {model_key: model}
         self.model_configs = {}  # {model_key: config}
         self.model_metrics = {}  # {model_key: metrics}
-
+        self.db_manager = DatabaseManager()
         # Шляхи для збереження моделей
         self.models_dir = models_dir
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
-    # ==================== НАВЧАННЯ МОДЕЛЕЙ ====================
 
-    def train_model(self, symbol: str, timeframe: str, model_type: str,
-                    epochs: int = 100, batch_size: int = 32, learning_rate: float = 0.001,
-                    hidden_dim: int = 64, num_layers: int = 2,
-                    validation_split: float = 0.2) -> Dict[str, Any]:
-        """
-        Навчання моделі для вказаного символу та таймфрейму
-
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-            epochs: Кількість епох навчання
-            batch_size: Розмір батчу
-            learning_rate: Швидкість навчання
-            hidden_dim: Розмірність прихованого шару
-            num_layers: Кількість шарів
-            validation_split: Частка даних для валідації
-
-        Returns:
-            Dict: Історія навчання та метрики
-        """
-        # Перевірка коректності вхідних параметрів
-        self._validate_inputs(symbol, timeframe, model_type)
-
-        # Завантаження даних та підготовка ознак
-        data_loader_fn = DataLoader.get_data_loader(symbol, timeframe)
-        df = data_loader_fn()
-        processed_data = DataLoader.prepare_features(df, symbol)
-
-        # Підготовка даних для навчання
-        X_train, y_train, X_val, y_val = DataLoader.preprocess_data_for_model(
-            processed_data, validation_split=validation_split
-        )
-
-        # Створення моделі
-        input_dim = len(processed_data.columns) - 1  # Не враховуємо цільовий стовпець
-        model = self._build_model(model_type, input_dim, hidden_dim, num_layers)
-
-        # Навчання моделі
-        training_history = self.model_trainer.train(
-            model,
-            (X_train, y_train),
-            (X_val, y_val),
-            epochs=epochs,
-            batch_size=batch_size,
-            learning_rate=learning_rate
-        )
-
-        # Оцінка моделі
-        metrics = self.model_trainer.evaluate(model, (X_val, y_val))
-
-        # Зберігаємо модель, конфігурацію та метрики
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        self.models[model_key] = model
-
-        # Зберігаємо конфігурацію моделі
-        self.model_configs[model_key] = {
-            'input_dim': input_dim,
-            'hidden_dim': hidden_dim,
-            'num_layers': num_layers,
-            'output_dim': 1,
-            'epochs': epochs,
-            'batch_size': batch_size,
-            'learning_rate': learning_rate
-        }
-
-        # Зберігаємо метрики
-        self.model_metrics[model_key] = metrics
-
-        # Зберігаємо модель на диск і в БД
-        self.model_persistence.save_model(
-            model,
-            symbol,
-            timeframe,
-            model_type,
-            self.model_configs[model_key],
-            metrics
-        )
-
-        # Зберігаємо метрики в БД
-        save_ml_model_metrics(symbol, timeframe, model_type, metrics)
-
-        return {
-            'config': self.model_configs[model_key],
-            'metrics': metrics,
-            'history': training_history
-        }
-
-    def train_all_models(self, symbols: Optional[List[str]] = None,
-                         timeframes: Optional[List[str]] = None,
-                         model_types: Optional[List[str]] = None,
-                         **training_params) -> Dict[str, Dict[str, Any]]:
-        """Навчання всіх моделей для вказаних параметрів"""
-        pass
-
-    def online_learning(self, symbol: str, timeframe: str, model_type: str,
-                        new_data: pd.DataFrame, epochs: int = 10,
-                        learning_rate: float = 0.0005) -> Dict[str, Any]:
-        """
-        Онлайн-навчання існуючої моделі на нових даних
-
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-            new_data: Нові дані для навчання
-            epochs: Кількість епох навчання
-            learning_rate: Швидкість навчання
-
-        Returns:
-            Dict: Результати донавчання
-        """
-        # Перевірка наявності моделі
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.models:
-            if not self.load_model(symbol, timeframe, model_type):
-                raise ValueError(f"Модель {model_key} не знайдена")
-
-        # Підготовка нових даних
-        processed_data = DataLoader.prepare_features(new_data, symbol)
-        X_train, y_train, X_val, y_val = DataLoader.preprocess_data_for_model(
-            processed_data, validation_split=0.2
-        )
-
-        # Донавчання моделі
-        model = self.models[model_key]
-        training_history = self.model_trainer.train(
-            model,
-            (X_train, y_train),
-            (X_val, y_val),
-            epochs=epochs,
-            batch_size=self.model_configs[model_key]['batch_size'],
-            learning_rate=learning_rate
-        )
-
-        # Оновлення метрик
-        metrics = self.model_trainer.evaluate(model, (X_val, y_val))
-        self.model_metrics[model_key] = metrics
-
-        # Зберігаємо оновлену модель та метрики
-        self.model_persistence.save_model(
-            model,
-            symbol,
-            timeframe,
-            model_type,
-            self.model_configs[model_key],
-            metrics
-        )
-        save_ml_model_metrics(symbol, timeframe, model_type, metrics)
-
-        return {
-            'metrics': metrics,
-            'history': training_history
-        }
-
-    def batch_online_learning(self, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Пакетне онлайн навчання кількох моделей"""
-        pass
 
     # ==================== ПРОГНОЗУВАННЯ ====================
 
@@ -389,7 +230,7 @@ class DeepLearning:
             model_key = self._create_model_key(symbol, timeframe, model_type)
             if model_key not in self.models:
                 if not self.load_model(symbol, timeframe, model_type):
-                    logger.warning(f"Модель {model_key} не знайдена і не буде включена в порівняння")
+                    self.logger.warning(f"Модель {model_key} не знайдена і не буде включена в порівняння")
                     continue
 
             # Оцінка моделі
@@ -413,98 +254,7 @@ class DeepLearning:
 
     # ==================== УПРАВЛІННЯ МОДЕЛЯМИ ====================
 
-    def save_model(self, symbol: str, timeframe: str, model_type: str) -> str:
-        """
-        Збереження навченої моделі на диск
 
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-
-        Returns:
-            str: Шлях до збереженої моделі
-        """
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.models:
-            raise ValueError(f"Модель {model_key} не знайдена")
-
-        # Створюємо директорію для моделі, якщо вона не існує
-        model_dir = os.path.join(self.models_dir, symbol, timeframe)
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
-
-        # Шлях до файлу моделі
-        model_path = os.path.join(model_dir, f"{model_type.lower()}_model.pth")
-
-        # Зберігаємо модель
-        torch.save({
-            'model_state_dict': self.models[model_key].state_dict(),
-            'config': self.model_configs[model_key],
-            'metrics': self.model_metrics.get(model_key, {})
-        }, model_path)
-
-        # Зберігаємо модель в БД
-        save_ml_model(
-            symbol=symbol,
-            timeframe=timeframe,
-            model_type=model_type,
-            model_config=self.model_configs[model_key],
-            model_path=model_path
-        )
-
-        return model_path
-
-    def load_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
-        """
-        Завантаження моделі з диску
-
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-
-        Returns:
-            bool: True, якщо модель успішно завантажена
-        """
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-
-        # Шлях до файлу моделі
-        model_dir = os.path.join(self.models_dir, symbol, timeframe)
-        model_path = os.path.join(model_dir, f"{model_type.lower()}_model.pth")
-
-        if not os.path.exists(model_path):
-            logger.warning(f"Модель {model_key} не знайдена за шляхом {model_path}")
-            return False
-
-        try:
-            # Завантаження моделі
-            checkpoint = torch.load(model_path, map_location=self.device)
-
-            # Отримання конфігурації та створення моделі
-            config = checkpoint['config']
-            model = self._build_model(
-                model_type,
-                config['input_dim'],
-                config['hidden_dim'],
-                config['num_layers'],
-                config['output_dim']
-            )
-
-            # Завантаження ваг моделі
-            model.load_state_dict(checkpoint['model_state_dict'])
-
-            # Збереження моделі та її конфігурації
-            self.models[model_key] = model
-            self.model_configs[model_key] = config
-            self.model_metrics[model_key] = checkpoint.get('metrics', {})
-
-            logger.info(f"Модель {model_key} успішно завантажена")
-            return True
-
-        except Exception as e:
-            logger.error(f"Помилка при завантаженні моделі {model_key}: {str(e)}")
-            return False
 
     def delete_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
         """Видалення моделі"""
@@ -595,55 +345,7 @@ class DeepLearning:
 
         return True
 
-    def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
-        """
-        Створення ключа для доступу до моделі у словнику
-
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-
-        Returns:
-            str: Ключ моделі
-        """
-        return f"{symbol}_{timeframe}_{model_type}"
-
-    def _build_model(self, model_type: str, input_dim: int, hidden_dim: int = 64,
-                     num_layers: int = 2, output_dim: int = 1) -> nn.Module:
-        """
-        Створення моделі відповідного типу
-
-        Args:
-            model_type: Тип моделі ('lstm' або 'gru')
-            input_dim: Розмірність вхідних даних
-            hidden_dim: Розмірність прихованого шару
-            num_layers: Кількість шарів
-            output_dim: Розмірність вихідних даних
-
-        Returns:
-            nn.Module: Створена модель
-        """
-        if model_type.lower() == 'lstm':
-            return LSTMModel(input_dim, hidden_dim, num_layers, output_dim).to(self.device)
-        elif model_type.lower() == 'gru':
-            return GRUModel(input_dim, hidden_dim, num_layers, output_dim).to(self.device)
-        else:
-            raise ValueError(f"Непідтримуваний тип моделі: {model_type}")
-
-    def _get_model_config(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
-        """Отримання конфігурації моделі"""
-        pass
-
     def _prepare_training_data(self, symbol: str, timeframe: str,
                                sequence_length: int, validation_split: float) -> Tuple:
         """Підготовка даних для навчання"""
-        pass
-
-    def _get_data_loader(self, symbol: str, timeframe: str, model_type: str):
-        """Отримання функції завантаження даних"""
-        pass
-
-    def _prepare_features(self, data: pd.DataFrame, symbol: str):
-        """Підготовка ознак для моделі"""
         pass

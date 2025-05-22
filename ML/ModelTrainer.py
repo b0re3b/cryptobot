@@ -5,8 +5,8 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 from ML.base import BaseDeepModel
-from data.db import save_ml_model, save_ml_model_metrics, load_ml_model
-from feature_engineering import prepare_features_pipeline
+from data.db import save_ml_model, save_ml_model_metrics, load_ml_model, DatabaseManager
+from featureengineering.feature_engineering import FeatureEngineering, prepare_features_pipeline
 
 class ModelTrainer:
     """
@@ -27,6 +27,8 @@ class ModelTrainer:
         self.model_metrics: Dict[str, Dict[str, float]] = {}
         self.best_models: Dict[str, BaseDeepModel] = {}
         self.training_history: Dict[str, List[float]] = {}
+        self.db_manager = DatabaseManager()
+        self.feature_engineering = FeatureEngineering()
 
     def train_model(self, symbol: str, timeframe: str, model_type: str,
                     data: pd.DataFrame, input_dim: int,
@@ -247,7 +249,8 @@ class ModelTrainer:
         Returns:
             BaseDeepModel: Ініціалізована модель.
         """
-        from ML.models import LSTMModel, GRUModel
+        from ML.LSTM import LSTMModel
+        from ML.GRU import GRUModel
         if model_type == 'lstm':
             return LSTMModel(input_dim, hidden_dim, num_layers, output_dim=1)
         elif model_type == 'gru':
@@ -264,16 +267,107 @@ class ModelTrainer:
         """
         return f"{symbol}_{timeframe}_{model_type}"
 
-    def load_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
+    def save_model(self, symbol: str, timeframe: str, model_type: str) -> str:
         """
-        Завантаження збереженої моделі з бази.
+        Збереження навченої моделі на диск
+
+        Args:
+            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
+            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
+            model_type: Тип моделі ('lstm' або 'gru')
 
         Returns:
-            bool: True, якщо модель успішно завантажена.
+            str: Шлях до збереженої моделі
         """
         model_key = self._create_model_key(symbol, timeframe, model_type)
-        model = load_ml_model(symbol, timeframe, model_type)
-        if model:
-            self.models[model_key] = model.to(self.device)
+        if model_key not in self.models:
+            raise ValueError(f"Модель {model_key} не знайдена")
+
+        # Створюємо директорію для моделі, якщо вона не існує
+        model_dir = os.path.join(self.models_dir, symbol, timeframe)
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir)
+
+        # Шлях до файлу моделі
+        model_path = os.path.join(model_dir, f"{model_type.lower()}_model.pth")
+
+        # Зберігаємо модель
+        torch.save({
+            'model_state_dict': self.models[model_key].state_dict(),
+            'config': self.model_configs[model_key],
+            'metrics': self.model_metrics.get(model_key, {})
+        }, model_path)
+
+        # Зберігаємо модель в БД
+        self.db_manager.save_ml_model(
+            symbol=symbol,
+            timeframe=timeframe,
+            model_type=model_type,
+            model_config=self.model_configs[model_key],
+            model_path=model_path
+        )
+
+        return model_path
+
+    def load_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
+        """
+        Завантаження моделі з диску
+
+        Args:
+            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
+            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
+            model_type: Тип моделі ('lstm' або 'gru')
+
+        Returns:
+            bool: True, якщо модель успішно завантажена
+        """
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+
+        # Шлях до файлу моделі
+        model_dir = os.path.join(self.models_dir, symbol, timeframe)
+        model_path = os.path.join(model_dir, f"{model_type.lower()}_model.pth")
+
+        if not os.path.exists(model_path):
+            self.logger.warning(f"Модель {model_key} не знайдена за шляхом {model_path}")
+            return False
+
+        try:
+            # Завантаження моделі
+            checkpoint = torch.load(model_path, map_location=self.device)
+
+            # Отримання конфігурації та створення моделі
+            config = checkpoint['config']
+            model = self._build_model(
+                model_type,
+                config['input_dim'],
+                config['hidden_dim'],
+                config['num_layers'],
+                config['output_dim']
+            )
+
+            # Завантаження ваг моделі
+            model.load_state_dict(checkpoint['model_state_dict'])
+
+            # Збереження моделі та її конфігурації
+            self.models[model_key] = model
+            self.model_configs[model_key] = config
+            self.model_metrics[model_key] = checkpoint.get('metrics', {})
+
+            self.logger.info(f"Модель {model_key} успішно завантажена")
             return True
-        return False
+
+        except Exception as e:
+            self.logger.error(f"Помилка при завантаженні моделі {model_key}: {str(e)}")
+            return False
+        # ==================== НАВЧАННЯ МОДЕЛЕЙ ====================
+
+    def train_all_models(self, symbols: Optional[List[str]] = None,
+                         timeframes: Optional[List[str]] = None,
+                         model_types: Optional[List[str]] = None,
+                         **training_params) -> Dict[str, Dict[str, Any]]:
+        """Навчання всіх моделей для вказаних параметрів"""
+        pass
+
+    def batch_online_learning(self, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Пакетне онлайн навчання кількох моделей"""
+        pass
