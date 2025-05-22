@@ -5,20 +5,15 @@ import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import pickle
 import os
+import traceback
+from statsmodels.tsa.arima.model import ARIMA as StatsARIMA
 from utils.logger import CryptoLogger
 from data.db import DatabaseManager
 from timeseriesmodels.TimeSeriesAnalyzer import TimeSeriesAnalyzer
+from pmdarima import auto_arima
 
 
 class ARIMAModeler:
-    """
-    Клас для створення, навчання та збереження моделей ARIMA та SARIMA.
-
-    Дозволяє виконувати:
-    - Підгонку моделей ARIMA/SARIMA до часових рядів
-    - Збереження моделей в пам'яті та на диску
-    - Завантаження моделей з диску або бази даних
-    """
 
     def __init__(self):
         """
@@ -30,126 +25,128 @@ class ARIMAModeler:
         self.transformations = {}
         self.ts_analyzer = TimeSeriesAnalyzer()
 
+        # Логування ініціалізації
+        self.logger.info("ARIMAModeler ініціалізовано")
+        self.logger.debug(f"База даних підключена: {self.db_manager is not None}")
+        self.logger.debug(f"Аналізатор часових рядів ініціалізовано: {self.ts_analyzer is not None}")
+
     def _validate_data(self, data: pd.Series, min_required: int) -> pd.Series:
-        """
-        Валідація вхідних даних перед підгонкою моделі.
 
-        Параметри:
-        ----------
-        data : pd.Series
-            Вхідні дані для моделі
-        min_required : int
-            Мінімальна необхідна кількість спостережень
+        self.logger.debug(
+            f"Початок валідації даних. Тип: {type(data)}, розмір: {len(data) if hasattr(data, '__len__') else 'невідомо'}")
 
-        Повертає:
-        ---------
-        pd.Series
-            Валідовані дані
-
-        Викидає:
-        --------
-        ValueError
-            Якщо дані не відповідають вимогам
-        """
         # Перевіряємо тип даних
         if not isinstance(data, pd.Series):
+            self.logger.info("Конвертація даних в pandas Series")
             try:
                 data = pd.Series(data)
+                self.logger.debug(f"Дані успішно конвертовані в Series розміром {len(data)}")
             except Exception as e:
-                raise ValueError(f"Не вдалося конвертувати дані в pandas Series: {str(e)}")
+                error_msg = f"Не вдалося конвертувати дані в pandas Series: {str(e)}"
+                self.logger.error(error_msg)
+                self.logger.debug(f"Стек помилки: {traceback.format_exc()}")
+                raise ValueError(error_msg)
+
+        # Логування інформації про вхідні дані
+        self.logger.info(f"Валідація даних: розмір={len(data)}, тип даних={data.dtype}, мін. потрібно={min_required}")
 
         # Перевіряємо тип даних значень - повинні бути числові
         if data.dtype == 'object':
+            self.logger.warning("Дані мають тип 'object', спроба конвертації в числовий тип")
             try:
-                # Спробуємо конвертувати в числовий тип
                 data = pd.to_numeric(data, errors='coerce')
-                self.logger.warning("Дані були сконвертовані з object в числовий тип")
+                self.logger.info(f"Дані успішно конвертовані в числовий тип: {data.dtype}")
             except Exception as e:
-                raise ValueError(f"Дані містять нечислові значення: {str(e)}")
+                error_msg = f"Дані містять нечислові значення: {str(e)}"
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
 
         # Перевірка на NaN значення
-        if data.isnull().any():
-            nan_count = data.isnull().sum()
-            self.logger.warning(f"Дані містять {nan_count} NaN значень. Видаляємо їх перед підгонкою.")
+        nan_count = data.isnull().sum()
+        if nan_count > 0:
+            self.logger.warning(
+                f"Знайдено {nan_count} NaN значень з {len(data)} загальних точок ({nan_count / len(data) * 100:.2f}%)")
+            data_before = len(data)
             data = data.dropna()
+            data_after = len(data)
+            self.logger.info(f"Видалено {data_before - data_after} NaN значень. Залишилось {data_after} точок")
 
         # Перевірка достатньої кількості даних
         if len(data) < min_required:
             error_msg = f"Недостатньо точок даних для моделі. Потрібно мінімум {min_required}, маємо {len(data)}"
             self.logger.error(error_msg)
+            self.logger.debug(
+                f"Статистика даних: мін={data.min():.4f}, макс={data.max():.4f}, середнє={data.mean():.4f}")
             raise ValueError(error_msg)
 
         # Перевірка на константні значення
-        if data.nunique() <= 1:
-            error_msg = "Дані містять тільки константні значення, неможливо навчити модель"
+        unique_values = data.nunique()
+        if unique_values <= 1:
+            error_msg = f"Дані містять тільки {unique_values} унікальних значень, неможливо навчити модель"
             self.logger.error(error_msg)
+            if len(data) > 0:
+                self.logger.debug(f"Значення в даних: {data.unique()[:10]}...")  # Показати перші 10 унікальних значень
             raise ValueError(error_msg)
+
+        # Логування статистики валідованих даних
+        self.logger.info(f"Валідація успішна. Фінальний розмір: {len(data)}, унікальних значень: {unique_values}")
+        self.logger.debug(
+            f"Статистика: мін={data.min():.4f}, макс={data.max():.4f}, середнє={data.mean():.4f}, стд={data.std():.4f}")
 
         return data
 
     def _generate_model_key(self, model_type: str, symbol: str) -> str:
-        """
-        Генерує унікальний ключ для моделі.
 
-        Параметри:
-        ----------
-        model_type : str
-            Тип моделі ('arima' або 'sarima')
-        symbol : str
-            Символ або ідентифікатор набору даних
-
-        Повертає:
-        ---------
-        str
-            Унікальний ключ моделі
-        """
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        return f"{symbol}_{model_type}_{timestamp}"
+        model_key = f"{symbol}_{model_type}_{timestamp}"
+        self.logger.debug(f"Згенеровано ключ моделі: {model_key}")
+        return model_key
 
     def _save_model_to_db(self, model_key: str, model_info: Dict) -> bool:
-        """
-        Зберігає модель у базу даних.
 
-        Параметри:
-        ----------
-        model_key : str
-            Ключ моделі
-        model_info : Dict
-            Інформація про модель
-
-        Повертає:
-        ---------
-        bool
-            True, якщо збереження успішне, інакше False
-        """
         if self.db_manager is None:
+            self.logger.warning("База даних недоступна, пропускаємо збереження моделі")
             return False
+
+        self.logger.info(f"Початок збереження моделі {model_key} в базу даних")
 
         try:
             metadata = model_info["metadata"]
+            self.logger.debug(f"Метадані моделі: {list(metadata.keys())}")
 
             # Витягуємо необхідні параметри для збереження
             model_type = metadata.get("model_type", "UNKNOWN")
-            timeframe = metadata.get("timeframe", "1d")  # Встановлюємо значення за замовчуванням
+            timeframe = metadata.get("timeframe", "1d")
+
+            self.logger.debug(f"Тип моделі: {model_type}, часовий період: {timeframe}")
 
             # Отримуємо дати з data_range
             data_range = metadata.get("data_range", {})
             start_date = data_range.get("start", datetime.now().isoformat())
             end_date = data_range.get("end", datetime.now().isoformat())
+            data_length = data_range.get("length", 0)
+
+            self.logger.debug(f"Діапазон даних: {start_date} - {end_date}, точок даних: {data_length}")
 
             # Конвертуємо дати в datetime об'єкти, якщо вони в форматі строки
             if isinstance(start_date, str):
                 try:
                     start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                except:
+                    self.logger.debug("Дата початку успішно конвертована")
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося конвертувати дату початку: {e}")
                     start_date = datetime.now()
+
             if isinstance(end_date, str):
                 try:
                     end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                except:
+                    self.logger.debug("Дата кінця успішно конвертована")
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося конвертувати дату кінця: {e}")
                     end_date = datetime.now()
 
             # Зберігаємо метадані з усіма необхідними параметрами
+            self.logger.debug("Збереження метаданих моделі")
             self.db_manager.save_model_metadata(
                 model_key,
                 model_type,
@@ -160,47 +157,41 @@ class ARIMAModeler:
             )
 
             # Зберігаємо параметри
+            self.logger.debug(f"Збереження параметрів моделі: {list(model_info['parameters'].keys())}")
             self.db_manager.save_model_parameters(model_key, model_info["parameters"])
 
             # Зберігаємо двійкове представлення моделі
+            self.logger.debug("Серіалізація та збереження двійкового представлення моделі")
             model_binary = pickle.dumps(model_info["fit_result"])
+            binary_size = len(model_binary)
+            self.logger.debug(f"Розмір серіалізованої моделі: {binary_size} байт")
             self.db_manager.save_model_binary(model_key, model_binary)
 
             # Якщо є трансформації, зберігаємо їх також
             if model_key in self.transformations:
+                self.logger.debug("Збереження трансформацій даних")
                 self.db_manager.save_data_transformations(model_key, self.transformations[model_key])
+            else:
+                self.logger.debug("Трансформації даних відсутні")
 
-            self.logger.info(f"Модель {model_key} збережена в базу даних")
+            self.logger.info(f"Модель {model_key} успішно збережена в базу даних")
             return True
+
         except Exception as db_error:
-            self.logger.error(f"Помилка збереження моделі в базу даних: {str(db_error)}")
+            error_msg = f"Помилка збереження моделі в базу даних: {str(db_error)}"
+            self.logger.error(error_msg)
+            self.logger.debug(f"Повний стек помилки: {traceback.format_exc()}")
             return False
 
     def _collect_model_metadata(self, data: pd.Series, model_key: str, model_type: str,
                                 symbol: str, timeframe: str = "1d") -> Dict:
-        """
-        Збирає метадані моделі.
 
-        Параметри:
-        ----------
-        data : pd.Series
-            Дані, використані для підгонки моделі
-        model_key : str
-            Ключ моделі
-        model_type : str
-            Тип моделі ('ARIMA' або 'SARIMA')
-        symbol : str
-            Символ або ідентифікатор набору даних
-        timeframe : str
-            Часовий період даних
+        self.logger.debug(f"Збирання метаданих для моделі {model_key}")
 
-        Повертає:
-        ---------
-        Dict
-            Словник з метаданими моделі
-        """
         start_date = data.index[0] if len(data.index) > 0 else datetime.now()
         end_date = data.index[-1] if len(data.index) > 0 else datetime.now()
+
+        self.logger.debug(f"Діапазон даних: {start_date} - {end_date}")
 
         # Конвертація дат в строки для серіалізації
         if isinstance(start_date, datetime):
@@ -213,7 +204,7 @@ class ARIMAModeler:
         else:
             end_date = str(end_date)
 
-        return {
+        metadata = {
             "model_type": model_type,
             "symbol": symbol,
             "timeframe": timeframe,
@@ -226,55 +217,35 @@ class ARIMAModeler:
             "model_key": model_key
         }
 
+        self.logger.debug(f"Метадані зібрані: тип={model_type}, символ={symbol}, точок даних={len(data)}")
+        return metadata
+
     def _create_model_info(self, fit_result: Any, data: pd.Series, model_key: str,
                            model_type: str, symbol: str, params: Dict, timeframe: str = "1d") -> Dict:
-        """
-        Створює повну інформацію про модель.
 
-        Параметри:
-        ----------
-        fit_result : Any
-            Результат підгонки моделі
-        data : pd.Series
-            Дані, використані для підгонки
-        model_key : str
-            Ключ моделі
-        model_type : str
-            Тип моделі ('ARIMA' або 'SARIMA')
-        symbol : str
-            Символ або ідентифікатор набору даних
-        params : Dict
-            Параметри моделі
-        timeframe : str
-            Часовий період даних
+        self.logger.debug(f"Створення інформації про модель {model_key}")
 
-        Повертає:
-        ---------
-        Dict
-            Повна інформація про модель
-        """
         # Збираємо метадані
         metadata = self._collect_model_metadata(data, model_key, model_type, symbol, timeframe)
 
         # Додаємо інформацію про збіжність
+        convergence_info = self._extract_convergence_info(fit_result)
+        self.logger.debug(f"Інформація про збіжність: {convergence_info}")
+
         training_info = {
-            "convergence": True if hasattr(fit_result, 'mle_retvals') and fit_result.mle_retvals.get('converged',
-                                                                                                     False) else False,
-            "iterations": fit_result.mle_retvals.get('iterations', None) if hasattr(fit_result, 'mle_retvals') else None
+            "convergence": convergence_info.get('converged', False),
+            "iterations": convergence_info.get('iterations', None),
+            "final_log_likelihood": convergence_info.get('final_llf', None)
         }
 
         # Додаємо параметри до загальних параметрів
         params["training_info"] = training_info
 
         # Збираємо статистику моделі
-        stats = {
-            "aic": getattr(fit_result, 'aic', None),
-            "bic": getattr(fit_result, 'bic', None),
-            "aicc": getattr(fit_result, 'aicc', None),
-            "log_likelihood": getattr(fit_result, 'llf', None)
-        }
+        stats = self._extract_model_stats(fit_result)
+        self.logger.info(f"Статистика моделі {model_key}: AIC={stats.get('aic', 'N/A')}, BIC={stats.get('bic', 'N/A')}")
 
-        return {
+        model_info = {
             "model": None,  # Саму модель не зберігаємо, щоб зменшити використання пам'яті
             "fit_result": fit_result,
             "metadata": metadata,
@@ -282,23 +253,56 @@ class ARIMAModeler:
             "stats": stats
         }
 
+        self.logger.debug("Інформація про модель успішно створена")
+        return model_info
+
+    def _extract_convergence_info(self, fit_result: Any) -> Dict:
+        """Витягує інформацію про збіжність з результату підгонки."""
+        convergence_info = {}
+
+        try:
+            if hasattr(fit_result, 'mle_retvals'):
+                mle_retvals = fit_result.mle_retvals
+                convergence_info['converged'] = mle_retvals.get('converged', False)
+                convergence_info['iterations'] = mle_retvals.get('iterations', None)
+                convergence_info['final_llf'] = mle_retvals.get('fopt', None)
+                self.logger.debug(
+                    f"MLE збіжність: {convergence_info['converged']}, ітерацій: {convergence_info['iterations']}")
+            else:
+                convergence_info['converged'] = True  # Припускаємо збіжність якщо немає інформації
+                self.logger.debug("Інформація про MLE збіжність недоступна")
+
+        except Exception as e:
+            self.logger.warning(f"Не вдалося витягти інформацію про збіжність: {e}")
+            convergence_info['converged'] = False
+
+        return convergence_info
+
+    def _extract_model_stats(self, fit_result: Any) -> Dict:
+        """Витягує статистику моделі з результату підгонки."""
+        stats = {}
+
+        stat_attrs = ['aic', 'bic', 'aicc', 'llf', 'hqic']
+        for attr in stat_attrs:
+            try:
+                value = getattr(fit_result, attr, None)
+                stats[attr] = value
+                if value is not None:
+                    self.logger.debug(f"Статистика {attr.upper()}: {value:.4f}")
+            except Exception as e:
+                self.logger.debug(f"Не вдалося отримати статистику {attr}: {e}")
+                stats[attr] = None
+
+        return stats
+
     def _extract_optimal_params(self, optimal_params: Dict) -> Tuple[Tuple[int, int, int], Tuple[int, int, int, int]]:
-        """
-        Витягає параметри ARIMA та SARIMA з результату оптимізації.
 
-        Параметри:
-        ----------
-        optimal_params : Dict
-            Результат роботи find_optimal_params
+        self.logger.debug(f"Витягування оптимальних параметрів з структури: {list(optimal_params.keys())}")
 
-        Повертає:
-        ---------
-        Tuple[Tuple[int, int, int], Tuple[int, int, int, int]]
-            Кортеж з параметрами ARIMA та SARIMA
-        """
         # Перевіряємо різні можливі структури результату
         if 'parameters' in optimal_params:
             params = optimal_params['parameters']
+            self.logger.debug(f"Знайдено секцію 'parameters': {list(params.keys())}")
 
             # Якщо є окремі параметри p, d, q
             if all(key in params for key in ['p', 'd', 'q']):
@@ -309,166 +313,232 @@ class ARIMAModeler:
                     params.get('Q', 1),
                     params.get('s', 7)
                 )
+                self.logger.debug(f"Витягнуто параметри: order={order}, seasonal_order={seasonal_order}")
                 return order, seasonal_order
 
         # Якщо є готові order та seasonal_order
         if 'order' in optimal_params and 'seasonal_order' in optimal_params:
-            return optimal_params['order'], optimal_params['seasonal_order']
+            order = optimal_params['order']
+            seasonal_order = optimal_params['seasonal_order']
+            self.logger.debug(f"Знайдено готові параметри: order={order}, seasonal_order={seasonal_order}")
+            return order, seasonal_order
 
         # Якщо результат це сама модель з атрибутом order
         if hasattr(optimal_params, 'order'):
             order = optimal_params.order
             seasonal_order = getattr(optimal_params, 'seasonal_order', (1, 1, 1, 7))
+            self.logger.debug(f"Витягнуто з атрибутів моделі: order={order}, seasonal_order={seasonal_order}")
             return order, seasonal_order
 
         # Якщо в результаті є ключ 'model'
         if 'model' in optimal_params and hasattr(optimal_params['model'], 'order'):
             order = optimal_params['model'].order
             seasonal_order = getattr(optimal_params['model'], 'seasonal_order', (1, 1, 1, 7))
+            self.logger.debug(f"Витягнуто з вкладеної моделі: order={order}, seasonal_order={seasonal_order}")
             return order, seasonal_order
 
         # Стандартні параметри за замовчуванням
-        self.logger.warning(f"Не вдалося витягти параметри з структури: {list(optimal_params.keys())}")
-        return (1, 1, 1), (1, 1, 1, 7)
+        default_order = (1, 1, 1)
+        default_seasonal = (1, 1, 1, 7)
+        self.logger.warning(f"Не вдалося витягти параметри з структури: {list(optimal_params.keys())}. "
+                            f"Використовуємо стандартні: order={default_order}, seasonal_order={default_seasonal}")
+        return default_order, default_seasonal
+
+    def _robust_model_fit(self, model, methods_to_try=['lbfgs', 'bfgs', 'nm']):
+        """
+        Robust model fitting with multiple optimization methods.
+
+        Parameters:
+        -----------
+        model : statsmodels model
+            The model instance to fit
+        methods_to_try : list
+            List of optimization methods to try
+
+        Returns:
+        --------
+        fit_result : statsmodels results
+            The fitted model result
+        """
+        fit_result = None
+
+        for method in methods_to_try:
+            self.logger.debug(f"Attempting to fit with method: {method}")
+
+            # Список наборів параметрів для спроб (від найбільш до найменш детального)
+            param_sets = [
+                {'method': method, 'maxiter': 200, 'disp': False},
+                {'method': method, 'maxiter': 200},
+                {'method': method, 'disp': False},
+                {'method': method},
+                {}  # Базовий виклик без параметрів
+            ]
+
+            for params in param_sets:
+                try:
+                    fit_result = model.fit(**params)
+                    param_info = f"with parameters: {params}" if params else "with default parameters"
+                    self.logger.info(f"Successfully fitted with method: {method} {param_info}")
+                    break
+                except TypeError as te:
+                    if 'unexpected keyword argument' in str(te):
+                        continue  # Спробувати наступний набір параметрів
+                    else:
+                        break  # Інша помилка - перейти до наступного методу
+                except Exception as e:
+                    self.logger.debug(f"Method {method} with params {params} failed: {str(e)}")
+                    break  # Перейти до наступного методу
+
+            if fit_result is not None:
+                break
+
+        # Якщо всі методи не спрацювали, спробувати базовий fit
+        if fit_result is None:
+            self.logger.info("Attempting basic fit without any parameters")
+            try:
+                fit_result = model.fit()
+            except Exception as e:
+                self.logger.error(f"Basic fit also failed: {str(e)}")
+                raise e
+
+        return fit_result
 
     def fit_arima(self, data: pd.Series, order: Tuple[int, int, int] = None,
                   symbol: str = 'default', auto_params: bool = True,
                   max_p: int = 5, max_d: int = 2, max_q: int = 5,
                   timeframe: str = "1d") -> Dict:
-        """
-        Підгонка моделі ARIMA до часового ряду.
 
-        Параметри:
-        ----------
-        data : pd.Series
-            Часовий ряд для моделювання
-        order : Tuple[int, int, int], optional
-            Порядок моделі ARIMA (p, d, q). Якщо None і auto_params=True, параметри визначаються автоматично.
-        symbol : str, optional
-            Ідентифікатор набору даних. За замовчуванням 'default'.
-        auto_params : bool, optional
-            Чи визначати параметри автоматично. За замовчуванням True.
-        max_p : int, optional
-            Максимальне значення параметра p при автоматичному визначенні. За замовчуванням 5.
-        max_d : int, optional
-            Максимальне значення параметра d при автоматичному визначенні. За замовчуванням 2.
-        max_q : int, optional
-            Максимальне значення параметра q при автоматичному визначенні. За замовчуванням 5.
-        timeframe : str, optional
-            Часовий період даних. За замовчуванням "1d".
-
-        Повертає:
-        ---------
-        Dict
-            Результат підгонки моделі
-        """
-        self.logger.info(f"Починаємо навчання моделі ARIMA для символу {symbol}")
+        # Start with detailed logging of input parameters
+        self.logger.info(
+            f"Starting ARIMA model fitting for symbol: {symbol}\n"
+            f"Parameters - auto_params: {auto_params}, max_p: {max_p}, max_d: {max_d}, max_q: {max_q}, timeframe: {timeframe}\n"
+            f"Initial data shape: {data.shape}, first values: {data.head(3).tolist()}, last values: {data.tail(3).tolist()}"
+        )
 
         try:
-            # Предварительна валідація даних
-            data = self._validate_data(data, 10)  # Мінімум 10 точок для ARIMA
+            # Data validation with logging
+            initial_length = len(data)
+            data = self._validate_data(data, 10)
+            self.logger.debug(
+                f"Data validation completed. Initial length: {initial_length}, "
+                f"after validation: {len(data)}. Removed {initial_length - len(data)} invalid points"
+            )
 
-            # Визначаємо оптимальні параметри, якщо потрібно
+            # Parameter determination
             if auto_params or order is None:
-                self.logger.info("Автоматичне визначення параметрів ARIMA моделі")
+                self.logger.info("Starting automatic ARIMA parameter determination")
 
                 try:
                     optimal_params = self.ts_analyzer.find_optimal_params(
                         data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=False
                     )
+                    self.logger.debug(f"Optimal params raw result: {optimal_params}")
 
                     if optimal_params['status'] == 'success':
                         order, _ = self._extract_optimal_params(optimal_params)
-                        self.logger.info(f"Визначено оптимальні параметри ARIMA: {order}")
+                        self.logger.info(
+                            f"Successfully determined optimal ARIMA parameters: {order}\n"
+                            f"Parameter selection details: {optimal_params.get('details', 'No details available')}"
+                        )
                     else:
-                        # У випадку помилки використовуємо стандартні параметри
                         order = (1, 1, 1)
                         self.logger.warning(
-                            f"Не вдалося визначити оптимальні параметри: {optimal_params.get('message', 'Unknown error')}. "
-                            f"Використовуємо стандартні: {order}"
+                            f"Failed to determine optimal parameters. Reason: {optimal_params.get('message', 'Unknown error')}\n"
+                            f"Using default parameters: {order}"
                         )
 
                 except Exception as param_error:
-                    # У випадку помилки використовуємо стандартні параметри
                     order = (1, 1, 1)
-                    self.logger.warning(
-                        f"Помилка під час визначення оптимальних параметрів: {str(param_error)}. "
-                        f"Використовуємо стандартні: {order}"
+                    self.logger.error(
+                        f"Error during parameter determination: {str(param_error)}\n"
+                        f"Traceback: {traceback.format_exc()}\n"
+                        f"Using default parameters: {order}"
                     )
 
-            # Додаткова валідація даних з урахуванням параметрів моделі
+            # Additional data validation with new parameters
             min_required = sum(order) + 10
+            pre_validation_length = len(data)
             data = self._validate_data(data, min_required)
-
-            # Генеруємо ключ моделі
-            model_key = self._generate_model_key("arima", symbol)
-
-            # Створюємо та навчаємо модель - використовуємо statsmodels ARIMA
-            from statsmodels.tsa.arima.model import ARIMA as StatsARIMA
-
-            # Конвертуємо дані в numpy array з float64 типом
-            data_values = np.asarray(data, dtype=np.float64)
-
-            # Створюємо модель з правильним імпортом
-            model = StatsARIMA(data_values, order=order)
-
-            # FIXED: Оновлені параметри для підгонки (видалено disp та optim_hessian)
-            fit_kwargs = {
-                'method': 'lbfgs',
-                'maxiter': 200
-            }
-
-            # Додаткові спроби з різними методами оптимізації
-            fit_result = None
-            methods_to_try = ['lbfgs', 'bfgs', 'nm']
-
-            for method in methods_to_try:
-                try:
-                    fit_kwargs['method'] = method
-                    fit_result = model.fit(**fit_kwargs)
-                    self.logger.info(f"Модель успішно навчена з методом: {method}")
-                    break
-                except Exception as method_error:
-                    self.logger.warning(f"Метод {method} не спрацював: {str(method_error)}")
-                    continue
-
-            # Якщо всі методи не спрацювали, спробуємо базовий fit без параметрів
-            if fit_result is None:
-                try:
-                    fit_result = model.fit()
-                    self.logger.info("Модель навчена з базовими параметрами")
-                except Exception as final_error:
-                    raise Exception(f"Не вдалося навчити модель жодним методом. Остання помилка: {str(final_error)}")
-
-            # Формуємо параметри моделі
-            params = {"order": order}
-
-            # Створюємо повну інформацію про модель
-            model_info = self._create_model_info(
-                fit_result, data, model_key, "ARIMA", symbol, params, timeframe
+            self.logger.debug(
+                f"Secondary data validation with order {order} completed. "
+                f"Before: {pre_validation_length} points, after: {len(data)} points"
             )
 
-            # Зберігаємо модель в словнику
-            self.models[model_key] = model_info
+            # Model creation
+            model_key = self._generate_model_key("arima", symbol)
+            self.logger.info(f"Creating ARIMA model with key: {model_key}")
 
-            # Зберігаємо модель в БД, якщо доступно
-            self._save_model_to_db(model_key, model_info)
+            try:
+                data_values = np.asarray(data, dtype=np.float64)
+                self.logger.debug(
+                    f"Converted data to numpy array. Shape: {data_values.shape}, dtype: {data_values.dtype}")
 
-            self.logger.info(f"Модель ARIMA {model_key} успішно навчена з параметрами {order}")
+                model = StatsARIMA(data_values, order=order)
+                self.logger.info(f"ARIMA model initialized with order {order}")
 
-            return {
-                "status": "success",
-                "message": "Модель ARIMA успішно навчена",
-                "model_key": model_key,
-                "model_info": {
-                    "metadata": model_info["metadata"],
-                    "parameters": model_info["parameters"],
-                    "stats": model_info["stats"]
+                # Model fitting using robust method
+                try:
+                    fit_result = self._robust_model_fit(model)
+
+                    # Log convergence information if available
+                    if hasattr(fit_result, 'mle_retvals'):
+                        convergence_info = fit_result.mle_retvals
+                        self.logger.info(f"Convergence info: {convergence_info}")
+
+                except Exception as fitting_error:
+                    error_msg = f"Model fitting failed: {str(fitting_error)}"
+                    self.logger.error(error_msg)
+                    raise Exception(error_msg)
+
+                # Model evaluation and saving
+                params = {"order": order}
+                model_info = self._create_model_info(
+                    fit_result, data, model_key, "ARIMA", symbol, params, timeframe
+                )
+
+                # Log model statistics
+                if "stats" in model_info:
+                    self.logger.info(
+                        "Model statistics:\n"
+                        f"AIC: {model_info['stats'].get('aic', 'N/A')}\n"
+                        f"BIC: {model_info['stats'].get('bic', 'N/A')}\n"
+                        f"HQIC: {model_info['stats'].get('hqic', 'N/A')}\n"
+                        f"Log Likelihood: {model_info['stats'].get('llf', 'N/A')}"
+                    )
+
+                self.models[model_key] = model_info
+                self._save_model_to_db(model_key, model_info)
+
+                self.logger.info(
+                    f"ARIMA model {model_key} successfully trained and saved\n"
+                    f"Final parameters: {order}\n"
+                    f"Training period: {model_info['metadata'].get('start_date', 'N/A')} to "
+                    f"{model_info['metadata'].get('end_date', 'N/A')}"
+                )
+
+                return {
+                    "status": "success",
+                    "message": "Модель ARIMA успішно навчена",
+                    "model_key": model_key,
+                    "model_info": {
+                        "metadata": model_info["metadata"],
+                        "parameters": model_info["parameters"],
+                        "stats": model_info["stats"]
+                    }
                 }
-            }
+
+            except Exception as model_error:
+                self.logger.error(
+                    f"Model creation/fitting error: {str(model_error)}\n"
+                    f"Traceback: {traceback.format_exc()}"
+                )
+                raise
 
         except ValueError as ve:
-            # Повертаємо помилку валідації
+            self.logger.error(
+                f"Data validation error: {str(ve)}\n"
+                f"Input data stats:\n{data.describe() if isinstance(data, pd.Series) else 'No data available'}"
+            )
             return {
                 "status": "error",
                 "message": str(ve),
@@ -477,7 +547,11 @@ class ARIMAModeler:
             }
 
         except Exception as e:
-            self.logger.error(f"Помилка під час навчання моделі ARIMA: {str(e)}")
+            self.logger.error(
+                f"Unexpected error in ARIMA fitting: {str(e)}\n"
+                f"Traceback: {traceback.format_exc()}\n"
+                f"Current parameters: order={order}, symbol={symbol}"
+            )
             return {
                 "status": "error",
                 "message": f"Помилка під час навчання моделі ARIMA: {str(e)}",
@@ -490,158 +564,194 @@ class ARIMAModeler:
                    symbol: str = 'default', auto_params: bool = True,
                    max_p: int = 5, max_d: int = 2, max_q: int = 5,
                    seasonal_period: int = 7, timeframe: str = "1d") -> Dict:
-        """
-        Підгонка моделі SARIMA до часового ряду.
 
-        Параметри:
-        ----------
-        data : pd.Series
-            Часовий ряд для моделювання
-        order : Tuple[int, int, int], optional
-            Порядок моделі ARIMA (p, d, q). Якщо None і auto_params=True, параметри визначаються автоматично.
-        seasonal_order : Tuple[int, int, int, int], optional
-            Сезонний порядок моделі (P, D, Q, s). Якщо None і auto_params=True, параметри визначаються автоматично.
-        symbol : str, optional
-            Ідентифікатор набору даних. За замовчуванням 'default'.
-        auto_params : bool, optional
-            Чи визначати параметри автоматично. За замовчуванням True.
-        max_p : int, optional
-            Максимальне значення параметра p при автоматичному визначенні. За замовчуванням 5.
-        max_d : int, optional
-            Максимальне значення параметра d при автоматичному визначенні. За замовчуванням 2.
-        max_q : int, optional
-            Максимальне значення параметра q при автоматичному визначенні. За замовчуванням 5.
-        seasonal_period : int, optional
-            Сезонний період для моделі. За замовчуванням 7 (тижневий).
-        timeframe : str, optional
-            Часовий період даних. За замовчуванням "1d".
-
-        Повертає:
-        ---------
-        Dict
-            Результат підгонки моделі
-        """
-        self.logger.info(f"Починаємо навчання моделі SARIMA для символу {symbol}")
+        self.logger.info(
+            f"Starting SARIMA model fitting for symbol: {symbol}\n"
+            f"Parameters - auto_params: {auto_params}, seasonal_period: {seasonal_period}\n"
+            f"Max orders - p: {max_p}, d: {max_d}, q: {max_q}\n"
+            f"Initial data shape: {data.shape}, first values: {data.head(3).tolist()}, last values: {data.tail(3).tolist()}"
+        )
 
         try:
-            # Предварительна валідація даних
-            data = self._validate_data(data, 20)  # Мінімум 20 точок для SARIMA
+            # Data validation
+            initial_length = len(data)
+            data = self._validate_data(data, 20)
+            self.logger.debug(
+                f"Data validation completed. Initial length: {initial_length}, "
+                f"after validation: {len(data)}. Removed {initial_length - len(data)} invalid points"
+            )
 
-            # Визначаємо оптимальні параметри, якщо потрібно
+            # Parameter determination
             if auto_params or order is None or seasonal_order is None:
-                self.logger.info("Автоматичне визначення параметрів SARIMA моделі")
+                self.logger.info("Starting automatic SARIMA parameter determination")
 
                 try:
                     optimal_params = self.ts_analyzer.find_optimal_params(
                         data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=True
                     )
+                    self.logger.debug(f"Optimal params raw result: {optimal_params}")
 
                     if optimal_params['status'] == 'success':
                         order, seasonal_order = self._extract_optimal_params(optimal_params)
-                        # Оновлюємо сезонний період, якщо він заданий
                         if seasonal_period != 7:
                             seasonal_order = (seasonal_order[0], seasonal_order[1], seasonal_order[2], seasonal_period)
-
-                        self.logger.info(f"Визначено оптимальні параметри SARIMA: {order}, сезонні: {seasonal_order}")
+                        self.logger.info(
+                            f"Successfully determined optimal SARIMA parameters\n"
+                            f"Order: {order}, Seasonal order: {seasonal_order}\n"
+                            f"Parameter selection details: {optimal_params.get('details', 'No details available')}"
+                        )
                     else:
-                        # У випадку помилки використовуємо стандартні параметри
                         order = (1, 1, 1)
                         seasonal_order = (1, 1, 1, seasonal_period)
                         self.logger.warning(
-                            f"Не вдалося визначити оптимальні параметри: {optimal_params.get('message', 'Unknown error')}. "
-                            f"Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
+                            f"Failed to determine optimal parameters. Reason: {optimal_params.get('message', 'Unknown error')}\n"
+                            f"Using default parameters: order={order}, seasonal_order={seasonal_order}"
                         )
 
                 except Exception as param_error:
-                    # У випадку помилки використовуємо стандартні параметри
                     order = (1, 1, 1)
                     seasonal_order = (1, 1, 1, seasonal_period)
-                    self.logger.warning(
-                        f"Помилка під час визначення оптимальних параметрів: {str(param_error)}. "
-                        f"Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
+                    self.logger.error(
+                        f"Error during parameter determination: {str(param_error)}\n"
+                        f"Traceback: {traceback.format_exc()}\n"
+                        f"Using default parameters: order={order}, seasonal_order={seasonal_order}"
                     )
 
-            # Додаткова валідація даних з урахуванням параметрів моделі
+            # Additional data validation
             min_required = sum(order) + sum(seasonal_order[:-1]) + 2 * seasonal_order[-1]
+            pre_validation_length = len(data)
             data = self._validate_data(data, min_required)
+            self.logger.debug(
+                f"Secondary data validation completed. Required: {min_required} points\n"
+                f"Before: {pre_validation_length} points, after: {len(data)} points"
+            )
 
-            # Генеруємо ключ моделі
+            # Model creation
             model_key = self._generate_model_key("sarima", symbol)
+            self.logger.info(f"Creating SARIMA model with key: {model_key}")
 
-            # Конвертуємо дані в numpy array з float64 типом
-            data_values = np.asarray(data, dtype=np.float64)
+            try:
+                data_values = np.asarray(data, dtype=np.float64)
+                self.logger.debug(
+                    f"Converted data to numpy array. Shape: {data_values.shape}, dtype: {data_values.dtype}")
 
-            # Створюємо та навчаємо модель
-            model = SARIMAX(
-                data_values,
-                order=order,
-                seasonal_order=seasonal_order,
-                enforce_stationarity=False,
-                enforce_invertibility=False
-            )
+                model = SARIMAX(
+                    data_values,
+                    order=order,
+                    seasonal_order=seasonal_order,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False
+                )
+                self.logger.info(
+                    f"SARIMA model initialized with order {order} and seasonal order {seasonal_order}"
+                )
 
-            # FIXED: Оновлені опції підгонки для кращої збіжності
-            fit_options = {
-                'maxiter': 200,  # Максимальна кількість ітерацій
-                'method': 'lbfgs'  # Метод оптимізації
-            }
-
-            # Спробуємо кілька методів оптимізації
-            fit_result = None
-            methods_to_try = ['lbfgs', 'bfgs', 'nm']
-
-            for method in methods_to_try:
+                # Model fitting using robust method with SARIMA-specific parameters
                 try:
-                    fit_options['method'] = method
-                    fit_result = model.fit(**fit_options)
-                    self.logger.info(f"SARIMA модель успішно навчена з методом: {method}")
-                    break
-                except Exception as method_error:
-                    self.logger.warning(f"Метод {method} не спрацював для SARIMA: {str(method_error)}")
-                    continue
+                    # Для SARIMA використовуємо розширений набір параметрів
+                    def _robust_sarima_fit(model, methods_to_try=['lbfgs', 'bfgs', 'nm']):
+                        fit_result = None
 
-            # Якщо всі методи не спрацювали, спробуємо базовий fit
-            if fit_result is None:
-                try:
-                    fit_result = model.fit()
-                    self.logger.info("SARIMA модель навчена з базовими параметрами")
-                except Exception as final_error:
-                    raise Exception(
-                        f"Не вдалося навчити SARIMA модель жодним методом. Остання помилка: {str(final_error)}")
+                        for method in methods_to_try:
+                            self.logger.debug(f"Attempting to fit SARIMA with method: {method}")
 
-            # Формуємо параметри моделі
-            params = {
-                "order": order,
-                "seasonal_order": seasonal_order
-            }
+                            # Набори параметрів специфічні для SARIMAX
+                            param_sets = [
+                                {'method': method, 'maxiter': 200, 'disp': False, 'warn_convergence': False},
+                                {'method': method, 'maxiter': 200, 'disp': False},
+                                {'method': method, 'maxiter': 200},
+                                {'method': method, 'disp': False},
+                                {'method': method},
+                                {}  # Базовий виклик
+                            ]
 
-            # Створюємо повну інформацію про модель
-            model_info = self._create_model_info(
-                fit_result, data, model_key, "SARIMA", symbol, params, timeframe
-            )
+                            for params in param_sets:
+                                try:
+                                    fit_result = model.fit(**params)
+                                    param_info = f"with parameters: {params}" if params else "with default parameters"
+                                    self.logger.info(f"Successfully fitted SARIMA with method: {method} {param_info}")
+                                    break
+                                except TypeError as te:
+                                    if 'unexpected keyword argument' in str(te):
+                                        continue
+                                    else:
+                                        break
+                                except Exception:
+                                    break
 
-            # Зберігаємо модель в словнику
-            self.models[model_key] = model_info
+                            if fit_result is not None:
+                                break
 
-            # Зберігаємо модель в БД, якщо доступно
-            self._save_model_to_db(model_key, model_info)
+                        if fit_result is None:
+                            self.logger.info("Attempting basic SARIMA fit without any parameters")
+                            fit_result = model.fit()
 
-            self.logger.info(
-                f"Модель SARIMA {model_key} успішно навчена з параметрами {order}, сезонними {seasonal_order}")
+                        return fit_result
 
-            return {
-                "status": "success",
-                "message": "Модель SARIMA успішно навчена",
-                "model_key": model_key,
-                "model_info": {
-                    "metadata": model_info["metadata"],
-                    "parameters": model_info["parameters"],
-                    "stats": model_info["stats"]
+                    fit_result = _robust_sarima_fit(model)
+
+                    # Log convergence information if available
+                    if hasattr(fit_result, 'mle_retvals'):
+                        convergence_info = fit_result.mle_retvals
+                        self.logger.info(f"Convergence info: {convergence_info}")
+
+                except Exception as fitting_error:
+                    error_msg = f"SARIMA model fitting failed: {str(fitting_error)}"
+                    self.logger.error(error_msg)
+                    raise Exception(error_msg)
+
+                # Model evaluation and saving
+                params = {
+                    "order": order,
+                    "seasonal_order": seasonal_order
                 }
-            }
+                model_info = self._create_model_info(
+                    fit_result, data, model_key, "SARIMA", symbol, params, timeframe
+                )
+
+                # Log model statistics
+                if "stats" in model_info:
+                    self.logger.info(
+                        "Model statistics:\n"
+                        f"AIC: {model_info['stats'].get('aic', 'N/A')}\n"
+                        f"BIC: {model_info['stats'].get('bic', 'N/A')}\n"
+                        f"HQIC: {model_info['stats'].get('hqic', 'N/A')}\n"
+                        f"Log Likelihood: {model_info['stats'].get('llf', 'N/A')}"
+                    )
+
+                self.models[model_key] = model_info
+                self._save_model_to_db(model_key, model_info)
+
+                self.logger.info(
+                    f"SARIMA model {model_key} successfully trained and saved\n"
+                    f"Final parameters: order={order}, seasonal_order={seasonal_order}\n"
+                    f"Training period: {model_info['metadata'].get('start_date', 'N/A')} to "
+                    f"{model_info['metadata'].get('end_date', 'N/A')}"
+                )
+
+                return {
+                    "status": "success",
+                    "message": "Модель SARIMA успішно навчена",
+                    "model_key": model_key,
+                    "model_info": {
+                        "metadata": model_info["metadata"],
+                        "parameters": model_info["parameters"],
+                        "stats": model_info["stats"]
+                    }
+                }
+
+            except Exception as model_error:
+                self.logger.error(
+                    f"Model creation/fitting error: {str(model_error)}\n"
+                    f"Traceback: {traceback.format_exc()}"
+                )
+                raise
 
         except ValueError as ve:
-            # Повертаємо помилку валідації
+            self.logger.error(
+                f"Data validation error: {str(ve)}\n"
+                f"Input data stats:\n{data.describe() if isinstance(data, pd.Series) else 'No data available'}"
+            )
             return {
                 "status": "error",
                 "message": str(ve),
@@ -650,7 +760,11 @@ class ARIMAModeler:
             }
 
         except Exception as e:
-            self.logger.error(f"Помилка під час навчання моделі SARIMA: {str(e)}")
+            self.logger.error(
+                f"Unexpected error in SARIMA fitting: {str(e)}\n"
+                f"Traceback: {traceback.format_exc()}\n"
+                f"Current parameters: order={order}, seasonal_order={seasonal_order}, symbol={symbol}"
+            )
             return {
                 "status": "error",
                 "message": f"Помилка під час навчання моделі SARIMA: {str(e)}",
@@ -660,56 +774,57 @@ class ARIMAModeler:
 
     def get_model_forecast(self, model_key: str, steps: int,
                            return_conf_int: bool = True, alpha: float = 0.05) -> Dict:
-        """
-        Отримує прогноз моделі на вказану кількість кроків.
 
-        Параметри:
-        ----------
-        model_key : str
-            Ключ моделі
-        steps : int
-            Кількість кроків для прогнозування
-        return_conf_int : bool, optional
-            Чи повертати інтервали довіри. За замовчуванням True.
-        alpha : float, optional
-            Рівень значущості для інтервалів довіри. За замовчуванням 0.05 (95% інтервал).
+        self.logger.info(
+            f"Getting forecast for model {model_key}\n"
+            f"Parameters - steps: {steps}, return_conf_int: {return_conf_int}, alpha: {alpha}"
+        )
 
-        Повертає:
-        ---------
-        Dict
-            Результат прогнозування
-        """
-        self.logger.info(f"Отримання прогнозу для моделі {model_key} на {steps} кроків")
-
-        # Перевіряємо наявність моделі в пам'яті
+        # Check model availability
         if model_key not in self.models:
-            # Якщо моделі немає в пам'яті, спробуємо завантажити її з БД
             if self.db_manager is not None:
                 try:
-                    self.logger.info(f"Модель {model_key} не знайдена в пам'яті, спроба завантаження з БД")
+                    self.logger.info(f"Model {model_key} not in memory, attempting DB load")
                     loaded = self.db_manager.load_complete_model(model_key)
-                    if not loaded:
-                        error_msg = f"Не вдалося завантажити модель {model_key} з бази даних"
+
+                    if loaded:
+                        self.logger.info(f"Successfully loaded model {model_key} from DB")
+                    else:
+                        error_msg = f"Failed to load model {model_key} from database"
                         self.logger.error(error_msg)
                         return {"status": "error", "message": error_msg}
+
                 except Exception as e:
-                    error_msg = f"Помилка завантаження моделі {model_key} з бази даних: {str(e)}"
-                    self.logger.error(error_msg)
+                    error_msg = f"Database error loading model {model_key}: {str(e)}"
+                    self.logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
                     return {"status": "error", "message": error_msg}
             else:
-                error_msg = f"Модель {model_key} не знайдена і не надано менеджер бази даних"
+                error_msg = f"Model {model_key} not found and no DB manager available"
                 self.logger.error(error_msg)
                 return {"status": "error", "message": error_msg}
 
         try:
-            # Отримуємо модель
             model_info = self.models[model_key]
             fit_result = model_info["fit_result"]
 
-            # Отримуємо прогноз
+            self.logger.debug(
+                f"Model info - type: {model_info['metadata'].get('model_type')}, "
+                f"timeframe: {model_info['metadata'].get('timeframe')}, "
+                f"params: {model_info['parameters']}"
+            )
+
+            # Get forecast
             if return_conf_int:
+                self.logger.debug("Generating forecast with confidence intervals")
                 forecast = fit_result.forecast(steps=steps)
                 conf_int = fit_result.get_forecast(steps=steps).conf_int(alpha=alpha)
+
+                self.logger.info(
+                    f"Successfully generated forecast for {steps} steps\n"
+                    f"First 3 forecast values: {forecast[:3] if hasattr(forecast, '__getitem__') else 'N/A'}\n"
+                    f"Last 3 forecast values: {forecast[-3:] if hasattr(forecast, '__getitem__') else 'N/A'}"
+                )
+
                 result = {
                     "status": "success",
                     "forecast": forecast.tolist() if isinstance(forecast, np.ndarray) else forecast,
@@ -718,36 +833,29 @@ class ARIMAModeler:
                     "alpha": alpha
                 }
             else:
+                self.logger.debug("Generating forecast without confidence intervals")
                 forecast = fit_result.forecast(steps=steps)
+
+                self.logger.info(
+                    f"Successfully generated forecast for {steps} steps\n"
+                    f"First 3 forecast values: {forecast[:3] if hasattr(forecast, '__getitem__') else 'N/A'}\n"
+                    f"Last 3 forecast values: {forecast[-3:] if hasattr(forecast, '__getitem__') else 'N/A'}"
+                )
+
                 result = {
                     "status": "success",
                     "forecast": forecast.tolist() if isinstance(forecast, np.ndarray) else forecast
                 }
 
-            self.logger.info(f"Прогноз для моделі {model_key} успішно отриманий")
             return result
 
         except Exception as e:
-            error_msg = f"Помилка отримання прогнозу: {str(e)}"
-            self.logger.error(error_msg)
+            error_msg = f"Error generating forecast: {str(e)}"
+            self.logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
             return {"status": "error", "message": error_msg}
 
     def save_model(self, model_key: str, path: str) -> bool:
-        """
-        Зберігає модель у файл на диску.
 
-        Параметри:
-        ----------
-        model_key : str
-            Ключ моделі
-        path : str
-            Шлях для збереження моделі
-
-        Повертає:
-        ---------
-        bool
-            True, якщо збереження успішне, інакше False
-        """
         self.logger.info(f"Починаємо зберігати модель {model_key} у {path}")
 
         # Перевіряємо наявність моделі в пам'яті
@@ -809,21 +917,7 @@ class ARIMAModeler:
             return False
 
     def load_model(self, model_key: str, path: str) -> bool:
-        """
-        Завантажує модель з файлу на диску.
 
-        Параметри:
-        ----------
-        model_key : str
-            Ключ моделі
-        path : str
-            Шлях до файлу моделі
-
-        Повертає:
-        ---------
-        bool
-            True, якщо завантаження успішне, інакше False
-        """
         self.logger.info(f"Завантаження моделі з шляху: {path}")
 
         try:
@@ -905,21 +999,7 @@ class ARIMAModeler:
             return False
 
     def add_data_transformation(self, model_key: str, transformation_info: Dict) -> bool:
-        """
-        Додає інформацію про трансформацію даних для моделі.
 
-        Параметри:
-        ----------
-        model_key : str
-            Ключ моделі
-        transformation_info : Dict
-            Інформація про трансформацію
-
-        Повертає:
-        ---------
-        bool
-            True, якщо додавання успішне, інакше False
-        """
         try:
             if model_key not in self.transformations:
                 self.transformations[model_key] = {}
@@ -941,21 +1021,7 @@ class ARIMAModeler:
             return False
 
     def select_best_stationary_column(self, data: pd.DataFrame, symbol: str):
-        """
-        Вибирає найкращий стаціонарний стовпець для моделювання.
 
-        Параметри:
-        ----------
-        data : pd.DataFrame
-            DataFrame з різними перетвореннями часового ряду
-        symbol : str, optional
-            Ідентифікатор набору даних
-
-        Повертає:
-        ---------
-        str
-            Назва найкращого стовпця для моделювання
-        """
         # Спочатку перевіряємо стовпці, які вже відзначені як стаціонарні
         if 'is_stationary' in data.columns:
             stationary_mask = data['is_stationary'] == True

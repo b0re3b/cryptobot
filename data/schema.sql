@@ -335,21 +335,22 @@ CREATE TABLE IF NOT EXISTS time_series_models (
 
 -- Таблиця для зберігання параметрів моделей
 CREATE TABLE IF NOT EXISTS model_parameters (
-    parameter_id SERIAL PRIMARY KEY,
-    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
-    param_name VARCHAR(50) NOT NULL,
-    param_value JSONB NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(model_id, param_name)
+    model_key VARCHAR(255) PRIMARY KEY,
+    order_params VARCHAR(20), -- наприклад "1,1,1"
+    seasonal_order VARCHAR(20), -- наприклад "1,1,1,7"
+    seasonal_period INTEGER,
+    FOREIGN KEY (model_key) REFERENCES models(model_key) ON DELETE CASCADE
 );
 
 -- Таблиця для зберігання метрик ефективності моделей
 CREATE TABLE IF NOT EXISTS model_metrics (
     metric_id SERIAL PRIMARY KEY,
-    model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
-    metric_name VARCHAR(50) NOT NULL,
-    metric_value FLOAT NOT NULL,
-    test_date TIMESTAMP,
+    model_key INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
+    mse DECIMAL(15,8),
+    rmse DECIMAL(15,8),
+    mae DECIMAL(15,8),
+    mape DECIMAL(15,8),
+    r2 DECIMAL(15,8),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(model_id, metric_name, test_date)
 );
@@ -371,7 +372,7 @@ CREATE TABLE IF NOT EXISTS model_forecasts (
 CREATE TABLE IF NOT EXISTS model_binary_data (
     binary_id SERIAL PRIMARY KEY,
     model_id INTEGER NOT NULL REFERENCES time_series_models(model_id) ON DELETE CASCADE,
-    model_binary BYTEA NOT NULL,
+    model_binary LONGBLOB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(model_id)
 );

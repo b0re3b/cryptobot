@@ -1107,7 +1107,7 @@ class DatabaseManager:
                             description: str = None) -> int:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = """
                         INSERT INTO time_series_models
@@ -1132,52 +1132,99 @@ class DatabaseManager:
         except Exception as e:
             raise
 
-    def save_model_parameters(self, model_id: str, parameters: Dict) -> bool:
-
+    def save_model_parameters(self, model_key: str, order_params: Optional[str] = None,
+                                seasonal_order: Optional[str] = None, seasonal_period: Optional[int] = None) -> bool:
+        """Додавання параметрів моделі"""
         try:
-            conn = self.conn()
-            with conn.cursor() as cursor:
-                for param_name, param_value in parameters.items():
-                    query = """
-                            INSERT INTO model_parameters
-                                (model_id, param_name, param_value)
-                            VALUES (%s, %s, %s) ON CONFLICT (model_id, param_name) 
-                    DO \
-                            UPDATE SET param_value = EXCLUDED.param_value \
-                            """
-                    # Перетворення значення параметра в JSON
-                    param_json = json.dumps(param_value)
-                    cursor.execute(query, (model_id, param_name, param_json))
-                conn.commit()
-                return True
+            query = """
+                    INSERT INTO model_parameters (model_key, order_params, seasonal_order, seasonal_period)
+                    VALUES (%s, %s, %s, %s) \
+                    """
+            self.cursor.execute(query, (model_key, order_params, seasonal_order, seasonal_period))
+            return True
         except Exception as e:
+            print(f"Error inserting model parameters: {e}")
+            self.conn.rollback()
             return False
 
-    def save_model_metrics(self, model_id: int, metrics: Dict, test_date: datetime = None) -> bool:
-
+    def get_model_parameters(self, model_key: str) -> Optional[Dict]:
+        """Отримання параметрів моделі"""
         try:
-            conn = self.conn()
-            with conn.cursor() as cursor:
-                for metric_name, metric_value in metrics.items():
-                    query = """
-                            INSERT INTO model_metrics
-                                (model_id, metric_name, metric_value, test_date)
-                            VALUES (%s, %s, %s, %s) ON CONFLICT (model_id, metric_name, test_date) 
-                    DO \
-                            UPDATE SET metric_value = EXCLUDED.metric_value \
-                            """
-                    cursor.execute(query, (model_id, metric_name, float(metric_value), test_date))
-                conn.commit()
-                return True
+            query = "SELECT * FROM model_parameters WHERE model_key = %s"
+            self.cursor.execute(query, (model_key,))
+            result = self.cursor.fetchone()
+
+            if result:
+                columns = [desc[0] for desc in self.cursor.description]
+                return dict(zip(columns, result))
+            return None
         except Exception as e:
-            return False
+            print(f"Error getting model parameters: {e}")
+            return None
+
+    def save_model_metrics(self, model_key,  metrics: dict):
+        """
+        Зберігає метрики моделі (mse, rmse, mae, mape, r2) в таблицю model_metrics.
+        Якщо запис існує — оновлює його.
+        """
+        query = """
+                INSERT INTO model_metrics (model_key,  mse, rmse, mae, mape, r2, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW()) ON CONFLICT (model_key) DO \
+                UPDATE \
+                    SET \
+                        mse = EXCLUDED.mse, \
+                    rmse = EXCLUDED.rmse, \
+                    mae = EXCLUDED.mae, \
+                    mape = EXCLUDED.mape, \
+                    r2 = EXCLUDED.r2, \
+                    created_at = EXCLUDED.created_at; \
+                """
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, (
+                model_key,
+                metrics.get("mse"),
+                metrics.get("rmse"),
+                metrics.get("mae"),
+                metrics.get("mape"),
+                metrics.get("r2"),
+            ))
+
+    def get_model_metrics(self, model_key):
+        """Отримує метрики моделі за model_key."""
+        query = """
+                SELECT model_id, \
+                       model_key, \
+                       mse, \
+                       rmse, \
+                       mae, \
+                       mape, \
+                       r2, \
+                       created_at
+                FROM model_metrics
+                WHERE model_key = %s; \
+                """
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, (model_key,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "model_id": row[0],
+                    "model_key": row[1],
+                    "mse": row[2],
+                    "rmse": row[3],
+                    "mae": row[4],
+                    "mape": row[5],
+                    "r2": row[6],
+                    "created_at": row[7],
+                }
+            return None
 
     def save_model_forecasts(self, model_id: int, forecasts: pd.Series,
                              lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
                              confidence_level: float = 0.95) -> bool:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 for date, value in forecasts.items():
                     lower = None if lower_bounds is None else lower_bounds.get(date)
@@ -1207,7 +1254,7 @@ class DatabaseManager:
     def save_model_binary(self, model_id: str, model_obj: Any) -> bool:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 # Серіалізація моделі
                 model_binary = pickle.dumps(model_obj)
@@ -1228,7 +1275,7 @@ class DatabaseManager:
     def save_data_transformations(self, model_id: str, transformations: List[Dict]) -> bool:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 # Спочатку видаляємо старі записи для цієї моделі
                 cursor.execute("DELETE FROM data_transformations WHERE model_id = %s", (model_id,))
@@ -1254,7 +1301,7 @@ class DatabaseManager:
 
     def get_model_by_key(self, model_key: str) -> Optional[Dict]:
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "SELECT * FROM time_series_models WHERE model_key = %s"
                 cursor.execute(query, (model_key,))
@@ -1268,67 +1315,11 @@ class DatabaseManager:
                 return None
         except Exception as e:
             return None
-
-    def get_model_parameters(self, model_id: int) -> Dict:
-        try:
-            conn = self.conn()
-            with conn.cursor() as cursor:
-                query = "SELECT param_name, param_value FROM model_parameters WHERE model_id = %s"
-                cursor.execute(query, (model_id,))
-                parameters = {}
-
-                for row in cursor.fetchall():
-                    param_name = row[0]
-                    param_value = json.loads(row[1])
-                    parameters[param_name] = param_value
-
-                return parameters
-        except Exception as e:
-            return {}
-
-    def get_model_metrics(self, model_id: int, test_date: datetime = None) -> Dict:
-        try:
-            conn = self.conn()
-            with conn.cursor() as cursor:
-                if test_date is None:
-                    query = """SELECT metric_name, metric_value, test_date
-                               FROM model_metrics
-                               WHERE model_id = %s"""
-                    cursor.execute(query, (model_id,))
-
-                    metrics = {}
-                    for row in cursor.fetchall():
-                        metric_name = row[0]
-                        metric_value = row[1]
-                        test_date_value = row[2]
-
-                        test_date_str = test_date_value.strftime('%Y-%m-%d') if test_date_value else 'unknown'
-                        if test_date_str not in metrics:
-                            metrics[test_date_str] = {}
-                        metrics[test_date_str][metric_name] = metric_value
-
-                else:
-                    query = """SELECT metric_name, metric_value
-                               FROM model_metrics
-                               WHERE model_id = %s
-                                 AND test_date = %s"""
-                    cursor.execute(query, (model_id, test_date))
-
-                    metrics = {}
-                    for row in cursor.fetchall():
-                        metric_name = row[0]
-                        metric_value = row[1]
-                        metrics[metric_name] = metric_value
-
-                return metrics
-        except Exception as e:
-            return {}
-
     def get_model_forecasts(self, model_id: int, start_date: datetime = None,
                             end_date: datetime = None) -> pd.DataFrame:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             query = """SELECT forecast_date, forecast_value, lower_bound, upper_bound, confidence_level
                        FROM model_forecasts
                        WHERE model_id = %s"""
@@ -1355,7 +1346,7 @@ class DatabaseManager:
     def load_model_binary(self, model_id: int) -> Any:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "SELECT model_binary FROM model_binary_data WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
@@ -1373,7 +1364,7 @@ class DatabaseManager:
     def get_data_transformations(self, model_id: int) -> List[Dict]:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = """SELECT transform_type, transform_params, transform_order
                            FROM data_transformations
@@ -1401,7 +1392,7 @@ class DatabaseManager:
     def delete_model(self, model_id: int) -> bool:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "DELETE FROM time_series_models WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
@@ -1414,7 +1405,7 @@ class DatabaseManager:
     def get_models_by_symbol(self, symbol: str, timeframe: str = None, active_only: bool = True) -> List[Dict]:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s"
                 params = [symbol]
@@ -1444,7 +1435,7 @@ class DatabaseManager:
                                    timeframe: str = None) -> Optional[Dict]:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s AND is_active = TRUE"
                 params = [symbol]
@@ -1472,7 +1463,7 @@ class DatabaseManager:
     def get_model_performance_history(self, model_id: int) -> pd.DataFrame:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             query = """SELECT metric_name, metric_value, test_date
                        FROM model_metrics
                        WHERE model_id = %s \
@@ -1494,7 +1485,7 @@ class DatabaseManager:
     def update_model_status(self, model_id: int, is_active: bool) -> bool:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "UPDATE time_series_models SET is_active = %s WHERE model_id = %s"
                 cursor.execute(query, (is_active, model_id))
@@ -1511,7 +1502,7 @@ class DatabaseManager:
 
             for model_id in model_ids:
                 # Отримуємо інформацію про модель
-                conn = self.connect()
+                conn = self.conn
                 with conn.cursor() as cursor:
                     cursor.execute("SELECT model_key FROM time_series_models WHERE model_id = %s", (model_id,))
                     model_info = cursor.fetchone()
@@ -1580,7 +1571,7 @@ class DatabaseManager:
     def get_available_symbols(self) -> List[str]:
 
         try:
-            conn = self.conn()
+            conn = self.conn
             with conn.cursor() as cursor:
                 query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
                 cursor.execute(query)

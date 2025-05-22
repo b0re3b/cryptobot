@@ -347,7 +347,7 @@ class TimeSeriesTransformer:
             self.logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def apply_preprocessing_pipeline(self, data: pd.Series, operations: List[Dict], model_id: int = None) -> pd.Series:
+    def apply_preprocessing_pipeline(self, data: pd.Series, operations: List[Dict], model_id: str = None) -> pd.Series:
         self.logger.info(f"Applying preprocessing pipeline with {len(operations)} operations")
 
         # If input is a DataFrame, convert to float and extract Series

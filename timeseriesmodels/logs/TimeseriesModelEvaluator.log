@@ -203,3 +203,133 @@
 2025-05-23 00:35:28 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
 2025-05-23 00:35:28 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
 2025-05-23 00:35:31 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 00:47:01 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 00:47:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 00:47:14 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 00:47:14 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 00:47:14 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 00:47:21 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 00:47:25 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 00:47:25 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 00:47:25 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 00:47:28 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 00:55:43 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 00:55:55 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 00:55:57 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 00:55:57 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 00:55:57 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 00:56:04 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 00:56:09 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 00:56:09 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 00:56:09 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 00:56:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:25:06 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:25:14 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:25:16 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:25:16 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:25:16 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:25:22 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:25:26 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:25:26 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:25:26 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:25:28 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-23 01:30:09 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:30:09 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:30:10 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:31:27 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:31:35 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:31:37 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:31:37 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:31:37 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:31:43 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:31:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:31:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:31:48 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:31:51 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:48:54 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:49:04 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:49:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:49:06 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:49:06 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:49:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:49:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:49:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:49:18 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:49:20 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:58:18 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 01:58:26 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 01:58:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 01:58:27 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 01:58:27 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 02:02:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 02:02:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 02:02:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 02:02:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 02:02:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-23 02:02:12 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-23 02:02:13 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 02:02:13 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 02:02:13 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 02:02:24 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 02:02:25 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 02:02:25 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 02:02:25 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 02:02:32 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-23 02:02:36 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying inverse  transformation
+2025-05-23 02:02:36 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Calculating volatility with window size 20
+2025-05-23 02:02:36 - TimeseriesModelEvaluator - ERROR - [logger.py:111] - Error during volatility calculation: loop of ufunc does not support argument 0 of type decimal.Decimal which has no callable log method
+2025-05-23 02:02:39 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381

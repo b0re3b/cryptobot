@@ -1232,3 +1232,408 @@ IndexError: boolean index did not match indexed array along dimension 0; dimensi
 2025-05-23 00:35:31 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
 2025-05-23 00:35:31 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
 2025-05-23 00:35:31 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 00:47:01 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 00:47:02 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 00:47:02 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 00:47:02 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 00:47:02 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 00:47:03 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 00:47:12 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 00:47:12 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 00:47:14 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 00:47:14 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 00:47:15 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 00:47:16 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 00:47:16 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 00:47:16 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 00:47:16 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 00:47:17 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-23 00:47:20 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 00:47:20 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 00:47:25 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 00:47:25 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 00:47:26 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 00:47:26 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 00:47:26 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 00:47:26 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-23 00:47:26 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 00:47:28 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 00:47:28 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-23 00:47:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 00:47:29 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-23 00:47:29 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-23 00:47:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 00:47:29 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-23 00:47:29 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-23 00:47:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 00:47:29 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-23 00:47:29 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-23 00:47:29 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-23 00:55:42 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 00:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 00:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 00:55:44 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 00:55:44 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 00:55:44 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 00:55:44 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 00:55:45 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 00:55:55 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 00:55:55 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 00:55:57 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 00:55:57 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 00:55:58 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 00:55:59 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 00:55:59 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 00:55:59 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 00:55:59 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 00:56:00 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-23 00:56:04 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 00:56:04 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 00:56:09 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 00:56:09 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 00:56:09 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 00:56:10 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 00:56:10 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 00:56:10 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-23 00:56:10 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 00:56:12 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 00:56:12 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-23 00:56:13 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 00:56:13 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-23 00:56:13 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-23 00:56:13 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 00:56:13 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-23 00:56:13 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-23 00:56:13 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 00:56:13 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-23 00:56:13 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-23 00:56:13 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:25:06 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:25:07 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:25:07 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:25:07 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:25:07 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:25:07 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:25:08 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:25:14 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:25:14 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:25:16 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:25:16 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:25:16 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 01:25:17 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:25:17 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:25:17 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:25:17 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:25:18 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-23 01:25:22 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:25:22 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:25:26 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:25:26 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:25:26 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:25:26 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:25:26 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:25:26 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-23 01:25:26 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:25:28 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:25:28 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-23 01:25:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:25:29 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-23 01:25:29 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-23 01:25:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:25:29 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-23 01:25:29 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-23 01:25:29 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:25:29 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-23 01:25:29 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-23 01:25:29 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-23 01:30:09 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 01:30:09 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:30:09 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:30:09 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 01:30:09 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:30:09 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 01:30:10 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:30:10 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 01:30:10 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:30:10 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:30:10 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:30:10 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:30:11 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:30:11 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:30:11 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:30:11 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:30:11 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:31:27 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:31:28 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:31:28 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:31:28 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:31:28 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:31:28 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:31:29 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:31:35 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:31:35 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:31:37 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:31:37 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:31:38 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 01:31:39 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:31:39 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:31:39 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:31:39 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:31:40 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-23 01:31:43 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:31:43 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:31:48 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:31:48 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:31:48 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:31:49 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:31:49 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:31:49 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-23 01:31:49 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:31:51 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-23 01:31:51 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-23 01:31:51 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-23 01:31:51 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-23 01:31:51 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-23 01:31:51 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:48:54 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:48:55 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:48:56 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:48:56 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:48:56 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:48:56 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:48:56 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:49:04 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:49:04 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:49:06 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:49:06 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:49:06 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 01:49:07 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:49:07 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:49:08 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:49:08 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:49:09 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-23 01:49:12 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:49:12 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:49:18 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:49:18 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:49:18 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:49:18 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 01:49:18 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:49:18 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-23 01:49:18 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:49:20 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:49:20 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-23 01:49:21 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:49:21 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-23 01:49:21 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-23 01:49:21 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:49:21 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-23 01:49:21 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-23 01:49:21 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 01:49:21 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-23 01:49:21 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-23 01:49:21 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:58:18 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 01:58:19 - TimeSeriesModels - WARNING - [logger.py:107] - Failed to train arima model: Помилка під час навчання моделі ARIMA: Model fitting failed: 'ARIMAModeler' object has no attribute 'fit'
+2025-05-23 01:58:19 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 01:58:19 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 01:58:19 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 01:58:20 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 01:58:26 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 01:58:26 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 01:58:27 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 01:58:27 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 01:58:28 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for BTC from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2834 records for ETH from 2017-08-17 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-23 02:02:12 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
+2025-05-23 02:02:13 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 02:02:13 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 02:02:13 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 02:02:14 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 02:02:14 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 02:02:14 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 02:02:14 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 02:02:14 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 02:02:24 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 02:02:24 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 02:02:25 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 02:02:25 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 02:02:26 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 1, 0)
+2025-05-23 02:02:27 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 02:02:27 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 02:02:27 - TimeSeriesModels - WARNING - [logger.py:107] - No seasonality detected for sarima, using default seasonal parameters
+2025-05-23 02:02:27 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 12 for SARIMA model
+2025-05-23 02:02:28 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 1, 0)
+2025-05-23 02:02:32 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 02:02:32 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 02:02:36 - TimeSeriesModels - INFO - [logger.py:103] - Creating ensemble forecast with models: ['arima', 'sarima']
+2025-05-23 02:02:36 - TimeSeriesModels - INFO - [logger.py:103] - Training arima model...
+2025-05-23 02:02:37 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 1, 0)
+2025-05-23 02:02:37 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for arima
+2025-05-23 02:02:37 - TimeSeriesModels - INFO - [logger.py:103] - Training sarima model...
+2025-05-23 02:02:37 - TimeSeriesModels - INFO - [logger.py:103] - Using seasonal period of 276 for SARIMA model
+2025-05-23 02:02:37 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (0, 1, 0)
+2025-05-23 02:02:39 - TimeSeriesModels - WARNING - [logger.py:107] - Empty forecast generated for sarima
+2025-05-23 02:02:39 - TimeSeriesModels - ERROR - [logger.py:111] - No successful forecasts generated
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-23 02:02:40 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for BTC: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 02:02:40 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for BTC
+2025-05-23 02:02:40 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for BTC, skipping
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-23 02:02:40 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for ETH: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 02:02:40 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for ETH
+2025-05-23 02:02:40 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for ETH, skipping
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-23 02:02:40 - TimeSeriesModels - ERROR - [logger.py:111] - Error getting last update time for SOL: 'DatabaseManager' object has no attribute 'get_latest_kline'
+2025-05-23 02:02:40 - TimeSeriesModels - WARNING - [logger.py:107] - No last update time for SOL
+2025-05-23 02:02:40 - TimeSeriesModels - WARNING - [logger.py:107] - No data available for SOL, skipping
+2025-05-23 02:02:40 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
