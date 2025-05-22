@@ -1,4 +1,5 @@
-from typing import Dict, Tuple, Callable
+from dataclasses import field, dataclass
+from typing import Dict, Tuple, Callable, List
 import pandas as pd
 import numpy as np
 import torch
@@ -8,12 +9,13 @@ from analysis.trend_detection import TrendDetection
 from cyclefeatures import CryptoCycles
 from featureengineering.feature_engineering import FeatureEngineering
 
-
+@dataclass
+class CryptoConfig:
+    symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
+    timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
+    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru'])
 class DataPreprocessor:
     """Клас для завантаження, підготовки, нормалізації та обробки даних для моделей"""
-
-    SYMBOLS = ['BTC', 'ETH', 'SOL']
-    TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
 
     def __init__(self):
         self.scalers = {}  # Словник для зберігання скейлерів
@@ -112,27 +114,6 @@ class DataPreprocessor:
             y.append(target[i+seq_length])
         return np.array(X), np.array(y)
 
-    def normalize_data(self, data: pd.DataFrame, symbol: str,
-                       timeframe: str) -> pd.DataFrame:
-        """
-        Нормалізація даних (мін-макс або стандартна)
-
-        Args:
-            data: DataFrame з числовими ознаками
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-
-        Returns:
-            Нормалізований DataFrame
-        """
-        from sklearn.preprocessing import MinMaxScaler
-
-        key = f"{symbol}_{timeframe}"
-        scaler = MinMaxScaler()
-        scaled = scaler.fit_transform(data.values)
-        self.scalers[key] = scaler
-
-        return pd.DataFrame(scaled, index=data.index, columns=data.columns)
 
     def denormalize_predictions(self, predictions: np.ndarray, symbol: str,
                                 timeframe: str) -> np.ndarray:
@@ -169,3 +150,4 @@ class DataPreprocessor:
         """
         split_index = int(len(X) * (1 - validation_split))
         return X[:split_index], X[split_index:], y[:split_index], y[split_index:]
+

@@ -371,3 +371,51 @@ class ModelTrainer:
     def batch_online_learning(self, updates: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Пакетне онлайн навчання кількох моделей"""
         pass
+    def cross_validate_model(self, symbol: str, timeframe: str, model_type: str,
+                             k_folds: int = 5) -> Dict[str, List[float]]:
+        """Крос-валідація моделі"""
+        pass
+
+    def evaluate_model(self, symbol: str, timeframe: str, model_type: str,
+                       test_data: Optional[pd.DataFrame] = None) -> Dict[str, float]:
+        """
+        Оцінка ефективності моделі на тестових даних
+
+        Args:
+            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
+            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
+            model_type: Тип моделі ('lstm' або 'gru')
+            test_data: Тестові дані (якщо None, використовуються збережені тестові дані)
+
+        Returns:
+            Dict: Метрики ефективності моделі
+        """
+        # Перевірка наявності моделі
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.models:
+            if not self.load_model(symbol, timeframe, model_type):
+                raise ValueError(f"Модель {model_key} не знайдена")
+
+        # Якщо тестові дані не надані, завантажуємо останні дані
+        if test_data is None:
+            data_loader = self._get_data_loader(symbol, timeframe, model_type)
+            test_data = data_loader()
+
+        # Підготовка даних для оцінки
+        processed_data = self._prepare_features(test_data, symbol)
+
+        # Оцінка моделі
+        model = self.models[model_key]
+        model.eval()
+
+        # Обчислення метрик (MSE, RMSE, MAE, MAPE тощо)
+        metrics = {}
+        # ...
+
+        # Зберігаємо метрики в БД
+        save_ml_model_metrics(symbol, timeframe, model_type, metrics)
+
+        # Оновлюємо фактичні значення для прогнозів
+        # Використовуємо метод update_prediction_actual_value для оновлення прогнозів
+
+        return metrics

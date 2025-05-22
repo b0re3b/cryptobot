@@ -1,3 +1,5 @@
+from dataclasses import dataclass, field
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,6 +28,22 @@ from cyclefeatures.crypto_cycles import prepare_cycle_ml_features  # Для от
 from featureengineering.feature_engineering import prepare_features_pipeline  # Для підготовки всіх ознак
 from utils.logger import CryptoLogger
 from ML.DataPreprocessor import DataPreprocessor
+@dataclass
+class ModelConfig:
+    input_dim: int
+    hidden_dim: int = 64
+    num_layers: int = 2
+    output_dim: int = 1
+    dropout: float = 0.2
+    learning_rate: float = 0.001
+    batch_size: int = 32
+    epochs: int = 100
+
+@dataclass
+class CryptoConfig:
+    symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
+    timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
+    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru'])
 
 class DeepLearning:
     """
@@ -33,9 +51,7 @@ class DeepLearning:
     Підтримує LSTM та GRU моделі для BTC, ETH та SOL на різних таймфреймах
     """
 
-    SYMBOLS = ['BTC', 'ETH', 'SOL']
-    TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
-    MODEL_TYPES = ['lstm', 'gru']
+
 
     def __init__(self, models_dir: str = "models/deep_learning"):
         """
@@ -48,7 +64,6 @@ class DeepLearning:
         # Ініціалізація компонентів
         self.data_preprocessor = DataPreprocessor()
         self.model_trainer = ModelTrainer(self.device)
-        self.model_manager = ModelManager(models_dir)
 
         # Словники для зберігання навчених моделей та їх конфігурацій
         self.models = {}  # {model_key: model}
@@ -165,49 +180,7 @@ class DeepLearning:
 
     # ==================== ОЦІНКА МОДЕЛЕЙ ====================
 
-    def evaluate_model(self, symbol: str, timeframe: str, model_type: str,
-                       test_data: Optional[pd.DataFrame] = None) -> Dict[str, float]:
-        """
-        Оцінка ефективності моделі на тестових даних
 
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-            test_data: Тестові дані (якщо None, використовуються збережені тестові дані)
-
-        Returns:
-            Dict: Метрики ефективності моделі
-        """
-        # Перевірка наявності моделі
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.models:
-            if not self.load_model(symbol, timeframe, model_type):
-                raise ValueError(f"Модель {model_key} не знайдена")
-
-        # Якщо тестові дані не надані, завантажуємо останні дані
-        if test_data is None:
-            data_loader = self._get_data_loader(symbol, timeframe, model_type)
-            test_data = data_loader()
-
-        # Підготовка даних для оцінки
-        processed_data = self._prepare_features(test_data, symbol)
-
-        # Оцінка моделі
-        model = self.models[model_key]
-        model.eval()
-
-        # Обчислення метрик (MSE, RMSE, MAE, MAPE тощо)
-        metrics = {}
-        # ...
-
-        # Зберігаємо метрики в БД
-        save_ml_model_metrics(symbol, timeframe, model_type, metrics)
-
-        # Оновлюємо фактичні значення для прогнозів
-        # Використовуємо метод update_prediction_actual_value для оновлення прогнозів
-
-        return metrics
 
     def compare_models(self, symbol: str, timeframe: str,
                        test_data: Optional[pd.DataFrame] = None) -> Dict[str, Dict[str, float]]:
@@ -242,10 +215,7 @@ class DeepLearning:
 
         return comparison_results
 
-    def cross_validate_model(self, symbol: str, timeframe: str, model_type: str,
-                             k_folds: int = 5) -> Dict[str, List[float]]:
-        """Крос-валідація моделі"""
-        pass
+
 
     def model_performance_report(self, symbol: Optional[str] = None,
                                  timeframe: Optional[str] = None) -> pd.DataFrame:
