@@ -1,9 +1,7 @@
 from datetime import datetime
 from typing import Tuple, Dict, Any
-
 import numpy as np
 import pandas as pd
-from pmdarima import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 import pickle
 import os
@@ -25,13 +23,6 @@ class ARIMAModeler:
     def __init__(self):
         """
         Ініціалізація класу ARIMAModeler.
-
-        Параметри:
-        ----------
-        logger : об'єкт для логування
-            Об'єкт, що підтримує методи info, warning, error для логування
-        db_manager : об'єкт, optional
-            Об'єкт для взаємодії з базою даних. За замовчуванням None.
         """
         self.logger = CryptoLogger('ArimaModeler')
         self.db_manager = DatabaseManager()
@@ -60,14 +51,37 @@ class ARIMAModeler:
         ValueError
             Якщо дані не відповідають вимогам
         """
+        # Перевіряємо тип даних
+        if not isinstance(data, pd.Series):
+            try:
+                data = pd.Series(data)
+            except Exception as e:
+                raise ValueError(f"Не вдалося конвертувати дані в pandas Series: {str(e)}")
+
+        # Перевіряємо тип даних значень - повинні бути числові
+        if data.dtype == 'object':
+            try:
+                # Спробуємо конвертувати в числовий тип
+                data = pd.to_numeric(data, errors='coerce')
+                self.logger.warning("Дані були сконвертовані з object в числовий тип")
+            except Exception as e:
+                raise ValueError(f"Дані містять нечислові значення: {str(e)}")
+
         # Перевірка на NaN значення
         if data.isnull().any():
-            self.logger.warning("Дані містять NaN значення. Видаляємо їх перед підгонкою.")
+            nan_count = data.isnull().sum()
+            self.logger.warning(f"Дані містять {nan_count} NaN значень. Видаляємо їх перед підгонкою.")
             data = data.dropna()
 
         # Перевірка достатньої кількості даних
         if len(data) < min_required:
             error_msg = f"Недостатньо точок даних для моделі. Потрібно мінімум {min_required}, маємо {len(data)}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Перевірка на константні значення
+        if data.nunique() <= 1:
+            error_msg = "Дані містять тільки константні значення, неможливо навчити модель"
             self.logger.error(error_msg)
             raise ValueError(error_msg)
 
@@ -112,8 +126,38 @@ class ARIMAModeler:
             return False
 
         try:
-            # Зберігаємо метадані
-            self.db_manager.save_model_metadata(model_key, model_info["metadata"])
+            metadata = model_info["metadata"]
+
+            # Витягуємо необхідні параметри для збереження
+            model_type = metadata.get("model_type", "UNKNOWN")
+            timeframe = metadata.get("timeframe", "1d")  # Встановлюємо значення за замовчуванням
+
+            # Отримуємо дати з data_range
+            data_range = metadata.get("data_range", {})
+            start_date = data_range.get("start", datetime.now().isoformat())
+            end_date = data_range.get("end", datetime.now().isoformat())
+
+            # Конвертуємо дати в datetime об'єкти, якщо вони в форматі строки
+            if isinstance(start_date, str):
+                try:
+                    start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                except:
+                    start_date = datetime.now()
+            if isinstance(end_date, str):
+                try:
+                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                except:
+                    end_date = datetime.now()
+
+            # Зберігаємо метадані з усіма необхідними параметрами
+            self.db_manager.save_model_metadata(
+                model_key,
+                model_type,
+                timeframe,
+                start_date,
+                end_date,
+                metadata
+            )
 
             # Зберігаємо параметри
             self.db_manager.save_model_parameters(model_key, model_info["parameters"])
@@ -133,7 +177,7 @@ class ARIMAModeler:
             return False
 
     def _collect_model_metadata(self, data: pd.Series, model_key: str, model_type: str,
-                                symbol: str) -> Dict:
+                                symbol: str, timeframe: str = "1d") -> Dict:
         """
         Збирає метадані моделі.
 
@@ -147,14 +191,16 @@ class ARIMAModeler:
             Тип моделі ('ARIMA' або 'SARIMA')
         symbol : str
             Символ або ідентифікатор набору даних
+        timeframe : str
+            Часовий період даних
 
         Повертає:
         ---------
         Dict
             Словник з метаданими моделі
         """
-        start_date = data.index[0]
-        end_date = data.index[-1]
+        start_date = data.index[0] if len(data.index) > 0 else datetime.now()
+        end_date = data.index[-1] if len(data.index) > 0 else datetime.now()
 
         # Конвертація дат в строки для серіалізації
         if isinstance(start_date, datetime):
@@ -170,6 +216,7 @@ class ARIMAModeler:
         return {
             "model_type": model_type,
             "symbol": symbol,
+            "timeframe": timeframe,
             "timestamp": datetime.now(),
             "data_range": {
                 "start": start_date,
@@ -180,7 +227,7 @@ class ARIMAModeler:
         }
 
     def _create_model_info(self, fit_result: Any, data: pd.Series, model_key: str,
-                           model_type: str, symbol: str, params: Dict) -> Dict:
+                           model_type: str, symbol: str, params: Dict, timeframe: str = "1d") -> Dict:
         """
         Створює повну інформацію про модель.
 
@@ -198,6 +245,8 @@ class ARIMAModeler:
             Символ або ідентифікатор набору даних
         params : Dict
             Параметри моделі
+        timeframe : str
+            Часовий період даних
 
         Повертає:
         ---------
@@ -205,7 +254,7 @@ class ARIMAModeler:
             Повна інформація про модель
         """
         # Збираємо метадані
-        metadata = self._collect_model_metadata(data, model_key, model_type, symbol)
+        metadata = self._collect_model_metadata(data, model_key, model_type, symbol, timeframe)
 
         # Додаємо інформацію про збіжність
         training_info = {
@@ -219,10 +268,10 @@ class ARIMAModeler:
 
         # Збираємо статистику моделі
         stats = {
-            "aic": fit_result.aic,
-            "bic": fit_result.bic,
-            "aicc": fit_result.aicc if hasattr(fit_result, 'aicc') else None,
-            "log_likelihood": fit_result.llf
+            "aic": getattr(fit_result, 'aic', None),
+            "bic": getattr(fit_result, 'bic', None),
+            "aicc": getattr(fit_result, 'aicc', None),
+            "log_likelihood": getattr(fit_result, 'llf', None)
         }
 
         return {
@@ -284,7 +333,8 @@ class ARIMAModeler:
 
     def fit_arima(self, data: pd.Series, order: Tuple[int, int, int] = None,
                   symbol: str = 'default', auto_params: bool = True,
-                  max_p: int = 5, max_d: int = 2, max_q: int = 5) -> Dict:
+                  max_p: int = 5, max_d: int = 2, max_q: int = 5,
+                  timeframe: str = "1d") -> Dict:
         """
         Підгонка моделі ARIMA до часового ряду.
 
@@ -304,6 +354,8 @@ class ARIMAModeler:
             Максимальне значення параметра d при автоматичному визначенні. За замовчуванням 2.
         max_q : int, optional
             Максимальне значення параметра q при автоматичному визначенні. За замовчуванням 5.
+        timeframe : str, optional
+            Часовий період даних. За замовчуванням "1d".
 
         Повертає:
         ---------
@@ -313,6 +365,9 @@ class ARIMAModeler:
         self.logger.info(f"Починаємо навчання моделі ARIMA для символу {symbol}")
 
         try:
+            # Предварительна валідація даних
+            data = self._validate_data(data, 10)  # Мінімум 10 точок для ARIMA
+
             # Визначаємо оптимальні параметри, якщо потрібно
             if auto_params or order is None:
                 self.logger.info("Автоматичне визначення параметрів ARIMA моделі")
@@ -341,23 +396,56 @@ class ARIMAModeler:
                         f"Використовуємо стандартні: {order}"
                     )
 
-            # Валідація даних
-            min_required = sum(order) + 1
+            # Додаткова валідація даних з урахуванням параметрів моделі
+            min_required = sum(order) + 10
             data = self._validate_data(data, min_required)
 
             # Генеруємо ключ моделі
             model_key = self._generate_model_key("arima", symbol)
 
-            # Створюємо та навчаємо модель
-            model = ARIMA(data, order=order)
-            fit_result = model.fit()
+            # Створюємо та навчаємо модель - використовуємо statsmodels ARIMA
+            from statsmodels.tsa.arima.model import ARIMA as StatsARIMA
+
+            # Конвертуємо дані в numpy array з float64 типом
+            data_values = np.asarray(data, dtype=np.float64)
+
+            # Створюємо модель з правильним імпортом
+            model = StatsARIMA(data_values, order=order)
+
+            # FIXED: Оновлені параметри для підгонки (видалено disp та optim_hessian)
+            fit_kwargs = {
+                'method': 'lbfgs',
+                'maxiter': 200
+            }
+
+            # Додаткові спроби з різними методами оптимізації
+            fit_result = None
+            methods_to_try = ['lbfgs', 'bfgs', 'nm']
+
+            for method in methods_to_try:
+                try:
+                    fit_kwargs['method'] = method
+                    fit_result = model.fit(**fit_kwargs)
+                    self.logger.info(f"Модель успішно навчена з методом: {method}")
+                    break
+                except Exception as method_error:
+                    self.logger.warning(f"Метод {method} не спрацював: {str(method_error)}")
+                    continue
+
+            # Якщо всі методи не спрацювали, спробуємо базовий fit без параметрів
+            if fit_result is None:
+                try:
+                    fit_result = model.fit()
+                    self.logger.info("Модель навчена з базовими параметрами")
+                except Exception as final_error:
+                    raise Exception(f"Не вдалося навчити модель жодним методом. Остання помилка: {str(final_error)}")
 
             # Формуємо параметри моделі
             params = {"order": order}
 
             # Створюємо повну інформацію про модель
             model_info = self._create_model_info(
-                fit_result, data, model_key, "ARIMA", symbol, params
+                fit_result, data, model_key, "ARIMA", symbol, params, timeframe
             )
 
             # Зберігаємо модель в словнику
@@ -401,7 +489,7 @@ class ARIMAModeler:
                    seasonal_order: Tuple[int, int, int, int] = None,
                    symbol: str = 'default', auto_params: bool = True,
                    max_p: int = 5, max_d: int = 2, max_q: int = 5,
-                   seasonal_period: int = 7) -> Dict:
+                   seasonal_period: int = 7, timeframe: str = "1d") -> Dict:
         """
         Підгонка моделі SARIMA до часового ряду.
 
@@ -425,6 +513,8 @@ class ARIMAModeler:
             Максимальне значення параметра q при автоматичному визначенні. За замовчуванням 5.
         seasonal_period : int, optional
             Сезонний період для моделі. За замовчуванням 7 (тижневий).
+        timeframe : str, optional
+            Часовий період даних. За замовчуванням "1d".
 
         Повертає:
         ---------
@@ -434,6 +524,9 @@ class ARIMAModeler:
         self.logger.info(f"Починаємо навчання моделі SARIMA для символу {symbol}")
 
         try:
+            # Предварительна валідація даних
+            data = self._validate_data(data, 20)  # Мінімум 20 точок для SARIMA
+
             # Визначаємо оптимальні параметри, якщо потрібно
             if auto_params or order is None or seasonal_order is None:
                 self.logger.info("Автоматичне визначення параметрів SARIMA моделі")
@@ -468,30 +561,53 @@ class ARIMAModeler:
                         f"Використовуємо стандартні: {order}, сезонні: {seasonal_order}"
                     )
 
-            # Валідація даних
+            # Додаткова валідація даних з урахуванням параметрів моделі
             min_required = sum(order) + sum(seasonal_order[:-1]) + 2 * seasonal_order[-1]
             data = self._validate_data(data, min_required)
 
             # Генеруємо ключ моделі
             model_key = self._generate_model_key("sarima", symbol)
 
+            # Конвертуємо дані в numpy array з float64 типом
+            data_values = np.asarray(data, dtype=np.float64)
+
             # Створюємо та навчаємо модель
             model = SARIMAX(
-                data,
+                data_values,
                 order=order,
                 seasonal_order=seasonal_order,
                 enforce_stationarity=False,
                 enforce_invertibility=False
             )
 
-            # Встановлюємо опції підгонки для кращої збіжності
+            # FIXED: Оновлені опції підгонки для кращої збіжності
             fit_options = {
-                'disp': False,  # Не виводити інформацію про ітерації
                 'maxiter': 200,  # Максимальна кількість ітерацій
                 'method': 'lbfgs'  # Метод оптимізації
             }
 
-            fit_result = model.fit(**fit_options)
+            # Спробуємо кілька методів оптимізації
+            fit_result = None
+            methods_to_try = ['lbfgs', 'bfgs', 'nm']
+
+            for method in methods_to_try:
+                try:
+                    fit_options['method'] = method
+                    fit_result = model.fit(**fit_options)
+                    self.logger.info(f"SARIMA модель успішно навчена з методом: {method}")
+                    break
+                except Exception as method_error:
+                    self.logger.warning(f"Метод {method} не спрацював для SARIMA: {str(method_error)}")
+                    continue
+
+            # Якщо всі методи не спрацювали, спробуємо базовий fit
+            if fit_result is None:
+                try:
+                    fit_result = model.fit()
+                    self.logger.info("SARIMA модель навчена з базовими параметрами")
+                except Exception as final_error:
+                    raise Exception(
+                        f"Не вдалося навчити SARIMA модель жодним методом. Остання помилка: {str(final_error)}")
 
             # Формуємо параметри моделі
             params = {
@@ -501,7 +617,7 @@ class ARIMAModeler:
 
             # Створюємо повну інформацію про модель
             model_info = self._create_model_info(
-                fit_result, data, model_key, "SARIMA", symbol, params
+                fit_result, data, model_key, "SARIMA", symbol, params, timeframe
             )
 
             # Зберігаємо модель в словнику
@@ -739,20 +855,42 @@ class ARIMAModeler:
             # Зберігаємо модель в БД, якщо доступний менеджер БД
             if self.db_manager is not None:
                 try:
-                    # Створюємо бінарне представлення моделі
+                    # Створюємо бінарний представлення моделі
                     model_binary = pickle.dumps(loaded_data["fit_result"])
 
-                    # Зберігаємо всі компоненти моделі
-                    self.db_manager.save_model_metadata(model_key, loaded_data["metadata"])
+                    # Отримуємо метадані з моделі або створюємо базові
+                    metadata = loaded_data.get("metadata", {})
+
+                    # Забезпечуємо наявність всіх обов'язкових полів
+                    required_metadata = {
+                        'model_type': metadata.get('model_type', 'ARIMA'),
+                        'timeframe': metadata.get('timeframe', '1D'),
+                        'start_date': metadata.get('start_date', '2020-01-01'),
+                        'end_date': metadata.get('end_date', '2024-01-01')
+                    }
+
+                    # Оновлюємо метадані
+                    metadata.update(required_metadata)
+
+                    # Зберігаємо всі компоненти моделі з правильними аргументами
+                    self.db_manager.save_model_metadata(
+                        model_key=model_key,
+                        model_type=metadata['model_type'],
+                        timeframe=metadata['timeframe'],
+                        start_date=metadata['start_date'],
+                        end_date=metadata['end_date'],
+                        **{k: v for k, v in metadata.items() if
+                           k not in ['model_type', 'timeframe', 'start_date', 'end_date']}
+                    )
                     self.db_manager.save_model_parameters(model_key, loaded_data["parameters"])
                     self.db_manager.save_model_binary(model_key, model_binary)
 
                     # Зберігаємо метрики, якщо є
-                    if "stats" in loaded_data:
+                    if "stats" in loaded_data and loaded_data["stats"]:
                         self.db_manager.save_model_metrics(model_key, loaded_data["stats"])
 
                     # Зберігаємо трансформації, якщо є
-                    if "transformations" in loaded_data:
+                    if "transformations" in loaded_data and loaded_data["transformations"]:
                         self.db_manager.save_data_transformations(model_key, loaded_data["transformations"])
 
                     self.logger.info(f"Модель {model_key} збережена в базу даних після завантаження з файлу")
@@ -801,6 +939,7 @@ class ARIMAModeler:
         except Exception as e:
             self.logger.error(f"Помилка додавання трансформації: {str(e)}")
             return False
+
     def select_best_stationary_column(self, data: pd.DataFrame, symbol: str):
         """
         Вибирає найкращий стаціонарний стовпець для моделювання.
@@ -819,23 +958,27 @@ class ARIMAModeler:
         """
         # Спочатку перевіряємо стовпці, які вже відзначені як стаціонарні
         if 'is_stationary' in data.columns:
-            stationary_cols = data.columns[data['is_stationary'] == True]
-            if len(stationary_cols) > 0:
+            stationary_mask = data['is_stationary'] == True
+            if stationary_mask.any():
+                stationary_indices = data.index[stationary_mask]
                 # Знаходимо стовпець з найкращими AIC/BIC, якщо вони доступні
                 if 'aic_score' in data.columns and 'bic_score' in data.columns:
-                    best_col = stationary_cols[data.loc[data['is_stationary'] == True, 'aic_score'].idxmin()]
-                    return best_col
-                return stationary_cols[0]
+                    stationary_data = data.loc[stationary_mask]
+                    best_idx = stationary_data['aic_score'].idxmin()
+                    # Повертаємо назву стовпця-кандидата, а не значення
+                    return data.index[best_idx] if best_idx in data.index else stationary_indices[0]
+                return stationary_indices[0]
 
         # Якщо немає колонки is_stationary, перевіряємо p-значення тестів
         if 'adf_pvalue' in data.columns:
-            stationary_by_adf = data.columns[data['adf_pvalue'] < 0.05]
-            if len(stationary_by_adf) > 0:
-                return stationary_by_adf[0]
+            stationary_mask = data['adf_pvalue'] < 0.05
+            if stationary_mask.any():
+                return data.index[stationary_mask][0]
 
         # Якщо аналіз не дав результатів, використовуємо стандартні перетворення в порядку їх ефективності
-        for col in ['close_diff2', 'close_seasonal_diff', 'close_diff', 'close_log_diff', 'close_combo_diff', 'close_log', 'original_close']:
-            if col in data.columns:
+        for col in ['close_diff2', 'close_seasonal_diff', 'close_diff', 'close_log_diff', 'close_combo_diff',
+                    'close_log', 'original_close']:
+            if col in data.index:  # використовуємо index замість columns
                 return col
 
         # Якщо жоден з бажаних стовпців не знайдено
@@ -857,9 +1000,26 @@ class ARIMAModeler:
         Tuple[int, int, int]
             Порядок ARIMA моделі (p, d, q)
         """
-        from pmdarima import auto_arima
-
         try:
+            # Переконуємося, що дані є числовими
+            if not pd.api.types.is_numeric_dtype(data):
+                # Спробуємо конвертувати в числовий тип
+                data = pd.to_numeric(data, errors='coerce')
+                # Видаляємо NaN значення
+                data = data.dropna()
+
+            # Перевіряємо, чи залишилися дані після очищення
+            if len(data) == 0:
+                self.logger.error("Немає валідних числових даних для аналізу")
+                return (1, 1, 1)
+
+            # Переконуємося, що індекс є числовим або datetime
+            if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex)):
+                data.index = pd.RangeIndex(len(data))
+
+            # FIXED: Використовуємо pmdarima.auto_arima для визначення оптимальних параметрів
+            from pmdarima import auto_arima
+
             # Використовуємо auto_arima для визначення оптимальних параметрів
             automodel = auto_arima(
                 data,
@@ -898,18 +1058,31 @@ class ARIMAModeler:
         if model_key not in self.transformations:
             return data
 
+        # Переконуємося, що дані є числовими
+        if not pd.api.types.is_numeric_dtype(data):
+            data = pd.to_numeric(data, errors='coerce')
+            data = data.dropna()
+
         transformed_data = data.copy()
         for transform_id, transform_info in self.transformations[model_key].items():
             transform_type = transform_info.get('type')
 
-            if transform_type == 'diff':
-                order = transform_info.get('order', 1)
-                transformed_data = transformed_data.diff(order).dropna()
-            elif transform_type == 'log':
-                transformed_data = np.log(transformed_data)
-            elif transform_type == 'seasonal_diff':
-                period = transform_info.get('period', 1)
-                transformed_data = transformed_data.diff(period).dropna()
+            try:
+                if transform_type == 'diff':
+                    order = transform_info.get('order', 1)
+                    transformed_data = transformed_data.diff(order).dropna()
+                elif transform_type == 'log':
+                    # Переконуємося, що всі значення додатні для логарифма
+                    if (transformed_data <= 0).any():
+                        self.logger.warning("Виявлено від'ємні або нульові значення для логарифмічної трансформації")
+                        transformed_data = transformed_data[transformed_data > 0]
+                    transformed_data = np.log(transformed_data)
+                elif transform_type == 'seasonal_diff':
+                    period = transform_info.get('period', 1)
+                    transformed_data = transformed_data.diff(period).dropna()
+            except Exception as e:
+                self.logger.error(f"Помилка застосування трансформації {transform_type}: {str(e)}")
+                continue
 
         return transformed_data
 
@@ -935,6 +1108,11 @@ class ARIMAModeler:
         if model_key not in self.transformations:
             return forecasted_data
 
+        # Переконуємося, що дані є числовими
+        if not pd.api.types.is_numeric_dtype(original_data):
+            original_data = pd.to_numeric(original_data, errors='coerce')
+            original_data = original_data.dropna()
+
         # Трансформації потрібно скасовувати в зворотному порядку
         inverse_transforms = list(self.transformations[model_key].items())
         inverse_transforms.reverse()
@@ -944,19 +1122,25 @@ class ARIMAModeler:
         for transform_id, transform_info in inverse_transforms:
             transform_type = transform_info.get('type')
 
-            if transform_type == 'diff':
-                order = transform_info.get('order', 1)
-                # Для інверсії диференціювання потрібне початкове значення
-                last_values = original_data.iloc[-order:].values
-                for i in range(len(result)):
-                    result.iloc[i] = result.iloc[i] + last_values[i % order]
-            elif transform_type == 'log':
-                result = np.exp(result)
-            elif transform_type == 'seasonal_diff':
-                period = transform_info.get('period', 1)
-                # Інверсія сезонного диференціювання потребує сезонних значень
-                seasonal_values = original_data.iloc[-period:].values
-                for i in range(len(result)):
-                    result.iloc[i] = result.iloc[i] + seasonal_values[i % period]
+            try:
+                if transform_type == 'diff':
+                    order = transform_info.get('order', 1)
+                    # Для інверсії диференціювання потрібне початкове значення
+                    if len(original_data) >= order:
+                        last_values = original_data.iloc[-order:].values
+                        for i in range(len(result)):
+                            result.iloc[i] = result.iloc[i] + last_values[i % order]
+                elif transform_type == 'log':
+                    result = np.exp(result)
+                elif transform_type == 'seasonal_diff':
+                    period = transform_info.get('period', 1)
+                    # Інверсія сезонного диференціювання потребує сезонних значень
+                    if len(original_data) >= period:
+                        seasonal_values = original_data.iloc[-period:].values
+                        for i in range(len(result)):
+                            result.iloc[i] = result.iloc[i] + seasonal_values[i % period]
+            except Exception as e:
+                self.logger.error(f"Помилка інверсії трансформації {transform_type}: {str(e)}")
+                continue
 
         return result

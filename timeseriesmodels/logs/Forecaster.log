@@ -151,3 +151,87 @@
 2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Applying log transformation
 2025-05-22 01:30:20 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
 2025-05-22 01:30:21 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:17:51 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 15:17:59 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 15:17:59 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 15:17:59 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 15:17:59 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 15:17:59 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 15:17:59 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 15:18:00 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:18:00 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 15:18:06 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 15:18:06 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 15:18:06 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 15:18:06 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 15:18:06 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 15:18:06 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 15:18:10 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:18:10 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 15:18:12 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 15:18:12 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 15:18:12 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 15:18:12 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 15:18:12 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 15:18:12 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 15:18:13 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 17:43:45 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 17:43:52 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 17:43:52 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 17:43:52 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 17:43:52 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 17:43:52 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 17:43:53 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 17:43:54 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: 'BTC_arima_20250522174353'
+2025-05-22 17:43:54 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 17:43:59 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 17:43:59 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 17:43:59 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 17:43:59 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 17:43:59 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 17:44:00 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 17:44:04 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: 'ETH_arima_20250522174404'
+2025-05-22 17:44:04 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 17:44:06 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 17:44:06 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 17:44:06 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 17:44:06 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 17:44:06 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 17:44:06 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 17:44:06 - Forecaster - ERROR - [logger.py:111] - Error during auto forecasting: 'SOL_arima_20250522174406'
+2025-05-22 19:13:09 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250522191316 with 30 steps
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522191316 not found in memory, trying to load from database
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522191316 successfully loaded from database
+2025-05-22 19:13:17 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_sarima_20250522191316: 'default_sarima_20250522191316'
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 19:13:17 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 19:13:18 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:18 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250522191324 with 30 steps
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522191324 not found in memory, trying to load from database
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522191324 successfully loaded from database
+2025-05-22 19:13:25 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_sarima_20250522191324: 'default_sarima_20250522191324'
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 19:13:25 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 19:13:29 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:29 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250522191331 with 30 steps
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522191331 not found in memory, trying to load from database
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250522191331 successfully loaded from database
+2025-05-22 19:13:32 - Forecaster - ERROR - [logger.py:111] - Error during forecasting with model default_sarima_20250522191331: 'default_sarima_20250522191331'
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying transformations.
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Applying log transformation
+2025-05-22 19:13:32 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying differencing.
+2025-05-22 19:13:32 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'

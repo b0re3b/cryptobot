@@ -207,3 +207,141 @@
 2025-05-22 01:30:21 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
 2025-05-22 01:30:21 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
 2025-05-22 01:30:21 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:17:52 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 15:17:52 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 15:17:52 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:17:52 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 15:17:52 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:17:53 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 15:17:53 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 15:17:59 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:17:59 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 15:17:59 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу BTC
+2025-05-22 15:17:59 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 15:18:00 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:00 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 15:18:00 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:18:01 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 15:18:01 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 15:18:02 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:02 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 15:18:02 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:18:03 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 15:18:03 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 15:18:06 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:06 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 15:18:08 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу ETH
+2025-05-22 15:18:08 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 15:18:10 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:10 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 15:18:10 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:18:11 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 15:18:11 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 15:18:11 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:11 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 15:18:11 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 15:18:11 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 15:18:11 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 15:18:12 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:12 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 15:18:13 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу SOL
+2025-05-22 15:18:13 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 15:18:13 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 15:18:13 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 15:18:13 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.__init__() got multiple values for argument 'order'
+2025-05-22 17:43:46 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 17:43:46 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 17:43:47 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:43:47 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 17:43:47 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 17:43:47 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 17:43:52 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:43:52 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 17:43:53 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу BTC
+2025-05-22 17:43:53 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 17:43:53 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:43:53 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 17:43:54 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: DatabaseManager.save_model_metadata() missing 4 required positional arguments: 'model_type', 'timeframe', 'start_date', and 'end_date'
+2025-05-22 17:43:54 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA BTC_arima_20250522174353 успішно навчена з параметрами (1, 1, 1)
+2025-05-22 17:43:55 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 17:43:55 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 17:43:56 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:43:56 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 17:43:57 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 17:43:57 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 17:43:59 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:43:59 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 17:44:02 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу ETH
+2025-05-22 17:44:02 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 17:44:04 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:44:04 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 17:44:04 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: DatabaseManager.save_model_metadata() missing 4 required positional arguments: 'model_type', 'timeframe', 'start_date', and 'end_date'
+2025-05-22 17:44:04 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA ETH_arima_20250522174404 успішно навчена з параметрами (1, 1, 1)
+2025-05-22 17:44:04 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 17:44:04 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 17:44:04 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:44:04 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 17:44:05 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 17:44:05 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 17:44:06 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:44:06 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 17:44:06 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу SOL
+2025-05-22 17:44:06 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 17:44:06 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 17:44:06 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 17:44:06 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: DatabaseManager.save_model_metadata() missing 4 required positional arguments: 'model_type', 'timeframe', 'start_date', and 'end_date'
+2025-05-22 17:44:06 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA SOL_arima_20250522174406 успішно навчена з параметрами (1, 1, 1)
+2025-05-22 19:13:10 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 19:13:10 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-22 19:13:10 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 19:13:11 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:11 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 19:13:11 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:11 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 19:13:11 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-22 19:13:11 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 19:13:16 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:16 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 19:13:17 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-22 19:13:17 - ArimaModeler - INFO - [logger.py:103] - Модель SARIMA default_sarima_20250522191316 успішно навчена з параметрами (1, 1, 1), сезонними (1, 1, 1, 7)
+2025-05-22 19:13:18 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу BTC
+2025-05-22 19:13:18 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 19:13:18 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:18 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 19:13:18 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:19 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 19:13:19 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-22 19:13:19 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 19:13:20 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:20 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 19:13:20 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:21 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 19:13:21 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-22 19:13:21 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 19:13:24 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:24 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 19:13:25 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-22 19:13:25 - ArimaModeler - INFO - [logger.py:103] - Модель SARIMA default_sarima_20250522191324 успішно навчена з параметрами (1, 1, 1), сезонними (1, 1, 1, 7)
+2025-05-22 19:13:27 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу ETH
+2025-05-22 19:13:27 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 19:13:29 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:29 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 19:13:29 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:29 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-22 19:13:29 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-22 19:13:29 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 19:13:29 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:29 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 19:13:29 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
+2025-05-22 19:13:30 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-22 19:13:30 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-22 19:13:30 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-22 19:13:31 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:31 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-22 19:13:32 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-22 19:13:32 - ArimaModeler - INFO - [logger.py:103] - Модель SARIMA default_sarima_20250522191331 успішно навчена з параметрами (1, 1, 1), сезонними (1, 1, 1, 7)
+2025-05-22 19:13:32 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу SOL
+2025-05-22 19:13:32 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-22 19:13:32 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-22 19:13:32 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-22 19:13:32 - ArimaModeler - ERROR - [logger.py:111] - Помилка під час навчання моделі ARIMA: ARIMA.fit() got an unexpected keyword argument 'disp'
