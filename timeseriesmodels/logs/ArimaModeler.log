@@ -432,3 +432,90 @@
 2025-05-22 19:27:36 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
 2025-05-22 19:27:36 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
 2025-05-22 19:27:36 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA SOL_arima_20250522192736 успішно навчена з параметрами (1, 1, 1)
+2025-05-23 00:35:07 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-23 00:35:07 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-23 00:35:07 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-23 00:35:07 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:07 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-23 00:35:07 - ArimaModeler - WARNING - [logger.py:107] - Метод lbfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:07 - ArimaModeler - WARNING - [logger.py:107] - Метод bfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:07 - ArimaModeler - WARNING - [logger.py:107] - Метод nm не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:07 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
+2025-05-23 00:35:07 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:07 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA default_arima_20250523003507 успішно навчена з параметрами (1, 1, 1)
+2025-05-23 00:35:08 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-23 00:35:08 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-23 00:35:08 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-23 00:35:14 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:14 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-23 00:35:15 - ArimaModeler - INFO - [logger.py:103] - SARIMA модель успішно навчена з методом: lbfgs
+2025-05-23 00:35:15 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:15 - ArimaModeler - INFO - [logger.py:103] - Модель SARIMA default_sarima_20250523003514 успішно навчена з параметрами (1, 1, 1), сезонними (1, 1, 1, 7)
+2025-05-23 00:35:16 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу BTC
+2025-05-23 00:35:16 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-23 00:35:16 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:16 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-23 00:35:16 - ArimaModeler - WARNING - [logger.py:107] - Метод lbfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:16 - ArimaModeler - WARNING - [logger.py:107] - Метод bfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:16 - ArimaModeler - WARNING - [logger.py:107] - Метод nm не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:17 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
+2025-05-23 00:35:17 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:17 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA BTC_arima_20250523003516 успішно навчена з параметрами (1, 1, 1)
+2025-05-23 00:35:18 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-23 00:35:18 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-23 00:35:18 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-23 00:35:19 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:19 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-23 00:35:19 - ArimaModeler - WARNING - [logger.py:107] - Метод lbfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:19 - ArimaModeler - WARNING - [logger.py:107] - Метод bfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:19 - ArimaModeler - WARNING - [logger.py:107] - Метод nm не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:19 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
+2025-05-23 00:35:19 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:19 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA default_arima_20250523003519 успішно навчена з параметрами (1, 1, 1)
+2025-05-23 00:35:20 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-23 00:35:20 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-23 00:35:20 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-23 00:35:23 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:23 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-23 00:35:23 - ArimaModeler - INFO - [logger.py:103] - SARIMA модель успішно навчена з методом: lbfgs
+2025-05-23 00:35:23 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:23 - ArimaModeler - INFO - [logger.py:103] - Модель SARIMA default_sarima_20250523003523 успішно навчена з параметрами (1, 1, 1), сезонними (1, 1, 1, 7)
+2025-05-23 00:35:26 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу ETH
+2025-05-23 00:35:26 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Метод lbfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Метод bfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Метод nm не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
+2025-05-23 00:35:28 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA ETH_arima_20250523003528 успішно навчена з параметрами (1, 1, 1)
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу default
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Метод lbfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Метод bfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:28 - ArimaModeler - WARNING - [logger.py:107] - Метод nm не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
+2025-05-23 00:35:28 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:28 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA default_arima_20250523003528 успішно навчена з параметрами (1, 1, 1)
+2025-05-23 00:35:29 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі SARIMA для символу default
+2025-05-23 00:35:29 - ArimaModeler - WARNING - [logger.py:107] - Дані були сконвертовані з object в числовий тип
+2025-05-23 00:35:29 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів SARIMA моделі
+2025-05-23 00:35:30 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:30 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри SARIMA: (1, 1, 1), сезонні: (1, 1, 1, 7)
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - SARIMA модель успішно навчена з методом: lbfgs
+2025-05-23 00:35:31 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - Модель SARIMA default_sarima_20250523003530 успішно навчена з параметрами (1, 1, 1), сезонними (1, 1, 1, 7)
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - Починаємо навчання моделі ARIMA для символу SOL
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - Автоматичне визначення параметрів ARIMA моделі
+2025-05-23 00:35:31 - ArimaModeler - WARNING - [logger.py:107] - Не вдалося витягти параметри з структури: ['status', 'message', 'parameters', 'model_info']
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - Визначено оптимальні параметри ARIMA: (1, 1, 1)
+2025-05-23 00:35:31 - ArimaModeler - WARNING - [logger.py:107] - Метод lbfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:31 - ArimaModeler - WARNING - [logger.py:107] - Метод bfgs не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:31 - ArimaModeler - WARNING - [logger.py:107] - Метод nm не спрацював: ARIMA.fit() got an unexpected keyword argument 'maxiter'
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - Модель навчена з базовими параметрами
+2025-05-23 00:35:31 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: 'psycopg2.extensions.connection' object is not callable
+2025-05-23 00:35:31 - ArimaModeler - INFO - [logger.py:103] - Модель ARIMA SOL_arima_20250523003531 успішно навчена з параметрами (1, 1, 1)

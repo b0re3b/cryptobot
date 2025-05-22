@@ -1253,32 +1253,33 @@ class DatabaseManager:
             return False
 
     def get_model_by_key(self, model_key: str) -> Optional[Dict]:
-
         try:
             conn = self.conn()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            with conn.cursor() as cursor:
                 query = "SELECT * FROM time_series_models WHERE model_key = %s"
                 cursor.execute(query, (model_key,))
                 model_data = cursor.fetchone()
 
                 if model_data:
-                    return dict(model_data)
+                    # Отримуємо назви колонок
+                    column_names = [desc[0] for desc in cursor.description]
+                    # Створюємо словник з назв колонок та значень
+                    return dict(zip(column_names, model_data))
                 return None
         except Exception as e:
             return None
 
     def get_model_parameters(self, model_id: int) -> Dict:
-
         try:
             conn = self.conn()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            with conn.cursor() as cursor:
                 query = "SELECT param_name, param_value FROM model_parameters WHERE model_id = %s"
                 cursor.execute(query, (model_id,))
                 parameters = {}
 
                 for row in cursor.fetchall():
-                    param_name = row['param_name']
-                    param_value = json.loads(row['param_value'])
+                    param_name = row[0]
+                    param_value = json.loads(row[1])
                     parameters[param_name] = param_value
 
                 return parameters
@@ -1286,33 +1287,37 @@ class DatabaseManager:
             return {}
 
     def get_model_metrics(self, model_id: int, test_date: datetime = None) -> Dict:
-
         try:
             conn = self.conn()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            with conn.cursor() as cursor:
                 if test_date is None:
                     query = """SELECT metric_name, metric_value, test_date
                                FROM model_metrics
                                WHERE model_id = %s"""
                     cursor.execute(query, (model_id,))
-                else:
-                    query = """SELECT metric_name, metric_value
-                               FROM model_metrics
-                               WHERE model_id = %s \
-                                 AND test_date = %s"""
-                    cursor.execute(query, (model_id, test_date))
 
-                metrics = {}
-                for row in cursor.fetchall():
-                    metric_name = row['metric_name']
-                    metric_value = row['metric_value']
+                    metrics = {}
+                    for row in cursor.fetchall():
+                        metric_name = row[0]
+                        metric_value = row[1]
+                        test_date_value = row[2]
 
-                    if test_date is None:
-                        test_date_str = row['test_date'].strftime('%Y-%m-%d') if row['test_date'] else 'unknown'
+                        test_date_str = test_date_value.strftime('%Y-%m-%d') if test_date_value else 'unknown'
                         if test_date_str not in metrics:
                             metrics[test_date_str] = {}
                         metrics[test_date_str][metric_name] = metric_value
-                    else:
+
+                else:
+                    query = """SELECT metric_name, metric_value
+                               FROM model_metrics
+                               WHERE model_id = %s
+                                 AND test_date = %s"""
+                    cursor.execute(query, (model_id, test_date))
+
+                    metrics = {}
+                    for row in cursor.fetchall():
+                        metric_name = row[0]
+                        metric_value = row[1]
                         metrics[metric_name] = metric_value
 
                 return metrics
@@ -1369,19 +1374,23 @@ class DatabaseManager:
 
         try:
             conn = self.conn()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            with conn.cursor() as cursor:
                 query = """SELECT transform_type, transform_params, transform_order
                            FROM data_transformations
                            WHERE model_id = %s
                            ORDER BY transform_order"""
                 cursor.execute(query, (model_id,))
 
+                # Получаем названия колонок
+                column_names = [desc[0] for desc in cursor.description]
+
                 transformations = []
                 for row in cursor.fetchall():
+                    row_dict = dict(zip(column_names, row))
                     transform = {
-                        'type': row['transform_type'],
-                        'params': json.loads(row['transform_params']),
-                        'order': row['transform_order']
+                        'type': row_dict['transform_type'],
+                        'params': json.loads(row_dict['transform_params']),
+                        'order': row_dict['transform_order']
                     }
                     transformations.append(transform)
 
@@ -1406,7 +1415,7 @@ class DatabaseManager:
 
         try:
             conn = self.conn()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            with conn.cursor() as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s"
                 params = [symbol]
 
@@ -1420,9 +1429,12 @@ class DatabaseManager:
                 query += " ORDER BY created_at DESC"
                 cursor.execute(query, params)
 
+                # Получаем названия колонок
+                column_names = [desc[0] for desc in cursor.description]
+
                 models = []
                 for row in cursor.fetchall():
-                    models.append(dict(row))
+                    models.append(dict(zip(column_names, row)))
 
                 return models
         except Exception as e:
@@ -1433,7 +1445,7 @@ class DatabaseManager:
 
         try:
             conn = self.conn()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            with conn.cursor() as cursor:
                 query = "SELECT * FROM time_series_models WHERE symbol = %s AND is_active = TRUE"
                 params = [symbol]
 
@@ -1448,9 +1460,11 @@ class DatabaseManager:
                 query += " ORDER BY updated_at DESC LIMIT 1"
                 cursor.execute(query, params)
 
-                model_data = cursor.fetchone()
-                if model_data:
-                    return dict(model_data)
+                column_names = [desc[0] for desc in cursor.description]
+
+                row = cursor.fetchone()
+                if row:
+                    return dict(zip(column_names, row))
                 return None
         except Exception as e:
             return None
@@ -1490,22 +1504,20 @@ class DatabaseManager:
 
             return False
 
-
     def compare_model_forecasts(self, model_ids: List[int], start_date: datetime = None,
                                 end_date: datetime = None) -> pd.DataFrame:
-
         try:
             results = {}
 
             for model_id in model_ids:
                 # Отримуємо інформацію про модель
                 conn = self.connect()
-                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                with conn.cursor() as cursor:
                     cursor.execute("SELECT model_key FROM time_series_models WHERE model_id = %s", (model_id,))
                     model_info = cursor.fetchone()
 
                     if model_info:
-                        model_key = model_info['model_key']
+                        model_key = model_info[0]  # Перший стовпець - model_key
 
                         # Отримання прогнозів для цієї моделі
                         forecasts = self.get_model_forecasts(model_id, start_date, end_date)
