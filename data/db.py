@@ -1117,7 +1117,7 @@ class DatabaseManager:
                         UPDATE SET
                             symbol = EXCLUDED.symbol, \
                             model_type = EXCLUDED.model_type, \
-                            interval = EXCLUDED.interval, \
+                            timeframe = EXCLUDED.timeframe, \
                             start_date = EXCLUDED.start_date, \
                             end_date = EXCLUDED.end_date, \
                             description = EXCLUDED.description, \
@@ -1141,6 +1141,10 @@ class DatabaseManager:
                     VALUES (%s, %s, %s, %s) \
                     """
             self.cursor.execute(query, (model_key, order_params, seasonal_order, seasonal_period))
+            with self.conn.cursor() as cursor:
+                cursor.execute(...)
+                self.conn.commit()
+            parametrs = (order_params, seasonal_order, seasonal_period)
             return True
         except Exception as e:
             print(f"Error inserting model parameters: {e}")
@@ -1561,7 +1565,7 @@ class DatabaseManager:
                 "MAPE": mape
             }
 
-            self.save_model_metrics(model_id, metrics, datetime.now())
+            self.save_model_metrics(model_id, metrics)
 
             return metrics
         except Exception as e:
@@ -1589,14 +1593,12 @@ class DatabaseManager:
         except Exception as e:
             return []
 
-
     def save_complete_model(self, model_key: str, symbol: str, model_type: str,
                             timeframe: str, start_date: datetime, end_date: datetime,
                             model_obj: Any, parameters: Dict, metrics: Dict = None,
                             forecasts: pd.Series = None, transformations: List[Dict] = None,
                             lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
                             description: str = None) -> int:
-
         try:
             # Зберігаємо метадані моделі
             model_id = self.save_model_metadata(model_key, symbol, model_type, timeframe,
@@ -1604,7 +1606,12 @@ class DatabaseManager:
 
             # Зберігаємо параметри моделі
             if parameters:
-                self.save_model_parameters(model_id, parameters)
+                self.save_model_parameters(
+                    model_key,
+                    order_params=parameters.get("order_params"),
+                    seasonal_order=parameters.get("seasonal_order"),
+                    seasonal_period=parameters.get("seasonal_period")
+                )
 
             # Зберігаємо метрики моделі
             if metrics:
@@ -1616,16 +1623,18 @@ class DatabaseManager:
 
             # Зберігаємо перетворення даних
             if transformations:
-                self.save_data_transformations(model_id, transformations)
+                self.save_data_transformations(model_key, transformations)
 
             # Зберігаємо бінарні дані моделі
             if model_obj:
-                self.save_model_binary(model_id, model_obj)
+                self.save_model_binary(model_key, model_obj)
 
             return model_id
-        except Exception as e:
-            raise
 
+        except Exception as e:
+            print(f"Error in save_complete_model: {e}")
+            self.conn.rollback()
+            raise
 
     def load_complete_model(self, model_key: str) -> Dict:
 
@@ -4873,21 +4882,7 @@ class DatabaseManager:
                                    start_date: Optional[datetime] = None,
                                    end_date: Optional[datetime] = None,
                                    limit: int = 100) -> List[Dict[str, Any]]:
-        """
-        Отримує дані про кросс-активну волатильність з таблиці cross_asset_volatility.
 
-        Args:
-            base_symbol: Базовий символ
-            compared_symbol: Символ порівняння
-            timeframe: Часовий інтервал
-            lag: Лаг кореляції (опціонально)
-            start_date: Початкова дата вибірки (опціонально)
-            end_date: Кінцева дата вибірки (опціонально)
-            limit: Обмеження кількості результатів (за замовчуванням 100)
-
-        Returns:
-            List[Dict]: Список словників з даними кросс-активної волатильності
-        """
         if not self.conn:
             self.connect()
 
@@ -4927,12 +4922,7 @@ class DatabaseManager:
     # --------- VIEWS ---------
 
     def get_current_volatility_regimes(self) -> List[Dict[str, Any]]:
-        """
-        Отримує поточні режими волатильності з представлення current_volatility_regimes.
 
-        Returns:
-            List[Dict]: Список словників з поточними режимами волатильності
-        """
         if not self.conn:
             self.connect()
 
@@ -4948,17 +4938,7 @@ class DatabaseManager:
     def get_volatility_metrics_comparison(self, symbol: str = None,
                                           timeframe: str = None,
                                           limit: int = 100) -> List[Dict[str, Any]]:
-        """
-        Отримує порівняння метрик волатильності з представлення volatility_metrics_comparison.
 
-        Args:
-            symbol: Символ криптовалюти (опціонально)
-            timeframe: Часовий інтервал (опціонально)
-            limit: Обмеження кількості результатів (за замовчуванням 100)
-
-        Returns:
-            List[Dict]: Список словників з порівнянням метрик волатильності
-        """
         if not self.conn:
             self.connect()
 
@@ -5536,15 +5516,7 @@ class DatabaseManager:
         # ----- Методи для технічних індикаторів -----
 
     def save_technical_indicator(self, data: Dict[str, Any]) -> int:
-            """
-            Збереження технічного індикатора
 
-            Args:
-                data: Словник з даними технічного індикатора
-
-            Returns:
-                id створеного запису
-            """
             fields = [
                  'symbol', 'timeframe', 'timestamp', 'rsi_14',
                 'macd', 'macd_signal', 'macd_histogram', 'bollinger_upper',
@@ -5585,19 +5557,7 @@ class DatabaseManager:
                                      start_time: Optional[datetime] = None,
                                      end_time: Optional[datetime] = None,
                                      limit: int = 100) -> List[Dict[str, Any]]:
-            """
-            Отримання технічних індикаторів за параметрами
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Часовий інтервал
-                start_time: Початковий час
-                end_time: Кінцевий час
-                limit: Обмеження кількості записів
-
-            Returns:
-                Список технічних індикаторів
-            """
             conditions = ["symbol = %s", "timeframe = %s"]
             params = [symbol, timeframe]
 
@@ -5623,15 +5583,7 @@ class DatabaseManager:
         # ----- Методи для ML послідовностей даних -----
 
     def save_ml_sequence_data(self, data: Dict[str, Any]) -> int:
-            """
-            Збереження послідовності даних для машинного навчання
 
-            Args:
-                data: Словник з даними послідовності
-
-            Returns:
-                id створеного запису
-            """
             required_fields = [
                 'symbol', 'timeframe', 'sequence_start_time', 'sequence_end_time',
                 'data_json', 'target_json', 'sequence_length'
@@ -5673,18 +5625,7 @@ class DatabaseManager:
     def get_ml_sequence_data(self, symbol: str, timeframe: str,
                                  start_time: Optional[datetime] = None,
                                  limit: int = 100) -> List[Dict[str, Any]]:
-            """
-            Отримання послідовностей даних для машинного навчання
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Часовий інтервал
-                start_time: Початковий час
-                limit: Обмеження кількості записів
-
-            Returns:
-                Список послідовностей даних
-            """
             conditions = ["symbol = %s", "timeframe = %s"]
             params = [symbol, timeframe]
 
@@ -5715,24 +5656,7 @@ class DatabaseManager:
         # ----- Методи для ML моделей -----
 
     def save_ml_model(self, data: Dict[str, Any]) -> int:
-        """
-        Збереження ML моделі
 
-        Args:
-            data: Словник з даними моделі, повинен містити:
-                - symbol: str - символ криптовалюти
-                - timeframe: str - часовий інтервал
-                - model_type: str - тип моделі
-                - model_version: str - версія моделі
-                - model_path: str - шлях до файлу моделі
-                - input_features: list - список вхідних ознак
-                - hidden_dim: int - розмір прихованого шару
-                - num_layers: int - кількість шарів
-                - active: bool - чи активна модель
-
-        Returns:
-            int: id створеного запису
-        """
         required_fields = [
             'symbol', 'timeframe', 'model_type', 'model_version', 'model_path',
             'input_features', 'hidden_dim', 'num_layers', 'active'
@@ -5779,18 +5703,7 @@ class DatabaseManager:
 
     def get_ml_models(self, symbol: Optional[str] = None, timeframe: Optional[str] = None,
                           model_type: Optional[str] = None, active_only: bool = True) -> List[Dict[str, Any]]:
-            """
-            Отримання ML моделей за параметрами
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Часовий інтервал
-                model_type: Тип моделі
-                active_only: Чи повертати тільки активні моделі
-
-            Returns:
-                Список моделей
-            """
             conditions = []
             params = []
 
@@ -5822,15 +5735,7 @@ class DatabaseManager:
         # ----- Методи для метрик моделей -----
 
     def save_ml_model_metrics(self, data: Dict[str, Any]) -> int:
-            """
-            Збереження метрик ML моделі
 
-            Args:
-                data: Словник з метриками моделі
-
-            Returns:
-                id створеного запису
-            """
             required_fields = [
                 'model_id', 'mse', 'rmse', 'mae', 'r2_score', 'test_date',
                 'training_duration_seconds', 'epochs_completed'
@@ -5856,15 +5761,7 @@ class DatabaseManager:
                 raise e
 
     def get_ml_model_metrics(self, model_id: int) -> List[Dict[str, Any]]:
-            """
-            Отримання метрик ML моделі за id моделі
 
-            Args:
-                model_id: ID моделі
-
-            Returns:
-                Список метрик моделі
-            """
             query = """
                     SELECT * \
                     FROM ml_model_metrics
@@ -5877,15 +5774,7 @@ class DatabaseManager:
         # ----- Методи для прогнозів -----
 
     def save_prediction(self, data: Dict[str, Any]) -> int:
-            """
-            Збереження прогнозу
 
-            Args:
-                data: Словник з даними прогнозу
-
-            Returns:
-                id створеного запису
-            """
             required_fields = [
                 'model_id', 'symbol', 'timeframe', 'prediction_timestamp', 'target_timestamp',
                 'predicted_value', 'confidence_interval_low', 'confidence_interval_high'
@@ -5939,20 +5828,7 @@ class DatabaseManager:
     def get_predictions(self, model_id: Optional[int] = None, symbol: Optional[str] = None,
                             timeframe: Optional[str] = None, start_time: Optional[datetime] = None,
                             end_time: Optional[datetime] = None, limit: int = 100) -> List[Dict[str, Any]]:
-            """
-            Отримання прогнозів за параметрами
 
-            Args:
-                model_id: ID моделі
-                symbol: Символ криптовалюти
-                timeframe: Часовий інтервал
-                start_time: Початковий час
-                end_time: Кінцевий час
-                limit: Обмеження кількості записів
-
-            Returns:
-                Список прогнозів
-            """
             conditions = []
             params = []
 
@@ -5990,13 +5866,7 @@ class DatabaseManager:
             return self.execute_query(query, params)
 
     def update_prediction_actual_value(self, prediction_id: int, actual_value: float) -> None:
-            """
-            Оновлення фактичного значення для прогнозу та розрахунок помилки
 
-            Args:
-                prediction_id: ID прогнозу
-                actual_value: Фактичне значення
-            """
             query = """
                     UPDATE predictions
                     SET actual_value     = %s,
