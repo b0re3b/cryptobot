@@ -10,6 +10,7 @@ import os
 import logging
 from datetime import datetime
 
+from ML import LSTMModel, GRUModel, ModelTrainer
 # Імпорт з інших модулів проекту
 from data.db import DatabaseManager
 
@@ -63,8 +64,9 @@ class DeepLearning:
 
         # Ініціалізація компонентів
         self.data_preprocessor = DataPreprocessor()
-        self.model_trainer = ModelTrainer(self.device)
-
+        self.model_trainer = ModelTrainer()
+        self.lstm = LSTMModel()
+        self.gru = GRUModel()
         # Словники для зберігання навчених моделей та їх конфігурацій
         self.models = {}  # {model_key: model}
         self.model_configs = {}  # {model_key: config}
@@ -75,58 +77,82 @@ class DeepLearning:
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
+    def train_model(self, symbol: str, timeframe: str, model_type: str,
+                    data: pd.DataFrame, input_dim: int, **training_params) -> Dict[str, Any]:
+        """
+        Навчання моделі з використанням ModelTrainer.
 
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            data: Дані для навчання
+            input_dim: Розмірність вхідних даних
+            **training_params: Додаткові параметри навчання
+
+        Returns:
+            Результати навчання
+        """
+        return self.model_trainer.train_model(
+            symbol=symbol,
+            timeframe=timeframe,
+            model_type=model_type,
+            data=data,
+            input_dim=input_dim,
+            **training_params
+        )
 
     # ==================== ПРОГНОЗУВАННЯ ====================
 
     def predict(self, symbol: str, timeframe: str, model_type: str,
-                steps_ahead: int = 1, input_data: Optional[pd.DataFrame] = None,
-                confidence_interval: bool = False) -> Dict[str, Any]:
+                input_data: Optional[pd.DataFrame] = None, steps_ahead: int = 1) -> Dict[str, Any]:
         """
-        Прогнозування на основі навченої моделі
+        Прогнозування за допомогою навченої моделі.
 
         Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
-            steps_ahead: Кількість кроків для прогнозування вперед
-            input_data: Вхідні дані для прогнозування (якщо None, використовуються останні дані)
-            confidence_interval: Чи повертати довірчий інтервал
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            input_data: Вхідні дані (якщо None, завантажуються останні дані)
+            steps_ahead: Кількість кроків прогнозу
 
         Returns:
-            Dict: Прогнозовані значення та метрики
+            Словник з прогнозами та додатковою інформацією
         """
-        # Перевірка наявності моделі
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.models:
-            if not self.load_model(symbol, timeframe, model_type):
+        # Завантаження моделі, якщо вона ще не завантажена
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.model_trainer.models:
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
                 raise ValueError(f"Модель {model_key} не знайдена")
 
-        # Якщо вхідні дані не надані, завантажуємо останні дані
+        # Отримання даних, якщо вони не надані
         if input_data is None:
-            data_loader = self._get_data_loader(symbol, timeframe, model_type)
+            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
             input_data = data_loader()
 
-        # Підготовка даних для прогнозування
-        processed_data = self._prepare_features(input_data, symbol)
+        # Підготовка даних
+        processed_data = self.data_preprocessor.prepare_features(input_data, symbol)
+        X = torch.tensor(processed_data.drop(columns=["target"]).float().to(self.device)
 
         # Прогнозування
-        model = self.models[model_key]
+        model = self.model_trainer.models[model_key]
         model.eval()
 
         with torch.no_grad():
-            # Підготовка вхідних даних для моделі
-            # ...
-
-            # Прогнозування на кілька кроків вперед
             predictions = []
-            # ...
+        current_input = X[-1:].unsqueeze(0)  # Беремо останню послідовність
 
-        # Зберігаємо прогнози в БД
+        for _ in range(steps_ahead):
+            pred = model(current_input)
+        predictions.append(pred.item())
+        # Оновлюємо вхідні дані для багатокрокового прогнозу
+        if steps_ahead > 1:
+            current_input = torch.cat([current_input[:, 1:], pred.unsqueeze(0).unsqueeze(0)], dim=1)
+
+        # Збереження прогнозу
         timestamp = datetime.now()
         for i, pred in enumerate(predictions):
-            # Використовуємо метод save_prediction для збереження прогнозу
-            save_prediction(
+            self.db_manager.save_prediction(
                 symbol=symbol,
                 timeframe=timeframe,
                 model_type=model_type,
@@ -138,7 +164,7 @@ class DeepLearning:
         return {
             'predictions': np.array(predictions),
             'timestamp': timestamp,
-            'confidence_interval': None if not confidence_interval else {}
+            'model_key': model_key
         }
 
     def predict_multiple_steps(self, symbol: str, timeframe: str, model_type: str,
@@ -182,40 +208,40 @@ class DeepLearning:
 
 
 
-    def compare_models(self, symbol: str, timeframe: str,
-                       test_data: Optional[pd.DataFrame] = None) -> Dict[str, Dict[str, float]]:
+
+
+    def evaluate_model(self, symbol: str, timeframe: str, model_type: str,
+                       test_data: Optional[pd.DataFrame] = None) -> Dict[str, float]:
         """
-        Порівняння ефективності LSTM та GRU моделей для вказаного символу та таймфрейму
+        Оцінка моделі на тестових даних.
 
         Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            test_data: Тестові дані для порівняння
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            test_data: Тестові дані
 
         Returns:
-            Dict: Порівняльні метрики моделей
+            Словник з метриками
         """
-        # Перевірка наявності моделей
-        models_to_compare = ['lstm', 'gru']
-        comparison_results = {}
+        # Завантаження моделі
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.model_trainer.models:
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+                raise ValueError(f"Модель {model_key} не знайдена")
 
-        for model_type in models_to_compare:
-            model_key = self._create_model_key(symbol, timeframe, model_type)
-            if model_key not in self.models:
-                if not self.load_model(symbol, timeframe, model_type):
-                    self.logger.warning(f"Модель {model_key} не знайдена і не буде включена в порівняння")
-                    continue
+        # Отримання даних, якщо вони не надані
+        if test_data is None:
+            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+            test_data = data_loader()
 
-            # Оцінка моделі
-            metrics = self.evaluate_model(symbol, timeframe, model_type, test_data)
-            comparison_results[model_type] = metrics
+        # Підготовка даних
+        processed_data = self.data_preprocessor.prepare_features(test_data, symbol)
+        X = torch.tensor(processed_data.drop(columns=["target"]).float()
+        y = torch.tensor(processed_data["target"]).float()
 
-        # Можна порівняти результати і визначити кращу модель
-        # ...
-
-        return comparison_results
-
-
+        # Оцінка
+        return self.model_trainer.evaluate(self.model_trainer.models[model_key], (X, y))
 
     def model_performance_report(self, symbol: Optional[str] = None,
                                  timeframe: Optional[str] = None) -> pd.DataFrame:
@@ -230,9 +256,7 @@ class DeepLearning:
         """Видалення моделі"""
         pass
 
-    def get_model_info(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
-        """Отримання інформації про модель"""
-        pass
+
 
     def get_model_metrics(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
         """
@@ -246,7 +270,7 @@ class DeepLearning:
         Returns:
             Dict: Метрики ефективності моделі
         """
-        model_key = self._create_model_key(symbol, timeframe, model_type)
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
         if model_key in self.model_metrics:
             return self.model_metrics[model_key]
         else:
@@ -319,3 +343,142 @@ class DeepLearning:
                                sequence_length: int, validation_split: float) -> Tuple:
         """Підготовка даних для навчання"""
         pass
+
+    def online_learning(self, symbol: str, timeframe: str, model_type: str,
+                        new_data: pd.DataFrame, epochs: int = 10) -> Dict[str, Any]:
+        """
+        Онлайн-дообучення моделі на нових даних.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            new_data: Нові дані для дообучення
+            epochs: Кількість епох
+
+        Returns:
+            Результати дообучення
+        """
+        # Визначення input_dim
+        input_dim = new_data.shape[1] - 1 if 'target' in new_data.columns else new_data.shape[1]
+
+        return self.model_trainer.online_learning(
+            symbol=symbol,
+            timeframe=timeframe,
+            model_type=model_type,
+            new_data=new_data,
+            input_dim=input_dim,
+            epochs=epochs
+        )
+
+    def compare_models(self, symbol: str, timeframe: str,
+                       test_data: Optional[pd.DataFrame] = None) -> Dict[str, Dict[str, float]]:
+        """
+        Порівняння моделей для заданого символу та таймфрейму.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            test_data: Тестові дані
+
+        Returns:
+            Словник з метриками для кожної моделі
+        """
+        results = {}
+
+        for model_type in self.crypto_config.model_types:
+            try:
+                metrics = self.evaluate_model(symbol, timeframe, model_type, test_data)
+                results[model_type] = metrics
+            except Exception as e:
+                self.logger.warning(f"Не вдалося оцінити модель {model_type}: {str(e)}")
+                continue
+
+        return results
+
+    def get_model_info(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
+        """
+        Отримання інформації про модель.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+
+        Returns:
+            Інформація про модель
+        """
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.model_trainer.models:
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+                raise ValueError(f"Модель {model_key} не знайдена")
+
+        model = self.model_trainer.models[model_key]
+
+        # Базова інформація
+        info = model.get_model_info()
+
+        # Додаткова інформація в залежності від типу моделі
+        if model_type.lower() == 'lstm':
+            info.update(model.get_lstm_specific_info())
+        elif model_type.lower() == 'gru':
+            info.update(model.get_gru_specific_info())
+        elif model_type.lower() == 'transformer':
+            info.update(model.get_transformer_specific_info())
+
+        return info
+
+    def train_all_models(self, symbols: Optional[List[str]] = None,
+                         timeframes: Optional[List[str]] = None,
+                         model_types: Optional[List[str]] = None,
+                         **training_params) -> Dict[str, Dict[str, Any]]:
+        """
+        Навчання всіх моделей для вказаних параметрів.
+
+        Args:
+            symbols: Список символів
+            timeframes: Список таймфреймів
+            model_types: Список типів моделей
+            **training_params: Параметри навчання
+
+        Returns:
+            Результати навчання для всіх моделей
+        """
+        return self.model_trainer.train_all_models(
+            symbols=symbols,
+            timeframes=timeframes,
+            model_types=model_types,
+            **training_params
+        )
+
+    def cross_validate_model(self, symbol: str, timeframe: str, model_type: str,
+                             k_folds: int = 5, **model_params) -> Dict[str, List[float]]:
+        """
+        Крос-валідація моделі.
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            k_folds: Кількість фолдів
+            **model_params: Параметри моделі
+
+        Returns:
+            Результати крос-валідації
+        """
+        return self.model_trainer.cross_validate_model(
+            symbol=symbol,
+            timeframe=timeframe,
+            model_type=model_type,
+            k_folds=k_folds,
+            **model_params
+        )
+
+    def get_training_summary(self) -> Dict[str, Any]:
+        """
+        Отримання зведення про навчені моделі.
+
+        Returns:
+            Зведена інформація
+        """
+        return self.model_trainer.get_training_summary()
