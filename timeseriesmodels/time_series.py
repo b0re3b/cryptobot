@@ -255,70 +255,111 @@ class TimeSeriesModels:
         return symbols
 
     def get_last_update_time(self, db_manager: Any, symbol: str,
-                             interval: str = '1d') -> Optional[datetime]:
-
-        self.logger.info(f"Getting last update time for {symbol} with interval {interval}")
+                             timeframe: str = '1d') -> Optional[datetime]:
+        """
+        Get the last update time for a given symbol and interval
+        """
+        self.logger.info(f"Getting last update time for {symbol} with interval {timeframe}")
 
         if db_manager is None:
             self.logger.error("Database manager is not provided")
             return None
 
         try:
-            # Check if the db_manager was passed during class initialization
-            # if not, use the provided one
-            db = self.db_manager if self.db_manager is not None else db_manager
+            # Use the provided db_manager or the one stored in the class
+            db = db_manager if db_manager is not None else self.db_manager
 
-            # Assume db_manager has a method to get the latest candlestick data
-            latest_kline = db.get_latest_kline(symbol=symbol, interval=interval)
+            if db is None:
+                self.logger.error("No database manager available")
+                return None
 
-            if latest_kline is not None and hasattr(latest_kline, 'timestamp'):
-                # If we got data and there is a timestamp
-                self.logger.info(f"Last update time for {symbol} ({interval}): {latest_kline.timestamp}")
-                return latest_kline.timestamp
+            # Use the existing crypto-specific methods that are already used in load_crypto_data
+            symbol = symbol.upper()  # Standardize to uppercase
 
-            # If there is no direct method, try to get through processed candles
-            klines_data = db.get_klines_processed(
-                symbol=symbol,
-                interval=interval,
-                limit=1,  # Take only one (latest) candle
-                sort_order="DESC"  # Sort by descending date
-            )
+            # Mapping of cryptocurrencies to their database methods
+            crypto_methods = {
+                'BTC': db.get_btc_arima_data,
+                'ETH': db.get_eth_arima_data,
+                'SOL': db.get_sol_arima_data
+            }
 
-            if klines_data is not None and not klines_data.empty:
-                # Get the index of the last candle (which should be datetime)
-                if isinstance(klines_data.index[0], datetime):
-                    last_update = klines_data.index[0]
+            # Check if the symbol is supported
+            if symbol not in crypto_methods:
+                self.logger.error(f"Unsupported cryptocurrency: {symbol}")
+                return None
+
+            # Get the latest data using the appropriate method
+            try:
+                # Get data with limit=1 to get only the most recent record
+                # We'll get a small amount of recent data to find the latest timestamp
+                klines_data = crypto_methods[symbol](timeframe=timeframe)
+
+                if klines_data is None or (isinstance(klines_data, pd.DataFrame) and klines_data.empty):
+                    self.logger.warning(f"No data found for {symbol} with interval {timeframe}")
+                    return None
+
+                # Convert to DataFrame if needed
+                if not isinstance(klines_data, pd.DataFrame):
+                    klines_data = pd.DataFrame(klines_data)
+
+                # Handle the datetime index
+                if isinstance(klines_data.index, pd.DatetimeIndex):
+                    # If index is already datetime, sort and get the latest
+                    klines_data = klines_data.sort_index()
+                    last_update = klines_data.index[-1]
+
+                    # Ensure it's a datetime object
+                    if isinstance(last_update, pd.Timestamp):
+                        last_update = last_update.to_pydatetime()
+
+                    self.logger.info(f"Last update time for {symbol} ({timeframe}): {last_update}")
+                    return last_update
                 else:
-                    # If the index is not datetime, try to find a column with the timestamp
-                    for col in ['timestamp', 'time', 'date', 'datetime']:
-                        if col in klines_data.columns:
-                            last_update = klines_data[col].iloc[0]
-                            if not isinstance(last_update, datetime):
-                                # Convert to datetime if it's not datetime
-                                if isinstance(last_update, (int, float)):
-                                    # Assume it's a UNIX timestamp in milliseconds or seconds
-                                    if last_update > 1e11:  # If in milliseconds
-                                        last_update = datetime.fromtimestamp(last_update / 1000)
-                                    else:  # If in seconds
-                                        last_update = datetime.fromtimestamp(last_update)
-                                else:
-                                    # If it's a string, try to parse
-                                    try:
-                                        from dateutil import parser
-                                        last_update = parser.parse(str(last_update))
-                                    except:
-                                        self.logger.warning(f"Cannot parse datetime from {last_update}")
-                                        continue
-                            break
+                    # Look for time columns
+                    time_cols = [col for col in klines_data.columns if any(
+                        time_str in str(col).lower() for time_str in ['time', 'date', 'timestamp'])]
+
+                    if time_cols:
+                        time_col = time_cols[0]
+                        try:
+                            # Convert to datetime and sort
+                            klines_data[time_col] = pd.to_datetime(klines_data[time_col])
+                            klines_data = klines_data.sort_values(by=time_col)
+
+                            # Get the latest timestamp
+                            last_update = klines_data[time_col].iloc[-1]
+
+                            # Ensure it's a datetime object
+                            if isinstance(last_update, pd.Timestamp):
+                                last_update = last_update.to_pydatetime()
+                            elif isinstance(last_update, (int, float)):
+                                # Handle Unix timestamp
+                                if last_update > 1e11:  # Milliseconds
+                                    last_update = datetime.fromtimestamp(last_update / 1000)
+                                else:  # Seconds
+                                    last_update = datetime.fromtimestamp(last_update)
+                            elif isinstance(last_update, str):
+                                # Parse string datetime
+                                try:
+                                    from dateutil import parser
+                                    last_update = parser.parse(last_update)
+                                except:
+                                    self.logger.error(f"Cannot parse datetime string: {last_update}")
+                                    return None
+
+                            self.logger.info(f"Last update time for {symbol} ({timeframe}): {last_update}")
+                            return last_update
+
+                        except Exception as e:
+                            self.logger.error(f"Error processing time column {time_col}: {str(e)}")
+                            return None
                     else:
-                        self.logger.warning(f"No datetime column found in klines data for {symbol}")
+                        self.logger.warning(f"No time column found in data for {symbol}")
                         return None
 
-                self.logger.info(f"Last update time for {symbol} ({interval}): {last_update}")
-                return last_update
-
-            self.logger.warning(f"No data found for {symbol} with interval {interval}")
-            return None
+            except Exception as data_error:
+                self.logger.error(f"Error getting data for {symbol}: {str(data_error)}")
+                return None
 
         except Exception as e:
             self.logger.error(f"Error getting last update time for {symbol}: {str(e)}")

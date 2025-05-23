@@ -443,7 +443,8 @@ class Forecaster:
                 self.logger.info("Time series is non-stationary. Applying differencing.")
 
                 diff_result = self.transformer.difference_series(train_data, order=1)
-                if diff_result["status"] == "success":
+                # Fixed: Check if diff_result is dict and has status key
+                if isinstance(diff_result, dict) and diff_result.get("status") == "success":
                     transformed_data = diff_result["differenced_data"]
                     transform_method = "diff"
                     self.logger.info("First-order differencing applied")
@@ -453,15 +454,23 @@ class Forecaster:
                     if not diff_stationary and len(transformed_data) > 10:
                         self.logger.info("Series still non-stationary. Applying second-order differencing.")
                         diff2_result = self.transformer.difference_series(transformed_data, order=1)
-                        if diff2_result["status"] == "success":
+                        # Fixed: Check if diff2_result is dict and has status key
+                        if isinstance(diff2_result, dict) and diff2_result.get("status") == "success":
                             transformed_data = diff2_result["differenced_data"]
                             transform_method = "diff_2"
                             self.logger.info("Second-order differencing applied")
                 else:
-                    self.logger.error(f"Differencing failed: {diff_result['message']}")
+                    # Fixed: Handle case when diff_result doesn't have expected structure
+                    error_msg = "Data transformation failed"
+                    if isinstance(diff_result, dict) and "message" in diff_result:
+                        error_msg = f"Data transformation failed: {diff_result['message']}"
+                    elif not isinstance(diff_result, dict):
+                        error_msg = f"Data transformation returned unexpected format: {type(diff_result)}"
+
+                    self.logger.error(error_msg)
                     return {
                         "status": "error",
-                        "message": f"Data transformation failed: {diff_result['message']}",
+                        "message": error_msg,
                         "model_key": model_key,
                         "forecasts": None,
                         "performance": None
@@ -510,11 +519,25 @@ class Forecaster:
                     seasonal=False
                 )
 
-            if optimal_params.get("status") == "error":
-                self.logger.error(f"Parameter search failed: {optimal_params['message']}")
+            # Fixed: Check if optimal_params is dict and has status key
+            if isinstance(optimal_params, dict) and optimal_params.get("status") == "error":
+                error_msg = "Parameter search failed"
+                if "message" in optimal_params:
+                    error_msg = f"Parameter search failed: {optimal_params['message']}"
+                self.logger.error(error_msg)
                 return {
                     "status": "error",
-                    "message": f"Parameter search failed: {optimal_params['message']}",
+                    "message": error_msg,
+                    "model_key": model_key,
+                    "forecasts": None,
+                    "performance": None
+                }
+            elif not isinstance(optimal_params, dict):
+                error_msg = f"Parameter search returned unexpected format: {type(optimal_params)}"
+                self.logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg,
                     "model_key": model_key,
                     "forecasts": None,
                     "performance": None
@@ -523,8 +546,8 @@ class Forecaster:
             # 5. Train model with optimal parameters
             if seasonal and seasonal_period:
                 # SARIMA model
-                order = optimal_params["parameters"]["order"]
-                seasonal_order = optimal_params["parameters"]["seasonal_order"]
+                order = optimal_params.get("parameters", {}).get("order", (1, 1, 1))
+                seasonal_order = optimal_params.get("parameters", {}).get("seasonal_order", (1, 1, 1, seasonal_period))
 
                 fit_result = self.modeler.fit_sarima(
                     transformed_data,
@@ -536,7 +559,7 @@ class Forecaster:
                 model_type = "SARIMA"
             else:
                 # ARIMA model
-                order = optimal_params["parameters"]["order"]
+                order = optimal_params.get("parameters", {}).get("order", (1, 1, 1))
 
                 fit_result = self.modeler.fit_arima(
                     transformed_data,
@@ -546,19 +569,33 @@ class Forecaster:
 
                 model_type = "ARIMA"
 
-            if fit_result.get("status") == "error":
-                self.logger.error(f"Model fitting failed: {fit_result['message']}")
+            # Fixed: Check if fit_result is dict and has status key
+            if isinstance(fit_result, dict) and fit_result.get("status") == "error":
+                error_msg = "Model fitting failed"
+                if "message" in fit_result:
+                    error_msg = f"Model fitting failed: {fit_result['message']}"
+                self.logger.error(error_msg)
                 return {
                     "status": "error",
-                    "message": f"Model fitting failed: {fit_result['message']}",
+                    "message": error_msg,
+                    "model_key": model_key,
+                    "forecasts": None,
+                    "performance": None
+                }
+            elif not isinstance(fit_result, dict):
+                error_msg = f"Model fitting returned unexpected format: {type(fit_result)}"
+                self.logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg,
                     "model_key": model_key,
                     "forecasts": None,
                     "performance": None
                 }
 
             # Save trained model key
-            model_key = fit_result["model_key"]
-            model_info = fit_result["model_info"]
+            model_key = fit_result.get("model_key", model_key)
+            model_info = fit_result.get("model_info")
 
             # Store transformation information in database
             if transform_method and self.db_manager is not None:
