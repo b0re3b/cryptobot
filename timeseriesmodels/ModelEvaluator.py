@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Dict, Tuple, List
+import decimal
 
 import numpy as np
 import pandas as pd
@@ -20,7 +21,8 @@ class ModelEvaluator:
         self.analyzer = TimeSeriesAnalyzer()
 
     def evaluate_model(self, model_key: str, test_data: pd.Series, use_rolling_validation: bool = True,
-                       window_size: int = 100, step: int = 20, forecast_horizon: int = 10) -> Dict:
+                       window_size: int = 100, step: int = 20, forecast_horizon: int = 10,
+                       apply_inverse_transforms: bool = False) -> Dict:
         """
         Оцінює модель, порівнюючи її прогнози з тестовими даними.
         Має можливість додатково оцінити модель за допомогою методу ковзного вікна для більш надійної валідації.
@@ -32,6 +34,7 @@ class ModelEvaluator:
             window_size: Розмір вікна для валідації методом ковзного вікна
             step: Крок зсуву для валідації методом ковзного вікна
             forecast_horizon: Горизонт прогнозування для валідації методом ковзного вікна
+            apply_inverse_transforms: Чи застосовувати зворотні трансформації до прогнозів
 
         Returns:
             Dictionary з метриками оцінки моделі
@@ -101,7 +104,9 @@ class ModelEvaluator:
             model_params = model_info.get("parameters", {})
 
             # Базова оцінка на тестових даних
-            base_evaluation_result = self._evaluate_on_test_data(model_key, fit_result, test_data, model_type)
+            base_evaluation_result = self._evaluate_on_test_data(
+                model_key, fit_result, test_data, model_type, apply_inverse_transforms
+            )
 
             result = {
                 "status": "success",
@@ -224,7 +229,8 @@ class ModelEvaluator:
                 "metrics": None
             }
 
-    def _evaluate_on_test_data(self, model_key: str, fit_result, test_data: pd.Series, model_type: str) -> Dict:
+    def _evaluate_on_test_data(self, model_key: str, fit_result, test_data: pd.Series,
+                              model_type: str, apply_inverse_transforms: bool = False) -> Dict:
         """
         Допоміжний метод для оцінки моделі на тестових даних.
 
@@ -233,6 +239,7 @@ class ModelEvaluator:
             fit_result: Результат навчання моделі
             test_data: Тестові дані
             model_type: Тип моделі (ARIMA, SARIMA, тощо)
+            apply_inverse_transforms: Чи застосовувати зворотні трансформації
 
         Returns:
             Dictionary з результатами оцінки
@@ -273,6 +280,28 @@ class ModelEvaluator:
             self.logger.warning(f"Error creating forecast series: {str(e)}")
             # Спробуємо створити Series без індексу
             forecast_series = pd.Series(forecast)
+
+        # Застосування зворотних трансформацій, тільки якщо явно вказано
+        if apply_inverse_transforms and self.db_manager is not None:
+            self.logger.info("Applying inverse transformations to forecast")
+            transformations = self.db_manager.get_data_transformations(model_key)
+            if transformations:
+                for transform in reversed(transformations):
+                    if transform.get("method"):
+                        self.logger.info(f"Applying inverse transformation: {transform['method']}")
+                        try:
+                            if transform["method"] == "log":
+                                forecast_series = np.exp(forecast_series)
+                            elif transform["method"] == "boxcox":
+                                from scipy import special
+                                forecast_series = special.inv_boxcox(forecast_series, transform.get("lambda", 0))
+                            elif transform["method"] == "sqrt":
+                                forecast_series = forecast_series ** 2
+                        except Exception as e:
+                            self.logger.error(f"Error applying inverse transformation {transform['method']}: {str(e)}")
+                            break
+            else:
+                self.logger.info("No transformations found for inverse application")
 
         # Обчислюємо метрики
         self.logger.info("Computing evaluation metrics")
@@ -337,7 +366,6 @@ class ModelEvaluator:
                 "dates": [str(idx) for idx in test_data.index]
             }
         }
-
     def rolling_window_validation(self, data: pd.Series, model_type: str = 'arima',
                                   order: Tuple = None, seasonal_order: Tuple = None,
                                   window_size: int = 100, step: int = 20,
@@ -791,17 +819,7 @@ class ModelEvaluator:
             return {"status": "error", "message": error_msg}
 
     def compare_models(self, model_keys: List[str], test_data: pd.Series, window_size: int = None) -> Dict:
-        """
-        Порівнює кілька моделей на основі їх прогнозів на тестових даних.
 
-        Args:
-            model_keys: Список ключів моделей для порівняння
-            test_data: Часовий ряд з тестовими даними
-            window_size: Розмір вікна для розрахунку волатильності. Якщо None, використовується вся серія.
-
-        Returns:
-            Dictionary з результатами порівняння
-        """
         self.logger.info(f"Starting comparison of models: {model_keys}")
 
         if len(model_keys) < 2:
@@ -1000,17 +1018,17 @@ class ModelEvaluator:
                 "results": {}
             }
 
-    def _calculate_volatility(self, data_series: pd.Series, window_size: int = None) -> float | None:
+    def calculate_volatility(self, data_series: pd.Series, window_size: int = None) -> float | None:
         """
         Розраховує волатильність часового ряду з правильною обробкою помилок.
 
         Args:
             data_series: Часовий ряд з фінансовими даними
-            window_size: Розмір вікна для розрахунку ковзної волатильності.
+            window_size: Розмір вікна для розрахунку ковзної волатільності.
                          Якщо None, розраховується для всієї серії.
 
         Returns:
-            Значення волатильності або None у випадку помилки
+            Значення волатільності або None у випадку помилки
         """
         if data_series is None or len(data_series) < 2:
             self.logger.warning("Insufficient data for volatility calculation")
@@ -1019,6 +1037,10 @@ class ModelEvaluator:
         try:
             # Видалення пропущених значень
             clean_data = data_series.dropna()
+
+            # Конвертація decimal.Decimal об'єктів у float
+            if hasattr(clean_data.iloc[0], '__class__') and 'decimal' in str(type(clean_data.iloc[0])):
+                clean_data = clean_data.astype(float)
 
             # Видалення нульових та від'ємних значень
             positive_data = clean_data[clean_data > 0]
@@ -1036,19 +1058,30 @@ class ModelEvaluator:
             # Видалення NaN з першого запису
             returns = returns.dropna()
 
-            # Застосування логарифму до всієї серії (не до окремих значень)
+            if len(returns) < 1:
+                self.logger.warning("No valid returns calculated for volatility")
+                return None
+
+            # Застосування логарифму до всієї серії
+            # Переконуємося, що returns містить float значення
+            returns = returns.astype(float)
             log_returns = np.log(returns)
 
             if window_size and window_size < len(log_returns):
-                # Розрахунок ковзної волатильності
+                # Розрахунок ковзної волатільності
                 self.logger.info(f"Calculating volatility with window size {window_size}")
                 rolling_std = log_returns.rolling(window=window_size).std()
                 # Використовуємо останнє значення ковзного стандартного відхилення
-                volatility = rolling_std.iloc[-1] * np.sqrt(252)  # Річна волатильність
+                volatility = rolling_std.iloc[-1] * np.sqrt(252)  # Річна волатільність
             else:
-                # Розрахунок загальної волатильності
+                # Розрахунок загальної волатільності
                 self.logger.info("Calculating overall volatility")
-                volatility = log_returns.std() * np.sqrt(252)  # Річна волатильність
+                volatility = log_returns.std() * np.sqrt(252)  # Річна волатільність
+
+            # Перевірка на NaN результат
+            if pd.isna(volatility):
+                self.logger.warning("Volatility calculation resulted in NaN")
+                return None
 
             return float(volatility)
 
