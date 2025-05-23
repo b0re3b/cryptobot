@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
@@ -294,191 +294,328 @@ class ARIMAModeler:
 
         return stats
 
-    def _extract_optimal_params(self, optimal_params: Dict) -> Tuple[Tuple[int, int, int], Tuple[int, int, int, int]]:
+    def _extract_optimal_params(self, optimal_params: Dict, is_seasonal: bool = False) -> Tuple[
+        Tuple[int, int, int], Tuple[int, int, int, int]]:
         """
-        Витягує оптимальні параметри ARIMA з результату аналізу.
-        Повертає кортеж (order, seasonal_order).
+        Витягує оптимальні параметри ARIMA/SARIMA з результату аналізу.
+
+        Args:
+            optimal_params: Словник з результатами оптимізації
+            is_seasonal: True для SARIMA, False для ARIMA
+
+        Returns:
+            Tuple[order, seasonal_order] для SARIMA або Tuple[order, None] для ARIMA
         """
-        self.logger.debug(f"Витягування оптимальних параметрів з структури: {list(optimal_params.keys())}")
+        self.logger.debug(f"Витягування оптимальних параметрів. Сезонна модель: {is_seasonal}")
+        self.logger.debug(f"Структура вхідних параметрів: {list(optimal_params.keys())}")
 
         # Стандартні параметри за замовчуванням
         default_order = (1, 1, 1)
-        default_seasonal = (1, 1, 1, 7)
+        default_seasonal = (1, 1, 1, 7) if is_seasonal else None
 
         try:
-            # 1. Спочатку перевіряємо секцію 'parameters' на верхньому рівні
-            if 'parameters' in optimal_params:
-                params = optimal_params['parameters']
-                self.logger.debug(f"Знайдено секцію 'parameters': {params}")
+            # Основний алгоритм витягування параметрів
+            extracted_order, extracted_seasonal = self._parse_parameters_structure(optimal_params, is_seasonal)
 
-                # Якщо parameters - це словник з ключами order та seasonal_order
-                if isinstance(params, dict):
-                    if 'order' in params and 'seasonal_order' in params:
-                        order = tuple(params['order']) if isinstance(params['order'], (list, tuple)) else params[
-                            'order']
-                        seasonal_order = tuple(params['seasonal_order']) if isinstance(params['seasonal_order'],
-                                                                                       (list, tuple)) else params[
-                            'seasonal_order']
-                        self.logger.info(f"Успішно витягнуто параметри: order={order}, seasonal_order={seasonal_order}")
-                        return order, seasonal_order
-
-                    # Якщо є окремі параметри p, d, q
-                    if all(key in params for key in ['p', 'd', 'q']):
-                        order = (params['p'], params['d'], params['q'])
-                        seasonal_order = (
-                            params.get('P', 0),
-                            params.get('D', 0),
-                            params.get('Q', 0),
-                            params.get('s', 7)
-                        )
-                        self.logger.info(
-                            f"Успішно витягнуто окремі параметри: order={order}, seasonal_order={seasonal_order}")
-                        return order, seasonal_order
-
-            # 2. Перевіряємо секцію 'model_info'
-            if 'model_info' in optimal_params:
-                model_info = optimal_params['model_info']
-                self.logger.debug(f"Знайдено секцію 'model_info': {type(model_info)}")
-
-                if isinstance(model_info, dict):
-                    # Прямі параметри в model_info
-                    if 'order' in model_info and 'seasonal_order' in model_info:
-                        order = tuple(model_info['order']) if isinstance(model_info['order'], (list, tuple)) else \
-                        model_info['order']
-                        seasonal_order = tuple(model_info['seasonal_order']) if isinstance(model_info['seasonal_order'],
-                                                                                           (list, tuple)) else \
-                        model_info['seasonal_order']
-                        self.logger.info(
-                            f"Успішно витягнуто з model_info: order={order}, seasonal_order={seasonal_order}")
-                        return order, seasonal_order
-
-                    # Вкладені параметри в model_info
-                    if 'parameters' in model_info:
-                        nested_params = model_info['parameters']
-                        if isinstance(nested_params, dict):
-                            if 'order' in nested_params and 'seasonal_order' in nested_params:
-                                order = tuple(nested_params['order']) if isinstance(nested_params['order'],
-                                                                                    (list, tuple)) else nested_params[
-                                    'order']
-                                seasonal_order = tuple(nested_params['seasonal_order']) if isinstance(
-                                    nested_params['seasonal_order'], (list, tuple)) else nested_params['seasonal_order']
-                                self.logger.info(
-                                    f"Успішно витягнуто з model_info.parameters: order={order}, seasonal_order={seasonal_order}")
-                                return order, seasonal_order
-
-                            # Окремі параметри в model_info.parameters
-                            if all(key in nested_params for key in ['p', 'd', 'q']):
-                                order = (nested_params['p'], nested_params['d'], nested_params['q'])
-                                seasonal_order = (
-                                    nested_params.get('P', 0),
-                                    nested_params.get('D', 0),
-                                    nested_params.get('Q', 0),
-                                    nested_params.get('s', 7)
-                                )
-                                self.logger.info(
-                                    f"Успішно витягнуто окремі параметри з model_info: order={order}, seasonal_order={seasonal_order}")
-                                return order, seasonal_order
-
-                    # Перевіряємо окремі параметри безпосередньо в model_info
-                    if all(key in model_info for key in ['p', 'd', 'q']):
-                        order = (model_info['p'], model_info['d'], model_info['q'])
-                        seasonal_order = (
-                            model_info.get('P', 0),
-                            model_info.get('D', 0),
-                            model_info.get('Q', 0),
-                            model_info.get('s', 7)
-                        )
-                        self.logger.info(
-                            f"Успішно витягнуто окремі параметри безпосередньо з model_info: order={order}, seasonal_order={seasonal_order}")
-                        return order, seasonal_order
-
-                # Якщо model_info це об'єкт моделі з атрибутами
-                if hasattr(model_info, 'order'):
-                    order = model_info.order
-                    seasonal_order = getattr(model_info, 'seasonal_order', (0, 0, 0, 7))
+            if extracted_order is not None:
+                # Валідація параметрів order
+                if self._validate_order_params(extracted_order):
+                    seasonal_result = extracted_seasonal if is_seasonal else None
                     self.logger.info(
-                        f"Успішно витягнуто з атрибутів model_info: order={order}, seasonal_order={seasonal_order}")
-                    return order, seasonal_order
+                        f"Успішно витягнуто параметри: order={extracted_order}, "
+                        f"seasonal_order={seasonal_result}"
+                    )
+                    return extracted_order, seasonal_result
+                else:
+                    self.logger.warning(f"Невалідні параметри order: {extracted_order}")
 
-            # 3. Перевіряємо прямі ключі order та seasonal_order на верхньому рівні
-            if 'order' in optimal_params and 'seasonal_order' in optimal_params:
-                order = tuple(optimal_params['order']) if isinstance(optimal_params['order'], (list, tuple)) else \
-                optimal_params['order']
-                seasonal_order = tuple(optimal_params['seasonal_order']) if isinstance(optimal_params['seasonal_order'],
-                                                                                       (list, tuple)) else \
-                optimal_params['seasonal_order']
-                self.logger.info(f"Успішно витягнуто прямі параметри: order={order}, seasonal_order={seasonal_order}")
+        except Exception as e:
+            self.logger.error(f"Помилка під час витягування параметрів: {str(e)}")
+            self.logger.debug(f"Стек помилки: {traceback.format_exc()}")
+
+        # Детальне логування для діагностики
+        self._log_structure_for_diagnosis(optimal_params)
+
+        # Повертаємо стандартні параметри
+        self.logger.warning(
+            f"Не вдалося витягти параметри. Використовуємо стандартні: "
+            f"order={default_order}, seasonal_order={default_seasonal}"
+        )
+        return default_order, default_seasonal
+
+    def _parse_parameters_structure(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """
+        Парсить різні можливі структури параметрів.
+
+        Returns:
+            Tuple[order, seasonal_order] або Tuple[None, None] якщо не знайдено
+        """
+
+        # Стратегії пошуку параметрів (у порядку пріоритету)
+        search_strategies = [
+            self._extract_from_parameters_section,
+            self._extract_from_model_info_section,
+            self._extract_from_top_level,
+            self._extract_from_individual_params,
+            self._extract_from_model_attributes,
+            self._extract_from_nested_dictionaries
+        ]
+
+        for strategy in search_strategies:
+            try:
+                order, seasonal_order = strategy(optimal_params, is_seasonal)
+                if order is not None:
+                    return order, seasonal_order
+            except Exception as e:
+                self.logger.debug(f"Стратегія {strategy.__name__} не спрацювала: {str(e)}")
+                continue
+
+        return None, None
+
+    def _extract_from_parameters_section(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """Витягує параметри з секції 'parameters'."""
+        if 'parameters' not in optimal_params:
+            return None, None
+
+        params = optimal_params['parameters']
+        self.logger.debug(f"Знайдено секцію 'parameters': {params}")
+
+        if not isinstance(params, dict):
+            return None, None
+
+        # Пряме витягування order та seasonal_order
+        if 'order' in params:
+            order = self._ensure_tuple(params['order'])
+            seasonal_order = None
+
+            if is_seasonal and 'seasonal_order' in params:
+                seasonal_order = self._ensure_tuple(params['seasonal_order'])
+            elif is_seasonal:
+                # Спробувати створити seasonal_order з окремих параметрів
+                seasonal_order = self._build_seasonal_order_from_params(params)
+
+            return order, seasonal_order
+
+        # Витягування з окремих параметрів p, d, q
+        if all(key in params for key in ['p', 'd', 'q']):
+            order = (params['p'], params['d'], params['q'])
+            seasonal_order = None
+
+            if is_seasonal:
+                seasonal_order = (
+                    params.get('P', 0),
+                    params.get('D', 0),
+                    params.get('Q', 0),
+                    params.get('s', 7)
+                )
+
+            return order, seasonal_order
+
+        return None, None
+
+    def _extract_from_model_info_section(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """Витягує параметри з секції 'model_info'."""
+        if 'model_info' not in optimal_params:
+            return None, None
+
+        model_info = optimal_params['model_info']
+        self.logger.debug(f"Знайдено секцію 'model_info': {type(model_info)}")
+
+        if isinstance(model_info, dict):
+            # Пряме витягування з model_info
+            if 'order' in model_info:
+                order = self._ensure_tuple(model_info['order'])
+                seasonal_order = None
+
+                if is_seasonal and 'seasonal_order' in model_info:
+                    seasonal_order = self._ensure_tuple(model_info['seasonal_order'])
+                elif is_seasonal:
+                    seasonal_order = self._build_seasonal_order_from_params(model_info)
+
                 return order, seasonal_order
 
-            # 4. Перевіряємо окремі параметри p, d, q на верхньому рівні
-            if all(key in optimal_params for key in ['p', 'd', 'q']):
-                order = (optimal_params['p'], optimal_params['d'], optimal_params['q'])
+            # Вкладені параметри в model_info
+            if 'parameters' in model_info:
+                return self._extract_from_parameters_section({'parameters': model_info['parameters']}, is_seasonal)
+
+            # Окремі параметри в model_info
+            if all(key in model_info for key in ['p', 'd', 'q']):
+                order = (model_info['p'], model_info['d'], model_info['q'])
+                seasonal_order = None
+
+                if is_seasonal:
+                    seasonal_order = (
+                        model_info.get('P', 0),
+                        model_info.get('D', 0),
+                        model_info.get('Q', 0),
+                        model_info.get('s', 7)
+                    )
+
+                return order, seasonal_order
+
+        # Об'єкт моделі з атрибутами
+        if hasattr(model_info, 'order'):
+            order = model_info.order
+            seasonal_order = None
+
+            if is_seasonal:
+                seasonal_order = getattr(model_info, 'seasonal_order', (0, 0, 0, 7))
+
+            return order, seasonal_order
+
+        return None, None
+
+    def _extract_from_top_level(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """Витягує параметри з верхнього рівня словника."""
+        if 'order' in optimal_params:
+            order = self._ensure_tuple(optimal_params['order'])
+            seasonal_order = None
+
+            if is_seasonal and 'seasonal_order' in optimal_params:
+                seasonal_order = self._ensure_tuple(optimal_params['seasonal_order'])
+            elif is_seasonal:
+                seasonal_order = self._build_seasonal_order_from_params(optimal_params)
+
+            return order, seasonal_order
+
+        return None, None
+
+    def _extract_from_individual_params(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """Витягує параметри з окремих ключів p, d, q."""
+        if all(key in optimal_params for key in ['p', 'd', 'q']):
+            order = (optimal_params['p'], optimal_params['d'], optimal_params['q'])
+            seasonal_order = None
+
+            if is_seasonal:
                 seasonal_order = (
                     optimal_params.get('P', 0),
                     optimal_params.get('D', 0),
                     optimal_params.get('Q', 0),
                     optimal_params.get('s', 7)
                 )
-                self.logger.info(
-                    f"Успішно витягнуто окремі параметри з верхнього рівня: order={order}, seasonal_order={seasonal_order}")
-                return order, seasonal_order
 
-            # 5. Якщо результат це сама модель з атрибутом order
-            if hasattr(optimal_params, 'order'):
-                order = optimal_params.order
+            return order, seasonal_order
+
+        return None, None
+
+    def _extract_from_model_attributes(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """Витягує параметри з атрибутів об'єкта моделі."""
+        # Якщо результат це сама модель з атрибутом order
+        if hasattr(optimal_params, 'order'):
+            order = optimal_params.order
+            seasonal_order = None
+
+            if is_seasonal:
                 seasonal_order = getattr(optimal_params, 'seasonal_order', (0, 0, 0, 7))
-                self.logger.info(
-                    f"Успішно витягнуто з атрибутів об'єкту: order={order}, seasonal_order={seasonal_order}")
-                return order, seasonal_order
 
-            # 6. Перевіряємо вкладений ключ 'model'
-            if 'model' in optimal_params and hasattr(optimal_params['model'], 'order'):
-                order = optimal_params['model'].order
+            return order, seasonal_order
+
+        # Перевіряємо вкладений ключ 'model'
+        if 'model' in optimal_params and hasattr(optimal_params['model'], 'order'):
+            order = optimal_params['model'].order
+            seasonal_order = None
+
+            if is_seasonal:
                 seasonal_order = getattr(optimal_params['model'], 'seasonal_order', (0, 0, 0, 7))
-                self.logger.info(
-                    f"Успішно витягнуто з вкладеної моделі: order={order}, seasonal_order={seasonal_order}")
-                return order, seasonal_order
 
-            # 7. Перевіряємо структуру результату auto_arima
-            if 'arima_model' in optimal_params:
-                arima_model = optimal_params['arima_model']
-                if hasattr(arima_model, 'order'):
-                    order = arima_model.order
-                    seasonal_order = getattr(arima_model, 'seasonal_order', (0, 0, 0, 7))
-                    self.logger.info(f"Успішно витягнуто з arima_model: order={order}, seasonal_order={seasonal_order}")
+            return order, seasonal_order
+
+        # Перевіряємо структуру результату auto_arima
+        if 'arima_model' in optimal_params and hasattr(optimal_params['arima_model'], 'order'):
+            arima_model = optimal_params['arima_model']
+            order = arima_model.order
+            seasonal_order = None
+
+            if is_seasonal:
+                seasonal_order = getattr(arima_model, 'seasonal_order', (0, 0, 0, 7))
+
+            return order, seasonal_order
+
+        return None, None
+
+    def _extract_from_nested_dictionaries(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
+        Optional[Tuple], Optional[Tuple]]:
+        """Рекурсивний пошук параметрів у вкладених словниках."""
+        for key, value in optimal_params.items():
+            if isinstance(value, dict):
+                # Перевіряємо наявність параметрів у вкладеному словнику
+                if 'order' in value:
+                    order = self._ensure_tuple(value['order'])
+                    seasonal_order = None
+
+                    if is_seasonal and 'seasonal_order' in value:
+                        seasonal_order = self._ensure_tuple(value['seasonal_order'])
+                    elif is_seasonal:
+                        seasonal_order = self._build_seasonal_order_from_params(value)
+
+                    self.logger.info(f"Знайдено параметри у вкладеному словнику '{key}'")
                     return order, seasonal_order
 
-            # 8. Рекурсивний пошук у всіх вкладених словниках
-            for key, value in optimal_params.items():
-                if isinstance(value, dict):
-                    # Перевіряємо наявність параметрів у вкладеному словнику
-                    if 'order' in value and 'seasonal_order' in value:
-                        order = tuple(value['order']) if isinstance(value['order'], (list, tuple)) else value['order']
-                        seasonal_order = tuple(value['seasonal_order']) if isinstance(value['seasonal_order'],
-                                                                                      (list, tuple)) else value[
-                            'seasonal_order']
-                        self.logger.info(
-                            f"Успішно витягнуто з вкладеного словника '{key}': order={order}, seasonal_order={seasonal_order}")
-                        return order, seasonal_order
+                # Перевіряємо окремі параметри у вкладеному словнику
+                if all(param_key in value for param_key in ['p', 'd', 'q']):
+                    order = (value['p'], value['d'], value['q'])
+                    seasonal_order = None
 
-                    # Перевіряємо окремі параметри у вкладеному словнику
-                    if all(param_key in value for param_key in ['p', 'd', 'q']):
-                        order = (value['p'], value['d'], value['q'])
+                    if is_seasonal:
                         seasonal_order = (
                             value.get('P', 0),
                             value.get('D', 0),
                             value.get('Q', 0),
                             value.get('s', 7)
                         )
-                        self.logger.info(
-                            f"Успішно витягнуто окремі параметри з '{key}': order={order}, seasonal_order={seasonal_order}")
-                        return order, seasonal_order
+
+                    self.logger.info(f"Знайдено окремі параметри у вкладеному словнику '{key}'")
+                    return order, seasonal_order
+
+        return None, None
+
+    def _build_seasonal_order_from_params(self, params: Dict) -> Optional[Tuple]:
+        """Створює seasonal_order з окремих параметрів P, D, Q, s."""
+        if any(key in params for key in ['P', 'D', 'Q', 's']):
+            return (
+                params.get('P', 0),
+                params.get('D', 0),
+                params.get('Q', 0),
+                params.get('s', 7)
+            )
+        return None
+
+    def _ensure_tuple(self, value) -> Tuple:
+        """Перетворює значення в кортеж, якщо це можливо."""
+        if isinstance(value, (list, tuple)):
+            return tuple(value)
+        return value
+
+    def _validate_order_params(self, order: Tuple) -> bool:
+        """Валідує параметри order."""
+        try:
+            if not isinstance(order, (list, tuple)) or len(order) != 3:
+                return False
+
+            # Перевіряємо, що всі значення - невід'ємні цілі числа
+            p, d, q = order
+            if not all(isinstance(x, int) and x >= 0 for x in [p, d, q]):
+                return False
+
+            # Перевіряємо розумні межі
+            if any(x > 10 for x in [p, d, q]):
+                self.logger.warning(f"Параметри order {order} виглядають занадто великими")
+                return False
+
+            return True
 
         except Exception as e:
-            self.logger.error(f"Помилка під час витягування параметрів: {str(e)}")
-            self.logger.debug(f"Стек помилки: {traceback.format_exc()}")
+            self.logger.debug(f"Помилка валідації order: {str(e)}")
+            return False
 
-        # Детальне логування структури для діагностики
+    def _log_structure_for_diagnosis(self, optimal_params: Dict):
+        """Детальне логування структури для діагностики."""
         self.logger.debug("Детальна структура optimal_params для діагностики:")
         try:
             for key, value in optimal_params.items():
@@ -494,15 +631,6 @@ class ARIMAModeler:
                     self.logger.debug(f"  {key}: {type(value)} = {value}")
         except Exception as log_error:
             self.logger.debug(f"Помилка логування структури: {str(log_error)}")
-
-        # Повертаємо стандартні параметри з попередженням
-        self.logger.warning(
-            f"Не вдалося витягти параметри з структури. "
-            f"Доступні ключі верхнього рівня: {list(optimal_params.keys())}\n"
-            f"Використовуємо стандартні параметри: order={default_order}, seasonal_order={default_seasonal}"
-        )
-
-        return default_order, default_seasonal
 
     def _robust_model_fit(self, model, methods_to_try=['lbfgs', 'bfgs', 'nm']):
 
@@ -581,7 +709,7 @@ class ARIMAModeler:
                     self.logger.debug(f"Optimal params raw result: {optimal_params}")
 
                     if optimal_params['status'] == 'success':
-                        order, _ = self._extract_optimal_params(optimal_params)
+                        order, _ = self._extract_optimal_params(optimal_params, is_seasonal=False)
                         self.logger.info(
                             f"Successfully determined optimal ARIMA parameters: {order}\n"
                             f"Parameter selection details: {optimal_params.get('details', 'No details available')}"
@@ -738,7 +866,8 @@ class ARIMAModeler:
                     self.logger.debug(f"Optimal params raw result: {optimal_params}")
 
                     if optimal_params['status'] == 'success':
-                        order, seasonal_order = self._extract_optimal_params(optimal_params)
+                        # ВАЖЛИВО: передаємо is_seasonal=True для SARIMA
+                        order, seasonal_order = self._extract_optimal_params(optimal_params, is_seasonal=True)
                         if seasonal_period != 7:
                             seasonal_order = (seasonal_order[0], seasonal_order[1], seasonal_order[2], seasonal_period)
                         self.logger.info(
