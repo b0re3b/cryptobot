@@ -5715,52 +5715,67 @@ class DatabaseManager:
         # ----- Методи для ML моделей -----
 
     def save_ml_model(self, data: Dict[str, Any]) -> int:
-            """
-            Збереження ML моделі
+        """
+        Збереження ML моделі
 
-            Args:
-                data: Словник з даними моделі
+        Args:
+            data: Словник з даними моделі, повинен містити:
+                - symbol: str - символ криптовалюти
+                - timeframe: str - часовий інтервал
+                - model_type: str - тип моделі
+                - model_version: str - версія моделі
+                - model_path: str - шлях до файлу моделі
+                - input_features: list - список вхідних ознак
+                - hidden_dim: int - розмір прихованого шару
+                - num_layers: int - кількість шарів
+                - active: bool - чи активна модель
 
-            Returns:
-                id створеного запису
-            """
-            required_fields = [
-                'symbol', 'timeframe', 'model_type', 'model_version', 'model_path',
-                'input_features', 'hidden_dim', 'num_layers', 'active'
-            ]
+        Returns:
+            int: id створеного запису
+        """
+        required_fields = [
+            'symbol', 'timeframe', 'model_type', 'model_version', 'model_path',
+            'input_features', 'hidden_dim', 'num_layers', 'active'
+        ]
 
-            # Переконуємося, що input_features - масив
-            if 'input_features' in data and not isinstance(data['input_features'], list):
-                data['input_features'] = [data['input_features']]
+        # Перевіряємо наявність обов'язкових полів
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            raise ValueError(f"Відсутні обов'язкові поля: {missing_fields}")
 
-            query = """
-                    INSERT INTO ml_models
-                    (symbol, timeframe, model_type, model_version, model_path, input_features, hidden_dim, num_layers, \
-                     active, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP) ON CONFLICT (symbol, timeframe, model_type, model_version) 
-                DO \
-                    UPDATE SET
-                        model_path = EXCLUDED.model_path, \
-                        input_features = EXCLUDED.input_features, \
-                        hidden_dim = EXCLUDED.hidden_dim, \
-                        num_layers = EXCLUDED.num_layers, \
-                        active = EXCLUDED.active, \
-                        updated_at = CURRENT_TIMESTAMP \
-                        RETURNING id \
-                    """
+        # Переконуємося, що input_features - масив
+        if 'input_features' in data and not isinstance(data['input_features'], list):
+            data['input_features'] = [data['input_features']]
 
-            params = [data.get(field, None) for field in required_fields]
+        query = """
+                INSERT INTO ml_models
+                (symbol, timeframe, model_type, model_version, model_path, input_features, hidden_dim, num_layers,
+                 active, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP) ON CONFLICT (symbol, timeframe, model_type, model_version) 
+            DO \
+                UPDATE SET
+                    model_path = EXCLUDED.model_path, \
+                    input_features = EXCLUDED.input_features, \
+                    hidden_dim = EXCLUDED.hidden_dim, \
+                    num_layers = EXCLUDED.num_layers, \
+                    active = EXCLUDED.active, \
+                    updated_at = CURRENT_TIMESTAMP \
+                    RETURNING id \
+                """
 
-            connection = self.conn()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(query, params)
-                    result = cursor.fetchone()
-                    connection.commit()
-                    return result[0]
-            except Exception as e:
-                connection.rollback()
-                raise e
+        params = [data.get(field) for field in required_fields]
+
+        connection = self.conn()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                result = cursor.fetchone()
+                connection.commit()
+                return result[0]
+        except Exception as e:
+            connection.rollback()
+            self.logger.error(f"Помилка при збереженні ML моделі в БД: {str(e)}")
+            raise e
 
     def get_ml_models(self, symbol: Optional[str] = None, timeframe: Optional[str] = None,
                           model_type: Optional[str] = None, active_only: bool = True) -> List[Dict[str, Any]]:

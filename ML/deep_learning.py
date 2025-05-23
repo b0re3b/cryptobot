@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-
+import torch.onnx
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,32 +7,13 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple, Union, Optional, Any, Callable
 import os
-import logging
 from datetime import datetime
 import json
 import pickle
 import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-
-from ML import LSTMModel, GRUModel, ModelTrainer
-# Імпорт з інших модулів проекту
+from sklearn.metrics import r2_score
+from ML import LSTMModel, GRUModel, ModelTrainer, TransformerModel
 from data.db import DatabaseManager
-
-(
-    get_btc_lstm_sequence, get_eth_lstm_sequence, get_sol_lstm_sequence,
-    save_prediction,  # Збереження прогнозів моделі
-    save_ml_model_metrics,  # Збереження метрик ефективності моделі
-    save_ml_model,  # Збереження інформації про модель
-    save_ml_sequence_data,  # Збереження послідовностей для LSTM/GRU
-    save_technical_indicator,  # Збереження технічних індикаторів
-    update_prediction_actual_value  # Оновлення прогнозів з фактичними значеннями
-)
-from analysis.trend_detection import prepare_ml_trend_features  # Для отримання ознак тренду
-from analysis.volatility_analysis import prepare_volatility_features_for_ml  # Для отримання ознак волатильності
-from cyclefeatures.crypto_cycles import prepare_cycle_ml_features  # Для отримання циклічних ознак
-from featureengineering.feature_engineering import prepare_features_pipeline  # Для підготовки всіх ознак
 from utils.logger import CryptoLogger
 from ML.DataPreprocessor import DataPreprocessor
 
@@ -47,24 +28,25 @@ class ModelConfig:
     learning_rate: float = 0.001
     batch_size: int = 32
     epochs: int = 100
+    sequence_length: int = 60  # Додано sequence_length
 
 
 @dataclass
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
     timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
-    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru'])
+    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru', 'transformer'])  # Додано transformer
 
 
 class DeepLearning:
     """
     Клас для роботи з глибокими нейронними мережами для прогнозування криптовалют
-    Підтримує LSTM та GRU моделі для BTC, ETH та SOL на різних таймфреймах
+    Підтримує LSTM, GRU та Transformer моделі для BTC, ETH та SOL на різних таймфреймах
     """
 
     SYMBOLS = ['BTC', 'ETH', 'SOL']
     TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
-    MODEL_TYPES = ['lstm', 'gru']
+    MODEL_TYPES = ['lstm', 'gru', 'transformer']  # Додано transformer
 
     def __init__(self, models_dir: str = "models/deep_learning"):
         """
@@ -78,8 +60,11 @@ class DeepLearning:
         # Ініціалізація компонентів
         self.data_preprocessor = DataPreprocessor()
         self.model_trainer = ModelTrainer()
-        self.lstm = LSTMModel()
-        self.gru = GRUModel()
+
+        # Ініціалізація моделей з правильними параметрами
+        self.lstm = None  # Будуть створені при потребі
+        self.gru = None
+        self.transformer = None
 
         # Словники для зберігання навчених моделей та їх конфігурацій
         self.models = {}  # {model_key: model}
@@ -94,8 +79,53 @@ class DeepLearning:
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
+    def _create_model(self, model_type: str, config: ModelConfig) -> nn.Module:
+        """
+        Створення моделі відповідного типу з заданою конфігурацією
+
+        Args:
+            model_type: Тип моделі ('lstm', 'gru', 'transformer')
+            config: Конфігурація моделі
+
+        Returns:
+            Створена модель
+        """
+        if model_type.lower() == 'lstm':
+            return LSTMModel(
+                input_dim=config.input_dim,
+                hidden_dim=config.hidden_dim,
+                num_layers=config.num_layers,
+                output_dim=config.output_dim,
+                dropout=config.dropout,
+                sequence_length=config.sequence_length
+            )
+        elif model_type.lower() == 'gru':
+            return GRUModel(
+                input_dim=config.input_dim,
+                hidden_dim=config.hidden_dim,
+                num_layers=config.num_layers,
+                output_dim=config.output_dim,
+                dropout=config.dropout,
+                sequence_length=config.sequence_length
+            )
+        elif model_type.lower() == 'transformer':
+            return TransformerModel(
+                input_dim=config.input_dim,
+                d_model=config.hidden_dim,
+                nhead=8,  # Кількість голів уваги
+                num_encoder_layers=config.num_layers,
+                dim_feedforward=config.hidden_dim * 4,
+                dropout=config.dropout,
+                sequence_length=config.sequence_length,
+                output_dim=config.output_dim
+            )
+        else:
+            raise ValueError(f"Непідтримуваний тип моделі: {model_type}")
+
     def train_model(self, symbol: str, timeframe: str, model_type: str,
-                    data: pd.DataFrame, input_dim: int, **training_params) -> Dict[str, Any]:
+                    data: Optional[pd.DataFrame] = None,
+                    config: Optional[ModelConfig] = None,
+                    **training_params) -> Dict[str, Any]:
         """
         Навчання моделі з використанням ModelTrainer.
 
@@ -103,8 +133,8 @@ class DeepLearning:
             symbol: Символ криптовалюти
             timeframe: Таймфрейм
             model_type: Тип моделі
-            data: Дані для навчання
-            input_dim: Розмірність вхідних даних
+            data: Дані для навчання (якщо None, завантажуються автоматично)
+            config: Конфігурація моделі
             **training_params: Додаткові параметри навчання
 
         Returns:
@@ -113,19 +143,46 @@ class DeepLearning:
         self._validate_inputs(symbol, timeframe, model_type)
 
         try:
+            # Отримання даних, якщо не надані
+            if data is None:
+                data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+                data = data_loader()
+
+            # Підготовка ознак
+            processed_data = self.data_preprocessor.prepare_features(data, symbol)
+
+            # Визначення input_dim
+            input_dim = processed_data.shape[1] - 1 if 'target' in processed_data.columns else processed_data.shape[1]
+
+            # Створення конфігурації, якщо не надана
+            if config is None:
+                config = ModelConfig(input_dim=input_dim)
+            else:
+                config.input_dim = input_dim
+
+            # Створення моделі
+            model = self._create_model(model_type, config)
+
+            # Навчання
             result = self.model_trainer.train_model(
                 symbol=symbol,
                 timeframe=timeframe,
                 model_type=model_type,
-                data=data,
-                input_dim=input_dim,
+                data=processed_data,
+                model=model,
+                config=config,
                 **training_params
             )
 
             # Збереження результатів
-            model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+            model_key = self._create_model_key(symbol, timeframe, model_type)
+            self.models[model_key] = model
+            self.model_configs[model_key] = config
             self.model_metrics[model_key] = result.get('metrics', {})
             self.training_history[model_key] = result.get('history', {})
+
+            # Збереження моделі
+            self._save_model(model_key, model, config)
 
             self.logger.info(f"Модель {model_key} успішно навчена")
             return result
@@ -133,6 +190,65 @@ class DeepLearning:
         except Exception as e:
             self.logger.error(f"Помилка навчання моделі {symbol}-{timeframe}-{model_type}: {str(e)}")
             raise
+
+    def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
+        """Створення ключа моделі"""
+        return f"{symbol}_{timeframe}_{model_type}"
+
+    def _save_model(self, model_key: str, model: nn.Module, config: ModelConfig) -> None:
+        """Збереження моделі та конфігурації"""
+        try:
+            # Збереження моделі
+            model_path = os.path.join(self.models_dir, f"{model_key}.pt")
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'model_class': model.__class__.__name__,
+                'config': config.__dict__,
+                'timestamp': datetime.now().isoformat()
+            }, model_path)
+
+            # Збереження конфігурації
+            config_path = os.path.join(self.models_dir, f"{model_key}_config.json")
+            with open(config_path, 'w') as f:
+                json.dump(config.__dict__, f, indent=2)
+
+            self.logger.info(f"Модель {model_key} збережена")
+
+        except Exception as e:
+            self.logger.error(f"Помилка збереження моделі {model_key}: {str(e)}")
+
+    def _load_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
+        """Завантаження моделі"""
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+
+        try:
+            model_path = os.path.join(self.models_dir, f"{model_key}.pt")
+            if not os.path.exists(model_path):
+                return False
+
+            # Завантаження checkpoint
+            checkpoint = torch.load(model_path, map_location=self.device)
+
+            # Створення конфігурації з checkpoint
+            config_dict = checkpoint['config']
+            config = ModelConfig(**config_dict)
+
+            # Створення моделі
+            model = self._create_model(model_type, config)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.to(self.device)
+            model.eval()
+
+            # Збереження в пам'яті
+            self.models[model_key] = model
+            self.model_configs[model_key] = config
+
+            self.logger.info(f"Модель {model_key} завантажена")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Помилка завантаження моделі {model_key}: {str(e)}")
+            return False
 
     # ==================== ПРОГНОЗУВАННЯ ====================
 
@@ -154,9 +270,9 @@ class DeepLearning:
         self._validate_inputs(symbol, timeframe, model_type)
 
         # Завантаження моделі, якщо вона ще не завантажена
-        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.model_trainer.models:
-            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.models:
+            if not self._load_model(symbol, timeframe, model_type):
                 raise ValueError(f"Модель {model_key} не знайдена")
 
         # Отримання даних, якщо вони не надані
@@ -166,41 +282,63 @@ class DeepLearning:
 
         # Підготовка даних
         processed_data = self.data_preprocessor.prepare_features(input_data, symbol)
-        X = torch.tensor(processed_data.drop(columns=["target"]).values, dtype=torch.float32).to(self.device)
+
+        # Перевірка наявності колонки target
+        feature_columns = [col for col in processed_data.columns if col != 'target']
+        X = torch.tensor(processed_data[feature_columns].values, dtype=torch.float32).to(self.device)
 
         # Прогнозування
-        model = self.model_trainer.models[model_key]
+        model = self.models[model_key]
         model.eval()
 
         with torch.no_grad():
             predictions = []
-            current_input = X[-1:].unsqueeze(0)  # Беремо останню послідовність
 
-            for _ in range(steps_ahead):
+            # Беремо останню послідовність для прогнозування
+            sequence_length = self.model_configs[model_key].sequence_length
+            current_input = X[-sequence_length:].unsqueeze(0)  # Додаємо batch dimension
+
+            for step in range(steps_ahead):
                 pred = model(current_input)
                 predictions.append(pred.item())
 
                 # Оновлюємо вхідні дані для багатокрокового прогнозу
-                if steps_ahead > 1:
-                    current_input = torch.cat([current_input[:, 1:], pred.unsqueeze(0).unsqueeze(0)], dim=1)
+                if steps_ahead > 1 and step < steps_ahead - 1:
+                    # Зсуваємо послідовність та додаємо нове прогнозоване значення
+                    new_input = torch.zeros_like(current_input[:, -1:, :])
+                    new_input[0, 0, 0] = pred.item()  # Припускаємо, що перша ознака - це ціна
+                    current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
 
-        # Збереження прогнозу
+        # Збереження прогнозу в БД
         timestamp = datetime.now()
         for i, pred in enumerate(predictions):
-            self.db_manager.save_prediction(
-                symbol=symbol,
-                timeframe=timeframe,
-                model_type=model_type,
-                prediction_value=float(pred),
-                prediction_timestamp=timestamp,
-                steps_ahead=i + 1
-            )
+            try:
+                self.db_manager.save_prediction(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type,
+                    prediction_value=float(pred),
+                    prediction_timestamp=timestamp,
+                    steps_ahead=i + 1
+                )
+            except Exception as e:
+                self.logger.warning(f"Не вдалося зберегти прогноз: {str(e)}")
 
         return {
             'predictions': np.array(predictions),
             'timestamp': timestamp,
-            'model_key': model_key
+            'model_key': model_key,
+            'confidence': self._calculate_prediction_confidence(model_key, processed_data)
         }
+
+    def _calculate_prediction_confidence(self, model_key: str, data: pd.DataFrame) -> float:
+        """Розрахунок довіри до прогнозу на основі метрик моделі"""
+        if model_key in self.model_metrics:
+            metrics = self.model_metrics[model_key]
+            # Простий розрахунок довіри на основі R²
+            r2 = metrics.get('r2_score', 0)
+            return max(0, min(1, r2))  # Обмежуємо від 0 до 1
+        return 0.5  # Середня довіра, якщо метрики недоступні
 
     def predict_multiple_steps(self, symbol: str, timeframe: str, model_type: str,
                                steps: int = 10, input_data: Optional[pd.DataFrame] = None) -> pd.DataFrame:
@@ -210,7 +348,7 @@ class DeepLearning:
         Args:
             symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
             timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
+            model_type: Тип моделі ('lstm', 'gru', 'transformer')
             steps: Кількість кроків для прогнозування
             input_data: Вхідні дані для прогнозування
 
@@ -225,7 +363,8 @@ class DeepLearning:
         forecast_df = pd.DataFrame({
             'step': range(1, steps + 1),
             'prediction': predictions,
-            'timestamp': [result['timestamp']] * steps
+            'timestamp': [result['timestamp']] * steps,
+            'confidence': [result['confidence']] * steps
         })
 
         return forecast_df
@@ -248,21 +387,28 @@ class DeepLearning:
 
     def ensemble_predict(self, symbol: str, timeframe: str, steps_ahead: int = 1,
                          weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
-        """Ансамблевий прогноз (комбінація LSTM та GRU)"""
+        """Ансамблевий прогноз (комбінація LSTM, GRU та Transformer)"""
         if weights is None:
-            weights = {'lstm': 0.5, 'gru': 0.5}
+            weights = {'lstm': 0.33, 'gru': 0.33, 'transformer': 0.34}
 
         predictions = {}
         ensemble_pred = np.zeros(steps_ahead)
+        total_weight = 0
 
         for model_type in self.MODEL_TYPES:
             try:
                 result = self.predict(symbol, timeframe, model_type, steps_ahead=steps_ahead)
                 predictions[model_type] = result['predictions']
-                ensemble_pred += weights.get(model_type, 0) * result['predictions']
+                weight = weights.get(model_type, 0)
+                ensemble_pred += weight * result['predictions']
+                total_weight += weight
             except Exception as e:
                 self.logger.warning(f"Модель {model_type} недоступна: {str(e)}")
                 continue
+
+        # Нормалізація, якщо не всі моделі доступні
+        if total_weight > 0:
+            ensemble_pred /= total_weight
 
         return {
             'ensemble_predictions': ensemble_pred,
@@ -290,9 +436,9 @@ class DeepLearning:
         self._validate_inputs(symbol, timeframe, model_type)
 
         # Завантаження моделі
-        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.model_trainer.models:
-            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.models:
+            if not self._load_model(symbol, timeframe, model_type):
                 raise ValueError(f"Модель {model_key} не знайдена")
 
         # Отримання даних, якщо вони не надані
@@ -302,11 +448,51 @@ class DeepLearning:
 
         # Підготовка даних
         processed_data = self.data_preprocessor.prepare_features(test_data, symbol)
-        X = torch.tensor(processed_data.drop(columns=["target"]).values, dtype=torch.float32)
-        y = torch.tensor(processed_data["target"].values, dtype=torch.float32)
+
+        feature_columns = [col for col in processed_data.columns if col != 'target']
+        X = torch.tensor(processed_data[feature_columns].values, dtype=torch.float32).to(self.device)
+        y = torch.tensor(processed_data["target"].values, dtype=torch.float32).to(self.device)
+
+        # Створення послідовностей для RNN/Transformer моделей
+        sequence_length = self.model_configs[model_key].sequence_length
+        X_sequences = []
+        y_sequences = []
+
+        for i in range(sequence_length, len(X)):
+            X_sequences.append(X[i - sequence_length:i])
+            y_sequences.append(y[i])
+
+        X_sequences = torch.stack(X_sequences)
+        y_sequences = torch.stack(y_sequences)
 
         # Оцінка
-        return self.model_trainer.evaluate(self.model_trainer.models[model_key], (X, y))
+        model = self.models[model_key]
+        model.eval()
+
+        with torch.no_grad():
+            predictions = model(X_sequences)
+
+            # Розрахунок метрик
+            mse = nn.MSELoss()(predictions.squeeze(), y_sequences).item()
+            mae = nn.L1Loss()(predictions.squeeze(), y_sequences).item()
+
+            # Конвертація в numpy для sklearn метрик
+            y_true = y_sequences.cpu().numpy()
+            y_pred = predictions.squeeze().cpu().numpy()
+
+            r2 = r2_score(y_true, y_pred)
+
+            metrics = {
+                'mse': mse,
+                'mae': mae,
+                'rmse': np.sqrt(mse),
+                'r2_score': r2
+            }
+
+            # Оновлення збережених метрик
+            self.model_metrics[model_key] = metrics
+
+            return metrics
 
     def model_performance_report(self, symbol: Optional[str] = None,
                                  timeframe: Optional[str] = None) -> pd.DataFrame:
@@ -341,11 +527,13 @@ class DeepLearning:
         self._validate_inputs(symbol, timeframe, model_type)
 
         try:
-            model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+            model_key = self._create_model_key(symbol, timeframe, model_type)
 
             # Видалення з пам'яті
-            if model_key in self.model_trainer.models:
-                del self.model_trainer.models[model_key]
+            if model_key in self.models:
+                del self.models[model_key]
+            if model_key in self.model_configs:
+                del self.model_configs[model_key]
             if model_key in self.model_metrics:
                 del self.model_metrics[model_key]
             if model_key in self.training_history:
@@ -359,6 +547,10 @@ class DeepLearning:
             config_file = os.path.join(self.models_dir, f"{model_key}_config.json")
             if os.path.exists(config_file):
                 os.remove(config_file)
+
+            metrics_file = os.path.join(self.models_dir, f"{model_key}_metrics.json")
+            if os.path.exists(metrics_file):
+                os.remove(metrics_file)
 
             self.logger.info(f"Модель {model_key} успішно видалена")
             return True
@@ -374,12 +566,12 @@ class DeepLearning:
         Args:
             symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
             timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
+            model_type: Тип моделі ('lstm', 'gru', 'transformer')
 
         Returns:
             Dict: Метрики ефективності моделі
         """
-        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        model_key = self._create_model_key(symbol, timeframe, model_type)
 
         if model_key in self.model_metrics:
             return self.model_metrics[model_key]
@@ -398,7 +590,7 @@ class DeepLearning:
         models_list = []
 
         # Моделі в пам'яті
-        for model_key in self.model_trainer.models.keys():
+        for model_key in self.models.keys():
             parts = model_key.split('_')
             if len(parts) >= 3:
                 models_list.append({
@@ -430,7 +622,7 @@ class DeepLearning:
     def update_model_metrics(self, symbol: str, timeframe: str, model_type: str,
                              new_metrics: Dict[str, float]) -> None:
         """Оновлення метрик моделі"""
-        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        model_key = self._create_model_key(symbol, timeframe, model_type)
 
         if model_key not in self.model_metrics:
             self.model_metrics[model_key] = {}
@@ -795,7 +987,7 @@ class DeepLearning:
 
         # ==================== HYPERPARAMETER OPTIMIZATION ====================
 
-        def hyperparameter_optimization(self, symbol: str, timeframe: str, model_type: str,
+    def hyperparameter_optimization(self, symbol: str, timeframe: str, model_type: str,
                                         param_space: Dict[str, List], optimization_method: str = 'grid_search',
                                         cv_folds: int = 3, max_iterations: int = 50) -> Dict[str, Any]:
             """
@@ -861,7 +1053,7 @@ class DeepLearning:
                 self.logger.error(f"Помилка оптимізації гіперпараметрів: {str(e)}")
                 raise
 
-        def _grid_search_optimization(self, symbol: str, timeframe: str, model_type: str,
+    def _grid_search_optimization(self, symbol: str, timeframe: str, model_type: str,
                                       data: pd.DataFrame, param_space: Dict, cv_folds: int) -> Tuple[Dict, float, List]:
             """Grid Search оптимізація"""
             from itertools import product
@@ -897,7 +1089,7 @@ class DeepLearning:
 
             return best_params, best_score, history
 
-        def _random_search_optimization(self, symbol: str, timeframe: str, model_type: str,
+    def _random_search_optimization(self, symbol: str, timeframe: str, model_type: str,
                                         data: pd.DataFrame, param_space: Dict, max_iterations: int, cv_folds: int) -> \
         Tuple[Dict, float, List]:
             """Random Search оптимізація"""
@@ -935,7 +1127,7 @@ class DeepLearning:
 
             return best_params, best_score, history
 
-        def _bayesian_optimization(self, symbol: str, timeframe: str, model_type: str,
+    def _bayesian_optimization(self, symbol: str, timeframe: str, model_type: str,
                                    data: pd.DataFrame, param_space: Dict, max_iterations: int, cv_folds: int) -> Tuple[
             Dict, float, List]:
             """Bayesian Optimization (спрощена версія)"""
@@ -1002,7 +1194,7 @@ class DeepLearning:
 
             return best_params, best_score, history
 
-        def _vary_best_params(self, best_params: Dict, param_space: Dict) -> Dict:
+    def _vary_best_params(self, best_params: Dict, param_space: Dict) -> Dict:
             """Варіація кращих параметрів для Bayesian optimization"""
             varied_params = best_params.copy()
 
@@ -1019,7 +1211,7 @@ class DeepLearning:
 
         # ==================== ADVANCED ANALYSIS ====================
 
-        def feature_importance_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
+    def feature_importance_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
             """
             Аналіз важливості ознак для моделі.
 
@@ -1052,7 +1244,7 @@ class DeepLearning:
 
             return dict(zip(feature_names, importance_scores))
 
-        def _permutation_importance(self, model, data: pd.DataFrame, feature_names: List[str]) -> List[float]:
+    def _permutation_importance(self, model, data: pd.DataFrame, feature_names: List[str]) -> List[float]:
             """Розрахунок важливості ознак методом пермутації"""
             X = torch.tensor(data.drop(columns=["target"]).values, dtype=torch.float32).to(self.device)
             y = torch.tensor(data["target"].values, dtype=torch.float32).to(self.device)
@@ -1084,7 +1276,7 @@ class DeepLearning:
 
             return importance_scores
 
-        def model_interpretation(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
+    def model_interpretation(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
             """
             Комплексна інтерпретація моделі.
 
@@ -1122,7 +1314,7 @@ class DeepLearning:
                 self.logger.error(f"Помилка інтерпретації моделі {symbol}-{timeframe}-{model_type}: {str(e)}")
                 raise
 
-        def _error_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
+    def _error_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
             """Аналіз помилок моделі"""
             # Отримання даних для аналізу
             data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
@@ -1160,7 +1352,7 @@ class DeepLearning:
                 }
             }
 
-        def _prediction_stability_analysis(self, symbol: str, timeframe: str, model_type: str,
+    def _prediction_stability_analysis(self, symbol: str, timeframe: str, model_type: str,
                                            n_runs: int = 10) -> Dict[str, float]:
             """Аналіз стабільності прогнозів"""
             # Отримання тестових даних
@@ -1190,7 +1382,7 @@ class DeepLearning:
                     predictions) != 0 else float('inf')
             }
 
-        def _calculate_skewness(self, data: np.ndarray) -> float:
+    def _calculate_skewness(self, data: np.ndarray) -> float:
             """Розрахунок асиметрії"""
             mean_val = np.mean(data)
             std_val = np.std(data)
@@ -1198,7 +1390,7 @@ class DeepLearning:
                 return 0.0
             return np.mean(((data - mean_val) / std_val) ** 3)
 
-        def _calculate_kurtosis(self, data: np.ndarray) -> float:
+    def _calculate_kurtosis(self, data: np.ndarray) -> float:
             """Розрахунок ексцесу"""
             mean_val = np.mean(data)
             std_val = np.std(data)
@@ -1208,7 +1400,7 @@ class DeepLearning:
 
         # ==================== VISUALIZATION ====================
 
-        def plot_model_comparison(self, symbol: str, timeframe: str,
+    def plot_model_comparison(self, symbol: str, timeframe: str,
                                   test_data: Optional[pd.DataFrame] = None, save_path: Optional[str] = None) -> None:
             """
             Візуалізація порівняння моделей.
@@ -1277,7 +1469,7 @@ class DeepLearning:
 
             plt.show()
 
-        def plot_feature_importance(self, symbol: str, timeframe: str, model_type: str,
+    def plot_feature_importance(self, symbol: str, timeframe: str, model_type: str,
                                     top_n: int = 15, save_path: Optional[str] = None) -> None:
             """
             Візуалізація важливості ознак.
@@ -1320,7 +1512,7 @@ class DeepLearning:
 
             plt.show()
 
-        def plot_prediction_vs_actual(self, symbol: str, timeframe: str, model_type: str,
+    def plot_prediction_vs_actual(self, symbol: str, timeframe: str, model_type: str,
                                       test_data: Optional[pd.DataFrame] = None,
                                       n_points: int = 100, save_path: Optional[str] = None) -> None:
             """
@@ -1396,7 +1588,7 @@ class DeepLearning:
 
         # ==================== UTILITY METHODS ====================
 
-        def cleanup_old_models(self, days_old: int = 30) -> int:
+    def cleanup_old_models(self, days_old: int = 30) -> int:
             """
             Очищення старих моделей.
 
@@ -1428,7 +1620,7 @@ class DeepLearning:
 
             return deleted_count
 
-        def get_system_info(self) -> Dict[str, Any]:
+    def get_system_info(self) -> Dict[str, Any]:
             """Отримання інформації про систему"""
             return {
                 'device': str(self.device),

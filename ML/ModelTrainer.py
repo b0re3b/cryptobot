@@ -8,16 +8,48 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
+from ML.DataPreprocessor import DataPreprocessor
 from ML.base import BaseDeepModel
-from data.db import  DatabaseManager
+from data.db import DatabaseManager
 from featureengineering.feature_engineering import FeatureEngineering
+
+
+@dataclass
+class ModelConfig:
+    input_dim: int
+    hidden_dim: int = 64
+    num_layers: int = 2
+    output_dim: int = 1
+    dropout: float = 0.2
+    learning_rate: float = 0.001
+    batch_size: int = 32
+    epochs: int = 100
+    sequence_length: int = 60
+
+    # Transformer specific parameters
+    num_heads: int = 8
+    dim_feedforward: int = 256
+
+    @classmethod
+    def get_sequence_length_for_timeframe(cls, timeframe: str) -> int:
+        """
+        Возвращает рекомендуемую длину последовательности для таймфрейма
+        """
+        sequence_mapping = {
+            '1m': 60,
+            '1h': 24,
+            '4h': 60,
+            '1d': 30,
+            '1w': 12
+        }
+        return sequence_mapping.get(timeframe, 60)
 
 
 @dataclass
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
     timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
-    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru'])
+    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru', 'transformer'])
 
 
 class ModelTrainer:
@@ -36,15 +68,15 @@ class ModelTrainer:
         """
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.models: Dict[str, BaseDeepModel] = {}
-        self.model_configs: Dict[str, Dict[str, Any]] = {}
+        self.model_configs: Dict[str, ModelConfig] = {}
         self.model_metrics: Dict[str, Dict[str, float]] = {}
         self.best_models: Dict[str, BaseDeepModel] = {}
         self.training_history: Dict[str, List[float]] = {}
         self.models_dir = models_dir
         self.db_manager = DatabaseManager()
         # Ініціалізація компонентів
-        self.db_manager = DatabaseManager()
         self.feature_engineering = FeatureEngineering()
+        self.processor = DataPreprocessor()
 
         # Налаштування логування
         self.logger = logging.getLogger(__name__)
@@ -59,36 +91,78 @@ class ModelTrainer:
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
+    def create_model_config(self, symbol: str, timeframe: str, model_type: str,
+                            input_dim: int, **kwargs) -> ModelConfig:
+        """
+        Створює конфігурацію моделі з урахуванням таймфрейму та типу моделі
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            input_dim: Розмірність вхідних даних
+            **kwargs: Додаткові параметри для перевизначення
+
+        Returns:
+            ModelConfig: Налаштована конфігурація моделі
+        """
+        # Базова конфігурація
+        config = ModelConfig(
+            input_dim=input_dim,
+            sequence_length=ModelConfig.get_sequence_length_for_timeframe(timeframe)
+        )
+
+        # Специфічні налаштування для різних типів моделей
+        if model_type.lower() == 'transformer':
+            config.hidden_dim = kwargs.get('hidden_dim', 128)  # Трансформер потребує більше параметрів
+            config.num_heads = kwargs.get('num_heads', 8)
+            config.dim_feedforward = kwargs.get('dim_feedforward', 256)
+            config.num_layers = kwargs.get('num_layers', 3)
+            config.learning_rate = kwargs.get('learning_rate', 0.0005)  # Менша швидкість для трансформера
+        elif model_type.lower() in ['lstm', 'gru']:
+            config.hidden_dim = kwargs.get('hidden_dim', 64)
+            config.num_layers = kwargs.get('num_layers', 2)
+            config.learning_rate = kwargs.get('learning_rate', 0.001)
+
+        # Перевизначення будь-яких параметрів
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+
+        return config
+
     def train_model(self, symbol: str, timeframe: str, model_type: str,
                     data: pd.DataFrame, input_dim: int,
-                    epochs: int = 100, batch_size: int = 32,
-                    learning_rate: float = 0.001, hidden_dim: int = 64,
-                    num_layers: int = 2, validation_split: float = 0.2,
-                    patience: int = 10) -> Dict[str, Any]:
+                    config: Optional[ModelConfig] = None,
+                    validation_split: float = 0.2,
+                    patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
         """
         Повний цикл навчання моделі: підготовка, тренування, збереження та оцінка.
 
         Args:
             symbol (str): Символ криптовалюти.
             timeframe (str): Таймфрейм (наприклад, '1h', '1d').
-            model_type (str): Тип моделі ('lstm' або 'gru').
+            model_type (str): Тип моделі ('lstm', 'gru', 'transformer').
             data (pd.DataFrame): Підготовлені фічі та ціль.
             input_dim (int): Кількість вхідних ознак.
-            epochs (int): Кількість епох.
-            batch_size (int): Розмір батчу.
-            learning_rate (float): Швидкість навчання.
-            hidden_dim (int): Розмір прихованого шару.
-            num_layers (int): Кількість шарів.
+            config (ModelConfig, optional): Конфігурація моделі.
             validation_split (float): Частка валідаційної вибірки.
             patience (int): Патієнс для early stopping.
+            model_data: Додаткові дані для збереження в БД.
+            **kwargs: Додаткові параметри для конфігурації.
 
         Returns:
             dict: Конфігурація, метрики та історія втрат.
         """
         self.logger.info(f"Початок навчання моделі {symbol}_{timeframe}_{model_type}")
 
-        # Підготовка даних
-        X, y = data.drop(columns=["target"]).values, data["target"].values
+        # Створення або використання наданої конфігурації
+        if config is None:
+            config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
+
+        # Підготовка даних з урахуванням sequence_length
+        X, y = self._prepare_sequence_data(data, config.sequence_length)
+
         split = int(len(X) * (1 - validation_split))
         X_train, X_val = X[:split], X[split:]
         y_train, y_val = y[:split], y[split:]
@@ -97,22 +171,15 @@ class ModelTrainer:
         val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
 
         # Створення та навчання моделі
-        model = self._build_model(model_type, input_dim, hidden_dim, num_layers).to(self.device)
+        model = self._build_model_from_config(model_type, config).to(self.device)
         history = self._train_loop(model, train_tensor, val_tensor,
-                                   epochs, batch_size, learning_rate, patience)
+                                   config.epochs, config.batch_size,
+                                   config.learning_rate, patience)
 
         # Збереження моделі та конфігурації
         model_key = self._create_model_key(symbol, timeframe, model_type)
         self.models[model_key] = model
-        self.model_configs[model_key] = {
-            'input_dim': input_dim,
-            'hidden_dim': hidden_dim,
-            'num_layers': num_layers,
-            'output_dim': 1,
-            'epochs': epochs,
-            'batch_size': batch_size,
-            'learning_rate': learning_rate
-        }
+        self.model_configs[model_key] = config
 
         # Оцінка моделі
         metrics = self.evaluate(model, val_tensor)
@@ -121,7 +188,9 @@ class ModelTrainer:
 
         # Збереження в БД
         try:
-            self.db_manager.save_ml_model(symbol, timeframe, model_type, self.model_configs[model_key])
+            if model_data is None:
+                model_data = self._create_model_data_dict(symbol, timeframe, model_type, config)
+            self.db_manager.save_ml_model(model_data)
             self.db_manager.save_ml_model_metrics(symbol, timeframe, model_type, metrics)
             self.logger.info(f"Модель {model_key} успішно збережена в БД")
         except Exception as e:
@@ -129,7 +198,103 @@ class ModelTrainer:
 
         self.logger.info(f"Навчання моделі {model_key} завершено. RMSE: {metrics.get('RMSE', 'N/A')}")
 
-        return {'config': self.model_configs[model_key], 'metrics': metrics, 'history': history}
+        return {
+            'config': config.__dict__,
+            'metrics': metrics,
+            'history': history
+        }
+
+    def _prepare_sequence_data(self, data: pd.DataFrame, sequence_length: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Підготовка даних у форматі послідовностей для моделей глибокого навчання
+
+        Args:
+            data: DataFrame з фічами та target
+            sequence_length: Довжина послідовності
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: X (sequences), y (targets)
+        """
+        features = data.drop(columns=["target"]).values
+        targets = data["target"].values
+
+        # Створення послідовностей
+        X, y = [], []
+        for i in range(sequence_length, len(features)):
+            X.append(features[i - sequence_length:i])
+            y.append(targets[i])
+
+        return np.array(X), np.array(y)
+
+    def _build_model_from_config(self, model_type: str, config: ModelConfig) -> BaseDeepModel:
+        """
+        Побудова моделі на основі конфігурації
+
+        Args:
+            model_type: Тип моделі
+            config: Конфігурація моделі
+
+        Returns:
+            BaseDeepModel: Ініціалізована модель
+        """
+        try:
+            if model_type.lower() == 'lstm':
+                from ML.LSTM import LSTMModel
+                return LSTMModel(
+                    input_dim=config.input_dim,
+                    hidden_dim=config.hidden_dim,
+                    num_layers=config.num_layers,
+                    output_dim=config.output_dim,
+                    dropout=config.dropout
+                )
+            elif model_type.lower() == 'gru':
+                from ML.GRU import GRUModel
+                return GRUModel(
+                    input_dim=config.input_dim,
+                    hidden_dim=config.hidden_dim,
+                    num_layers=config.num_layers,
+                    output_dim=config.output_dim,
+                    dropout=config.dropout
+                )
+            elif model_type.lower() == 'transformer':
+                from ML.transformer import TransformerModel
+                return TransformerModel(
+                    input_dim=config.input_dim,
+                    hidden_dim=config.hidden_dim,
+                    num_heads=config.num_heads,
+                    num_layers=config.num_layers,
+                    dim_feedforward=config.dim_feedforward,
+                    output_dim=config.output_dim,
+                    dropout=config.dropout,
+                    max_seq_length=config.sequence_length
+                )
+            else:
+                raise ValueError(f"Невідомий тип моделі: {model_type}")
+        except ImportError as e:
+            self.logger.error(f"Помилка імпорту моделі {model_type}: {str(e)}")
+            raise
+
+    def _create_model_data_dict(self, symbol: str, timeframe: str, model_type: str,
+                                config: ModelConfig) -> Dict[str, Any]:
+        """
+        Створює словник з даними моделі для збереження в БД
+        """
+        model_path = os.path.join(self.models_dir, symbol, timeframe, f"{model_type.lower()}_model.pth")
+
+        return {
+            'symbol': symbol,
+            'timeframe': timeframe,
+            'model_type': model_type,
+            'model_version': '1.0',
+            'model_path': model_path,
+            'input_features': list(range(config.input_dim)),  # Список індексів фічів
+            'hidden_dim': config.hidden_dim,
+            'num_layers': config.num_layers,
+            'sequence_length': config.sequence_length,
+            'num_heads': getattr(config, 'num_heads', None),
+            'dim_feedforward': getattr(config, 'dim_feedforward', None),
+            'active': True
+        }
 
     def _train_loop(self, model: BaseDeepModel, train_data: Tuple[torch.Tensor, torch.Tensor],
                     val_data: Tuple[torch.Tensor, torch.Tensor], epochs: int,
@@ -200,6 +365,10 @@ class ModelTrainer:
             output = model(X_batch).squeeze()
             loss = criterion(output, y_batch)
             loss.backward()
+
+            # Gradient clipping для стабільності (особливо важливо для Transformer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             optimizer.step()
             total_loss += loss.item()
         return total_loss / len(train_loader)
@@ -264,17 +433,6 @@ class ModelTrainer:
             'R2': float(r2)
         }
 
-    def early_stopping_check(self, val_losses: List[float], patience: int = 10) -> bool:
-        """
-        Перевірка умови early stopping.
-
-        Returns:
-            bool: Чи слід зупинити тренування.
-        """
-        if len(val_losses) < patience:
-            return False
-        return val_losses[-patience] <= min(val_losses[-patience:])
-
     def setup_optimizer_and_loss(self, model: BaseDeepModel, learning_rate: float):
         """
         Налаштування оптимізатора та функції втрат.
@@ -282,13 +440,20 @@ class ModelTrainer:
         Returns:
             Tuple: Оптимізатор, функція втрат.
         """
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        # Для Transformer моделей можна використовувати AdamW
+        if hasattr(model, 'model_type') and model.model_type == 'transformer':
+            optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+        else:
+            optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
         criterion = nn.MSELoss()
         return optimizer, criterion
 
     def online_learning(self, symbol: str, timeframe: str, model_type: str,
-                        new_data: pd.DataFrame, input_dim: int,
-                        epochs: int = 10, learning_rate: float = 0.0005) -> Dict[str, Any]:
+                        new_data: pd.DataFrame, input_dim: int = None,
+                        config: Optional[ModelConfig] = None,
+                        epochs: int = 10, learning_rate: float = 0.0005,
+                        model_data=None) -> Dict[str, Any]:
         """
         Онлайн-дообучення моделі на нових даних.
 
@@ -303,11 +468,12 @@ class ModelTrainer:
                 raise ValueError(f"Модель {model_key} не знайдена")
 
         model = self.models[model_key]
+        model_config = self.model_configs[model_key]
+
         self.logger.info(f"Початок онлайн навчання для {model_key}")
 
-        # Підготовка нових даних
-        X = new_data.drop(columns=["target"]).values
-        y = new_data["target"].values
+        # Підготовка нових даних з урахуванням sequence_length
+        X, y = self._prepare_sequence_data(new_data, model_config.sequence_length)
         train_tensor = (torch.tensor(X).float(), torch.tensor(y).float())
 
         # Дообучення з меншою кількістю епох та швидкістю навчання
@@ -319,7 +485,9 @@ class ModelTrainer:
 
         # Збереження оновленої моделі
         try:
-            self.db_manager.save_ml_model(symbol, timeframe, model_type, self.model_configs[model_key])
+            if model_data is None:
+                model_data = self._create_model_data_dict(symbol, timeframe, model_type, model_config)
+            self.db_manager.save_ml_model(model_data)
             self.db_manager.save_ml_model_metrics(symbol, timeframe, model_type, metrics)
             self.logger.info(f"Онлайн навчання для {model_key} завершено")
         except Exception as e:
@@ -329,23 +497,17 @@ class ModelTrainer:
 
     def _build_model(self, model_type: str, input_dim: int, hidden_dim: int, num_layers: int) -> BaseDeepModel:
         """
-        Побудова моделі за типом.
+        Побудова моделі за типом (збережено для сумісності).
 
         Returns:
             BaseDeepModel: Ініціалізована модель.
         """
-        try:
-            if model_type.lower() == 'lstm':
-                from ML.LSTM import LSTMModel
-                return LSTMModel(input_dim, hidden_dim, num_layers, output_dim=1)
-            elif model_type.lower() == 'gru':
-                from ML.GRU import GRUModel
-                return GRUModel(input_dim, hidden_dim, num_layers, output_dim=1)
-            else:
-                raise ValueError(f"Невідомий тип моделі: {model_type}")
-        except ImportError as e:
-            self.logger.error(f"Помилка імпорту моделі {model_type}: {str(e)}")
-            raise
+        config = ModelConfig(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers
+        )
+        return self._build_model_from_config(model_type, config)
 
     def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
         """
@@ -363,7 +525,7 @@ class ModelTrainer:
         Args:
             symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
             timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
+            model_type: Тип моделі ('lstm', 'gru', 'transformer')
 
         Returns:
             str: Шлях до збереженої моделі
@@ -383,21 +545,19 @@ class ModelTrainer:
             # Зберігаємо модель
             torch.save({
                 'model_state_dict': self.models[model_key].state_dict(),
-                'config': self.model_configs[model_key],
+                'config': self.model_configs[model_key].__dict__,
                 'metrics': self.model_metrics.get(model_key, {}),
                 'training_history': self.training_history.get(model_key, [])
             }, model_path)
 
-            # Зберігаємо інформацію про модель в БД
-            self.db_manager.save_ml_model(
-                symbol=symbol,
-                timeframe=timeframe,
-                model_type=model_type,
-                model_config=self.model_configs[model_key],
-                model_path=model_path
-            )
+            # Підготовлюємо дані для збереження в БД
+            config = self.model_configs[model_key]
+            model_data = self._create_model_data_dict(symbol, timeframe, model_type, config)
 
-            self.logger.info(f"Модель {model_key} збережена за шляхом: {model_path}")
+            # Зберігаємо інформацію про модель в БД
+            model_id = self.db_manager.save_ml_model(model_data)
+
+            self.logger.info(f"Модель {model_key} збережена за шляхом: {model_path} з ID: {model_id}")
             return model_path
 
         except Exception as e:
@@ -411,7 +571,7 @@ class ModelTrainer:
         Args:
             symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
             timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm' або 'gru')
+            model_type: Тип моделі ('lstm', 'gru', 'transformer')
 
         Returns:
             bool: True, якщо модель успішно завантажена
@@ -430,14 +590,12 @@ class ModelTrainer:
             # Завантаження моделі
             checkpoint = torch.load(model_path, map_location=self.device)
 
-            # Отримання конфігурації та створення моделі
-            config = checkpoint['config']
-            model = self._build_model(
-                model_type,
-                config['input_dim'],
-                config['hidden_dim'],
-                config['num_layers']
-            )
+            # Відновлення конфігурації
+            config_dict = checkpoint['config']
+            config = ModelConfig(**config_dict)
+
+            # Створення моделі
+            model = self._build_model_from_config(model_type, config)
 
             # Завантаження ваг моделі
             model.load_state_dict(checkpoint['model_state_dict'])
@@ -495,13 +653,13 @@ class ModelTrainer:
                         self.logger.info(f"Навчання моделі {current_model}/{total_models}: {model_key}")
 
                         # Завантаження та підготовка даних
-                        data = self.get_data_loader(symbol, timeframe)
+                        data = self.processor.get_data_loader(symbol, timeframe)
                         if data is None or len(data) < 100:
                             self.logger.warning(f"Недостатньо даних для {model_key}")
                             continue
 
                         # Підготовка фічів
-                        processed_data = self.prepare_features(data, symbol)
+                        processed_data = self.processor.prepare_features(data, symbol)
                         input_dim = processed_data.shape[1] - 1  # -1 для target колонки
 
                         # Навчання моделі
@@ -602,11 +760,11 @@ class ModelTrainer:
         self.logger.info(f"Початок крос-валідації для {symbol}_{timeframe}_{model_type}")
 
         # Завантаження даних
-        data = self.get_data_loader(symbol, timeframe)
+        data = self.processor.get_data_loader(symbol, timeframe)
         if data is None:
             raise ValueError(f"Не вдалося завантажити дані для {symbol}_{timeframe}")
 
-        processed_data = self.prepare_features(data, symbol)
+        processed_data = self.processor.prepare_features(data, symbol)
         X = processed_data.drop(columns=["target"]).values
         y = processed_data["target"].values
 

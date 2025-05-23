@@ -13,6 +13,19 @@ from featureengineering.feature_engineering import FeatureEngineering
 
 
 @dataclass
+class ModelConfig:
+    input_dim: int
+    hidden_dim: int = 64
+    num_layers: int = 2
+    output_dim: int = 1
+    dropout: float = 0.2
+    learning_rate: float = 0.001
+    batch_size: int = 32
+    epochs: int = 100
+    sequence_length: int = 60
+
+
+@dataclass
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
     timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
@@ -22,14 +35,86 @@ class CryptoConfig:
 class DataPreprocessor:
     """Клас для завантаження, підготовки, нормалізації та обробки даних для моделей"""
 
+    # Константи для розмірів послідовностей по таймфреймам
+    TIMEFRAME_SEQUENCES = {
+        '1m': 60,
+        '1h': 24,
+        '4h': 60,
+        '1d': 30,
+        '1w': 12
+    }
+
     def __init__(self):
         self.scalers = {}  # Словник для зберігання скейлерів
         self.feature_configs = {}  # Конфігурації ознак
+        self.model_configs = {}  # Конфігурації моделей
         self.trend = TrendDetection()
         self.vol = VolatilityAnalysis()
         self.cycle = CryptoCycles()
         self.indicators = FeatureEngineering()
-        self.db_manager = DatabaseManager
+        self.db_manager = DatabaseManager()
+
+    def get_sequence_length_for_timeframe(self, timeframe: str) -> int:
+        """
+        Отримати розмір послідовності для конкретного таймфрейму
+
+        Args:
+            timeframe: Часовий інтервал
+
+        Returns:
+            int: Розмір послідовності
+        """
+        return self.TIMEFRAME_SEQUENCES.get(timeframe, 60)
+
+    def create_model_config(self, input_dim: int, timeframe: str, **kwargs) -> ModelConfig:
+        """
+        Створити конфігурацію моделі з правильним розміром послідовності
+
+        Args:
+            input_dim: Розмірність вхідних даних
+            timeframe: Часовий інтервал
+            **kwargs: Додаткові параметри для ModelConfig
+
+        Returns:
+            ModelConfig: Конфігурація моделі
+        """
+        sequence_length = self.get_sequence_length_for_timeframe(timeframe)
+
+        config_params = {
+            'input_dim': input_dim,
+            'sequence_length': sequence_length,
+            **kwargs
+        }
+
+        return ModelConfig(**config_params)
+
+    def get_model_config(self, symbol: str, timeframe: str, model_type: str) -> ModelConfig:
+        """
+        Отримати збережену конфігурацію моделі або створити нову
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            model_type: Тип моделі
+
+        Returns:
+            ModelConfig: Конфігурація моделі
+        """
+        key = f"{symbol}_{timeframe}_{model_type}"
+        return self.model_configs.get(key)
+
+    def set_model_config(self, symbol: str, timeframe: str, model_type: str, config: ModelConfig):
+        """
+        Зберегти конфігурацію моделі
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            model_type: Тип моделі
+            config: Конфігурація моделі
+        """
+        key = f"{symbol}_{timeframe}_{model_type}"
+        self.model_configs[key] = config
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
         """
@@ -63,50 +148,87 @@ class DataPreprocessor:
         Returns:
             DataFrame з ознаками
         """
-        # Отримання різних типів ознак
-        trend_features = self.trend.prepare_ml_trend_features(df, symbol)
-        volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
-        cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
+        try:
+            # Отримання різних типів ознак
+            trend_features = self.trend.prepare_ml_trend_features(df, symbol)
+            volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
+            cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
 
-        # Об'єднання всіх ознак через конвейер
-        final_features = self.indicators.prepare_features_pipeline(
-            df,
-            trend_features=trend_features,
-            volatility_features=volatility_features,
-            cycle_features=cycle_features,
-            symbol=symbol
-        )
+            # Об'єднання всіх ознак через конвейер
+            indicator_features = self.indicators.prepare_features_pipeline(df)
 
-        return final_features
+            # Виправлено: об'єднання всіх ознак
+            final_features = pd.concat([
+                trend_features,
+                volatility_features,
+                cycle_features,
+                indicator_features
+            ], axis=1)
 
-    def preprocess_data_for_model(self, data: pd.DataFrame, sequence_length: int = 60,
-                                  validation_split: float = 0.2) -> Tuple[torch.Tensor, torch.Tensor,
-    torch.Tensor, torch.Tensor]:
+            # Видалення дублікатів колонок
+            final_features = final_features.loc[:, ~final_features.columns.duplicated()]
+
+            return final_features
+
+        except Exception as e:
+            print(f"Помилка при підготовці ознак для {symbol}: {e}")
+            raise
+
+    def preprocess_data_for_model(self, data: pd.DataFrame, symbol: str, timeframe: str,
+                                  model_type: str = 'lstm', validation_split: float = 0.2,
+                                  config: ModelConfig = None) -> Tuple[torch.Tensor, torch.Tensor,
+    torch.Tensor, torch.Tensor, ModelConfig]:
         """
-        Препроцесинг даних для моделі
+        Препроцесинг даних для моделі з використанням ModelConfig
 
         Args:
             data: DataFrame з ознаками
-            sequence_length: Довжина послідовностей
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            model_type: Тип моделі
             validation_split: Розмір валідаційної вибірки
+            config: Опціональна конфігурація моделі
 
         Returns:
-            Кортеж тензорів (X_train, y_train, X_val, y_val)
+            Кортеж (X_train, y_train, X_val, y_val, model_config)
         """
         # Перевірка наявності цільової змінної
         if "target" not in data.columns:
             raise ValueError("Цільова змінна 'target' не знайдена в даних")
 
+        # Видалення рядків з NaN значеннями
+        data_clean = data.dropna()
+
+        if len(data_clean) == 0:
+            raise ValueError("Після видалення NaN значень не залишилось даних")
+
         # Розділення на ознаки та цільову змінну
-        data_values = data.drop(columns=["target"]).values
-        target_values = data["target"].values
+        feature_columns = data_clean.drop(columns=["target"])
+        data_values = feature_columns.values
+        target_values = data_clean["target"].values
+
+        # Створення або отримання конфігурації моделі
+        if config is None:
+            sequence_length = self.get_sequence_length_for_timeframe(timeframe)
+            input_dim = data_values.shape[1]
+            config = self.create_model_config(input_dim, timeframe)
+            # Збереження конфігурації
+            self.set_model_config(symbol, timeframe, model_type, config)
+        else:
+            # Оновлення input_dim якщо потрібно
+            if config.input_dim != data_values.shape[1]:
+                config.input_dim = data_values.shape[1]
 
         # Нормалізація даних
         scaler = StandardScaler()
         data_values_scaled = scaler.fit_transform(data_values)
 
-        # Створення послідовностей
-        X, y = self.create_sequences(data_values_scaled, target_values, sequence_length)
+        # Збереження скейлера
+        scaler_key = f"{symbol}_{timeframe}"
+        self.scalers[scaler_key] = scaler
+
+        # Створення послідовностей з використанням sequence_length з конфігурації
+        X, y = self.create_sequences(data_values_scaled, target_values, config.sequence_length)
 
         # Розділення на тренувальну та валідаційну вибірки
         X_train, X_val, y_train, y_val = self.split_data(X, y, validation_split)
@@ -115,7 +237,8 @@ class DataPreprocessor:
         return (torch.tensor(X_train, dtype=torch.float32),
                 torch.tensor(y_train, dtype=torch.float32),
                 torch.tensor(X_val, dtype=torch.float32),
-                torch.tensor(y_val, dtype=torch.float32))
+                torch.tensor(y_val, dtype=torch.float32),
+                config)
 
     def create_sequences(self, data: np.ndarray, target: np.ndarray,
                          seq_length: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -143,6 +266,60 @@ class DataPreprocessor:
             y.append(target[i + seq_length])
 
         return np.array(X), np.array(y)
+
+    def prepare_data_with_config(self, symbol: str, timeframe: str, model_type: str,
+                                 validation_split: float = 0.2) -> Tuple[torch.Tensor, torch.Tensor,
+    torch.Tensor, torch.Tensor, ModelConfig]:
+        """
+        Повний конвейер підготовки даних з автоматичним створенням конфігурації
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Часовий інтервал
+            model_type: Тип моделі
+            validation_split: Розмір валідаційної вибірки
+
+        Returns:
+            Кортеж (X_train, y_train, X_val, y_val, model_config)
+        """
+        # Завантаження даних
+        data_loader = self.get_data_loader(symbol, timeframe, model_type)
+        raw_data = data_loader()
+
+        # Підготовка ознак
+        features = self.prepare_features(raw_data, symbol)
+
+        # Препроцесинг даних з створенням конфігурації
+        return self.preprocess_data_for_model(
+            features, symbol, timeframe, model_type, validation_split
+        )
+
+    def get_optimal_config_for_timeframe(self, timeframe: str, input_dim: int,
+                                         **custom_params) -> ModelConfig:
+        """
+        Отримати оптимальну конфігурацію для конкретного таймфрейму
+
+        Args:
+            timeframe: Часовий інтервал
+            input_dim: Розмірність вхідних даних
+            **custom_params: Кастомні параметри
+
+        Returns:
+            ModelConfig: Оптимальна конфігурація
+        """
+        # Базові параметри залежно від таймфрейму
+        timeframe_configs = {
+            '1m': {'hidden_dim': 128, 'num_layers': 3, 'dropout': 0.3, 'learning_rate': 0.0005},
+            '1h': {'hidden_dim': 64, 'num_layers': 2, 'dropout': 0.2, 'learning_rate': 0.001},
+            '4h': {'hidden_dim': 96, 'num_layers': 2, 'dropout': 0.25, 'learning_rate': 0.0008},
+            '1d': {'hidden_dim': 48, 'num_layers': 2, 'dropout': 0.15, 'learning_rate': 0.001},
+            '1w': {'hidden_dim': 32, 'num_layers': 1, 'dropout': 0.1, 'learning_rate': 0.0015}
+        }
+
+        base_config = timeframe_configs.get(timeframe, {})
+        base_config.update(custom_params)
+
+        return self.create_model_config(input_dim, timeframe, **base_config)
 
     def denormalize_predictions(self, predictions: np.ndarray, symbol: str,
                                 timeframe: str) -> np.ndarray:
@@ -227,10 +404,13 @@ class DataPreprocessor:
         # Нормалізація даних
         numeric_columns = data.select_dtypes(include=[np.number]).columns
         data_normalized = data.copy()
-        data_normalized[numeric_columns] = scaler.fit_transform(data[numeric_columns])
 
-        # Збереження скейлера
-        self.scalers[key] = scaler
+        if len(numeric_columns) > 0:
+            data_normalized[numeric_columns] = scaler.fit_transform(data[numeric_columns])
+            # Збереження скейлера
+            self.scalers[key] = scaler
+        else:
+            print(f"Попередження: не знайдено числових колонок для нормалізації в {key}")
 
         return data_normalized
 
@@ -255,3 +435,35 @@ class DataPreprocessor:
             config: Конфігурація ознак
         """
         self.feature_configs[symbol] = config
+
+    def validate_data(self, data: pd.DataFrame) -> bool:
+        """
+        Валідація вхідних даних
+
+        Args:
+            data: DataFrame для валідації
+
+        Returns:
+            bool: True якщо дані валідні
+        """
+        if data.empty:
+            raise ValueError("DataFrame порожній")
+
+        if data.isnull().all().any():
+            print("Попередження: знайдені колонки з усіма NaN значеннями")
+
+        return True
+
+    def get_scaler(self, symbol: str, timeframe: str):
+        """
+        Отримання збереженого скейлера
+
+        Args:
+            symbol: Символ криптовалюти
+            timeframe: Таймфрейм
+
+        Returns:
+            Скейлер або None якщо не знайдено
+        """
+        key = f"{symbol}_{timeframe}"
+        return self.scalers.get(key)
