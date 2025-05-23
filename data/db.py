@@ -1132,19 +1132,24 @@ class DatabaseManager:
         except Exception as e:
             raise
 
-    def save_model_parameters(self, model_key: str, order_params: Optional[str] = None,
-                                seasonal_order: Optional[str] = None, seasonal_period: Optional[int] = None) -> bool:
+    def save_model_parameters(self, model_key: str,
+                              order_params: Optional[Union[str, tuple]] = None,
+                              seasonal_order: Optional[Union[str, tuple]] = None,
+                              seasonal_period: Optional[int] = None) -> bool:
         """Додавання параметрів моделі"""
         try:
+            # Перетворення tuple в рядок
+            if isinstance(order_params, (tuple, list)):
+                order_params = json.dumps(order_params)
+            if isinstance(seasonal_order, (tuple, list)):
+                seasonal_order = json.dumps(seasonal_order)
+
             query = """
                     INSERT INTO model_parameters (model_key, order_params, seasonal_order, seasonal_period)
-                    VALUES (%s, %s, %s, %s) \
+                    VALUES (%s, %s, %s, %s)
                     """
             self.cursor.execute(query, (model_key, order_params, seasonal_order, seasonal_period))
-            with self.conn.cursor() as cursor:
-                cursor.execute(...)
-                self.conn.commit()
-            parametrs = (order_params, seasonal_order, seasonal_period)
+            self.conn.commit()
             return True
         except Exception as e:
             print(f"Error inserting model parameters: {e}")

@@ -102,7 +102,16 @@ class ARIMAModeler:
         return model_key
 
     def _save_model_to_db(self, model_key: str, model_info: Dict) -> bool:
+        """
+        Save ARIMA model to database with proper parameter serialization
 
+        Args:
+            model_key: Unique identifier for the model
+            model_info: Dictionary containing model data, parameters, and metadata
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
         if self.db_manager is None:
             self.logger.warning("База даних недоступна, пропускаємо збереження моделі")
             return False
@@ -128,21 +137,8 @@ class ARIMAModeler:
             self.logger.debug(f"Діапазон даних: {start_date} - {end_date}, точок даних: {data_length}")
 
             # Конвертуємо дати в datetime об'єкти, якщо вони в форматі строки
-            if isinstance(start_date, str):
-                try:
-                    start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                    self.logger.debug("Дата початку успішно конвертована")
-                except Exception as e:
-                    self.logger.warning(f"Не вдалося конвертувати дату початку: {e}")
-                    start_date = datetime.now()
-
-            if isinstance(end_date, str):
-                try:
-                    end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                    self.logger.debug("Дата кінця успішно конвертована")
-                except Exception as e:
-                    self.logger.warning(f"Не вдалося конвертувати дату кінця: {e}")
-                    end_date = datetime.now()
+            start_date = self._convert_to_datetime(start_date)
+            end_date = self._convert_to_datetime(end_date)
 
             # Зберігаємо метадані з усіма необхідними параметрами
             self.logger.debug("Збереження метаданих моделі")
@@ -155,13 +151,14 @@ class ARIMAModeler:
                 metadata
             )
 
-            # Зберігаємо параметри
-            self.logger.debug(f"Збереження параметрів моделі: {list(model_info['parameters'].keys())}")
-            self.db_manager.save_model_parameters(model_key, model_info["parameters"])
+            # Серіалізуємо та зберігаємо параметри
+            serialized_parameters = self._serialize_model_parameters(model_info.get("parameters", {}))
+            self.logger.debug(f"Збереження параметрів моделі: {list(serialized_parameters.keys())}")
+            self.db_manager.save_model_parameters(model_key, serialized_parameters)
 
             # Зберігаємо двійкове представлення моделі
             self.logger.debug("Серіалізація та збереження двійкового представлення моделі")
-            model_binary = pickle.dumps(model_info["fit_result"])
+            model_binary = self._serialize_model_object(model_info["fit_result"])
             binary_size = len(model_binary)
             self.logger.debug(f"Розмір серіалізованої моделі: {binary_size} байт")
             self.db_manager.save_model_binary(model_key, model_binary)
@@ -169,7 +166,8 @@ class ARIMAModeler:
             # Якщо є трансформації, зберігаємо їх також
             if model_key in self.transformations:
                 self.logger.debug("Збереження трансформацій даних")
-                self.db_manager.save_data_transformations(model_key, self.transformations[model_key])
+                serialized_transformations = self._serialize_transformations(self.transformations[model_key])
+                self.db_manager.save_data_transformations(model_key, serialized_transformations)
             else:
                 self.logger.debug("Трансформації даних відсутні")
 
@@ -181,6 +179,170 @@ class ARIMAModeler:
             self.logger.error(error_msg)
             self.logger.debug(f"Повний стек помилки: {traceback.format_exc()}")
             return False
+
+    def _convert_to_datetime(self, date_value) -> datetime:
+        """
+        Convert string date to datetime object with proper error handling
+
+        Args:
+            date_value: Date as string or datetime object
+
+        Returns:
+            datetime: Converted datetime object
+        """
+        if isinstance(date_value, datetime):
+            return date_value
+
+        if isinstance(date_value, str):
+            try:
+                # Handle ISO format with Z timezone
+                if date_value.endswith('Z'):
+                    date_value = date_value.replace('Z', '+00:00')
+                return datetime.fromisoformat(date_value)
+            except ValueError:
+                try:
+                    # Try parsing common date formats
+                    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y-%m-%dT%H:%M:%S']:
+                        try:
+                            return datetime.strptime(date_value, fmt)
+                        except ValueError:
+                            continue
+                    raise ValueError(f"Unable to parse date format: {date_value}")
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося конвертувати дату {date_value}: {e}")
+                    return datetime.now()
+
+        return datetime.now()
+
+    def _serialize_model_parameters(self, parameters: Dict) -> Dict:
+        """
+        Serialize model parameters to ensure they can be stored in database
+
+        Args:
+            parameters: Dictionary of model parameters
+
+        Returns:
+            Dict: Serialized parameters ready for database storage
+        """
+        serialized = {}
+
+        try:
+            for key, value in parameters.items():
+                if value is None:
+                    serialized[key] = None
+                elif isinstance(value, (int, float, str, bool)):
+                    serialized[key] = value
+                elif isinstance(value, (list, tuple)):
+                    # Convert numpy arrays and other iterables to lists
+                    try:
+                        serialized[key] = [float(x) if hasattr(x, 'item') else x for x in value]
+                    except (TypeError, ValueError):
+                        serialized[key] = str(value)
+                elif hasattr(value, 'tolist'):  # numpy arrays
+                    serialized[key] = value.tolist()
+                elif hasattr(value, 'item'):  # numpy scalars
+                    serialized[key] = value.item()
+                elif isinstance(value, dict):
+                    # Recursively serialize nested dictionaries
+                    serialized[key] = self._serialize_model_parameters(value)
+                else:
+                    # For complex objects, try to extract meaningful information
+                    if hasattr(value, '__dict__'):
+                        try:
+                            serialized[key] = {
+                                'type': type(value).__name__,
+                                'attributes': {k: v for k, v in value.__dict__.items()
+                                               if not k.startswith('_') and isinstance(v, (int, float, str, bool))}
+                            }
+                        except:
+                            serialized[key] = str(value)
+                    else:
+                        serialized[key] = str(value)
+
+            self.logger.debug(f"Серіалізовано {len(serialized)} параметрів")
+            return serialized
+
+        except Exception as e:
+            self.logger.error(f"Помилка серіалізації параметрів: {e}")
+            # Return basic string representation as fallback
+            return {str(k): str(v) for k, v in parameters.items()}
+
+    def _serialize_model_object(self, model_object) -> bytes:
+        """
+        Serialize the fitted model object to bytes
+
+        Args:
+            model_object: The fitted ARIMA model or similar object
+
+        Returns:
+            bytes: Serialized model object
+        """
+        try:
+            # Try different serialization methods
+            try:
+                # First try with pickle (most common)
+                return pickle.dumps(model_object, protocol=pickle.HIGHEST_PROTOCOL)
+            except Exception as pickle_error:
+                self.logger.warning(f"Pickle серіалізація не вдалася: {pickle_error}")
+
+                # Try with joblib if available (better for sklearn-like models)
+                try:
+                    import joblib
+                    from io import BytesIO
+                    buffer = BytesIO()
+                    joblib.dump(model_object, buffer)
+                    return buffer.getvalue()
+                except ImportError:
+                    self.logger.debug("joblib недоступний, продовжуємо з pickle")
+                    raise pickle_error
+                except Exception as joblib_error:
+                    self.logger.warning(f"joblib серіалізація не вдалася: {joblib_error}")
+                    raise pickle_error
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка серіалізації моделі: {e}")
+            raise
+
+    def _serialize_transformations(self, transformations: Dict) -> Dict:
+        """
+        Serialize data transformations for database storage
+
+        Args:
+            transformations: Dictionary of transformation objects
+
+        Returns:
+            Dict: Serialized transformations
+        """
+        serialized_transforms = {}
+
+        try:
+            for transform_key, transform_obj in transformations.items():
+                if transform_obj is None:
+                    serialized_transforms[transform_key] = None
+                    continue
+
+                try:
+                    # Try to serialize the transformation object
+                    serialized_transforms[transform_key] = {
+                        'type': type(transform_obj).__name__,
+                        'data': pickle.dumps(transform_obj).hex(),  # Store as hex string
+                        'serialization_method': 'pickle_hex'
+                    }
+                except Exception as transform_error:
+                    self.logger.warning(f"Не вдалося серіалізувати трансформацію {transform_key}: {transform_error}")
+                    # Store basic information about the transformation
+                    serialized_transforms[transform_key] = {
+                        'type': type(transform_obj).__name__,
+                        'error': str(transform_error),
+                        'serialization_method': 'failed'
+                    }
+
+            self.logger.debug(f"Серіалізовано {len(serialized_transforms)} трансформацій")
+            return serialized_transforms
+
+        except Exception as e:
+            self.logger.error(f"Помилка серіалізації трансформацій: {e}")
+            return {}
 
     def _collect_model_metadata(self, data: pd.Series, model_key: str, model_type: str,
                                 symbol: str, timeframe: str = "1d") -> Dict:
