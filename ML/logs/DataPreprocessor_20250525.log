@@ -255,3 +255,83 @@ LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
 2025-05-25 02:24:39 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
 2025-05-25 02:24:39 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для BTC: 'list' object has no attribute 'columns'
 2025-05-25 02:24:39 - DataPreprocessor - INFO - [logger.py:103] - Подготовка загрузчика данных для ETH с таймфреймом 1h и моделью lstm
+2025-05-25 02:34:06 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
+2025-05-25 02:34:06 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
+2025-05-25 02:34:06 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю lstm
+2025-05-25 02:34:08 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для BTC-1h
+2025-05-25 02:34:08 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-25 02:34:08 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для BTC: <class 'list'>
+2025-05-25 02:34:08 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:08 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-25 02:34:08 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для BTC: DataFrame невалідний для BTC
+2025-05-25 02:34:08 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю gru
+2025-05-25 02:34:09 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для BTC-1h
+2025-05-25 02:34:09 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-25 02:34:09 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для BTC: <class 'list'>
+2025-05-25 02:34:09 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:09 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-25 02:34:09 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для BTC: DataFrame невалідний для BTC
+2025-05-25 02:34:09 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-25 02:34:10 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-25 02:34:10 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-25 02:34:10 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для BTC: <class 'list'>
+2025-05-25 02:34:10 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:10 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-25 02:34:10 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для BTC: DataFrame невалідний для BTC
+2025-05-25 02:34:10 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-25 02:34:10 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-25 02:34:10 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-25 02:34:10 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для BTC: <class 'list'>
+2025-05-25 02:34:10 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:10 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-25 02:34:10 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для BTC: DataFrame невалідний для BTC
+2025-05-25 02:34:10 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1h та моделлю lstm
+2025-05-25 02:34:12 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для ETH-1h
+2025-05-25 02:34:12 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-25 02:34:12 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для ETH: <class 'list'>
+2025-05-25 02:34:12 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для ETH: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:12 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для ETH
+2025-05-25 02:34:12 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для ETH: DataFrame невалідний для ETH
+2025-05-25 02:34:12 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1h та моделлю gru
+2025-05-25 02:34:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для ETH-1h
+2025-05-25 02:34:13 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-25 02:34:13 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для ETH: <class 'list'>
+2025-05-25 02:34:13 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для ETH: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:13 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для ETH
+2025-05-25 02:34:13 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для ETH: DataFrame невалідний для ETH
+2025-05-25 02:34:13 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю lstm
+2025-05-25 02:34:14 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-25 02:34:14 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-25 02:34:14 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для ETH: <class 'list'>
+2025-05-25 02:34:14 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для ETH: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:14 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для ETH
+2025-05-25 02:34:14 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для ETH: DataFrame невалідний для ETH
+2025-05-25 02:34:14 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю gru
+2025-05-25 02:34:14 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-25 02:34:14 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-25 02:34:14 - DataPreprocessor - ERROR - [logger.py:111] - Вхідні дані не є DataFrame для ETH: <class 'list'>
+2025-05-25 02:34:14 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для ETH: Очікується DataFrame, отримано <class 'list'>
+2025-05-25 02:34:14 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для ETH
+2025-05-25 02:34:14 - DataPreprocessor - ERROR - [logger.py:111] - Помилка fallback для ETH: DataFrame невалідний для ETH
+2025-05-25 02:38:11 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
+2025-05-25 02:38:11 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
+2025-05-25 02:38:11 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю lstm
+2025-05-25 02:38:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для BTC-1h
+2025-05-25 02:38:13 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-25 02:38:13 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-25 02:38:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 67848 записів в DataFrame для BTC
+2025-05-25 02:38:13 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-25 02:38:15 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні трендових ознак для BTC: 'tuple' object has no attribute 'empty'
+2025-05-25 02:38:15 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для BTC порожні
+2025-05-25 02:38:15 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-25 02:43:18 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
+2025-05-25 02:43:18 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
+2025-05-25 02:43:18 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю lstm
+2025-05-25 02:43:19 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для BTC-1h
+2025-05-25 02:43:19 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-25 02:43:19 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-25 02:43:20 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 67848 записів в DataFrame для BTC
+2025-05-25 02:43:20 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-25 02:43:22 - DataPreprocessor - WARNING - [logger.py:107] - Трендові ознаки для BTC порожні
+2025-05-25 02:43:22 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для BTC порожні
+2025-05-25 02:43:22 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given

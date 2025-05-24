@@ -180,13 +180,19 @@ class DataPreprocessor:
                     return data
                 # Якщо це список словників, конвертуємо в DataFrame
                 elif isinstance(data, list) and len(data) > 0:
-                    df = pd.DataFrame(data)
-                    self.logger.info(f"Конвертовано список в DataFrame для {symbol}-{timeframe}: "
-                                     f"форма {df.shape}")
-                    return df
+                    # Перевірка що елементи списку - це словники
+                    if isinstance(data[0], dict):
+                        df = pd.DataFrame(data)
+                        self.logger.info(f"Конвертовано список словників в DataFrame для {symbol}-{timeframe}: "
+                                         f"форма {df.shape}")
+                        return df
+                    else:
+                        self.logger.error(
+                            f"Неочікуваний тип елементів списку для {symbol}-{timeframe}: {type(data[0])}")
+                        raise ValueError(f"Елементи списку повинні бути словниками, а не {type(data[0])}")
                 else:
                     self.logger.warning(f"Невідомий тип даних для {symbol}-{timeframe}: {type(data)}")
-                    raise ValueError("Невірний тип завантажених даних")
+                    raise ValueError(f"Невірний тип завантажених даних: {type(data)}")
             else:
                 self.logger.warning(f"Основний метод повернув порожні дані для {symbol}-{timeframe}")
                 raise ValueError("Порожні дані з основного методу")
@@ -223,6 +229,11 @@ class DataPreprocessor:
             bool: True якщо дані валідні
         """
         self.logger.info(f"Валідація підготовлених даних для {symbol}")
+
+        # Перевірка що це DataFrame
+        if not isinstance(df, pd.DataFrame):
+            self.logger.error(f"Дані для {symbol} не є DataFrame: {type(df)}")
+            raise ValueError(f"Очікується DataFrame, отримано {type(df)}")
 
         if df.empty:
             self.logger.error(f"DataFrame порожній для {symbol}")
@@ -306,6 +317,11 @@ class DataPreprocessor:
             Кортеж (X, y) де X - послідовності ознак, y - цільові значення
         """
         self.logger.info(f"Витягування послідовностей з підготовлених даних")
+
+        # Перевірка що це DataFrame
+        if not isinstance(df, pd.DataFrame):
+            self.logger.error(f"Дані не є DataFrame: {type(df)}")
+            raise ValueError(f"Очікується DataFrame, отримано {type(df)}")
 
         # Перевірка наявності необхідних колонок
         if 'sequence_id' not in df.columns or 'sequence_position' not in df.columns:
@@ -648,49 +664,165 @@ class DataPreprocessor:
             'scalers_keys': list(self.scalers.keys())[:10]  # Перші 10 ключів
         }
 
-    def prepare_features(self, df: pd.DataFrame, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
+    def prepare_features(self, data, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
         """Підготовка ознак для моделі з використанням всіх доступних модулів"""
         try:
             self.logger.info(f"Початок підготовки ознак для {symbol}")
+
+            # Перевірка типу вхідних даних та конвертація в DataFrame
+            if isinstance(data, list):
+                self.logger.info(f"Конвертація списку словників в DataFrame для {symbol}")
+                if not data:
+                    raise ValueError(f"Порожній список даних для {symbol}")
+
+                # Перевірка що елементи списку - це словники
+                if not isinstance(data[0], dict):
+                    raise ValueError(f"Елементи списку повинні бути словниками для {symbol}")
+
+                df = pd.DataFrame(data)
+                self.logger.info(f"Успішно конвертовано {len(data)} записів в DataFrame для {symbol}")
+
+            elif isinstance(data, pd.DataFrame):
+                df = data.copy()
+                self.logger.debug(f"Використовується існуючий DataFrame для {symbol}")
+
+            else:
+                self.logger.error(f"Невідомий тип вхідних даних для {symbol}: {type(data)}")
+                raise ValueError(f"Очікується DataFrame або список словників, отримано {type(data)}")
+
+            # Перевірка що DataFrame не порожній
+            if df.empty:
+                raise ValueError(f"DataFrame порожній для {symbol}")
+
+            # Логування інформації про DataFrame
+            self.logger.debug(f"DataFrame для {symbol}: форма {df.shape}, колонки {list(df.columns)}")
+
             # Список для зберігання DataFrames перед об'єднанням
             feature_dataframes = []
 
             # Базові OHLCV ознаки (з оригінального DataFrame)
             self.logger.debug(f"Додавання базових OHLCV ознак для {symbol}")
-            base_features = df[['open', 'high', 'low', 'close', 'volume']].copy()
+
+            # Перевірка наявності базових колонок (можуть бути з суфіксами _scaled)
+            potential_base_columns = ['open', 'high', 'low', 'close', 'volume',
+                                      'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
+            available_base_columns = [col for col in potential_base_columns if col in df.columns]
+
+            if not available_base_columns:
+                self.logger.error(f"Жодної базової колонки не знайдено для {symbol}")
+                self.logger.debug(f"Доступні колонки: {list(df.columns)}")
+                raise ValueError(f"Відсутні необхідні базові колонки для {symbol}")
+
+            # Використовуємо доступні базові колонки
+            base_features = df[available_base_columns].copy()
             feature_dataframes.append(base_features)
+            self.logger.info(f"Додано {len(available_base_columns)} базових ознак для {symbol}")
+
+            # Якщо у нас є scaled колонки, створимо також unscaled версії для аналізу
+            scaled_columns = [col for col in available_base_columns if col.endswith('_scaled')]
+            if scaled_columns:
+                self.logger.debug(f"Знайдено {len(scaled_columns)} scaled колонок для {symbol}")
+
+                # Для аналізу потрібні unscaled дані, але якщо їх немає, спробуємо використати scaled
+                unscaled_map = {
+                    'open_scaled': 'open',
+                    'high_scaled': 'high',
+                    'low_scaled': 'low',
+                    'close_scaled': 'close',
+                    'volume_scaled': 'volume'
+                }
+
+                # Створимо unscaled версії якщо їх немає (для технічного аналізу)
+                analysis_df = df.copy()
+                for scaled_col in scaled_columns:
+                    unscaled_col = unscaled_map.get(scaled_col)
+                    if unscaled_col and unscaled_col not in analysis_df.columns:
+                        # Використовуємо scaled дані як базу для аналізу
+                        analysis_df[unscaled_col] = analysis_df[scaled_col]
+                        self.logger.debug(f"Створено {unscaled_col} з {scaled_col} для аналізу")
+            else:
+                analysis_df = df.copy()
 
             # Отримання трендових ознак
             self.logger.debug(f"Підготовка трендових ознак для {symbol}")
             try:
-                trend_features = self.trend.prepare_ml_trend_features(df)
-                if trend_features is not None and not trend_features.empty:
-                    feature_dataframes.append(trend_features)
-                    self.logger.info(f"Додано {trend_features.shape[1]} трендових ознак")
+                # Виправлення: prepare_ml_trend_features повертає кортеж, а не DataFrame
+                trend_result = self.trend.prepare_ml_trend_features(analysis_df)
+
+                if trend_result is not None and len(trend_result) == 3:
+                    X, y, regimes = trend_result
+                    # Створюємо DataFrame з трендових ознак
+                    if X is not None and len(X) > 0:
+                        # Конвертуємо 3D масив X в 2D DataFrame
+                        # X має форму (samples, timesteps, features), візьмемо останній timestep
+                        if len(X.shape) == 3:
+                            trend_features_array = X[:, -1, :]  # Останній timestep для кожного sample
+                        else:
+                            trend_features_array = X
+
+                        # Створюємо назви колонок для трендових ознак
+                        trend_feature_names = [
+                            'close_norm', 'volume_norm', 'adx_norm', 'di_plus_norm', 'di_minus_norm',
+                            'rsi_norm', 'macd_norm', 'macd_signal_norm', 'trend_strength_norm',
+                            'speed_20_norm', 'volatility_20_norm'
+                        ]
+
+                        # Обрізуємо назви якщо є більше ознак ніж очікувалося
+                        if trend_features_array.shape[1] > len(trend_feature_names):
+                            trend_feature_names.extend([f'trend_feature_{i}' for i in
+                                                        range(len(trend_feature_names), trend_features_array.shape[1])])
+                        elif trend_features_array.shape[1] < len(trend_feature_names):
+                            trend_feature_names = trend_feature_names[:trend_features_array.shape[1]]
+
+                        # Створюємо DataFrame з правильним індексом
+                        start_idx = len(analysis_df) - len(trend_features_array)
+                        trend_index = analysis_df.index[start_idx:]
+
+                        trend_features = pd.DataFrame(
+                            trend_features_array,
+                            index=trend_index,
+                            columns=trend_feature_names
+                        )
+
+                        # Додаємо режими ринку як окрему колонку
+                        if regimes is not None and len(regimes) == len(trend_features):
+                            trend_features['market_regime'] = regimes
+
+                        feature_dataframes.append(trend_features)
+                        self.logger.info(f"Додано {trend_features.shape[1]} трендових ознак")
+                    else:
+                        self.logger.warning(f"Трендові ознаки для {symbol} порожні")
                 else:
-                    self.logger.warning(f"Трендові ознаки для {symbol} порожні")
+                    self.logger.warning(f"Неправильний формат результату трендових ознак для {symbol}")
             except Exception as e:
                 self.logger.error(f"Помилка при створенні трендових ознак для {symbol}: {e}")
 
             # Отримання ознак волатильності
-            self.logger.debug(f"Підготовка ознак волатильності для {symbol}")
+            self.logger.debug(f"Підготовка ознак волатільності для {symbol}")
             try:
-                volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
+                volatility_features = self.vol.prepare_volatility_features_for_ml(analysis_df, symbol)
                 if volatility_features is not None and not volatility_features.empty:
-                    feature_dataframes.append(volatility_features)
-                    self.logger.info(f"Додано {volatility_features.shape[1]} ознак волатильності")
+                    if isinstance(volatility_features, pd.DataFrame):
+                        feature_dataframes.append(volatility_features)
+                        self.logger.info(f"Додано {volatility_features.shape[1]} ознак волатільності")
+                    else:
+                        self.logger.warning(
+                            f"Ознаки волатільності не є DataFrame для {symbol}: {type(volatility_features)}")
                 else:
-                    self.logger.warning(f"Ознаки волатильності для {symbol} порожні")
+                    self.logger.warning(f"Ознаки волатільності для {symbol} порожні")
             except Exception as e:
-                self.logger.error(f"Помилка при створенні ознак волатильності для {symbol}: {e}")
+                self.logger.error(f"Помилка при створенні ознак волатільності для {symbol}: {e}")
 
             # Отримання циклічних ознак
             self.logger.debug(f"Підготовка циклічних ознак для {symbol}")
             try:
-                cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
+                cycle_features = self.cycle.prepare_cycle_ml_features(analysis_df, symbol)
                 if cycle_features is not None and not cycle_features.empty:
-                    feature_dataframes.append(cycle_features)
-                    self.logger.info(f"Додано {cycle_features.shape[1]} циклічних ознак")
+                    if isinstance(cycle_features, pd.DataFrame):
+                        feature_dataframes.append(cycle_features)
+                        self.logger.info(f"Додано {cycle_features.shape[1]} циклічних ознак")
+                    else:
+                        self.logger.warning(f"Циклічні ознаки не є DataFrame для {symbol}: {type(cycle_features)}")
                 else:
                     self.logger.warning(f"Циклічні ознаки для {symbol} порожні")
             except Exception as e:
@@ -699,10 +831,14 @@ class DataPreprocessor:
             # Отримання технічних індикаторів
             self.logger.debug(f"Підготовка технічних індикаторів для {symbol}")
             try:
-                indicator_features = self.indicators.prepare_features_pipeline(df)
+                indicator_features = self.indicators.prepare_features_pipeline(analysis_df)
                 if indicator_features is not None and not indicator_features.empty:
-                    feature_dataframes.append(indicator_features)
-                    self.logger.info(f"Додано {indicator_features.shape[1]} технічних індикаторів")
+                    if isinstance(indicator_features, pd.DataFrame):
+                        feature_dataframes.append(indicator_features)
+                        self.logger.info(f"Додано {indicator_features.shape[1]} технічних індикаторів")
+                    else:
+                        self.logger.warning(
+                            f"Технічні індикатори не є DataFrame для {symbol}: {type(indicator_features)}")
                 else:
                     self.logger.warning(f"Технічні індикатори для {symbol} порожні")
             except Exception as e:
@@ -715,19 +851,41 @@ class DataPreprocessor:
             # Оптимізоване об'єднання з обробкою індексів
             self.logger.debug(f"Об'єднання {len(feature_dataframes)} наборів ознак для {symbol}")
 
-            # Вирівнюємо всі DataFrame по індексу першого (базового)
-            base_index = feature_dataframes[0].index
-            aligned_dataframes = []
+            # Знаходимо спільний індекс для всіх DataFrames
+            common_index = feature_dataframes[0].index
+            for df_features in feature_dataframes[1:]:
+                common_index = common_index.intersection(df_features.index)
 
+            if len(common_index) == 0:
+                self.logger.warning(f"Немає спільного індексу між DataFrames для {symbol}, використовуємо outer join")
+                common_index = None
+
+            # Вирівнюємо всі DataFrame
+            aligned_dataframes = []
             for i, features_df in enumerate(feature_dataframes):
                 try:
-                    # Вирівнюємо по базовому індексу
-                    aligned_df = features_df.reindex(base_index, method='ffill')
+                    # Додаткова перевірка що це DataFrame
+                    if not isinstance(features_df, pd.DataFrame):
+                        self.logger.warning(f"DataFrame {i} не є DataFrame для {symbol}: {type(features_df)}")
+                        continue
+
+                    if common_index is not None:
+                        # Вирівнюємо по спільному індексу
+                        aligned_df = features_df.reindex(common_index, method='ffill')
+                    else:
+                        aligned_df = features_df.copy()
+
                     aligned_dataframes.append(aligned_df)
                 except Exception as e:
                     self.logger.warning(f"Помилка вирівнювання DataFrame {i} для {symbol}: {e}")
-                    # Спробуємо додати як є
-                    aligned_dataframes.append(features_df)
+                    # Спробуємо додати як є, якщо це DataFrame
+                    if isinstance(features_df, pd.DataFrame):
+                        aligned_dataframes.append(features_df)
+
+            # Перевірка що є що об'єднувати
+            if not aligned_dataframes:
+                self.logger.error(f"Немає валідних DataFrame для об'єднання для {symbol}")
+                raise ValueError(f"Немає валідних DataFrame для об'єднання для {symbol}")
 
             # Об'єднання з обробкою помилок
             try:
@@ -798,18 +956,45 @@ class DataPreprocessor:
             # Повертаємо базовий набір ознак як fallback
             try:
                 self.logger.warning(f"Спроба створити базові ознаки для {symbol}")
-                basic_features = self.indicators.prepare_features_pipeline(df)
-                if basic_features is not None and not basic_features.empty:
-                    self.logger.info(f"Повернуто базові ознаки для {symbol}: {basic_features.shape}")
-                    return basic_features
+
+                # Спочатку переконуємося що у нас є DataFrame
+                if isinstance(data, list):
+                    if not data:
+                        raise ValueError(f"Порожній список даних для fallback {symbol}")
+                    df = pd.DataFrame(data)
+                elif isinstance(data, pd.DataFrame):
+                    df = data.copy()
                 else:
-                    # Останній fallback - тільки OHLCV
-                    self.logger.warning(f"Повертаємо тільки OHLCV для {symbol}")
-                    return df[['open', 'high', 'low', 'close', 'volume']].copy()
+                    raise ValueError(f"Невідомий тип даних для fallback {symbol}: {type(data)}")
+
+                if not df.empty:
+                    # Перевірка наявності базових колонок
+                    basic_columns = ['open', 'high', 'low', 'close', 'volume',
+                                     'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
+                    available_basic = [col for col in basic_columns if col in df.columns]
+
+                    if available_basic:
+                        basic_features = df[available_basic].copy()
+                        self.logger.info(f"Повернуто базові ознаки для {symbol}: {basic_features.shape}")
+                        return basic_features
+                    else:
+                        # Останній fallback - спробуємо технічні індикатори з базового DataFrame
+                        basic_features = self.indicators.prepare_features_pipeline(df)
+                        if basic_features is not None and not basic_features.empty:
+                            self.logger.info(f"Повернуто технічні індикатори для {symbol}: {basic_features.shape}")
+                            return basic_features
+                        else:
+                            # Критичний fallback - тільки доступні числові колонки
+                            numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+                            if numeric_columns:
+                                return df[numeric_columns].copy()
+                            else:
+                                raise ValueError(f"Жодної числової колонки не знайдено для {symbol}")
+                else:
+                    raise ValueError(f"DataFrame невалідний для {symbol}")
             except Exception as fallback_error:
                 self.logger.error(f"Помилка fallback для {symbol}: {fallback_error}")
-                # Критичний fallback - тільки ціна закриття
-                return pd.DataFrame({'close': df['close']})
+                raise e
 
     def create_enhanced_sequences_with_features(self, df: pd.DataFrame, symbol: str,
                                                 sequence_length: int = 60) -> Tuple[np.ndarray, np.ndarray]:
