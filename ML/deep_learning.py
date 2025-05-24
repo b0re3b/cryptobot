@@ -2,21 +2,18 @@ from dataclasses import dataclass, field
 import torch.onnx
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Union, Optional, Any, Callable
+from typing import Dict, List, Tuple,  Optional, Any
+from torch.utils.data import DataLoader, TensorDataset
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import pickle
 import matplotlib.pyplot as plt
-from sklearn.metrics import r2_score
-from ML.LSTM import LSTMModel
-from ML.GRU import GRUModel
-from ML.transformer import TransformerModel
 from ML.ModelTrainer import ModelTrainer
 from data.db import DatabaseManager
+from timeseriesmodels import ModelEvaluator
 from utils.logger import CryptoLogger
 from ML.DataPreprocessor import DataPreprocessor
 
@@ -57,7 +54,7 @@ class DeepLearning:
         # Ініціалізація компонентів
         self.data_preprocessor = DataPreprocessor()
         self.model_trainer = ModelTrainer()
-
+        self.model_evaluator = ModelEvaluator()
         # Ініціалізація моделей з правильними параметрами
         self.lstm = None  # Будуть створені при потребі
         self.gru = None
@@ -76,154 +73,25 @@ class DeepLearning:
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
-    def _create_model(self, model_type: str, config: ModelConfig) -> nn.Module:
 
-        if model_type.lower() == 'lstm':
-            return LSTMModel(
-                input_dim=config.input_dim,
-                hidden_dim=config.hidden_dim,
-                num_layers=config.num_layers,
-                output_dim=config.output_dim,
-                dropout=config.dropout,
-                sequence_length=config.sequence_length
-            )
-        elif model_type.lower() == 'gru':
-            return GRUModel(
-                input_dim=config.input_dim,
-                hidden_dim=config.hidden_dim,
-                num_layers=config.num_layers,
-                output_dim=config.output_dim,
-                dropout=config.dropout,
-                sequence_length=config.sequence_length
-            )
-        elif model_type.lower() == 'transformer':
-            return TransformerModel(
-                input_dim=config.input_dim,
-                d_model=config.hidden_dim,
-                nhead=8,  # Кількість голів уваги
-                num_encoder_layers=config.num_layers,
-                dim_feedforward=config.hidden_dim * 4,
-                dropout=config.dropout,
-                sequence_length=config.sequence_length,
-                output_dim=config.output_dim
-            )
-        else:
-            raise ValueError(f"Непідтримуваний тип моделі: {model_type}")
 
     def train_model(self, symbol: str, timeframe: str, model_type: str,
-                    data: Optional[pd.DataFrame] = None,
+                    data: pd.DataFrame, input_dim: int,
                     config: Optional[ModelConfig] = None,
-                    **training_params) -> Dict[str, Any]:
-
-        self._validate_inputs(symbol, timeframe, model_type)
-
-        try:
-            # Отримання даних, якщо не надані
-            if data is None:
-                data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-                data = data_loader()
-
-            # Підготовка ознак
-            processed_data = self.data_preprocessor.prepare_features(data, symbol)
-
-            # Визначення input_dim
-            input_dim = processed_data.shape[1] - 1 if 'target' in processed_data.columns else processed_data.shape[1]
-
-            # Створення конфігурації, якщо не надана
-            if config is None:
-                config = ModelConfig(input_dim=input_dim)
-            else:
-                config.input_dim = input_dim
-
-            # Створення моделі
-            model = self._create_model(model_type, config)
-
-            # Навчання
-            result = self.model_trainer.train_model(
-                symbol=symbol,
-                timeframe=timeframe,
-                model_type=model_type,
-                data=processed_data,
-                model=model,
-                config=config,
-                **training_params
-            )
-
-            # Збереження результатів
-            model_key = self._create_model_key(symbol, timeframe, model_type)
-            self.models[model_key] = model
-            self.model_configs[model_key] = config
-            self.model_metrics[model_key] = result.get('metrics', {})
-            self.training_history[model_key] = result.get('history', {})
-
-            # Збереження моделі
-            self._save_model(model_key, model, config)
-
-            self.logger.info(f"Модель {model_key} успішно навчена")
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Помилка навчання моделі {symbol}-{timeframe}-{model_type}: {str(e)}")
-            raise
-
-    def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
-        """Створення ключа моделі"""
-        return f"{symbol}_{timeframe}_{model_type}"
-
-    def _save_model(self, model_key: str, model: nn.Module, config: ModelConfig) -> None:
-        """Збереження моделі та конфігурації"""
-        try:
-            # Збереження моделі
-            model_path = os.path.join(self.models_dir, f"{model_key}.pt")
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'model_class': model.__class__.__name__,
-                'config': config.__dict__,
-                'timestamp': datetime.now().isoformat()
-            }, model_path)
-
-            # Збереження конфігурації
-            config_path = os.path.join(self.models_dir, f"{model_key}_config.json")
-            with open(config_path, 'w') as f:
-                json.dump(config.__dict__, f, indent=2)
-
-            self.logger.info(f"Модель {model_key} збережена")
-
-        except Exception as e:
-            self.logger.error(f"Помилка збереження моделі {model_key}: {str(e)}")
-
-    def _load_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
-        """Завантаження моделі"""
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-
-        try:
-            model_path = os.path.join(self.models_dir, f"{model_key}.pt")
-            if not os.path.exists(model_path):
-                return False
-
-            # Завантаження checkpoint
-            checkpoint = torch.load(model_path, map_location=self.device)
-
-            # Створення конфігурації з checkpoint
-            config_dict = checkpoint['config']
-            config = ModelConfig(**config_dict)
-
-            # Створення моделі
-            model = self._create_model(model_type, config)
-            model.load_state_dict(checkpoint['model_state_dict'])
-            model.to(self.device)
-            model.eval()
-
-            # Збереження в пам'яті
-            self.models[model_key] = model
-            self.model_configs[model_key] = config
-
-            self.logger.info(f"Модель {model_key} завантажена")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Помилка завантаження моделі {model_key}: {str(e)}")
-            return False
+                    validation_split: float = 0.2,
+                    patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
+        return self.model_trainer.train_model(
+            symbol=symbol,
+            timeframe=timeframe,
+            model_type=model_type,
+            data=data,
+            input_dim=input_dim,
+            config=config,
+            validation_split=validation_split,
+            patience=patience,
+            model_data=model_data,
+            **kwargs
+        )
 
     # ==================== ПРОГНОЗУВАННЯ ====================
 
@@ -233,9 +101,9 @@ class DeepLearning:
         self._validate_inputs(symbol, timeframe, model_type)
 
         # Завантаження моделі, якщо вона ще не завантажена
-        model_key = self._create_model_key(symbol, timeframe, model_type)
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
         if model_key not in self.models:
-            if not self._load_model(symbol, timeframe, model_type):
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
                 raise ValueError(f"Модель {model_key} не знайдена")
 
         # Отримання даних, якщо вони не надані
@@ -272,27 +140,68 @@ class DeepLearning:
                     new_input[0, 0, 0] = pred.item()  # Припускаємо, що перша ознака - це ціна
                     current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
 
-        # Збереження прогнозу в БД
-        timestamp = datetime.now()
+        # Збереження прогнозу в БД (ВИПРАВЛЕНИЙ КОД)
+        prediction_timestamp = datetime.now()
+
+        # Отримуємо model_id (потрібно додати метод для отримання ID моделі)
+        model_id = self.db_manager._get_model_id(symbol, timeframe, model_type)
+
+        # Розрахунок інтервалів довіри (базова реалізація)
+        confidence = self._calculate_prediction_confidence(model_key, processed_data)
+
         for i, pred in enumerate(predictions):
             try:
-                self.db_manager.save_prediction(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    model_type=model_type,
-                    prediction_value=float(pred),
-                    prediction_timestamp=timestamp,
-                    steps_ahead=i + 1
-                )
+                # Розрахунок target_timestamp на основі timeframe та кроків вперед
+                target_timestamp = self._calculate_target_timestamp(prediction_timestamp, timeframe, i + 1)
+
+                # Розрахунок інтервалів довіри
+                confidence_low, confidence_high = self._calculate_confidence_intervals(pred, confidence)
+
+                prediction_data = {
+                    'model_id': model_id,
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'prediction_timestamp': prediction_timestamp,
+                    'target_timestamp': target_timestamp,
+                    'predicted_value': float(pred),
+                    'confidence_interval_low': confidence_low,
+                    'confidence_interval_high': confidence_high
+                }
+
+                prediction_id = self.db_manager.save_prediction(prediction_data, symbol)
+                self.logger.info(f"Збережено прогноз з ID: {prediction_id}")
+
             except Exception as e:
                 self.logger.warning(f"Не вдалося зберегти прогноз: {str(e)}")
 
         return {
             'predictions': np.array(predictions),
-            'timestamp': timestamp,
+            'timestamp': prediction_timestamp,
             'model_key': model_key,
-            'confidence': self._calculate_prediction_confidence(model_key, processed_data)
+            'confidence': confidence
         }
+
+    # Допоміжні методи, які потрібно додати до класу:
+
+    def _calculate_target_timestamp(self, prediction_timestamp: datetime, timeframe: str, steps_ahead: int) -> datetime:
+        """Розраховує цільовий час для прогнозу"""
+        timeframe_deltas = {
+            '1m': timedelta(minutes=1),
+            '5m': timedelta(minutes=5),
+            '15m': timedelta(minutes=15),
+            '1h': timedelta(hours=1),
+            '4h': timedelta(hours=4),
+            '1d': timedelta(days=1)
+        }
+
+        delta = timeframe_deltas.get(timeframe, timedelta(hours=1))
+        return prediction_timestamp + (delta * steps_ahead)
+
+    def _calculate_confidence_intervals(self, prediction: float, confidence: float) -> tuple:
+        """Розраховує інтервали довіри для прогнозу"""
+        # Простий розрахунок на основі довіри (можна покращити)
+        margin = prediction * (1 - confidence) * 0.1  # 10% від різниці до повної довіри
+        return (prediction - margin, prediction + margin)
 
     def _calculate_prediction_confidence(self, model_key: str, data: pd.DataFrame) -> float:
         """Розрахунок довіри до прогнозу на основі метрик моделі"""
@@ -370,69 +279,10 @@ class DeepLearning:
 
     # ==================== ОЦІНКА МОДЕЛЕЙ ====================
 
-    def evaluate_model(self, symbol: str, timeframe: str, model_type: str,
-                       test_data: Optional[pd.DataFrame] = None) -> Dict[str, float]:
-
-        self._validate_inputs(symbol, timeframe, model_type)
-
-        # Завантаження моделі
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.models:
-            if not self._load_model(symbol, timeframe, model_type):
-                raise ValueError(f"Модель {model_key} не знайдена")
-
-        # Отримання даних, якщо вони не надані
-        if test_data is None:
-            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-            test_data = data_loader()
-
-        # Підготовка даних
-        processed_data = self.data_preprocessor.prepare_features(test_data, symbol)
-
-        feature_columns = [col for col in processed_data.columns if col != 'target']
-        X = torch.tensor(processed_data[feature_columns].values, dtype=torch.float32).to(self.device)
-        y = torch.tensor(processed_data["target"].values, dtype=torch.float32).to(self.device)
-
-        # Створення послідовностей для RNN/Transformer моделей
-        sequence_length = self.model_configs[model_key].sequence_length
-        X_sequences = []
-        y_sequences = []
-
-        for i in range(sequence_length, len(X)):
-            X_sequences.append(X[i - sequence_length:i])
-            y_sequences.append(y[i])
-
-        X_sequences = torch.stack(X_sequences)
-        y_sequences = torch.stack(y_sequences)
-
-        # Оцінка
-        model = self.models[model_key]
-        model.eval()
-
-        with torch.no_grad():
-            predictions = model(X_sequences)
-
-            # Розрахунок метрик
-            mse = nn.MSELoss()(predictions.squeeze(), y_sequences).item()
-            mae = nn.L1Loss()(predictions.squeeze(), y_sequences).item()
-
-            # Конвертація в numpy для sklearn метрик
-            y_true = y_sequences.cpu().numpy()
-            y_pred = predictions.squeeze().cpu().numpy()
-
-            r2 = r2_score(y_true, y_pred)
-
-            metrics = {
-                'mse': mse,
-                'mae': mae,
-                'rmse': np.sqrt(mse),
-                'r2_score': r2
-            }
-
-            # Оновлення збережених метрик
-            self.model_metrics[model_key] = metrics
-
-            return metrics
+    def evaluate_model(self, model_key: str, test_data: pd.Series, use_rolling_validation: bool = True,
+                       window_size: int = 100, step: int = 20, forecast_horizon: int = 10,
+                       apply_inverse_transforms: bool = False) -> Dict:
+        return self.model_evaluator.evaluate_model(model_key, test_data, use_rolling_validation, window_size, step)
 
     def model_performance_report(self, symbol: Optional[str] = None,
                                  timeframe: Optional[str] = None) -> pd.DataFrame:
@@ -467,7 +317,7 @@ class DeepLearning:
         self._validate_inputs(symbol, timeframe, model_type)
 
         try:
-            model_key = self._create_model_key(symbol, timeframe, model_type)
+            model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
 
             # Видалення з пам'яті
             if model_key in self.models:
@@ -501,7 +351,7 @@ class DeepLearning:
 
     def get_model_metrics(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
 
-        model_key = self._create_model_key(symbol, timeframe, model_type)
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
 
         if model_key in self.model_metrics:
             return self.model_metrics[model_key]
@@ -552,7 +402,7 @@ class DeepLearning:
     def update_model_metrics(self, symbol: str, timeframe: str, model_type: str,
                              new_metrics: Dict[str, float]) -> None:
         """Оновлення метрик моделі"""
-        model_key = self._create_model_key(symbol, timeframe, model_type)
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
 
         if model_key not in self.model_metrics:
             self.model_metrics[model_key] = {}

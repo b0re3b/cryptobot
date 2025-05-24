@@ -1,12 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Tuple, Optional, Union
+from typing import Dict, Any, List, Tuple, Union
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import pandas as pd
-import numpy as np
 from datetime import datetime
-import os
 
 
 class BaseDeepModel(nn.Module, ABC):

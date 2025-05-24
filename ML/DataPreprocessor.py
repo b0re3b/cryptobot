@@ -1,8 +1,9 @@
 from dataclasses import field, dataclass
-from typing import Dict, Tuple, Callable, List
+from typing import Dict, Tuple, Callable, List, Any
 import pandas as pd
 import numpy as np
 import torch
+from pandas import DataFrame, Series
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from analysis import VolatilityAnalysis
@@ -55,29 +56,11 @@ class DataPreprocessor:
         self.db_manager = DatabaseManager()
 
     def get_sequence_length_for_timeframe(self, timeframe: str) -> int:
-        """
-        Отримати розмір послідовності для конкретного таймфрейму
 
-        Args:
-            timeframe: Часовий інтервал
-
-        Returns:
-            int: Розмір послідовності
-        """
         return self.TIMEFRAME_SEQUENCES.get(timeframe, 60)
 
     def create_model_config(self, input_dim: int, timeframe: str, **kwargs) -> ModelConfig:
-        """
-        Створити конфігурацію моделі з правильним розміром послідовності
 
-        Args:
-            input_dim: Розмірність вхідних даних
-            timeframe: Часовий інтервал
-            **kwargs: Додаткові параметри для ModelConfig
-
-        Returns:
-            ModelConfig: Конфігурація моделі
-        """
         sequence_length = self.get_sequence_length_for_timeframe(timeframe)
 
         config_params = {
@@ -89,45 +72,17 @@ class DataPreprocessor:
         return ModelConfig(**config_params)
 
     def get_model_config(self, symbol: str, timeframe: str, model_type: str) -> ModelConfig:
-        """
-        Отримати збережену конфігурацію моделі або створити нову
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            model_type: Тип моделі
-
-        Returns:
-            ModelConfig: Конфігурація моделі
-        """
         key = f"{symbol}_{timeframe}_{model_type}"
         return self.model_configs.get(key)
 
     def set_model_config(self, symbol: str, timeframe: str, model_type: str, config: ModelConfig):
-        """
-        Зберегти конфігурацію моделі
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            model_type: Тип моделі
-            config: Конфігурація моделі
-        """
         key = f"{symbol}_{timeframe}_{model_type}"
         self.model_configs[key] = config
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
-        """
-        Отримати функцію для завантаження даних
 
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm', 'gru')
-
-        Returns:
-            Callable: Функція для завантаження даних
-        """
         if symbol == 'BTC':
             return lambda: self.db_manager.get_btc_lstm_sequence(timeframe)
         elif symbol == 'ETH':
@@ -137,41 +92,71 @@ class DataPreprocessor:
         else:
             raise ValueError(f"Непідтримуваний символ: {symbol}")
 
-    def prepare_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """
-        Підготовка ознак для навчання моделі
+    def prepare_features(self, df: pd.DataFrame, symbol: str) -> tuple[DataFrame, Series] | DataFrame | Any:
 
-        Args:
-            df: Вхідний DataFrame
-            symbol: Символ криптовалюти
-
-        Returns:
-            DataFrame з ознаками
-        """
         try:
+            # Список для зберігання DataFrames перед об'єднанням
+            feature_dataframes = []
+
             # Отримання різних типів ознак
-            trend_features = self.trend.prepare_ml_trend_features(df, symbol)
+            print(f"Підготовка трендових ознак для {symbol}...")
+            trend_features = self.trend.prepare_ml_trend_features(df)
+            if not trend_features.empty:
+                feature_dataframes.append(trend_features)
+
+            print(f"Підготовка ознак волатильності для {symbol}...")
             volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
+            if not volatility_features.empty:
+                feature_dataframes.append(volatility_features)
+
+            print(f"Підготовка циклічних ознак для {symbol}...")
             cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
+            if not cycle_features.empty:
+                feature_dataframes.append(cycle_features)
 
-            # Об'єднання всіх ознак через конвейер
+            print(f"Підготовка технічних індикаторів для {symbol}...")
             indicator_features = self.indicators.prepare_features_pipeline(df)
+            if not indicator_features.empty:
+                feature_dataframes.append(indicator_features)
 
-            # Виправлено: об'єднання всіх ознак
-            final_features = pd.concat([
-                trend_features,
-                volatility_features,
-                cycle_features,
-                indicator_features
-            ], axis=1)
+            # Перевірка наявності ознак для об'єднання
+            if not feature_dataframes:
+                raise ValueError(f"Не вдалося створити жодних ознак для {symbol}")
 
-            # Видалення дублікатів колонок
-            final_features = final_features.loc[:, ~final_features.columns.duplicated()]
+            # Оптимізоване об'єднання з copy=False та ignore_index=False для кращої продуктивності
+            print(f"Об'єднання {len(feature_dataframes)} наборів ознак...")
+            final_features = pd.concat(
+                feature_dataframes,
+                axis=1,
+                copy=False,  # Не копіювати дані без потреби
+                sort=False  # Не сортувати колонки для швидкості
+            )
 
+            # Ефективне видалення дублікатів колонок
+            if final_features.columns.duplicated().any():
+                print("Видалення дублікатних колонок...")
+                # Отримуємо унікальні колонки, зберігаючи порядок
+                unique_columns = final_features.columns[~final_features.columns.duplicated()]
+                final_features = final_features[unique_columns]
+
+            # Додаткова валідація результату
+            if final_features.empty:
+                raise ValueError(f"Результуючий DataFrame порожній для {symbol}")
+
+            print(f"Успішно підготовлено {final_features.shape[1]} ознак для {symbol}")
             return final_features
 
         except Exception as e:
             print(f"Помилка при підготовці ознак для {symbol}: {e}")
+            # Повертаємо базовий набір ознак як fallback
+            try:
+                print(f"Спроба створити базові ознаки для {symbol}...")
+                basic_features = self.indicators.prepare_features_pipeline(df)
+                if not basic_features.empty:
+                    return basic_features
+            except Exception as fallback_error:
+                print(f"Помилка fallback для {symbol}: {fallback_error}")
+
             raise
 
     def preprocess_data_for_model(self, data: pd.DataFrame, symbol: str, timeframe: str,
@@ -242,17 +227,7 @@ class DataPreprocessor:
 
     def create_sequences(self, data: np.ndarray, target: np.ndarray,
                          seq_length: int) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Створення послідовностей для моделей RNN
 
-        Args:
-            data: Масив ознак
-            target: Цільові значення
-            seq_length: Довжина послідовності
-
-        Returns:
-            Кортеж масивів (X, y)
-        """
         X, y = [], []
 
         # Перевірка достатності даних
@@ -270,18 +245,7 @@ class DataPreprocessor:
     def prepare_data_with_config(self, symbol: str, timeframe: str, model_type: str,
                                  validation_split: float = 0.2) -> Tuple[torch.Tensor, torch.Tensor,
     torch.Tensor, torch.Tensor, ModelConfig]:
-        """
-        Повний конвейер підготовки даних з автоматичним створенням конфігурації
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            model_type: Тип моделі
-            validation_split: Розмір валідаційної вибірки
-
-        Returns:
-            Кортеж (X_train, y_train, X_val, y_val, model_config)
-        """
         # Завантаження даних
         data_loader = self.get_data_loader(symbol, timeframe, model_type)
         raw_data = data_loader()
@@ -296,17 +260,7 @@ class DataPreprocessor:
 
     def get_optimal_config_for_timeframe(self, timeframe: str, input_dim: int,
                                          **custom_params) -> ModelConfig:
-        """
-        Отримати оптимальну конфігурацію для конкретного таймфрейму
 
-        Args:
-            timeframe: Часовий інтервал
-            input_dim: Розмірність вхідних даних
-            **custom_params: Кастомні параметри
-
-        Returns:
-            ModelConfig: Оптимальна конфігурація
-        """
         # Базові параметри залежно від таймфрейму
         timeframe_configs = {
             '1m': {'hidden_dim': 128, 'num_layers': 3, 'dropout': 0.3, 'learning_rate': 0.0005},
@@ -323,17 +277,7 @@ class DataPreprocessor:
 
     def denormalize_predictions(self, predictions: np.ndarray, symbol: str,
                                 timeframe: str) -> np.ndarray:
-        """
-        Денормалізація прогнозів
 
-        Args:
-            predictions: Масив прогнозів
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-
-        Returns:
-            Денормалізований масив
-        """
         key = f"{symbol}_{timeframe}"
         scaler = self.scalers.get(key)
 
@@ -350,17 +294,7 @@ class DataPreprocessor:
     def split_data(self, X: np.ndarray, y: np.ndarray,
                    validation_split: float) -> Tuple[np.ndarray, np.ndarray,
     np.ndarray, np.ndarray]:
-        """
-        Розділення даних на тренувальну та валідаційну вибірки
 
-        Args:
-            X: Ознаки
-            y: Ціль
-            validation_split: Частка валідації
-
-        Returns:
-            X_train, X_val, y_train, y_val
-        """
         # Перевірка валідності параметрів
         if not 0 < validation_split < 1:
             raise ValueError(f"validation_split має бути між 0 та 1, отримано: {validation_split}")
@@ -379,18 +313,7 @@ class DataPreprocessor:
 
     def normalize_features(self, data: pd.DataFrame, symbol: str, timeframe: str,
                            scaler_type: str = 'standard') -> pd.DataFrame:
-        """
-        Нормалізація ознак з збереженням скейлера
 
-        Args:
-            data: DataFrame з ознаками
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            scaler_type: Тип скейлера ('standard' або 'minmax')
-
-        Returns:
-            Нормалізований DataFrame
-        """
         key = f"{symbol}_{timeframe}"
 
         # Вибір типу скейлера
@@ -415,37 +338,15 @@ class DataPreprocessor:
         return data_normalized
 
     def get_feature_importance(self, symbol: str) -> Dict:
-        """
-        Отримання конфігурації важливості ознак
 
-        Args:
-            symbol: Символ криптовалюти
-
-        Returns:
-            Словник з конфігурацією ознак
-        """
         return self.feature_configs.get(symbol, {})
 
     def set_feature_config(self, symbol: str, config: Dict):
-        """
-        Встановлення конфігурації ознак для символу
 
-        Args:
-            symbol: Символ криптовалюти
-            config: Конфігурація ознак
-        """
         self.feature_configs[symbol] = config
 
     def validate_data(self, data: pd.DataFrame) -> bool:
-        """
-        Валідація вхідних даних
 
-        Args:
-            data: DataFrame для валідації
-
-        Returns:
-            bool: True якщо дані валідні
-        """
         if data.empty:
             raise ValueError("DataFrame порожній")
 
@@ -455,15 +356,6 @@ class DataPreprocessor:
         return True
 
     def get_scaler(self, symbol: str, timeframe: str):
-        """
-        Отримання збереженого скейлера
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-
-        Returns:
-            Скейлер або None якщо не знайдено
-        """
         key = f"{symbol}_{timeframe}"
         return self.scalers.get(key)

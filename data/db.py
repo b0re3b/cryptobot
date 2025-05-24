@@ -1281,7 +1281,7 @@ class DatabaseManager:
                     conn.commit()
                     return True
             except Exception as e:
-                conn.rollback()
+                self.conn.rollback()
                 return False
 
     def save_data_transformations(self, model_key: str, transformations: List[Dict]) -> bool:
@@ -1308,7 +1308,7 @@ class DatabaseManager:
                     conn.commit()
                     return True
             except Exception as e:
-                conn.rollback()
+                self.conn.rollback()
                 return False
 
     def get_model_by_key(self, model_key: str) -> Optional[Dict]:
@@ -1416,7 +1416,7 @@ class DatabaseManager:
                     conn.commit()
                     return True
             except Exception as e:
-                conn.rollback()
+                self.conn.rollback()
                 return False
 
     def get_models_by_symbol(self, symbol: str, timeframe: str = None, active_only: bool = True) -> List[Dict]:
@@ -1526,7 +1526,7 @@ class DatabaseManager:
                     conn.commit()
                     return True
             except Exception as e:
-                conn.rollback()
+                self.conn.rollback()
                 return False
 
     def compare_model_forecasts(self, model_keys: List[str], start_date: datetime = None,
@@ -1621,15 +1621,13 @@ class DatabaseManager:
             try:
                 # Зберігаємо метадані моделі
                 self.save_model_metadata(model_key, symbol, model_type, timeframe,
-                                         start_date, end_date, description)
+                                         start_date, end_date)
 
                 # Зберігаємо параметри моделі
                 if parameters:
                     self.save_model_parameters(
                         model_key,
-                        order_params=parameters.get("order_params"),
-                        seasonal_order=parameters.get("seasonal_order"),
-                        seasonal_period=parameters.get("seasonal_period")
+                       parameters
                     )
 
                 # Зберігаємо метрики моделі
@@ -3483,7 +3481,7 @@ class DatabaseManager:
         self.conn.commit()
         return inserted_ids
 
-    def get_eth_lstm_sequence(self, timeframe: str, sequence_id: int) -> List[Dict[str, Any]]:
+    def get_eth_lstm_sequence(self, timeframe: str) -> List[Dict[str, Any]]:
 
 
         with self.conn.cursor() as cursor:
@@ -3518,7 +3516,7 @@ class DatabaseManager:
                       AND sequence_id = %s
                     ORDER BY open_time \
                     """
-            cursor.execute(query, (timeframe, sequence_id))
+            cursor.execute(query, (timeframe))
             results = cursor.fetchall()
 
             sequence_data = []
@@ -3846,7 +3844,7 @@ class DatabaseManager:
         self.conn.commit()
         return inserted_ids
 
-    def get_btc_lstm_sequence(self, timeframe: str, sequence_id: int) -> List[Dict[str, Any]]:
+    def get_btc_lstm_sequence(self, timeframe: str) -> List[Dict[str, Any]]:
         with self.conn.cursor() as cursor:
             query = """
                     SELECT id, \
@@ -3879,7 +3877,7 @@ class DatabaseManager:
                       AND sequence_id = %s
                     ORDER BY open_time \
                     """
-            cursor.execute(query, (timeframe, sequence_id))
+            cursor.execute(query, (timeframe))
             results = cursor.fetchall()
 
             sequence_data = []
@@ -4101,7 +4099,7 @@ class DatabaseManager:
         self.conn.commit()
         return inserted_ids
 
-    def get_sol_lstm_sequence(self, timeframe: str, sequence_id: int) -> List[Dict[str, Any]]:
+    def get_sol_lstm_sequence(self, timeframe: str) -> List[Dict[str, Any]]:
 
         with self.conn.cursor() as cursor:
             query = """
@@ -4135,7 +4133,7 @@ class DatabaseManager:
                       AND sequence_id = %s
                     ORDER BY open_time \
                     """
-            cursor.execute(query, (timeframe, sequence_id))
+            cursor.execute(query, (timeframe))
             results = cursor.fetchall()
 
             sequence_data = []
@@ -5790,7 +5788,7 @@ class DatabaseManager:
 
         # ----- Методи для прогнозів -----
 
-    def save_prediction(self, data: Dict[str, Any]) -> int:
+    def save_prediction(self, data: Dict[str, Any], symbol:str ) -> int:
 
             required_fields = [
                 'model_id', 'symbol', 'timeframe', 'prediction_timestamp', 'target_timestamp',
@@ -5841,6 +5839,41 @@ class DatabaseManager:
             except Exception as e:
                 connection.rollback()
                 raise e
+
+    def _get_model_id(self, symbol: str, timeframe: str, model_type: str) -> int:
+        """
+        Отримує ID моделі з бази даних за символом, таймфреймом та типом моделі.
+
+        Args:
+            symbol (str): Символ криптовалюти (наприклад, 'BTCUSDT').
+            timeframe (str): Таймфрейм (наприклад, '1h').
+            model_type (str): Тип моделі (наприклад, 'lstm').
+
+        Returns:
+            int: ID моделі в базі даних.
+
+        Raises:
+            ValueError: Якщо модель не знайдена в базі даних.
+        """
+        query = """
+                SELECT id
+                FROM models
+                WHERE symbol = %s
+                  AND timeframe = %s
+                  AND model_type = %s \
+                """
+        try:
+            with self.conn() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(query, (symbol, timeframe, model_type))
+                    result = cursor.fetchone()
+                    if result:
+                        return result[0]
+                    else:
+                        raise ValueError(f"Модель не знайдена в БД: {symbol}-{timeframe}-{model_type}")
+        except Exception as e:
+            self.logger.error(f"Помилка при отриманні ID моделі: {e}")
+            raise
 
     def get_predictions(self, model_id: Optional[int] = None, symbol: Optional[str] = None,
                             timeframe: Optional[str] = None, start_time: Optional[datetime] = None,

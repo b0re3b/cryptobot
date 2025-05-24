@@ -1,5 +1,5 @@
 from ML.base import BaseDeepModel
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, List, Tuple
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
@@ -34,6 +34,37 @@ class ModelConfig:
             '1w': 12
         }
         return sequence_mapping.get(timeframe, 60)
+
+
+class TransformerEncoderLayerWithAttention(nn.Module):
+    """Custom TransformerEncoderLayer that returns attention weights"""
+
+    def __init__(self, d_model, nhead, dim_feedforward, dropout=0.1):
+        super().__init__()
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(self, src, return_attention=False):
+        # Self-attention
+        attn_output, attn_weights = self.self_attn(src, src, src, need_weights=return_attention)
+        src = src + self.dropout1(attn_output)
+        src = self.norm1(src)
+
+        # Feed forward
+        ff_output = self.linear2(self.dropout(torch.relu(self.linear1(src))))
+        src = src + self.dropout2(ff_output)
+        src = self.norm2(src)
+
+        if return_attention:
+            return src, attn_weights
+        return src
 
 
 class TransformerModel(BaseDeepModel):
@@ -79,15 +110,15 @@ class TransformerModel(BaseDeepModel):
         # Вхідна проекція
         self.input_projection = nn.Linear(input_dim, hidden_dim)
 
-        # Transformer encoder
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_dim,
-            nhead=n_heads,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-            batch_first=True
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
+        # Створюємо custom transformer layers для отримання ваг уваги
+        self.transformer_layers = nn.ModuleList([
+            TransformerEncoderLayerWithAttention(
+                d_model=hidden_dim,
+                nhead=n_heads,
+                dim_feedforward=dim_feedforward,
+                dropout=dropout
+            ) for _ in range(num_layers)
+        ])
 
         # Dropout шар
         self.dropout_layer = nn.Dropout(dropout)
@@ -100,7 +131,8 @@ class TransformerModel(BaseDeepModel):
         """Створення моделі з конфігурації"""
         return cls(config=config)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_attention: bool = False) -> Union[
+        torch.Tensor, Tuple[torch.Tensor, List[torch.Tensor]]]:
         """Прямий прохід через Transformer"""
         # x shape: (batch_size, seq_len, input_dim)
         batch_size, seq_len, _ = x.shape
@@ -111,11 +143,17 @@ class TransformerModel(BaseDeepModel):
         # Додаємо позиційне кодування
         x = x + self.pos_encoding[:seq_len, :].unsqueeze(0)
 
-        # Прохід через transformer
-        transformer_out = self.transformer(x)  # (batch_size, seq_len, hidden_dim)
+        # Прохід через transformer layers
+        attention_weights = []
+        for layer in self.transformer_layers:
+            if return_attention:
+                x, attn_weights = layer(x, return_attention=True)
+                attention_weights.append(attn_weights)
+            else:
+                x = layer(x, return_attention=False)
 
         # Використовуємо останній вихід
-        last_output = transformer_out[:, -1, :]  # (batch_size, hidden_dim)
+        last_output = x[:, -1, :]  # (batch_size, hidden_dim)
 
         # Dropout
         dropped_output = self.dropout_layer(last_output)
@@ -123,6 +161,8 @@ class TransformerModel(BaseDeepModel):
         # Вихідний шар
         output = self.fc(dropped_output)  # (batch_size, output_dim)
 
+        if return_attention:
+            return output, attention_weights
         return output
 
     def init_hidden(self, batch_size: int) -> torch.Tensor:
@@ -156,7 +196,7 @@ class TransformerModel(BaseDeepModel):
             'dim_feedforward': self.dim_feedforward,
             'has_cell_state': False,
             'uses_attention': True,
-            'transformer_parameters': sum(p.numel() for p in self.transformer.parameters()),
+            'transformer_parameters': sum(p.numel() for p in self.transformer_layers.parameters()),
             'fc_parameters': sum(p.numel() for p in self.fc.parameters()),
             'input_projection_parameters': sum(p.numel() for p in self.input_projection.parameters()),
             'pos_encoding_size': self.pos_encoding.numel()
@@ -175,14 +215,55 @@ class TransformerModel(BaseDeepModel):
 
         return info
 
-    def get_attention_weights(self, x: torch.Tensor) -> torch.Tensor:
-        """Отримання ваг уваги (для аналізу)"""
-        # Цей метод може бути корисним для інтерпретації моделі
-        with torch.no_grad():
-            batch_size, seq_len, _ = x.shape
-            x = self.input_projection(x)
-            x = x + self.pos_encoding[:seq_len, :].unsqueeze(0)
+    def get_attention_weights(self, x: torch.Tensor) -> List[torch.Tensor]:
+        """
+        Отримання ваг уваги для всіх шарів transformer
 
-            # Для отримання ваг уваги потрібно модифікувати transformer
-            # Це спрощена версія - в реальності потрібен доступ до внутрішніх шарів
-            return torch.ones(batch_size, self.n_heads, seq_len, seq_len)
+        Args:
+            x: Вхідний тензор (batch_size, seq_len, input_dim)
+
+        Returns:
+            List[torch.Tensor]: Список ваг уваги для кожного шару
+                               Кожен тензор має розмір (batch_size, n_heads, seq_len, seq_len)
+        """
+        self.eval()  # Переключаємо в режим оцінки
+        with torch.no_grad():
+            _, attention_weights = self.forward(x, return_attention=True)
+            return attention_weights
+
+    def visualize_attention(self, x: torch.Tensor, layer_idx: int = -1) -> torch.Tensor:
+        """
+        Візуалізація ваг уваги для конкретного шару
+
+        Args:
+            x: Вхідний тензор
+            layer_idx: Індекс шару (-1 для останнього шару)
+
+        Returns:
+            torch.Tensor: Ваги уваги для вказаного шару
+        """
+        attention_weights = self.get_attention_weights(x)
+        if not attention_weights:
+            raise ValueError("Не вдалося отримати ваги уваги")
+
+        return attention_weights[layer_idx]
+
+    def get_averaged_attention(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Отримання усереднених ваг уваги по всіх головах та шарах
+
+        Args:
+            x: Вхідний тензор
+
+        Returns:
+            torch.Tensor: Усереднені ваги уваги (batch_size, seq_len, seq_len)
+        """
+        attention_weights = self.get_attention_weights(x)
+        if not attention_weights:
+            raise ValueError("Не вдалося отримати ваги уваги")
+
+        # Усереднюємо по всіх шарах та головах
+        all_layers_attention = torch.stack(attention_weights)  # (num_layers, batch_size, n_heads, seq_len, seq_len)
+        averaged_attention = all_layers_attention.mean(dim=[0, 2])  # (batch_size, seq_len, seq_len)
+
+        return averaged_attention
