@@ -4243,3 +4243,496 @@ min         0.0
 75%         0.0
 max         0.0
 Name: id, dtype: float64
+2025-05-24 11:40:15 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 11:40:15 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 11:40:16 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:40:16 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 11:40:16 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:40:16 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:40:16 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: ETH
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:40:16 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 11:40:16 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:40:16 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:40:16 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (1380,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:40:16 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1380, тип даних=float64, мін. потрібно=10
+2025-05-24 11:40:16 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:40:16 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    1380.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:52:39 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 11:52:39 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 11:52:40 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:52:40 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 11:52:40 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:52:40 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:52:40 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: ETH
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:52:40 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 11:52:40 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:52:40 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:52:40 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (1380,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:52:40 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1380, тип даних=float64, мін. потрібно=10
+2025-05-24 11:52:40 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:52:40 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    1380.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:58:20 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 11:58:20 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 11:58:22 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2833,), first values: [Decimal('-0.00931122284188043'), Decimal('-0.00201938849687660'), Decimal('0.00416103976247730')], last values: [Decimal('0.1287093717950684'), Decimal('-0.035053063564253'), Decimal('0.0513897732163285')]
+2025-05-24 11:58:22 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=object, мін. потрібно=10
+2025-05-24 11:58:22 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 11:58:22 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 11:58:22 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 11:58:22 - ArimaModeler - INFO - [logger.py:103] - Starting automatic ARIMA parameter determination
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(1, 0, 0), seasonal_order=None
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal ARIMA parameters: (1, 0, 0)
+Parameter selection details: No details available
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=float64, мін. потрібно=11
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Creating ARIMA model with key: BTC_arima_20250524115823
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - ARIMA model initialized with order (1, 0, 0)
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Attempting basic fit without any parameters
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.6478745683389984, 'gopt': array([1.27172464e-03, 1.58360658e-05, 1.98691730e-04]), 'fcalls': 80, 'warnflag': 0, 'converged': True, 'iterations': 2}
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі BTC_arima_20250524115823: AIC=-9330.857304208765, BIC=-9313.010029709272
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -9330.857304208765
+BIC: -9313.010029709272
+HQIC: -9324.418958336453
+Log Likelihood: 4668.428652104382
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі BTC_arima_20250524115823 в базу даних
+2025-05-24 11:58:23 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 11:58:23 - ArimaModeler - INFO - [logger.py:103] - ARIMA model BTC_arima_20250524115823 successfully trained and saved
+Final parameters: (1, 0, 0)
+Training period: N/A to N/A
+2025-05-24 11:58:24 - ArimaModeler - INFO - [logger.py:103] - Starting SARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, seasonal_period: 7
+Max orders - p: 5, d: 2, q: 5
+Initial data shape: (2833,), first values: [Decimal('-0.00931122284188043'), Decimal('-0.00201938849687660'), Decimal('0.00416103976247730')], last values: [Decimal('0.1287093717950684'), Decimal('-0.035053063564253'), Decimal('0.0513897732163285')]
+2025-05-24 11:58:24 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=object, мін. потрібно=20
+2025-05-24 11:58:24 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 11:58:24 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 11:58:24 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 11:58:24 - ArimaModeler - INFO - [logger.py:103] - Starting automatic SARIMA parameter determination
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(1, 0, 0), seasonal_order=(0, 0, 0, 7)
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal SARIMA parameters
+Order: (1, 0, 0), Seasonal order: (0, 0, 0, 7)
+Parameter selection details: No details available
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=float64, мін. потрібно=15
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Creating SARIMA model with key: BTC_sarima_20250524115827
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - SARIMA model initialized with order (1, 0, 0) and seasonal order (0, 0, 0, 7)
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Successfully fitted SARIMA with method: lbfgs with parameters: {'method': 'lbfgs', 'maxiter': 200, 'disp': False, 'warn_convergence': False}
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.646621930496163, 'gopt': array([5.00119945e-06, 4.60153449e-03]), 'fcalls': 45, 'warnflag': 0, 'converged': True, 'iterations': 1}
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі BTC_sarima_20250524115827: AIC=-9325.759858191259, BIC=-9313.862381281631
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -9325.759858191259
+BIC: -9313.862381281631
+HQIC: -9321.467805266677
+Log Likelihood: 4664.879929095629
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі BTC_sarima_20250524115827 в базу даних
+2025-05-24 11:58:27 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - SARIMA model BTC_sarima_20250524115827 successfully trained and saved
+Final parameters: order=(1, 0, 0), seasonal_order=(0, 0, 0, 7)
+Training period: N/A to N/A
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: ETH
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2833,), first values: [Decimal('-0.00809827807250546'), Decimal('-0.00324113589714195'), Decimal('0.00627842534675163')], last values: [Decimal('0.0154533993941178'), Decimal('0.0256077981862050'), Decimal('-0.0007929512808742')]
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=object, мін. потрібно=10
+2025-05-24 11:58:27 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 11:58:27 - ArimaModeler - INFO - [logger.py:103] - Starting automatic ARIMA parameter determination
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(1, 0, 0), seasonal_order=None
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal ARIMA parameters: (1, 0, 0)
+Parameter selection details: No details available
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=float64, мін. потрібно=11
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Creating ARIMA model with key: ETH_arima_20250524115828
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - ARIMA model initialized with order (1, 0, 0)
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Attempting basic fit without any parameters
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.2824695817431127, 'gopt': array([5.50899082e-04, 2.30962804e-05, 2.48400522e-04]), 'fcalls': 60, 'warnflag': 0, 'converged': True, 'iterations': 2}
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі ETH_arima_20250524115828: AIC=-7260.472650156476, BIC=-7242.625375656985
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -7260.472650156476
+BIC: -7242.625375656985
+HQIC: -7254.034304284165
+Log Likelihood: 3633.236325078238
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі ETH_arima_20250524115828 в базу даних
+2025-05-24 11:58:28 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - ARIMA model ETH_arima_20250524115828 successfully trained and saved
+Final parameters: (1, 0, 0)
+Training period: N/A to N/A
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Починаємо зберігати модель ETH_arima_20250524115828 у models/best_ETH_1d.pkl
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Створено директорію: models
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Модель ETH_arima_20250524115828 успішно збережена у models/best_ETH_1d.pkl
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (1727,), first values: [Decimal('0.00770899655456873'), Decimal('-0.00018614091844188'), Decimal('0.00658981985566333')], last values: [Decimal('0.1085215327888893'), Decimal('-0.0951107488368634'), Decimal('0.0256727750548880')]
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=object, мін. потрібно=10
+2025-05-24 11:58:28 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 11:58:28 - ArimaModeler - INFO - [logger.py:103] - Starting automatic ARIMA parameter determination
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(0, 0, 0), seasonal_order=None
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal ARIMA parameters: (0, 0, 0)
+Parameter selection details: No details available
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=float64, мін. потрібно=10
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Creating ARIMA model with key: SOL_arima_20250524115829
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - ARIMA model initialized with order (0, 0, 0)
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Attempting basic fit without any parameters
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.099456374381898, 'gopt': array([-2.20463647e-06,  5.98967320e-04]), 'fcalls': 81, 'warnflag': 0, 'converged': True, 'iterations': 5}
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі SOL_arima_20250524115829: AIC=-3793.5223171150756, BIC=-3782.614034958782
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -3793.5223171150756
+BIC: -3782.614034958782
+HQIC: -3789.4872382055555
+Log Likelihood: 1898.7611585575378
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі SOL_arima_20250524115829 в базу даних
+2025-05-24 11:58:29 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - ARIMA model SOL_arima_20250524115829 successfully trained and saved
+Final parameters: (0, 0, 0)
+Training period: N/A to N/A
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Starting SARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, seasonal_period: 7
+Max orders - p: 5, d: 2, q: 5
+Initial data shape: (1727,), first values: [Decimal('0.00770899655456873'), Decimal('-0.00018614091844188'), Decimal('0.00658981985566333')], last values: [Decimal('0.1085215327888893'), Decimal('-0.0951107488368634'), Decimal('0.0256727750548880')]
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=object, мін. потрібно=20
+2025-05-24 11:58:29 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 11:58:29 - ArimaModeler - INFO - [logger.py:103] - Starting automatic SARIMA parameter determination
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(0, 0, 0), seasonal_order=(0, 0, 0, 7)
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal SARIMA parameters
+Order: (0, 0, 0), Seasonal order: (0, 0, 0, 7)
+Parameter selection details: No details available
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=float64, мін. потрібно=14
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Creating SARIMA model with key: SOL_sarima_20250524115830
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - SARIMA model initialized with order (0, 0, 0) and seasonal order (0, 0, 0, 7)
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Successfully fitted SARIMA with method: lbfgs with parameters: {'method': 'lbfgs', 'maxiter': 200, 'disp': False, 'warn_convergence': False}
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.0983793906693022, 'gopt': array([0.00024566]), 'fcalls': 26, 'warnflag': 0, 'converged': True, 'iterations': 2}
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі SOL_sarima_20250524115830: AIC=-3791.8024153717697, BIC=-3786.3488535001266
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -3791.8024153717697
+BIC: -3786.3488535001266
+HQIC: -3789.7850313283443
+Log Likelihood: 1896.9012076858849
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі SOL_sarima_20250524115830 в базу даних
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - SARIMA model SOL_sarima_20250524115830 successfully trained and saved
+Final parameters: order=(0, 0, 0), seasonal_order=(0, 0, 0, 7)
+Training period: N/A to N/A
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: ETH
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (1380,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 11:58:30 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1380, тип даних=float64, мін. потрібно=10
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:58:30 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    1380.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 12:13:56 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 12:13:56 - ArimaModeler - INFO - [logger.py:103] - ARIMAModeler ініціалізовано
+2025-05-24 12:13:58 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2833,), first values: [Decimal('-0.00931122284188043'), Decimal('-0.00201938849687660'), Decimal('0.00416103976247730')], last values: [Decimal('0.1287093717950684'), Decimal('-0.035053063564253'), Decimal('0.0513897732163285')]
+2025-05-24 12:13:58 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=object, мін. потрібно=10
+2025-05-24 12:13:58 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 12:13:58 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 12:13:58 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 12:13:58 - ArimaModeler - INFO - [logger.py:103] - Starting automatic ARIMA parameter determination
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(1, 0, 0), seasonal_order=None
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal ARIMA parameters: (1, 0, 0)
+Parameter selection details: No details available
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=float64, мін. потрібно=11
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Creating ARIMA model with key: BTC_arima_20250524121359
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - ARIMA model initialized with order (1, 0, 0)
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Attempting basic fit without any parameters
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.6478745683389984, 'gopt': array([1.27172464e-03, 1.58360658e-05, 1.98691730e-04]), 'fcalls': 80, 'warnflag': 0, 'converged': True, 'iterations': 2}
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі BTC_arima_20250524121359: AIC=-9330.857304208765, BIC=-9313.010029709272
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -9330.857304208765
+BIC: -9313.010029709272
+HQIC: -9324.418958336453
+Log Likelihood: 4668.428652104382
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі BTC_arima_20250524121359 в базу даних
+2025-05-24 12:13:59 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 12:13:59 - ArimaModeler - INFO - [logger.py:103] - ARIMA model BTC_arima_20250524121359 successfully trained and saved
+Final parameters: (1, 0, 0)
+Training period: N/A to N/A
+2025-05-24 12:14:00 - ArimaModeler - INFO - [logger.py:103] - Starting SARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, seasonal_period: 7
+Max orders - p: 5, d: 2, q: 5
+Initial data shape: (2833,), first values: [Decimal('-0.00931122284188043'), Decimal('-0.00201938849687660'), Decimal('0.00416103976247730')], last values: [Decimal('0.1287093717950684'), Decimal('-0.035053063564253'), Decimal('0.0513897732163285')]
+2025-05-24 12:14:00 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=object, мін. потрібно=20
+2025-05-24 12:14:00 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 12:14:00 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 12:14:00 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 12:14:00 - ArimaModeler - INFO - [logger.py:103] - Starting automatic SARIMA parameter determination
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(1, 0, 0), seasonal_order=(0, 0, 0, 7)
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal SARIMA parameters
+Order: (1, 0, 0), Seasonal order: (0, 0, 0, 7)
+Parameter selection details: No details available
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=float64, мін. потрібно=15
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Creating SARIMA model with key: BTC_sarima_20250524121403
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - SARIMA model initialized with order (1, 0, 0) and seasonal order (0, 0, 0, 7)
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Successfully fitted SARIMA with method: lbfgs with parameters: {'method': 'lbfgs', 'maxiter': 200, 'disp': False, 'warn_convergence': False}
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.646621930496163, 'gopt': array([5.00119945e-06, 4.60153449e-03]), 'fcalls': 45, 'warnflag': 0, 'converged': True, 'iterations': 1}
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі BTC_sarima_20250524121403: AIC=-9325.759858191259, BIC=-9313.862381281631
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -9325.759858191259
+BIC: -9313.862381281631
+HQIC: -9321.467805266677
+Log Likelihood: 4664.879929095629
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі BTC_sarima_20250524121403 в базу даних
+2025-05-24 12:14:03 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 12:14:03 - ArimaModeler - INFO - [logger.py:103] - SARIMA model BTC_sarima_20250524121403 successfully trained and saved
+Final parameters: order=(1, 0, 0), seasonal_order=(0, 0, 0, 7)
+Training period: N/A to N/A
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: ETH
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2833,), first values: [Decimal('-0.00809827807250546'), Decimal('-0.00324113589714195'), Decimal('0.00627842534675163')], last values: [Decimal('0.0154533993941178'), Decimal('0.0256077981862050'), Decimal('-0.0007929512808742')]
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=object, мін. потрібно=10
+2025-05-24 12:14:04 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Starting automatic ARIMA parameter determination
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(1, 0, 0), seasonal_order=None
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal ARIMA parameters: (1, 0, 0)
+Parameter selection details: No details available
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2833, тип даних=float64, мін. потрібно=11
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 2833, унікальних значень: 2833
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Creating ARIMA model with key: ETH_arima_20250524121404
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - ARIMA model initialized with order (1, 0, 0)
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Attempting basic fit without any parameters
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.2824695817431127, 'gopt': array([5.50899082e-04, 2.30962804e-05, 2.48400522e-04]), 'fcalls': 60, 'warnflag': 0, 'converged': True, 'iterations': 2}
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі ETH_arima_20250524121404: AIC=-7260.472650156476, BIC=-7242.625375656985
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -7260.472650156476
+BIC: -7242.625375656985
+HQIC: -7254.034304284165
+Log Likelihood: 3633.236325078238
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі ETH_arima_20250524121404 в базу даних
+2025-05-24 12:14:04 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - ARIMA model ETH_arima_20250524121404 successfully trained and saved
+Final parameters: (1, 0, 0)
+Training period: N/A to N/A
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Починаємо зберігати модель ETH_arima_20250524121404 у models/best_ETH_1d.pkl
+2025-05-24 12:14:04 - ArimaModeler - INFO - [logger.py:103] - Модель ETH_arima_20250524121404 успішно збережена у models/best_ETH_1d.pkl
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (1727,), first values: [Decimal('0.00770899655456873'), Decimal('-0.00018614091844188'), Decimal('0.00658981985566333')], last values: [Decimal('0.1085215327888893'), Decimal('-0.0951107488368634'), Decimal('0.0256727750548880')]
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=object, мін. потрібно=10
+2025-05-24 12:14:05 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Starting automatic ARIMA parameter determination
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(0, 0, 0), seasonal_order=None
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal ARIMA parameters: (0, 0, 0)
+Parameter selection details: No details available
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=float64, мін. потрібно=10
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Creating ARIMA model with key: SOL_arima_20250524121405
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - ARIMA model initialized with order (0, 0, 0)
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Attempting basic fit without any parameters
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.099456374381898, 'gopt': array([-2.20463647e-06,  5.98967320e-04]), 'fcalls': 81, 'warnflag': 0, 'converged': True, 'iterations': 5}
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі SOL_arima_20250524121405: AIC=-3793.5223171150756, BIC=-3782.614034958782
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -3793.5223171150756
+BIC: -3782.614034958782
+HQIC: -3789.4872382055555
+Log Likelihood: 1898.7611585575378
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі SOL_arima_20250524121405 в базу даних
+2025-05-24 12:14:05 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - ARIMA model SOL_arima_20250524121405 successfully trained and saved
+Final parameters: (0, 0, 0)
+Training period: N/A to N/A
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Starting SARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, seasonal_period: 7
+Max orders - p: 5, d: 2, q: 5
+Initial data shape: (1727,), first values: [Decimal('0.00770899655456873'), Decimal('-0.00018614091844188'), Decimal('0.00658981985566333')], last values: [Decimal('0.1085215327888893'), Decimal('-0.0951107488368634'), Decimal('0.0256727750548880')]
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=object, мін. потрібно=20
+2025-05-24 12:14:05 - ArimaModeler - WARNING - [logger.py:107] - Дані мають тип 'object', спроба конвертації в числовий тип
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Дані успішно конвертовані в числовий тип: float64
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 12:14:05 - ArimaModeler - INFO - [logger.py:103] - Starting automatic SARIMA parameter determination
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Успішно витягнуто параметри: order=(0, 0, 0), seasonal_order=(0, 0, 0, 7)
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Successfully determined optimal SARIMA parameters
+Order: (0, 0, 0), Seasonal order: (0, 0, 0, 7)
+Parameter selection details: No details available
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1727, тип даних=float64, мін. потрібно=14
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Валідація успішна. Фінальний розмір: 1727, унікальних значень: 1727
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Creating SARIMA model with key: SOL_sarima_20250524121406
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - SARIMA model initialized with order (0, 0, 0) and seasonal order (0, 0, 0, 7)
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Successfully fitted SARIMA with method: lbfgs with parameters: {'method': 'lbfgs', 'maxiter': 200, 'disp': False, 'warn_convergence': False}
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Convergence info: {'fopt': -1.0983793906693022, 'gopt': array([0.00024566]), 'fcalls': 26, 'warnflag': 0, 'converged': True, 'iterations': 2}
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Статистика моделі SOL_sarima_20250524121406: AIC=-3791.8024153717697, BIC=-3786.3488535001266
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Model statistics:
+AIC: -3791.8024153717697
+BIC: -3786.3488535001266
+HQIC: -3789.7850313283443
+Log Likelihood: 1896.9012076858849
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Початок збереження моделі SOL_sarima_20250524121406 в базу даних
+2025-05-24 12:14:06 - ArimaModeler - ERROR - [logger.py:111] - Помилка збереження моделі в базу даних: can't adapt type 'dict'
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - SARIMA model SOL_sarima_20250524121406 successfully trained and saved
+Final parameters: order=(0, 0, 0), seasonal_order=(0, 0, 0, 7)
+Training period: N/A to N/A
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: BTC
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 12:14:06 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 12:14:06 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 12:14:06 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 12:14:07 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: ETH
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (2265,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 12:14:07 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=2265, тип даних=float64, мін. потрібно=10
+2025-05-24 12:14:07 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 12:14:07 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    2265.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64
+2025-05-24 12:14:07 - ArimaModeler - INFO - [logger.py:103] - Starting ARIMA model fitting for symbol: SOL
+Parameters - auto_params: True, max_p: 5, max_d: 2, max_q: 5, timeframe: 1d
+Initial data shape: (1380,), first values: [0.0, 0.0, 0.0], last values: [0.0, 0.0, 0.0]
+2025-05-24 12:14:07 - ArimaModeler - INFO - [logger.py:103] - Валідація даних: розмір=1380, тип даних=float64, мін. потрібно=10
+2025-05-24 12:14:07 - ArimaModeler - ERROR - [logger.py:111] - Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 12:14:07 - ArimaModeler - ERROR - [logger.py:111] - Data validation error: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+Input data stats:
+count    1380.0
+mean        0.0
+std         0.0
+min         0.0
+25%         0.0
+50%         0.0
+75%         0.0
+max         0.0
+Name: id, dtype: float64

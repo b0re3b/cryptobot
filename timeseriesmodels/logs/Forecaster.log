@@ -1281,3 +1281,76 @@
 2025-05-24 10:46:14 - Forecaster - INFO - [logger.py:103] - Series still non-stationary. Applying second-order differencing.
 2025-05-24 10:46:14 - Forecaster - INFO - [logger.py:103] - Second-order differencing applied
 2025-05-24 10:46:14 - Forecaster - ERROR - [logger.py:111] - Model fitting failed: Дані містять тільки 1 унікальних значень, неможливо навчити модель
+2025-05-24 11:40:15 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:40:15 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:40:16 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:40:16 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 11:40:16 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:40:16 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:52:39 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:52:39 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:52:40 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:52:40 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 11:52:40 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:52:40 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:58:21 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:58:21 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:58:27 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:58:27 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:58:28 - Forecaster - INFO - [logger.py:103] - Starting forecast for model ETH_arima_20250524115828 with 30 steps
+2025-05-24 11:58:28 - Forecaster - INFO - [logger.py:103] - Loading model ETH_arima_20250524115828 from database
+2025-05-24 11:58:28 - Forecaster - ERROR - [logger.py:111] - Model ETH_arima_20250524115828 loaded but not available in memory
+2025-05-24 11:58:28 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:58:28 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:58:30 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:58:30 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 11:58:30 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 11:58:30 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 12:13:57 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 12:13:57 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 12:14:03 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 12:14:03 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 12:14:04 - Forecaster - INFO - [logger.py:103] - Starting forecast for model ETH_arima_20250524121404 with 30 steps
+2025-05-24 12:14:04 - Forecaster - INFO - [logger.py:103] - Loading model ETH_arima_20250524121404 from database
+2025-05-24 12:14:04 - Forecaster - ERROR - [logger.py:111] - Error loading model ETH_arima_20250524121404: 'DatabaseManager' object has no attribute 'load_model_data'
+2025-05-24 12:14:04 - Forecaster - ERROR - [logger.py:111] - Error loading model ETH_arima_20250524121404: 'DatabaseManager' object has no attribute 'load_model_data'
+2025-05-24 12:14:04 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 12:14:05 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 12:14:06 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 12:14:06 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 12:14:06 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 12:14:06 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 12:14:07 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 12:14:07 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 12:14:07 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 12:14:07 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-24 12:14:07 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 12:14:07 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 12:14:07 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 12:14:07 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant

@@ -651,7 +651,7 @@ class TimeSeriesModels:
             data = self.transformer.convert_dataframe_to_float(data)
 
             # Select target variable (closing)
-            target = data['close']
+            target = data['original_close']
 
             # 2. Data analysis
             analysis = self.analyze_series(target)
@@ -700,6 +700,12 @@ class TimeSeriesModels:
 
             # 7. Forecasting
             forecast = self.forecast(best_model_key, forecast_steps)
+
+            save_path = f"models/best_{symbol}_{interval}.pkl"
+            if self.save_model(best_model_key, save_path):
+                self.logger.info(f"Best model {best_model_key} saved to {save_path}")
+            else:
+                self.logger.warning(f"Failed to save best model {best_model_key}")
 
             # 8. Residual analysis
             residuals = self.residual_analysis(best_model_key)

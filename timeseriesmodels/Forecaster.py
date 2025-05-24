@@ -128,30 +128,124 @@ class Forecaster:
         return forecast_index
 
     def _ensure_model_loaded(self, model_key: str) -> Dict:
-        """Ensure model is loaded in memory"""
+        """Ensure model is loaded in memory with improved error handling"""
         if model_key not in self.models:
             if self.db_manager is not None:
                 try:
                     self.logger.info(f"Loading model {model_key} from database")
-                    loaded = self.db_manager.load_complete_model(model_key)
-                    if not loaded:
-                        return {"status": "error", "message": f"Model {model_key} not found in database"}
 
+                    # Load model data from database
+                    model_data = self.db_manager.load_model_data(model_key)
+                    if not model_data:
+                        return {"status": "error", "message": f"No model data found for {model_key}"}
+
+                    # Store the loaded model in memory
+                    self.models[model_key] = model_data
+
+                    # Verify the model is properly loaded
                     if model_key not in self.models:
-                        return {"status": "error", "message": f"Model {model_key} loaded but not available in memory"}
+                        return {"status": "error", "message": f"Model {model_key} failed to load into memory"}
 
-                    self.logger.info(f"Model {model_key} successfully loaded")
+                    # Verify required components exist
+                    model_info = self.models[model_key]
+                    if "fit_result" not in model_info or model_info["fit_result"] is None:
+                        return {"status": "error", "message": f"Model {model_key} has no fit_result"}
+
+                    self.logger.info(f"Model {model_key} successfully loaded and verified")
                     return {"status": "success"}
+
                 except Exception as e:
+                    self.logger.error(f"Error loading model {model_key}: {str(e)}")
                     return {"status": "error", "message": f"Error loading model {model_key}: {str(e)}"}
             else:
                 return {"status": "error", "message": f"Model {model_key} not found and no database manager available"}
 
-        return {"status": "success"}
+        # Model already in memory - verify it's valid
+        try:
+            model_info = self.models[model_key]
+            if "fit_result" not in model_info or model_info["fit_result"] is None:
+                return {"status": "error", "message": f"Model {model_key} in memory but has no fit_result"}
+            return {"status": "success"}
+        except Exception as e:
+            return {"status": "error", "message": f"Error validating model {model_key} in memory: {str(e)}"}
+
+    def register_model(self, model_key: str, fit_result, metadata: Dict = None) -> None:
+        """Register a trained model in memory"""
+        try:
+            self.models[model_key] = {
+                "fit_result": fit_result,
+                "metadata": metadata or {},
+                "created_at": datetime.now(),
+                "model_key": model_key
+            }
+            self.logger.info(f"Model {model_key} registered in memory")
+        except Exception as e:
+            self.logger.error(f"Error registering model {model_key}: {str(e)}")
+
+    def get_model_info(self, model_key: str) -> Dict:
+        """Get model information with proper error handling"""
+        try:
+            # Ensure model is loaded
+            load_result = self._ensure_model_loaded(model_key)
+            if load_result["status"] == "error":
+                return {"status": "error", "message": load_result["message"]}
+
+            model_info = self.models[model_key]
+            fit_result = model_info.get("fit_result")
+            metadata = model_info.get("metadata", {})
+
+            if fit_result is None:
+                return {"status": "error", "message": f"Model {model_key} has no fit result"}
+
+            # Extract model information safely
+            try:
+                model_summary = {
+                    "model_key": model_key,
+                    "model_type": metadata.get("model_type", "ARIMA"),
+                    "aic": getattr(fit_result, 'aic', None),
+                    "bic": getattr(fit_result, 'bic', None),
+                    "hqic": getattr(fit_result, 'hqic', None),
+                    "llf": getattr(fit_result, 'llf', None),
+                    "created_at": model_info.get("created_at"),
+                    "parameters": {}
+                }
+
+                # Get model parameters safely
+                if hasattr(fit_result, 'params'):
+                    model_summary["parameters"] = fit_result.params.to_dict()
+                elif hasattr(fit_result, 'model') and hasattr(fit_result.model, 'params'):
+                    model_summary["parameters"] = fit_result.model.params.to_dict()
+
+                # Get order information
+                if hasattr(fit_result, 'model'):
+                    if hasattr(fit_result.model, 'order'):
+                        model_summary["order"] = fit_result.model.order
+                    if hasattr(fit_result.model, 'seasonal_order'):
+                        model_summary["seasonal_order"] = fit_result.model.seasonal_order
+
+                return {"status": "success", "model_info": model_summary}
+
+            except Exception as e:
+                self.logger.warning(f"Error extracting detailed model info for {model_key}: {str(e)}")
+                return {
+                    "status": "success",
+                    "model_info": {
+                        "model_key": model_key,
+                        "model_type": metadata.get("model_type", "ARIMA"),
+                        "created_at": model_info.get("created_at"),
+                        "note": "Limited info due to extraction error"
+                    }
+                }
+
+        except Exception as e:
+            return {"status": "error", "message": f"Error getting model info: {str(e)}"}
 
     def _generate_model_forecast(self, model_key: str, steps: int, alpha: Optional[float] = None) -> Dict:
-        """Core forecast generation method"""
+        """Core forecast generation method with improved error handling"""
         try:
+            if model_key not in self.models:
+                return {"status": "error", "message": f"Model {model_key} not found in memory"}
+
             model_info = self.models[model_key]
             fit_result = model_info.get("fit_result")
             metadata = model_info.get("metadata", {})
@@ -164,32 +258,40 @@ class Forecaster:
             # Generate forecast based on model type and requirements
             if alpha is not None:
                 # Generate forecast with confidence intervals
-                forecast_result = fit_result.get_forecast(steps=steps)
-                predicted_mean = forecast_result.predicted_mean
-                confidence_intervals = forecast_result.conf_int(alpha=alpha)
+                try:
+                    forecast_result = fit_result.get_forecast(steps=steps)
+                    predicted_mean = forecast_result.predicted_mean
+                    confidence_intervals = forecast_result.conf_int(alpha=alpha)
 
-                return {
-                    "status": "success",
-                    "forecast": predicted_mean,
-                    "lower_bound": confidence_intervals.iloc[:, 0],
-                    "upper_bound": confidence_intervals.iloc[:, 1],
-                    "confidence_level": 1.0 - alpha
-                }
+                    return {
+                        "status": "success",
+                        "forecast": predicted_mean,
+                        "lower_bound": confidence_intervals.iloc[:, 0],
+                        "upper_bound": confidence_intervals.iloc[:, 1],
+                        "confidence_level": 1.0 - alpha
+                    }
+                except Exception as e:
+                    return {"status": "error", "message": f"Error generating forecast with intervals: {str(e)}"}
             else:
                 # Generate point forecast only
-                if model_type == "ARIMA":
-                    forecast_result = fit_result.forecast(steps=steps)
-                else:  # SARIMA or other
-                    forecast_result = fit_result.get_forecast(steps=steps)
-                    forecast_result = forecast_result.predicted_mean
+                try:
+                    if hasattr(fit_result, 'get_forecast'):
+                        forecast_result = fit_result.get_forecast(steps=steps)
+                        forecast_values = forecast_result.predicted_mean
+                    elif hasattr(fit_result, 'forecast'):
+                        forecast_values = fit_result.forecast(steps=steps)
+                    else:
+                        return {"status": "error", "message": "Model does not support forecasting"}
 
-                return {
-                    "status": "success",
-                    "forecast": forecast_result
-                }
+                    return {
+                        "status": "success",
+                        "forecast": forecast_values
+                    }
+                except Exception as e:
+                    return {"status": "error", "message": f"Error generating point forecast: {str(e)}"}
 
         except Exception as e:
-            return {"status": "error", "message": f"Error generating forecast: {str(e)}"}
+            return {"status": "error", "message": f"Error in forecast generation: {str(e)}"}
 
     def _apply_transformations(self, data: pd.Series, reverse: bool = False,
                                transformations: Optional[Dict] = None) -> pd.Series:
@@ -257,12 +359,24 @@ class Forecaster:
 
             # Create training data series for index generation
             fit_result = model_info["fit_result"]
-            if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
-                train_data = pd.Series(fit_result.model.data.orig_endog)
-                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
-                    train_data.index = fit_result.model.data.dates
-            else:
-                train_data = pd.Series(range(100))  # Fallback
+
+            # Try different ways to get training data
+            train_data = None
+            if hasattr(fit_result, 'model') and hasattr(fit_result.model, 'data'):
+                if hasattr(fit_result.model.data, 'orig_endog'):
+                    train_data = pd.Series(fit_result.model.data.orig_endog)
+                    if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                        try:
+                            train_data.index = fit_result.model.data.dates
+                        except:
+                            pass
+                elif hasattr(fit_result.model.data, 'endog'):
+                    train_data = pd.Series(fit_result.model.data.endog)
+
+            # Fallback if we can't get training data
+            if train_data is None or len(train_data) == 0:
+                train_data = pd.Series(range(100))
+                self.logger.warning("Using fallback training data for index generation")
 
             # Create forecast index and series
             forecast_index = self._create_forecast_index(train_data, steps)
@@ -273,25 +387,31 @@ class Forecaster:
             if self.db_manager is not None:
                 try:
                     transformations = self.db_manager.get_data_transformations(model_key)
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.debug(f"No transformations found for {model_key}: {str(e)}")
 
             if transformations:
-                forecast_series = self._apply_transformations(forecast_series, reverse=True,
-                                                              transformations=transformations)
+                try:
+                    forecast_series = self._apply_transformations(forecast_series, reverse=True,
+                                                                  transformations=transformations)
+                except Exception as e:
+                    self.logger.warning(f"Error applying inverse transformations: {str(e)}")
 
             # Save to database
-            forecast_data = {
-                "model_key": model_key,
-                "timestamp": datetime.now(),
-                "forecast_horizon": steps,
-                "values": forecast_series.to_dict(),
-                "start_date": forecast_index[0].isoformat() if isinstance(forecast_index[0], datetime) else str(
-                    forecast_index[0]),
-                "end_date": forecast_index[-1].isoformat() if isinstance(forecast_index[-1], datetime) else str(
-                    forecast_index[-1])
-            }
-            self._save_forecast_to_db(model_key, forecast_data)
+            try:
+                forecast_data = {
+                    "model_key": model_key,
+                    "timestamp": datetime.now(),
+                    "forecast_horizon": steps,
+                    "values": forecast_series.to_dict(),
+                    "start_date": forecast_index[0].isoformat() if isinstance(forecast_index[0], datetime) else str(
+                        forecast_index[0]),
+                    "end_date": forecast_index[-1].isoformat() if isinstance(forecast_index[-1], datetime) else str(
+                        forecast_index[-1])
+                }
+                self._save_forecast_to_db(model_key, forecast_data)
+            except Exception as e:
+                self.logger.warning(f"Error saving forecast to database: {str(e)}")
 
             self.logger.info(f"Forecast for model {model_key} completed successfully")
             return forecast_series
@@ -326,11 +446,18 @@ class Forecaster:
 
             # Create training data for index generation
             fit_result = model_info["fit_result"]
-            if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
-                train_data = pd.Series(fit_result.model.data.orig_endog)
-                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
-                    train_data.index = fit_result.model.data.dates
-            else:
+            train_data = None
+
+            if hasattr(fit_result, 'model') and hasattr(fit_result.model, 'data'):
+                if hasattr(fit_result.model.data, 'orig_endog'):
+                    train_data = pd.Series(fit_result.model.data.orig_endog)
+                    if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                        try:
+                            train_data.index = fit_result.model.data.dates
+                        except:
+                            pass
+
+            if train_data is None:
                 train_data = pd.Series(range(100))
 
             # Create forecast index
@@ -350,12 +477,15 @@ class Forecaster:
                     pass
 
             if transformations:
-                forecast_series = self._apply_transformations(forecast_series, reverse=True,
+                try:
+                    forecast_series = self._apply_transformations(forecast_series, reverse=True,
+                                                                  transformations=transformations)
+                    lower_bound = self._apply_transformations(lower_bound, reverse=True,
                                                               transformations=transformations)
-                lower_bound = self._apply_transformations(lower_bound, reverse=True,
-                                                          transformations=transformations)
-                upper_bound = self._apply_transformations(upper_bound, reverse=True,
-                                                          transformations=transformations)
+                    upper_bound = self._apply_transformations(upper_bound, reverse=True,
+                                                              transformations=transformations)
+                except Exception as e:
+                    self.logger.warning(f"Error applying inverse transformations: {str(e)}")
 
             # Format results
             forecast_data = {
@@ -367,14 +497,17 @@ class Forecaster:
             }
 
             # Save to database
-            forecast_db_data = {
-                "model_key": model_key,
-                "forecast_timestamp": datetime.now(),
-                "steps": steps,
-                "alpha": alpha,
-                "forecast_data": forecast_data
-            }
-            self._save_forecast_to_db(model_key, forecast_db_data)
+            try:
+                forecast_db_data = {
+                    "model_key": model_key,
+                    "forecast_timestamp": datetime.now(),
+                    "steps": steps,
+                    "alpha": alpha,
+                    "forecast_data": forecast_data
+                }
+                self._save_forecast_to_db(model_key, forecast_db_data)
+            except Exception as e:
+                self.logger.warning(f"Error saving forecast to database: {str(e)}")
 
             result = {
                 "status": "success",
@@ -458,9 +591,18 @@ class Forecaster:
                 fit_result = self.modeler.fit_arima(data, order=order, symbol=symbol)
 
             if isinstance(fit_result, dict) and fit_result.get("status") == "success":
+                # Register the model in memory
+                actual_model_key = fit_result.get("model_key", model_key)
+                if "model_info" in fit_result and "fit_result" in fit_result["model_info"]:
+                    self.register_model(
+                        actual_model_key,
+                        fit_result["model_info"]["fit_result"],
+                        {"model_type": model_type.upper(), "symbol": symbol}
+                    )
+
                 return {
                     "status": "success",
-                    "model_key": fit_result.get("model_key", model_key),
+                    "model_key": actual_model_key,
                     "model_info": fit_result.get("model_info"),
                     "model_type": model_type.upper()
                 }

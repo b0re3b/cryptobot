@@ -699,7 +699,7 @@ class TimeSeriesTransformer:
             return pd.Series([], index=pd.DatetimeIndex([]))
 
     def extract_volatility(self, data: pd.Series, window: int = 20) -> pd.Series:
-        self.logger.info(f"Applying inverse  transformation")
+        self.logger.info(f"Applying volatility calculation with window {window}")
 
         # If input is a DataFrame, convert to float and extract Series
         if isinstance(data, pd.DataFrame):
@@ -710,7 +710,6 @@ class TimeSeriesTransformer:
             else:
                 self.logger.error("DataFrame has no columns after conversion")
                 return pd.Series([], index=pd.DatetimeIndex([]))
-        self.logger.info(f"Calculating volatility with window size {window}")
 
         # Input validation - ensure data is actually a pandas Series
         if not isinstance(data, pd.Series):
@@ -733,10 +732,26 @@ class TimeSeriesTransformer:
                 self.logger.error(f"Could not convert input to Series: {str(conv_err)}")
                 return pd.Series([], index=pd.DatetimeIndex([]))
 
-        # Check for NaN values
+        # Convert decimal.Decimal objects to float BEFORE any calculations
+        try:
+            # Check if we have Decimal objects
+            if len(data) > 0 and hasattr(data.iloc[0], '__class__') and 'decimal' in str(type(data.iloc[0])).lower():
+                self.logger.info("Converting decimal.Decimal objects to float")
+                data = data.astype(float)
+            elif data.dtype == 'object':
+                # Try to convert object dtype to numeric, which handles Decimal conversion
+                self.logger.info("Converting object dtype to numeric")
+                data = pd.to_numeric(data, errors='coerce')
+        except Exception as decimal_err:
+            self.logger.error(f"Error converting Decimal objects: {str(decimal_err)}")
+            return pd.Series([], index=pd.DatetimeIndex([]))
+
+        # Check for NaN values after conversion
         if data.isnull().any():
             self.logger.warning("Data contains NaN values. Removing them before volatility calculation.")
+            original_length = len(data)
             data = data.dropna()
+            self.logger.info(f"Removed {original_length - len(data)} NaN values")
 
         # Check for empty data
         if len(data) == 0:
@@ -746,79 +761,109 @@ class TimeSeriesTransformer:
         # Check for zero or negative values
         if (data <= 0).any():
             min_value = data.min()
+            negative_count = (data <= 0).sum()
             self.logger.warning(
-                f"Data contains zero or negative values (min={min_value}). These points will be excluded from volatility calculation.")
-            data = data[data > 0]  # Filter out all zero and negative values
+                f"Data contains {negative_count} zero or negative values (min={min_value}). These points will be excluded from volatility calculation.")
+            original_index = data.index
+            data = data[data > 0]
+            self.logger.info(f"Filtered out {len(original_index) - len(data)} non-positive values")
 
         # Check if enough data points remain after filtering
         if len(data) < window:
-            self.logger.error(f"Not enough data points for volatility calculation with window={window}")
+            self.logger.error(f"Not enough data points ({len(data)}) for volatility calculation with window={window}")
             return pd.Series([], index=pd.DatetimeIndex([]))
 
         try:
+            # Store original index for final result
+            original_index = data.index
+
             # Create a proper Series with appropriate index if needed
             if not isinstance(data.index, pd.DatetimeIndex) and not data.index.is_numeric():
                 self.logger.warning("Data index is not a DatetimeIndex or numeric index, results may be unexpected")
 
-            # Calculate log returns
+            # Calculate log returns with proper error handling
             data_shifted = data.shift(1)
-            # Ensure we're not dividing by zero
-            valid_indices = (data_shifted != 0) & ~data_shifted.isna()
+
+            # Ensure we're not dividing by zero and both values are valid
+            valid_mask = (data_shifted != 0) & ~data_shifted.isna() & ~data.isna() & (data_shifted > 0)
+
+            if not valid_mask.any():
+                self.logger.error("No valid data points for return calculation")
+                return pd.Series(np.nan, index=original_index)
 
             # Initialize log_returns with NaN values
-            log_returns = pd.Series(np.nan, index=data.index)
+            log_returns = pd.Series(np.nan, index=data.index, dtype=float)
 
-            # Only calculate for valid indices
-            if valid_indices.any():
-                ratio = data[valid_indices] / data_shifted[valid_indices]
-                log_returns[valid_indices] = np.log(ratio)
+            # Calculate returns only for valid indices
+            try:
+                # Ensure both series are float type before division
+                data_float = data[valid_mask].astype(float)
+                data_shifted_float = data_shifted[valid_mask].astype(float)
 
-            log_returns = log_returns.dropna()
+                ratio = data_float / data_shifted_float
+
+                # Apply log transformation
+                log_returns.loc[valid_mask] = np.log(ratio)
+
+            except Exception as calc_err:
+                self.logger.error(f"Error calculating log returns: {str(calc_err)}")
+                return pd.Series(np.nan, index=original_index)
+
+            # Remove NaN values from log returns
+            log_returns_clean = log_returns.dropna()
 
             # Check if we have enough data after calculating returns
-            if len(log_returns) < window:
-                self.logger.error(f"Not enough valid log returns for volatility calculation with window={window}")
-                # Return a Series with the same index as the input but filled with NaN
-                return pd.Series(np.nan, index=data.index)
+            if len(log_returns_clean) < window:
+                self.logger.error(
+                    f"Not enough valid log returns ({len(log_returns_clean)}) for volatility calculation with window={window}")
+                return pd.Series(np.nan, index=original_index)
 
             # Calculate volatility as rolling standard deviation of log returns
-            volatility = log_returns.rolling(window=window).std()
+            volatility = log_returns_clean.rolling(window=window, min_periods=window).std()
 
-            # Convert standard deviation to annualized volatility
-            # Default to daily data
-            annualization_factor = np.sqrt(252)
+            # Determine annualization factor
+            annualization_factor = np.sqrt(252)  # Default to daily data
 
-            if isinstance(data.index, pd.DatetimeIndex) and len(data) >= 2:
+            if isinstance(original_index, pd.DatetimeIndex) and len(data) >= 2:
                 try:
-                    time_diff = data.index[1:] - data.index[:-1]
-                    median_diff = pd.Series(time_diff).median()
+                    # Calculate time differences to determine frequency
+                    time_diffs = original_index[1:] - original_index[:-1]
+                    median_diff = pd.Series(time_diffs).median()
 
                     if median_diff <= pd.Timedelta(minutes=5):
                         annualization_factor = np.sqrt(252 * 24 * 12)  # 5-minute data
+                        self.logger.info("Detected 5-minute data frequency")
                     elif median_diff <= pd.Timedelta(hours=1):
                         annualization_factor = np.sqrt(252 * 24)  # Hourly data
+                        self.logger.info("Detected hourly data frequency")
                     elif median_diff <= pd.Timedelta(days=1):
                         annualization_factor = np.sqrt(252)  # Daily data
+                        self.logger.info("Detected daily data frequency")
                     else:
-                        # Don't annualize for non-standard intervals
                         self.logger.warning(
                             f"Non-standard time interval detected ({median_diff}). Using default annualization factor.")
-                except Exception as e:
+
+                except Exception as freq_err:
                     self.logger.warning(
-                        f"Error determining time frequency: {str(e)}. Using default annualization factor.")
+                        f"Error determining time frequency: {str(freq_err)}. Using default annualization factor.")
 
-            volatility = volatility * annualization_factor
-            self.logger.info(f"Volatility calculation completed. Annualization factor: {annualization_factor}")
+            # Apply annualization
+            volatility_annualized = volatility * annualization_factor
 
-            # Make sure the returned Series has the same index length as the input data
-            # Fill NaN values for indices where volatility couldn't be calculated
-            full_volatility = pd.Series(np.nan, index=data.index)
-            full_volatility.loc[volatility.index] = volatility
+            # Create result series with original index structure
+            result = pd.Series(np.nan, index=original_index, dtype=float)
 
-            return full_volatility
+            # Map volatility values back to original index where available
+            for idx in volatility_annualized.index:
+                if idx in result.index:
+                    result.loc[idx] = volatility_annualized.loc[idx]
+
+            self.logger.info(f"Volatility calculation completed. Annualization factor: {annualization_factor:.2f}")
+            self.logger.info(f"Valid volatility values: {result.count()}/{len(result)}")
+
+            return result
 
         except Exception as e:
             self.logger.error(f"Error during volatility calculation: {str(e)}")
-            # Create an empty Series with the same index as the input data
-            # This will prevent the "Length of values does not match length of index" error
-            return pd.Series(np.nan, index=data.index)
+            # Return Series with NaN values and original index to maintain structure
+            return pd.Series(np.nan, index=data.index if hasattr(data, 'index') else pd.RangeIndex(len(data)))
