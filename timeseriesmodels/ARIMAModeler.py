@@ -102,16 +102,7 @@ class ARIMAModeler:
         return model_key
 
     def _save_model_to_db(self, model_key: str, model_info: Dict) -> bool:
-        """
-        Save ARIMA model to database with proper parameter serialization
 
-        Args:
-            model_key: Unique identifier for the model
-            model_info: Dictionary containing model data, parameters, and metadata
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
         if self.db_manager is None:
             self.logger.warning("База даних недоступна, пропускаємо збереження моделі")
             return False
@@ -215,15 +206,7 @@ class ARIMAModeler:
         return datetime.now()
 
     def _serialize_model_parameters(self, parameters: Dict) -> Dict:
-        """
-        Serialize model parameters to ensure they can be stored in database
 
-        Args:
-            parameters: Dictionary of model parameters
-
-        Returns:
-            Dict: Serialized parameters ready for database storage
-        """
         serialized = {}
 
         try:
@@ -268,15 +251,7 @@ class ARIMAModeler:
             return {str(k): str(v) for k, v in parameters.items()}
 
     def _serialize_model_object(self, model_object) -> bytes:
-        """
-        Serialize the fitted model object to bytes
 
-        Args:
-            model_object: The fitted ARIMA model or similar object
-
-        Returns:
-            bytes: Serialized model object
-        """
         try:
             # Try different serialization methods
             try:
@@ -304,15 +279,7 @@ class ARIMAModeler:
             raise
 
     def _serialize_transformations(self, transformations: Dict) -> Dict:
-        """
-        Serialize data transformations for database storage
 
-        Args:
-            transformations: Dictionary of transformation objects
-
-        Returns:
-            Dict: Serialized transformations
-        """
         serialized_transforms = {}
 
         try:
@@ -458,16 +425,7 @@ class ARIMAModeler:
 
     def _extract_optimal_params(self, optimal_params: Dict, is_seasonal: bool = False) -> Tuple[
         Tuple[int, int, int], Tuple[int, int, int, int]]:
-        """
-        Витягує оптимальні параметри ARIMA/SARIMA з результату аналізу.
 
-        Args:
-            optimal_params: Словник з результатами оптимізації
-            is_seasonal: True для SARIMA, False для ARIMA
-
-        Returns:
-            Tuple[order, seasonal_order] для SARIMA або Tuple[order, None] для ARIMA
-        """
         self.logger.debug(f"Витягування оптимальних параметрів. Сезонна модель: {is_seasonal}")
         self.logger.debug(f"Структура вхідних параметрів: {list(optimal_params.keys())}")
 

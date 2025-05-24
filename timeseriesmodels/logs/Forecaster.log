@@ -990,3 +990,165 @@
 2025-05-23 17:20:02 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250523172001 not found in memory, trying to load from database
 2025-05-23 17:20:02 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250523172001 successfully loaded from database
 2025-05-23 17:20:02 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250523172001 loaded from database but not available in memory
+2025-05-24 10:07:12 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:07:14 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524100713 with 30 steps
+2025-05-24 10:07:14 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524100713 not found in memory, trying to load from database
+2025-05-24 10:07:14 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524100713 successfully loaded from database
+2025-05-24 10:07:14 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524100713 loaded from database but not available in memory
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524100719 with 30 steps
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524100719 not found in memory, trying to load from database
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524100719 successfully loaded from database
+2025-05-24 10:07:20 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524100719 loaded from database but not available in memory
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:07:20 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:07:20 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:07:22 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524100722 with 30 steps
+2025-05-24 10:07:22 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524100722 not found in memory, trying to load from database
+2025-05-24 10:07:22 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524100722 successfully loaded from database
+2025-05-24 10:07:22 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524100722 loaded from database but not available in memory
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524100726 with 30 steps
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524100726 not found in memory, trying to load from database
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524100726 successfully loaded from database
+2025-05-24 10:07:26 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524100726 loaded from database but not available in memory
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:07:26 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524100726 with 30 steps
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524100726 not found in memory, trying to load from database
+2025-05-24 10:07:26 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524100726 successfully loaded from database
+2025-05-24 10:07:26 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524100726 loaded from database but not available in memory
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524100728 with 30 steps
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524100728 not found in memory, trying to load from database
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524100728 successfully loaded from database
+2025-05-24 10:07:28 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524100728 loaded from database but not available in memory
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:07:28 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:07:28 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:07:28 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:07:29 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 10:07:29 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:07:29 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:07:29 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:07:29 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 10:07:29 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 10:07:29 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:07:29 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:11:09 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:11:11 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524101111 with 30 steps
+2025-05-24 10:11:11 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101111 not found in memory, trying to load from database
+2025-05-24 10:11:11 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101111 successfully loaded from database
+2025-05-24 10:11:11 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524101111 loaded from database but not available in memory
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524101116 with 30 steps
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101116 not found in memory, trying to load from database
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101116 successfully loaded from database
+2025-05-24 10:11:16 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524101116 loaded from database but not available in memory
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:11:16 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:11:16 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:11:18 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524101118 with 30 steps
+2025-05-24 10:11:18 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101118 not found in memory, trying to load from database
+2025-05-24 10:11:18 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101118 successfully loaded from database
+2025-05-24 10:11:18 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524101118 loaded from database but not available in memory
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524101121 with 30 steps
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101121 not found in memory, trying to load from database
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101121 successfully loaded from database
+2025-05-24 10:11:21 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524101121 loaded from database but not available in memory
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:11:21 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:11:21 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:11:22 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524101122 with 30 steps
+2025-05-24 10:11:22 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101122 not found in memory, trying to load from database
+2025-05-24 10:11:22 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101122 successfully loaded from database
+2025-05-24 10:11:22 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524101122 loaded from database but not available in memory
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524101123 with 30 steps
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101123 not found in memory, trying to load from database
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101123 successfully loaded from database
+2025-05-24 10:11:23 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524101123 loaded from database but not available in memory
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:11:23 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:11:23 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:11:23 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:11:24 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 10:11:24 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:11:24 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:11:24 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:11:24 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 10:11:24 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 10:11:24 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:11:24 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:17:35 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:17:36 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524101736 with 30 steps
+2025-05-24 10:17:36 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101736 not found in memory, trying to load from database
+2025-05-24 10:17:36 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101736 successfully loaded from database
+2025-05-24 10:17:36 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524101736 loaded from database but not available in memory
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524101742 with 30 steps
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101742 not found in memory, trying to load from database
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101742 successfully loaded from database
+2025-05-24 10:17:42 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524101742 loaded from database but not available in memory
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:17:42 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:17:42 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:17:44 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524101744 with 30 steps
+2025-05-24 10:17:44 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101744 not found in memory, trying to load from database
+2025-05-24 10:17:44 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101744 successfully loaded from database
+2025-05-24 10:17:44 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524101744 loaded from database but not available in memory
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524101748 with 30 steps
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101748 not found in memory, trying to load from database
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101748 successfully loaded from database
+2025-05-24 10:17:48 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524101748 loaded from database but not available in memory
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:17:48 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_arima_20250524101748 with 30 steps
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101748 not found in memory, trying to load from database
+2025-05-24 10:17:48 - Forecaster - INFO - [logger.py:103] - Model default_arima_20250524101748 successfully loaded from database
+2025-05-24 10:17:48 - Forecaster - ERROR - [logger.py:111] - Model default_arima_20250524101748 loaded from database but not available in memory
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Starting forecast for model default_sarima_20250524101749 with 30 steps
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101749 not found in memory, trying to load from database
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Model default_sarima_20250524101749 successfully loaded from database
+2025-05-24 10:17:49 - Forecaster - ERROR - [logger.py:111] - Model default_sarima_20250524101749 loaded from database but not available in memory
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 10:17:49 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:17:49 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:17:50 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Split data: train=2267, test=567
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:17:50 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
+2025-05-24 10:17:50 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-24 10:17:50 - Forecaster - ERROR - [logger.py:111] - Data transformation returned unexpected format: <class 'pandas.core.series.Series'>

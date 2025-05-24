@@ -12,7 +12,10 @@ import json
 import pickle
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
-from ML import LSTMModel, GRUModel, ModelTrainer, TransformerModel
+from ML.LSTM import LSTMModel
+from ML.GRU import GRUModel
+from ML.transformer import TransformerModel
+from ML.ModelTrainer import ModelTrainer
 from data.db import DatabaseManager
 from utils.logger import CryptoLogger
 from ML.DataPreprocessor import DataPreprocessor
@@ -28,7 +31,7 @@ class ModelConfig:
     learning_rate: float = 0.001
     batch_size: int = 32
     epochs: int = 100
-    sequence_length: int = 60  # Додано sequence_length
+    sequence_length: int = 60
 
 
 @dataclass
@@ -39,20 +42,14 @@ class CryptoConfig:
 
 
 class DeepLearning:
-    """
-    Клас для роботи з глибокими нейронними мережами для прогнозування криптовалют
-    Підтримує LSTM, GRU та Transformer моделі для BTC, ETH та SOL на різних таймфреймах
-    """
+
 
     SYMBOLS = ['BTC', 'ETH', 'SOL']
     TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
     MODEL_TYPES = ['lstm', 'gru', 'transformer']  # Додано transformer
 
     def __init__(self, models_dir: str = "models/deep_learning"):
-        """
-        Ініціалізація класу DeepLearning
-        Створення структур для зберігання моделей, їх конфігурацій та метрик
-        """
+
         self.logger = CryptoLogger('deep_learning')
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.crypto_config = CryptoConfig()
@@ -80,16 +77,7 @@ class DeepLearning:
             os.makedirs(self.models_dir)
 
     def _create_model(self, model_type: str, config: ModelConfig) -> nn.Module:
-        """
-        Створення моделі відповідного типу з заданою конфігурацією
 
-        Args:
-            model_type: Тип моделі ('lstm', 'gru', 'transformer')
-            config: Конфігурація моделі
-
-        Returns:
-            Створена модель
-        """
         if model_type.lower() == 'lstm':
             return LSTMModel(
                 input_dim=config.input_dim,
@@ -126,20 +114,7 @@ class DeepLearning:
                     data: Optional[pd.DataFrame] = None,
                     config: Optional[ModelConfig] = None,
                     **training_params) -> Dict[str, Any]:
-        """
-        Навчання моделі з використанням ModelTrainer.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            model_type: Тип моделі
-            data: Дані для навчання (якщо None, завантажуються автоматично)
-            config: Конфігурація моделі
-            **training_params: Додаткові параметри навчання
-
-        Returns:
-            Результати навчання
-        """
         self._validate_inputs(symbol, timeframe, model_type)
 
         try:
@@ -254,19 +229,7 @@ class DeepLearning:
 
     def predict(self, symbol: str, timeframe: str, model_type: str,
                 input_data: Optional[pd.DataFrame] = None, steps_ahead: int = 1) -> Dict[str, Any]:
-        """
-        Прогнозування за допомогою навченої моделі.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            model_type: Тип моделі
-            input_data: Вхідні дані (якщо None, завантажуються останні дані)
-            steps_ahead: Кількість кроків прогнозу
-
-        Returns:
-            Словник з прогнозами та додатковою інформацією
-        """
         self._validate_inputs(symbol, timeframe, model_type)
 
         # Завантаження моделі, якщо вона ще не завантажена
@@ -342,19 +305,7 @@ class DeepLearning:
 
     def predict_multiple_steps(self, symbol: str, timeframe: str, model_type: str,
                                steps: int = 10, input_data: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        """
-        Багатокроковий прогноз
 
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm', 'gru', 'transformer')
-            steps: Кількість кроків для прогнозування
-            input_data: Вхідні дані для прогнозування
-
-        Returns:
-            pd.DataFrame: Прогнозовані значення
-        """
         # Прогнозування на кілька кроків вперед
         result = self.predict(symbol, timeframe, model_type, steps_ahead=steps, input_data=input_data)
         predictions = result['predictions']
@@ -421,18 +372,7 @@ class DeepLearning:
 
     def evaluate_model(self, symbol: str, timeframe: str, model_type: str,
                        test_data: Optional[pd.DataFrame] = None) -> Dict[str, float]:
-        """
-        Оцінка моделі на тестових даних.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            model_type: Тип моделі
-            test_data: Тестові дані
-
-        Returns:
-            Словник з метриками
-        """
         self._validate_inputs(symbol, timeframe, model_type)
 
         # Завантаження моделі
@@ -560,17 +500,7 @@ class DeepLearning:
             return False
 
     def get_model_metrics(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
-        """
-        Отримання метрик ефективності моделі
 
-        Args:
-            symbol: Символ криптовалюти ('BTC', 'ETH', 'SOL')
-            timeframe: Часовий інтервал ('1m', '1h', '4h', '1d', '1w')
-            model_type: Тип моделі ('lstm', 'gru', 'transformer')
-
-        Returns:
-            Dict: Метрики ефективності моделі
-        """
         model_key = self._create_model_key(symbol, timeframe, model_type)
 
         if model_key in self.model_metrics:
@@ -801,17 +731,7 @@ class DeepLearning:
     # ==================== ДОПОМІЖНІ МЕТОДИ ====================
 
     def _validate_inputs(self, symbol: str, timeframe: str, model_type: str) -> bool:
-        """
-        Перевірка правильності вхідних параметрів
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            model_type: Тип моделі
-
-        Returns:
-            bool: True, якщо всі параметри правильні
-        """
         if symbol not in self.SYMBOLS:
             raise ValueError(f"Непідтримуваний символ: {symbol}. Доступні символи: {self.SYMBOLS}")
 
@@ -848,19 +768,7 @@ class DeepLearning:
 
     def online_learning(self, symbol: str, timeframe: str, model_type: str,
                         new_data: pd.DataFrame, epochs: int = 10) -> Dict[str, Any]:
-        """
-        Онлайн-дообучення моделі на нових даних.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            model_type: Тип моделі
-            new_data: Нові дані для дообучення
-            epochs: Кількість епох
-
-        Returns:
-            Результати дообучення
-        """
         # Визначення input_dim
         input_dim = new_data.shape[1] - 1 if 'target' in new_data.columns else new_data.shape[1]
 
@@ -875,17 +783,7 @@ class DeepLearning:
 
     def compare_models(self, symbol: str, timeframe: str,
                        test_data: Optional[pd.DataFrame] = None) -> Dict[str, Dict[str, float]]:
-        """
-        Порівняння моделей для заданого символу та таймфрейму.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            test_data: Тестові дані
-
-        Returns:
-            Словник з метриками для кожної моделі
-        """
         results = {}
 
         for model_type in self.crypto_config.model_types:
@@ -899,17 +797,7 @@ class DeepLearning:
         return results
 
     def get_model_info(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
-        """
-        Отримання інформації про модель.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            model_type: Тип моделі
-
-        Returns:
-            Інформація про модель
-        """
         model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
         if model_key not in self.model_trainer.models:
             if not self.model_trainer.load_model(symbol, timeframe, model_type):
@@ -934,18 +822,7 @@ class DeepLearning:
                          timeframes: Optional[List[str]] = None,
                          model_types: Optional[List[str]] = None,
                          **training_params) -> Dict[str, Dict[str, Any]]:
-        """
-        Навчання всіх моделей для вказаних параметрів.
 
-        Args:
-            symbols: Список символів
-            timeframes: Список таймфреймів
-            model_types: Список типів моделей
-            **training_params: Параметри навчання
-
-        Returns:
-            Результати навчання для всіх моделей
-        """
         return self.model_trainer.train_all_models(
             symbols=symbols,
             timeframes=timeframes,
@@ -955,19 +832,7 @@ class DeepLearning:
 
     def cross_validate_model(self, symbol: str, timeframe: str, model_type: str,
                              k_folds: int = 5, **model_params) -> Dict[str, List[float]]:
-        """
-        Крос-валідація моделі.
 
-        Args:
-            symbol: Символ криптовалюти
-            timeframe: Таймфрейм
-            model_type: Тип моделі
-            k_folds: Кількість фолдів
-            **model_params: Параметри моделі
-
-        Returns:
-            Результати крос-валідації
-        """
         return self.model_trainer.cross_validate_model(
             symbol=symbol,
             timeframe=timeframe,
@@ -977,12 +842,7 @@ class DeepLearning:
         )
 
     def get_training_summary(self) -> Dict[str, Any]:
-        """
-        Отримання зведення про навчені моделі.
 
-        Returns:
-            Зведена інформація
-        """
         return self.model_trainer.get_training_summary()
 
         # ==================== HYPERPARAMETER OPTIMIZATION ====================
@@ -990,21 +850,7 @@ class DeepLearning:
     def hyperparameter_optimization(self, symbol: str, timeframe: str, model_type: str,
                                         param_space: Dict[str, List], optimization_method: str = 'grid_search',
                                         cv_folds: int = 3, max_iterations: int = 50) -> Dict[str, Any]:
-            """
-            Оптимізація гіперпараметрів моделі.
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Таймфрейм
-                model_type: Тип моделі
-                param_space: Простір пошуку параметрів
-                optimization_method: Метод оптимізації ('grid_search', 'random_search', 'bayesian')
-                cv_folds: Кількість фолдів для крос-валідації
-                max_iterations: Максимальна кількість ітерацій
-
-            Returns:
-                Результати оптимізації
-            """
             self._validate_inputs(symbol, timeframe, model_type)
 
             try:
@@ -1212,17 +1058,7 @@ class DeepLearning:
         # ==================== ADVANCED ANALYSIS ====================
 
     def feature_importance_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
-            """
-            Аналіз важливості ознак для моделі.
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Таймфрейм
-                model_type: Тип моделі
-
-            Returns:
-                Словник з важливістю кожної ознаки
-            """
             self._validate_inputs(symbol, timeframe, model_type)
 
             # Завантаження моделі
@@ -1277,17 +1113,7 @@ class DeepLearning:
             return importance_scores
 
     def model_interpretation(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
-            """
-            Комплексна інтерпретація моделі.
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Таймфрейм
-                model_type: Тип моделі
-
-            Returns:
-                Словник з результатами інтерпретації
-            """
             interpretation_results = {}
 
             try:
@@ -1402,15 +1228,7 @@ class DeepLearning:
 
     def plot_model_comparison(self, symbol: str, timeframe: str,
                                   test_data: Optional[pd.DataFrame] = None, save_path: Optional[str] = None) -> None:
-            """
-            Візуалізація порівняння моделей.
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Таймфрейм
-                test_data: Тестові дані
-                save_path: Шлях для збереження графіку
-            """
             plt.style.use('seaborn-v0_8')
             fig, axes = plt.subplots(2, 2, figsize=(20, 12))
 
@@ -1471,16 +1289,7 @@ class DeepLearning:
 
     def plot_feature_importance(self, symbol: str, timeframe: str, model_type: str,
                                     top_n: int = 15, save_path: Optional[str] = None) -> None:
-            """
-            Візуалізація важливості ознак.
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Таймфрейм
-                model_type: Тип моделі
-                top_n: Кількість топ-ознак для показу
-                save_path: Шлях для збереження графіку
-            """
             feature_importance = self.feature_importance_analysis(symbol, timeframe, model_type)
 
             # Сортування за важливістю
@@ -1515,17 +1324,7 @@ class DeepLearning:
     def plot_prediction_vs_actual(self, symbol: str, timeframe: str, model_type: str,
                                       test_data: Optional[pd.DataFrame] = None,
                                       n_points: int = 100, save_path: Optional[str] = None) -> None:
-            """
-            Візуалізація прогнозів проти фактичних значень.
 
-            Args:
-                symbol: Символ криптовалюти
-                timeframe: Таймфрейм
-                model_type: Тип моделі
-                test_data: Тестові дані
-                n_points: Кількість точок для відображення
-                save_path: Шлях для збереження графіку
-            """
             # Отримання даних
             if test_data is None:
                 data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
@@ -1589,15 +1388,7 @@ class DeepLearning:
         # ==================== UTILITY METHODS ====================
 
     def cleanup_old_models(self, days_old: int = 30) -> int:
-            """
-            Очищення старих моделей.
 
-            Args:
-                days_old: Видалити моделі старше вказаної кількості днів
-
-            Returns:
-                Кількість видалених моделей
-            """
             if not os.path.exists(self.models_dir):
                 return 0
 

@@ -1102,42 +1102,42 @@ class DatabaseManager:
     #         self.conn.rollback()
     #         return False
 
-    def save_model_metadata(self, model_key: str, symbol: str, model_type: str,
-                            timeframe: str, start_date: datetime, end_date: datetime,
-                            description: str = None) -> int:
+    def save_model_metadata(self, model_key: str, model_type: str, timeframe: str,
+                            start_date: datetime, end_date: datetime, symbol: str,**metadata) -> int:
+            """Збереження метаданих моделі з використанням тільки model_key"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = """
+                            INSERT INTO time_series_models
+                            (model_key, symbol, model_type, timeframe, start_date, end_date, description)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (model_key) 
+                            DO \
+                            UPDATE SET
+                                symbol = EXCLUDED.symbol, \
+                                model_type = EXCLUDED.model_type, \
+                                timeframe = EXCLUDED.timeframe, \
+                                start_date = EXCLUDED.start_date, \
+                                end_date = EXCLUDED.end_date, \
+                                description = EXCLUDED.description, \
+                                updated_at = CURRENT_TIMESTAMP
+                            """
+                    cursor.execute(query, (model_key, symbol, model_type, timeframe,
+                                           start_date, end_date))
+                    conn.commit()
+                    return True
+            except Exception as e:
+                self.conn.rollback()
+                raise
 
+    def save_model_parameters(self, model_key: str, parameters: Dict) -> bool:
+        """Збереження параметрів моделі"""
         try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = """
-                        INSERT INTO time_series_models
-                        (model_key, symbol, model_type, timeframe, start_date, end_date, description)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (model_key) 
-                DO \
-                        UPDATE SET
-                            symbol = EXCLUDED.symbol, \
-                            model_type = EXCLUDED.model_type, \
-                            timeframe = EXCLUDED.timeframe, \
-                            start_date = EXCLUDED.start_date, \
-                            end_date = EXCLUDED.end_date, \
-                            description = EXCLUDED.description, \
-                            updated_at = CURRENT_TIMESTAMP \
-                            RETURNING model_id \
-                        """
-                cursor.execute(query, (model_key, symbol, model_type, timeframe,
-                                       start_date, end_date, description))
-                model_id = cursor.fetchone()[0]
-                conn.commit()
-                return model_id
-        except Exception as e:
-            raise
+            # Витягуємо параметри зі словника
+            order_params = parameters.get('order_params')
+            seasonal_order = parameters.get('seasonal_order')
+            seasonal_period = parameters.get('seasonal_period')
 
-    def save_model_parameters(self, model_key: str,
-                              order_params: Optional[Union[str, tuple]] = None,
-                              seasonal_order: Optional[Union[str, tuple]] = None,
-                              seasonal_period: Optional[int] = None) -> bool:
-        """Додавання параметрів моделі"""
-        try:
             # Перетворення tuple в рядок
             if isinstance(order_params, (tuple, list)):
                 order_params = json.dumps(order_params)
@@ -1146,7 +1146,11 @@ class DatabaseManager:
 
             query = """
                     INSERT INTO model_parameters (model_key, order_params, seasonal_order, seasonal_period)
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s) ON CONFLICT (model_key) DO
+                    UPDATE SET
+                        order_params = EXCLUDED.order_params,
+                        seasonal_order = EXCLUDED.seasonal_order,
+                        seasonal_period = EXCLUDED.seasonal_period
                     """
             self.cursor.execute(query, (model_key, order_params, seasonal_order, seasonal_period))
             self.conn.commit()
@@ -1157,521 +1161,529 @@ class DatabaseManager:
             return False
 
     def get_model_parameters(self, model_key: str) -> Optional[Dict]:
-        """Отримання параметрів моделі"""
-        try:
-            query = "SELECT * FROM model_parameters WHERE model_key = %s"
-            self.cursor.execute(query, (model_key,))
-            result = self.cursor.fetchone()
+            """Отримання параметрів моделі"""
+            try:
+                query = "SELECT * FROM model_parameters WHERE model_key = %s"
+                self.cursor.execute(query, (model_key,))
+                result = self.cursor.fetchone()
 
-            if result:
-                columns = [desc[0] for desc in self.cursor.description]
-                return dict(zip(columns, result))
-            return None
-        except Exception as e:
-            print(f"Error getting model parameters: {e}")
-            return None
+                if result:
+                    columns = [desc[0] for desc in self.cursor.description]
+                    return dict(zip(columns, result))
+                return None
+            except Exception as e:
+                print(f"Error getting model parameters: {e}")
+                return None
 
-    def save_model_metrics(self, model_key,  metrics: dict):
-        """
-        Зберігає метрики моделі (mse, rmse, mae, mape, r2) в таблицю model_metrics.
-        Якщо запис існує — оновлює його.
-        """
-        query = """
-                INSERT INTO model_metrics (model_key,  mse, rmse, mae, mape, r2, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW()) ON CONFLICT (model_key) DO \
-                UPDATE \
-                    SET \
-                        mse = EXCLUDED.mse, \
-                    rmse = EXCLUDED.rmse, \
-                    mae = EXCLUDED.mae, \
-                    mape = EXCLUDED.mape, \
-                    r2 = EXCLUDED.r2, \
-                    created_at = EXCLUDED.created_at; \
-                """
-        with self.conn.cursor() as cursor:
-            cursor.execute(query, (
-                model_key,
-                metrics.get("mse"),
-                metrics.get("rmse"),
-                metrics.get("mae"),
-                metrics.get("mape"),
-                metrics.get("r2"),
-            ))
+    def save_model_metrics(self, model_key: str, metrics: dict):
+            """
+            Зберігає метрики моделі (mse, rmse, mae, mape, r2) в таблицю model_metrics.
+            Якщо запис існує — оновлює його.
+            """
+            query = """
+                    INSERT INTO model_metrics (model_key, mse, rmse, mae, mape, r2, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW()) ON CONFLICT (model_key) DO
+                    UPDATE SET
+                        mse = EXCLUDED.mse,
+                        rmse = EXCLUDED.rmse,
+                        mae = EXCLUDED.mae,
+                        mape = EXCLUDED.mape,
+                        r2 = EXCLUDED.r2,
+                        created_at = EXCLUDED.created_at
+                    """
+            with self.conn.cursor() as cursor:
+                cursor.execute(query, (
+                    model_key,
+                    metrics.get("mse"),
+                    metrics.get("rmse"),
+                    metrics.get("mae"),
+                    metrics.get("mape"),
+                    metrics.get("r2"),
+                ))
+                self.conn.commit()
 
-    def get_model_metrics(self, model_key):
-        """Отримує метрики моделі за model_key."""
-        query = """
-                SELECT model_id, \
-                       model_key, \
-                       mse, \
-                       rmse, \
-                       mae, \
-                       mape, \
-                       r2, \
-                       created_at
-                FROM model_metrics
-                WHERE model_key = %s; \
-                """
-        with self.conn.cursor() as cursor:
-            cursor.execute(query, (model_key,))
-            row = cursor.fetchone()
-            if row:
-                return {
-                    "model_id": row[0],
-                    "model_key": row[1],
-                    "mse": row[2],
-                    "rmse": row[3],
-                    "mae": row[4],
-                    "mape": row[5],
-                    "r2": row[6],
-                    "created_at": row[7],
-                }
-            return None
-
-    def save_model_forecasts(self, model_id: int, forecasts: pd.Series,
-                             lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
-                             confidence_level: float = 0.95) -> bool:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                for date, value in forecasts.items():
-                    lower = None if lower_bounds is None else lower_bounds.get(date)
-                    upper = None if upper_bounds is None else upper_bounds.get(date)
-
-                    query = """
-                            INSERT INTO model_forecasts
-                            (model_id, forecast_date, forecast_value, lower_bound, upper_bound, confidence_level)
-                            VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (model_id, forecast_date) 
-                    DO \
-                            UPDATE SET
-                                forecast_value = EXCLUDED.forecast_value, \
-                                lower_bound = EXCLUDED.lower_bound, \
-                                upper_bound = EXCLUDED.upper_bound, \
-                                confidence_level = EXCLUDED.confidence_level \
-                            """
-                    cursor.execute(query, (model_id, date, float(value),
-                                           float(lower) if lower is not None else None,
-                                           float(upper) if upper is not None else None,
-                                           confidence_level))
-                conn.commit()
-                return True
-        except Exception as e:
-
-            return False
-
-    def save_model_binary(self, model_id: str, model_obj: Any) -> bool:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                # Серіалізація моделі
-                model_binary = pickle.dumps(model_obj)
-
-                query = """
-                        INSERT INTO model_binary_data
-                            (model_id, model_binary)
-                        VALUES (%s, %s) ON CONFLICT (model_id) 
-                DO \
-                        UPDATE SET model_binary = EXCLUDED.model_binary \
-                        """
-                cursor.execute(query, (model_id, psycopg2.Binary(model_binary)))
-                conn.commit()
-                return True
-        except Exception as e:
-            return False
-
-    def save_data_transformations(self, model_id: str, transformations: List[Dict]) -> bool:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                # Спочатку видаляємо старі записи для цієї моделі
-                cursor.execute("DELETE FROM data_transformations WHERE model_id = %s", (model_id,))
-
-                # Додаємо нові записи
-                for transform in transformations:
-                    query = """
-                            INSERT INTO data_transformations
-                                (model_id, transform_type, transform_params, transform_order)
-                            VALUES (%s, %s, %s, %s) \
-                            """
-                    transform_type = transform.get('type')
-                    transform_params = json.dumps(transform.get('params', {}))
-                    transform_order = transform.get('order')
-
-                    cursor.execute(query, (model_id, transform_type, transform_params, transform_order))
-
-                conn.commit()
-                return True
-        except Exception as e:
-
-            return False
-
-    def get_model_by_key(self, model_key: str) -> Optional[Dict]:
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "SELECT * FROM time_series_models WHERE model_key = %s"
+    def get_model_metrics(self, model_key: str):
+            """Отримує метрики моделі за model_key."""
+            query = """
+                    SELECT model_key,
+                           mse,
+                           rmse,
+                           mae,
+                           mape,
+                           r2,
+                           created_at
+                    FROM model_metrics
+                    WHERE model_key = %s
+                    """
+            with self.conn.cursor() as cursor:
                 cursor.execute(query, (model_key,))
-                model_data = cursor.fetchone()
-
-                if model_data:
-                    # Отримуємо назви колонок
-                    column_names = [desc[0] for desc in cursor.description]
-                    # Створюємо словник з назв колонок та значень
-                    return dict(zip(column_names, model_data))
-                return None
-        except Exception as e:
-            return None
-    def get_model_forecasts(self, model_id: int, start_date: datetime = None,
-                            end_date: datetime = None) -> pd.DataFrame:
-
-        try:
-            conn = self.conn
-            query = """SELECT forecast_date, forecast_value, lower_bound, upper_bound, confidence_level
-                       FROM model_forecasts
-                       WHERE model_id = %s"""
-            params = [model_id]
-
-            if start_date:
-                query += " AND forecast_date >= %s"
-                params.append(start_date)
-            if end_date:
-                query += " AND forecast_date <= %s"
-                params.append(end_date)
-
-            query += " ORDER BY forecast_date"
-
-            forecasts_df = pd.read_sql(query, conn, params=params, parse_dates=['forecast_date'])
-
-            if not forecasts_df.empty:
-                forecasts_df.set_index('forecast_date', inplace=True)
-
-            return forecasts_df
-        except Exception as e:
-            return pd.DataFrame()
-
-    def load_model_binary(self, model_id: int) -> Any:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "SELECT model_binary FROM model_binary_data WHERE model_id = %s"
-                cursor.execute(query, (model_id,))
                 row = cursor.fetchone()
-
                 if row:
-                    model_binary = row[0]
-                    model_obj = pickle.loads(model_binary)
-                    return model_obj
-
-                return None
-        except Exception as e:
-            return None
-
-    def get_data_transformations(self, model_id: int) -> List[Dict]:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = """SELECT transform_type, transform_params, transform_order
-                           FROM data_transformations
-                           WHERE model_id = %s
-                           ORDER BY transform_order"""
-                cursor.execute(query, (model_id,))
-
-                # Получаем названия колонок
-                column_names = [desc[0] for desc in cursor.description]
-
-                transformations = []
-                for row in cursor.fetchall():
-                    row_dict = dict(zip(column_names, row))
-                    transform = {
-                        'type': row_dict['transform_type'],
-                        'params': json.loads(row_dict['transform_params']),
-                        'order': row_dict['transform_order']
+                    return {
+                        "model_key": row[0],
+                        "mse": row[1],
+                        "rmse": row[2],
+                        "mae": row[3],
+                        "mape": row[4],
+                        "r2": row[5],
+                        "created_at": row[6],
                     }
-                    transformations.append(transform)
-
-                return transformations
-        except Exception as e:
-            return []
-
-    def delete_model(self, model_id: int) -> bool:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "DELETE FROM time_series_models WHERE model_id = %s"
-                cursor.execute(query, (model_id,))
-                conn.commit()
-                return True
-        except Exception as e:
-
-            return False
-
-    def get_models_by_symbol(self, symbol: str, timeframe: str = None, active_only: bool = True) -> List[Dict]:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "SELECT * FROM time_series_models WHERE symbol = %s"
-                params = [symbol]
-
-                if timeframe:
-                    query += " AND timeframe = %s"
-                    params.append(timeframe)
-
-                if active_only:
-                    query += " AND is_active = TRUE"
-
-                query += " ORDER BY created_at DESC"
-                cursor.execute(query, params)
-
-                # Получаем названия колонок
-                column_names = [desc[0] for desc in cursor.description]
-
-                models = []
-                for row in cursor.fetchall():
-                    models.append(dict(zip(column_names, row)))
-
-                return models
-        except Exception as e:
-            return []
-
-    def get_latest_model_by_symbol(self, symbol: str, model_type: str = None,
-                                   timeframe: str = None) -> Optional[Dict]:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "SELECT * FROM time_series_models WHERE symbol = %s AND is_active = TRUE"
-                params = [symbol]
-
-                if model_type:
-                    query += " AND model_type = %s"
-                    params.append(model_type)
-
-                if timeframe:
-                    query += " AND timeframe = %s"
-                    params.append(timeframe)
-
-                query += " ORDER BY updated_at DESC LIMIT 1"
-                cursor.execute(query, params)
-
-                column_names = [desc[0] for desc in cursor.description]
-
-                row = cursor.fetchone()
-                if row:
-                    return dict(zip(column_names, row))
                 return None
-        except Exception as e:
-            return None
 
-    def get_model_performance_history(self, model_id: int) -> pd.DataFrame:
-
-        try:
-            conn = self.conn
-            query = """SELECT metric_name, metric_value, test_date
-                       FROM model_metrics
-                       WHERE model_id = %s \
-                         AND test_date IS NOT NULL
-                       ORDER BY test_date"""
-
-            metrics_df = pd.read_sql(query, conn, params=[model_id], parse_dates=['test_date'])
-
-            if not metrics_df.empty:
-                # Перетворення на широкий формат для зручності аналізу
-                metrics_pivot = metrics_df.pivot(index='test_date', columns='metric_name', values='metric_value')
-                return metrics_pivot
-
-            return pd.DataFrame()
-        except Exception as e:
-            return pd.DataFrame()
-
-
-    def update_model_status(self, model_id: int, is_active: bool) -> bool:
-
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "UPDATE time_series_models SET is_active = %s WHERE model_id = %s"
-                cursor.execute(query, (is_active, model_id))
-                conn.commit()
-                return True
-        except Exception as e:
-
-            return False
-
-    def compare_model_forecasts(self, model_ids: List[int], start_date: datetime = None,
-                                end_date: datetime = None) -> pd.DataFrame:
-        try:
-            results = {}
-
-            for model_id in model_ids:
-                # Отримуємо інформацію про модель
+    def save_model_forecasts(self, model_key: str, forecasts: pd.Series,
+                                 lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
+                                 confidence_level: float = 0.95) -> bool:
+            """Збереження прогнозів моделі"""
+            try:
                 conn = self.conn
                 with conn.cursor() as cursor:
-                    cursor.execute("SELECT model_key FROM time_series_models WHERE model_id = %s", (model_id,))
-                    model_info = cursor.fetchone()
+                    for date, value in forecasts.items():
+                        lower = None if lower_bounds is None else lower_bounds.get(date)
+                        upper = None if upper_bounds is None else upper_bounds.get(date)
 
-                    if model_info:
-                        model_key = model_info[0]  # Перший стовпець - model_key
+                        query = """
+                                INSERT INTO model_forecasts
+                                (model_key, forecast_date, forecast_value, lower_bound, upper_bound, confidence_level)
+                                VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (model_key, forecast_date) 
+                                DO \
+                                UPDATE SET
+                                    forecast_value = EXCLUDED.forecast_value, \
+                                    lower_bound = EXCLUDED.lower_bound, \
+                                    upper_bound = EXCLUDED.upper_bound, \
+                                    confidence_level = EXCLUDED.confidence_level
+                                """
+                        cursor.execute(query, (model_key, date, float(value),
+                                               float(lower) if lower is not None else None,
+                                               float(upper) if upper is not None else None,
+                                               confidence_level))
+                    conn.commit()
+                    return True
+            except Exception as e:
+                self.conn.rollback()
+                return False
 
-                        # Отримання прогнозів для цієї моделі
-                        forecasts = self.get_model_forecasts(model_id, start_date, end_date)
+    def save_model_binary(self, model_key: str, model_obj: Any) -> bool:
+            """Збереження бінарних даних моделі"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    # Серіалізація моделі
+                    model_binary = pickle.dumps(model_obj)
 
-                        if not forecasts.empty:
-                            results[model_key] = forecasts['forecast_value']
+                    query = """
+                            INSERT INTO model_binary_data
+                                (model_key, model_binary)
+                            VALUES (%s, %s) ON CONFLICT (model_key) 
+                            DO \
+                            UPDATE SET model_binary = EXCLUDED.model_binary
+                            """
+                    cursor.execute(query, (model_key, psycopg2.Binary(model_binary)))
+                    conn.commit()
+                    return True
+            except Exception as e:
+                conn.rollback()
+                return False
 
-            if results:
-                # Об'єднуємо всі прогнози в один DataFrame
-                combined_df = pd.DataFrame(results)
-                return combined_df
+    def save_data_transformations(self, model_key: str, transformations: List[Dict]) -> bool:
+            """Збереження перетворень даних"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    # Спочатку видаляємо старі записи для цієї моделі
+                    cursor.execute("DELETE FROM data_transformations WHERE model_key = %s", (model_key,))
 
-            return pd.DataFrame()
-        except Exception as e:
-            return pd.DataFrame()
+                    # Додаємо нові записи
+                    for transform in transformations:
+                        query = """
+                                INSERT INTO data_transformations
+                                    (model_key, transform_type, transform_params, transform_order)
+                                VALUES (%s, %s, %s, %s)
+                                """
+                        transform_type = transform.get('type')
+                        transform_params = json.dumps(transform.get('params', {}))
+                        transform_order = transform.get('order')
 
+                        cursor.execute(query, (model_key, transform_type, transform_params, transform_order))
 
-    def get_model_forecast_accuracy(self, model_id: int, actual_data: pd.Series) -> Dict:
+                    conn.commit()
+                    return True
+            except Exception as e:
+                conn.rollback()
+                return False
 
-        try:
-            # Отримуємо прогнози моделі
-            forecast_df = self.get_model_forecasts(model_id)
+    def get_model_by_key(self, model_key: str) -> Optional[Dict]:
+            """Отримання моделі за ключем"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = "SELECT * FROM time_series_models WHERE model_key = %s"
+                    cursor.execute(query, (model_key,))
+                    model_data = cursor.fetchone()
 
-            if forecast_df.empty:
-                return {"error": "Прогнози не знайдено"}
+                    if model_data:
+                        column_names = [desc[0] for desc in cursor.description]
+                        return dict(zip(column_names, model_data))
+                    return None
+            except Exception as e:
+                return None
 
-            forecasts = forecast_df['forecast_value']
+    def get_model_forecasts(self, model_key: str, start_date: datetime = None,
+                                end_date: datetime = None) -> pd.DataFrame:
+            """Отримання прогнозів моделі"""
+            try:
+                conn = self.conn
+                query = """SELECT forecast_date, forecast_value, lower_bound, upper_bound, confidence_level
+                           FROM model_forecasts
+                           WHERE model_key = %s"""
+                params = [model_key]
 
-            # Фільтруємо фактичні дані для співпадіння з прогнозами
-            common_dates = forecasts.index.intersection(actual_data.index)
+                if start_date:
+                    query += " AND forecast_date >= %s"
+                    params.append(start_date)
+                if end_date:
+                    query += " AND forecast_date <= %s"
+                    params.append(end_date)
 
-            if len(common_dates) == 0:
-                return {"error": "Немає спільних дат для порівняння прогнозів і фактичних даних"}
+                query += " ORDER BY forecast_date"
 
-            # Підготовка даних для порівняння
-            y_true = actual_data.loc[common_dates]
-            y_pred = forecasts.loc[common_dates]
+                forecasts_df = pd.read_sql(query, conn, params=params, parse_dates=['forecast_date'])
 
-            # Розрахунок метрик
-            mse = ((y_true - y_pred) ** 2).mean()
-            rmse = np.sqrt(mse)
-            mae = np.abs(y_true - y_pred).mean()
-            mape = np.abs((y_true - y_pred) / y_true).mean() * 100
+                if not forecasts_df.empty:
+                    forecasts_df.set_index('forecast_date', inplace=True)
 
-            # Збереження метрик в базу даних
-            metrics = {
-                "MSE": mse,
-                "RMSE": rmse,
-                "MAE": mae,
-                "MAPE": mape
-            }
+                return forecasts_df
+            except Exception as e:
+                return pd.DataFrame()
 
-            self.save_model_metrics(model_id, metrics)
+    def load_model_binary(self, model_key: str) -> Any:
+            """Завантаження бінарних даних моделі"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = "SELECT model_binary FROM model_binary_data WHERE model_key = %s"
+                    cursor.execute(query, (model_key,))
+                    row = cursor.fetchone()
 
-            return metrics
-        except Exception as e:
-            return {"error": str(e)}
+                    if row:
+                        model_binary = row[0]
+                        model_obj = pickle.loads(model_binary)
+                        return model_obj
 
+                    return None
+            except Exception as e:
+                return None
+
+    def get_data_transformations(self, model_key: str) -> List[Dict]:
+            """Отримання перетворень даних"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = """SELECT transform_type, transform_params, transform_order
+                               FROM data_transformations
+                               WHERE model_key = %s
+                               ORDER BY transform_order"""
+                    cursor.execute(query, (model_key,))
+
+                    column_names = [desc[0] for desc in cursor.description]
+
+                    transformations = []
+                    for row in cursor.fetchall():
+                        row_dict = dict(zip(column_names, row))
+                        transform = {
+                            'type': row_dict['transform_type'],
+                            'params': json.loads(row_dict['transform_params']),
+                            'order': row_dict['transform_order']
+                        }
+                        transformations.append(transform)
+
+                    return transformations
+            except Exception as e:
+                return []
+
+    def delete_model(self, model_key: str) -> bool:
+            """Видалення моделі"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    # Видаляємо всі пов'язані дані
+                    cursor.execute("DELETE FROM model_forecasts WHERE model_key = %s", (model_key,))
+                    cursor.execute("DELETE FROM model_metrics WHERE model_key = %s", (model_key,))
+                    cursor.execute("DELETE FROM model_parameters WHERE model_key = %s", (model_key,))
+                    cursor.execute("DELETE FROM model_binary_data WHERE model_key = %s", (model_key,))
+                    cursor.execute("DELETE FROM data_transformations WHERE model_key = %s", (model_key,))
+                    cursor.execute("DELETE FROM time_series_models WHERE model_key = %s", (model_key,))
+
+                    conn.commit()
+                    return True
+            except Exception as e:
+                conn.rollback()
+                return False
+
+    def get_models_by_symbol(self, symbol: str, timeframe: str = None, active_only: bool = True) -> List[Dict]:
+            """Отримання моделей за символом"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = "SELECT * FROM time_series_models WHERE symbol = %s"
+                    params = [symbol]
+
+                    if timeframe:
+                        query += " AND timeframe = %s"
+                        params.append(timeframe)
+
+                    if active_only:
+                        query += " AND is_active = TRUE"
+
+                    query += " ORDER BY created_at DESC"
+                    cursor.execute(query, params)
+
+                    column_names = [desc[0] for desc in cursor.description]
+
+                    models = []
+                    for row in cursor.fetchall():
+                        models.append(dict(zip(column_names, row)))
+
+                    return models
+            except Exception as e:
+                return []
+
+    def get_latest_model_by_symbol(self, symbol: str, model_type: str = None,
+                                       timeframe: str = None) -> Optional[Dict]:
+            """Отримання останньої моделі за символом"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = "SELECT * FROM time_series_models WHERE symbol = %s AND is_active = TRUE"
+                    params = [symbol]
+
+                    if model_type:
+                        query += " AND model_type = %s"
+                        params.append(model_type)
+
+                    if timeframe:
+                        query += " AND timeframe = %s"
+                        params.append(timeframe)
+
+                    query += " ORDER BY updated_at DESC LIMIT 1"
+                    cursor.execute(query, params)
+
+                    column_names = [desc[0] for desc in cursor.description]
+
+                    row = cursor.fetchone()
+                    if row:
+                        return dict(zip(column_names, row))
+                    return None
+            except Exception as e:
+                return None
+
+    def get_model_performance_history(self, model_key: str) -> pd.DataFrame:
+            """Отримання історії продуктивності моделі"""
+            try:
+                conn = self.conn
+                query = """SELECT 'mse' as metric_name, mse as metric_value, created_at as test_date
+                           FROM model_metrics \
+                           WHERE model_key = %s \
+                             AND mse IS NOT NULL
+                           UNION ALL
+                           SELECT 'rmse' as metric_name, rmse as metric_value, created_at as test_date
+                           FROM model_metrics \
+                           WHERE model_key = %s \
+                             AND rmse IS NOT NULL
+                           UNION ALL
+                           SELECT 'mae' as metric_name, mae as metric_value, created_at as test_date
+                           FROM model_metrics \
+                           WHERE model_key = %s \
+                             AND mae IS NOT NULL
+                           UNION ALL
+                           SELECT 'mape' as metric_name, mape as metric_value, created_at as test_date
+                           FROM model_metrics \
+                           WHERE model_key = %s \
+                             AND mape IS NOT NULL
+                           UNION ALL
+                           SELECT 'r2' as metric_name, r2 as metric_value, created_at as test_date
+                           FROM model_metrics \
+                           WHERE model_key = %s \
+                             AND r2 IS NOT NULL
+                           ORDER BY test_date"""
+
+                metrics_df = pd.read_sql(query, conn, params=[model_key] * 5, parse_dates=['test_date'])
+
+                if not metrics_df.empty:
+                    metrics_pivot = metrics_df.pivot(index='test_date', columns='metric_name', values='metric_value')
+                    return metrics_pivot
+
+                return pd.DataFrame()
+            except Exception as e:
+                return pd.DataFrame()
+
+    def update_model_status(self, model_key: str, is_active: bool) -> bool:
+            """Оновлення статусу моделі"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = "UPDATE time_series_models SET is_active = %s WHERE model_key = %s"
+                    cursor.execute(query, (is_active, model_key))
+                    conn.commit()
+                    return True
+            except Exception as e:
+                conn.rollback()
+                return False
+
+    def compare_model_forecasts(self, model_keys: List[str], start_date: datetime = None,
+                                    end_date: datetime = None) -> pd.DataFrame:
+            """Порівняння прогнозів моделей"""
+            try:
+                results = {}
+
+                for model_key in model_keys:
+                    # Отримання прогнозів для цієї моделі
+                    forecasts = self.get_model_forecasts(model_key, start_date, end_date)
+
+                    if not forecasts.empty:
+                        results[model_key] = forecasts['forecast_value']
+
+                if results:
+                    combined_df = pd.DataFrame(results)
+                    return combined_df
+
+                return pd.DataFrame()
+            except Exception as e:
+                return pd.DataFrame()
+
+    def get_model_forecast_accuracy(self, model_key: str, actual_data: pd.Series) -> Dict:
+            """Розрахунок точності прогнозів моделі"""
+            try:
+                # Отримуємо прогнози моделі
+                forecast_df = self.get_model_forecasts(model_key)
+
+                if forecast_df.empty:
+                    return {"error": "Прогнози не знайдено"}
+
+                forecasts = forecast_df['forecast_value']
+
+                # Фільтруємо фактичні дані для співпадіння з прогнозами
+                common_dates = forecasts.index.intersection(actual_data.index)
+
+                if len(common_dates) == 0:
+                    return {"error": "Немає спільних дат для порівняння прогнозів і фактичних даних"}
+
+                # Підготовка даних для порівняння
+                y_true = actual_data.loc[common_dates]
+                y_pred = forecasts.loc[common_dates]
+
+                # Розрахунок метрик
+                mse = ((y_true - y_pred) ** 2).mean()
+                rmse = np.sqrt(mse)
+                mae = np.abs(y_true - y_pred).mean()
+                mape = np.abs((y_true - y_pred) / y_true).mean() * 100
+
+                # Збереження метрик в базу даних
+                metrics = {
+                    "mse": mse,
+                    "rmse": rmse,
+                    "mae": mae,
+                    "mape": mape
+                }
+
+                self.save_model_metrics(model_key, metrics)
+
+                return metrics
+            except Exception as e:
+                return {"error": str(e)}
 
     def get_available_symbols(self) -> List[str]:
+            """Отримання доступних символів"""
+            try:
+                conn = self.conn
+                with conn.cursor() as cursor:
+                    query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
+                    cursor.execute(query)
+                    symbols = [row[0] for row in cursor.fetchall()]
+                    return symbols
+            except Exception as e:
+                return []
 
-        try:
-            conn = self.conn
-            with conn.cursor() as cursor:
-                query = "SELECT DISTINCT symbol FROM time_series_models ORDER BY symbol"
-                cursor.execute(query)
-                symbols = [row[0] for row in cursor.fetchall()]
-                return symbols
-        except Exception as e:
-            return []
-
-
-    def get_model_transformation_pipeline(self, model_id: int) -> List[Dict]:
-
-        try:
-            transformations = self.get_data_transformations(model_id)
-            return transformations
-        except Exception as e:
-            return []
+    def get_model_transformation_pipeline(self, model_key: str) -> List[Dict]:
+            """Отримання пайплайну перетворень моделі"""
+            try:
+                transformations = self.get_data_transformations(model_key)
+                return transformations
+            except Exception as e:
+                return []
 
     def save_complete_model(self, model_key: str, symbol: str, model_type: str,
-                            timeframe: str, start_date: datetime, end_date: datetime,
-                            model_obj: Any, parameters: Dict, metrics: Dict = None,
-                            forecasts: pd.Series = None, transformations: List[Dict] = None,
-                            lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
-                            description: str = None) -> int:
-        try:
-            # Зберігаємо метадані моделі
-            model_id = self.save_model_metadata(model_key, symbol, model_type, timeframe,
-                                                start_date, end_date, description)
+                                timeframe: str, start_date: datetime, end_date: datetime,
+                                model_obj: Any, parameters: Dict, metrics: Dict = None,
+                                forecasts: pd.Series = None, transformations: List[Dict] = None,
+                                lower_bounds: pd.Series = None, upper_bounds: pd.Series = None,
+                                description: str = None) -> bool:
+            """Збереження повної моделі з усіма компонентами"""
+            try:
+                # Зберігаємо метадані моделі
+                self.save_model_metadata(model_key, symbol, model_type, timeframe,
+                                         start_date, end_date, description)
 
-            # Зберігаємо параметри моделі
-            if parameters:
-                self.save_model_parameters(
-                    model_key,
-                    order_params=parameters.get("order_params"),
-                    seasonal_order=parameters.get("seasonal_order"),
-                    seasonal_period=parameters.get("seasonal_period")
-                )
+                # Зберігаємо параметри моделі
+                if parameters:
+                    self.save_model_parameters(
+                        model_key,
+                        order_params=parameters.get("order_params"),
+                        seasonal_order=parameters.get("seasonal_order"),
+                        seasonal_period=parameters.get("seasonal_period")
+                    )
 
-            # Зберігаємо метрики моделі
-            if metrics:
-                self.save_model_metrics(model_id, metrics)
+                # Зберігаємо метрики моделі
+                if metrics:
+                    self.save_model_metrics(model_key, metrics)
 
-            # Зберігаємо прогнози
-            if forecasts is not None:
-                self.save_model_forecasts(model_id, forecasts, lower_bounds, upper_bounds)
+                # Зберігаємо прогнози
+                if forecasts is not None:
+                    self.save_model_forecasts(model_key, forecasts, lower_bounds, upper_bounds)
 
-            # Зберігаємо перетворення даних
-            if transformations:
-                self.save_data_transformations(model_key, transformations)
+                # Зберігаємо перетворення даних
+                if transformations:
+                    self.save_data_transformations(model_key, transformations)
 
-            # Зберігаємо бінарні дані моделі
-            if model_obj:
-                self.save_model_binary(model_key, model_obj)
+                # Зберігаємо бінарні дані моделі
+                if model_obj:
+                    self.save_model_binary(model_key, model_obj)
 
-            return model_id
+                return True
 
-        except Exception as e:
-            print(f"Error in save_complete_model: {e}")
-            self.conn.rollback()
-            raise
+            except Exception as e:
+                print(f"Error in save_complete_model: {e}")
+                self.conn.rollback()
+                raise
 
     def load_complete_model(self, model_key: str) -> Dict:
+            """Завантаження повної моделі з усіма компонентами"""
+            try:
+                # Отримуємо метадані моделі
+                model_info = self.get_model_by_key(model_key)
 
-        try:
-            # Отримуємо метадані моделі
-            model_info = self.get_model_by_key(model_key)
+                if not model_info:
+                    return {"error": f"Модель з ключем {model_key} не знайдена"}
 
-            if not model_info:
-                return {"error": f"Модель з ключем {model_key} не знайдена"}
+                # Отримуємо всі необхідні дані
+                parameters = self.get_model_parameters(model_key)
+                metrics = self.get_model_metrics(model_key)
+                transformations = self.get_data_transformations(model_key)
+                forecasts = self.get_model_forecasts(model_key)
+                model_obj = self.load_model_binary(model_key)
 
-            model_id = model_info['model_id']
+                # Формуємо повний словник з даними моделі
+                result = {
+                    "model_info": model_info,
+                    "parameters": parameters,
+                    "metrics": metrics,
+                    "forecasts": forecasts,
+                    "transformations": transformations,
+                    "model_obj": model_obj
+                }
 
-            # Отримуємо всі необхідні дані
-            parameters = self.get_model_parameters(model_id)
-            metrics = self.get_model_metrics(model_id)
-            transformations = self.get_data_transformations(model_id)
-            forecasts = self.get_model_forecasts(model_id)
-            model_obj = self.load_model_binary(model_id)
-
-            # Формуємо повний словник з даними моделі
-            result = {
-                "model_info": model_info,
-                "parameters": parameters,
-                "metrics": metrics,
-                "forecasts": forecasts,
-                "transformations": transformations,
-                "model_obj": model_obj
-            }
-
-            return result
-        except Exception as e:
-            return {"error": str(e)}
+                return result
+            except Exception as e:
+                return {"error": str(e)}
 
 
 
