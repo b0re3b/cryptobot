@@ -37,7 +37,7 @@ class ModelConfig:
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
     timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
-    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru', 'transformer'])  # Додано transformer
+    model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru', 'transformer'])
 
 
 class DeepLearning:
@@ -45,7 +45,7 @@ class DeepLearning:
 
     SYMBOLS = ['BTC', 'ETH', 'SOL']
     TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
-    MODEL_TYPES = ['lstm', 'gru', 'transformer']  # Додано transformer
+    MODEL_TYPES = ['lstm', 'gru', 'transformer']
 
     def __init__(self, models_dir: str = "models/deep_learning"):
 

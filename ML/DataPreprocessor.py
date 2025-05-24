@@ -4,8 +4,6 @@ import pandas as pd
 import numpy as np
 import torch
 from pandas import DataFrame, Series
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-
 from analysis import VolatilityAnalysis
 from analysis.trend_detection import TrendDetection
 from cyclefeatures import CryptoCycles
@@ -59,13 +57,12 @@ class DataPreprocessor:
         self.scalers = {}  # Словник для зберігання скейлерів (для зворотного перетворення)
         self.feature_configs = {}  # Конфігурації ознак
         self.model_configs = {}  # Конфігурації моделей
-        self.trend = TrendDetection()
-        self.vol = VolatilityAnalysis()
-        self.cycle = CryptoCycles()
-        self.indicators = FeatureEngineering()
         self.db_manager = DatabaseManager()
         self.logger = CryptoLogger('DataPreprocessor')
-
+        self.indicators = FeatureEngineering()
+        self.cycle = CryptoCycles()
+        self.vol = VolatilityAnalysis()
+        self.trend = TrendDetection()
         # Флажки для відстеження стану даних
         self.data_is_scaled = True
         self.sequences_prepared = True
@@ -155,14 +152,7 @@ class DataPreprocessor:
         self.logger.info(f"Збережено конфігурацію моделі для {key}")
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
-        """
-        Отримання функції завантаження попередньо підготовлених даних.
 
-        :param symbol: Символ криптовалюти (BTC, ETH, SOL)
-        :param timeframe: Таймфрейм у вигляді рядка (наприклад, '1d', '15m')
-        :param model_type: Тип моделі
-        :return: Callable — функція, що при виклику повертає підготовлені дані
-        """
         try:
             symbol = symbol.upper()
             self.logger.info(f"Підготовка завантажувача даних для {symbol} з таймфреймом {timeframe} "
@@ -183,24 +173,27 @@ class DataPreprocessor:
                 self.logger.error(f"Непідтримуваний символ: {symbol}")
                 raise ValueError(f"Непідтримуваний символ: {symbol}")
 
-            # Парсимо timeframe у зрозумілий формат
-            timeframe_params = self.parse_timeframe(timeframe)
-            self.logger.debug(f"Параметри таймфрейму: {timeframe_params}")
-
             method = symbol_methods[symbol]
 
             def data_loader():
                 try:
-                    self.logger.debug(f"Завантаження даних для {symbol} з параметрами: {timeframe_params}")
+                    self.logger.debug(f"Завантаження даних для {symbol} з таймфреймом {timeframe}")
 
-                    data = method(
-                        timeframe_value=timeframe_params['timeframe'],
-                        timeframe_unit=timeframe_params['unit']
-                    )
+                    # Викликаємо метод напряму через db_manager з timeframe як позиційним аргументом
+                    if symbol == 'BTC':
+                        data = self.db_manager.get_btc_lstm_sequence(timeframe)
+                    elif symbol == 'ETH':
+                        data = self.db_manager.get_eth_lstm_sequence(timeframe)
+                    elif symbol == 'SOL':
+                        data = self.db_manager.get_sol_lstm_sequence(timeframe)
+                    else:
+                        raise ValueError(f"Непідтримуваний символ: {symbol}")
 
-                    if data is not None and not data.empty:
+                    if data is not None and len(data) > 0:
                         self.logger.info(f"Успішно завантажено {len(data)} записів для {symbol}-{timeframe}")
-                        self.logger.debug(f"Колонки у завантажених даних: {list(data.columns)}")
+                        # Якщо data - це список словників, можна перевірити ключі першого елемента
+                        if isinstance(data, list) and len(data) > 0:
+                            self.logger.debug(f"Ключі у завантажених даних: {list(data[0].keys())}")
                     else:
                         self.logger.warning(f"Завантажені дані для {symbol}-{timeframe} порожні")
 
@@ -257,7 +250,7 @@ class DataPreprocessor:
 
     def validate_prepared_data(self, df: pd.DataFrame, symbol: str) -> bool:
         """
-        Валідація попередньо підготовлених даних
+        Валідація попередньо підготовлених даних з новою структурою колонок
 
         Args:
             df: DataFrame з підготовленими даними
@@ -272,35 +265,49 @@ class DataPreprocessor:
             self.logger.error(f"DataFrame порожній для {symbol}")
             raise ValueError(f"DataFrame порожній для {symbol}")
 
-        # Перевірка наявності цільової змінної
-        if "target" not in df.columns:
-            self.logger.error(f"Цільова змінна 'target' не знайдена для {symbol}")
-            raise ValueError(f"Цільова змінна 'target' не знайдена для {symbol}")
+        # Список очікуваних колонок
+        expected_columns = [
+            'id', 'timeframe', 'sequence_id', 'sequence_position', 'open_time',
+            'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled',
+            'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
+            'month_sin', 'month_cos', 'day_of_month_sin', 'day_of_month_cos',
+            'target_close_1', 'target_close_5', 'target_close_10',
+            'sequence_length', 'scaling_metadata', 'created_at', 'updated_at'
+        ]
+
+        # Перевірка наявності основних колонок
+        missing_columns = [col for col in expected_columns if col not in df.columns]
+        if missing_columns:
+            self.logger.warning(f"Відсутні колонки для {symbol}: {missing_columns}")
+
+        # Перевірка наявності цільових змінних
+        target_columns = ['target_close_1', 'target_close_5', 'target_close_10']
+        available_targets = [col for col in target_columns if col in df.columns]
+        if not available_targets:
+            self.logger.error(f"Жодної цільової змінної не знайдено для {symbol}")
+            raise ValueError(f"Жодної цільової змінної не знайдено для {symbol}")
+        else:
+            self.logger.info(f"Знайдено цільові змінні для {symbol}: {available_targets}")
 
         # Перевірка часових ознак
-        time_features = [col for col in df.columns if 'sin' in col or 'cos' in col]
-        if time_features:
-            self.logger.info(f"Знайдено {len(time_features)} часових ознак для {symbol}: {time_features[:5]}...")
-        else:
-            self.logger.warning(f"Часові ознаки не знайдені для {symbol}")
+        time_features = ['hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
+                         'month_sin', 'month_cos', 'day_of_month_sin', 'day_of_month_cos']
+        available_time_features = [col for col in time_features if col in df.columns]
+        self.logger.info(f"Знайдено {len(available_time_features)} часових ознак для {symbol}")
 
-        # Перевірка послідовностей (якщо є колонки типу sequence_*)
-        sequence_features = [col for col in df.columns if 'sequence' in col.lower()]
-        if sequence_features:
-            self.logger.info(f"Знайдено {len(sequence_features)} ознак послідовностей для {symbol}")
-        else:
-            self.logger.info(f"Ознаки послідовностей не виявлені (можливо, дані у звичайному форматі) для {symbol}")
+        # Перевірка scaled ознак
+        scaled_features = ['open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
+        available_scaled_features = [col for col in scaled_features if col in df.columns]
+        self.logger.info(f"Знайдено {len(available_scaled_features)} scaled ознак для {symbol}")
 
-        # Перевірка масштабування (евристично)
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
-        if len(numeric_cols) > 0:
-            mean_abs_values = df[numeric_cols].abs().mean().mean()
-            if mean_abs_values > 10:
-                self.logger.warning(f"Дані можуть бути не відскейлені для {symbol} "
-                                    f"(середнє абсолютне значення: {mean_abs_values:.2f})")
-            else:
-                self.logger.info(f"Дані, схоже, відскейлені для {symbol} "
-                                 f"(середнє абсолютне значення: {mean_abs_values:.2f})")
+        # Перевірка sequence_id та sequence_position
+        if 'sequence_id' in df.columns and 'sequence_position' in df.columns:
+            unique_sequences = df['sequence_id'].nunique()
+            max_position = df['sequence_position'].max()
+            self.logger.info(f"Знайдено {unique_sequences} унікальних послідовностей "
+                             f"з максимальною позицією {max_position} для {symbol}")
+        else:
+            self.logger.warning(f"Колонки sequence_id або sequence_position відсутні для {symbol}")
 
         # Статистика по NaN
         nan_counts = df.isnull().sum()
@@ -318,116 +325,76 @@ class DataPreprocessor:
         self.logger.info(f"Валідація завершена для {symbol}: форма даних {df.shape}")
         return True
 
-    def prepare_features(self, df: pd.DataFrame, symbol: str) -> tuple[DataFrame, Series] | DataFrame | Any:
-        """Підготовка ознак для моделі"""
-        try:
-            # Список для зберігання DataFrames перед об'єднанням
-            feature_dataframes = []
-
-            # Отримання різних типів ознак
-            print(f"Підготовка трендових ознак для {symbol}...")
-            try:
-                trend_features = self.trend.prepare_ml_trend_features(df)
-                if not trend_features.empty:
-                    feature_dataframes.append(trend_features)
-            except Exception as e:
-                print(f"Помилка при створенні трендових ознак: {e}")
-
-            print(f"Підготовка ознак волатильності для {symbol}...")
-            try:
-                volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
-                if not volatility_features.empty:
-                    feature_dataframes.append(volatility_features)
-            except Exception as e:
-                print(f"Помилка при створенні ознак волатильності: {e}")
-
-            print(f"Підготовка циклічних ознак для {symbol}...")
-            try:
-                cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
-                if not cycle_features.empty:
-                    feature_dataframes.append(cycle_features)
-            except Exception as e:
-                print(f"Помилка при створенні циклічних ознак: {e}")
-
-            print(f"Підготовка технічних індикаторів для {symbol}...")
-            try:
-                indicator_features = self.indicators.prepare_features_pipeline(df)
-                if not indicator_features.empty:
-                    feature_dataframes.append(indicator_features)
-            except Exception as e:
-                print(f"Помилка при створенні технічних індикаторів: {e}")
-
-            # Перевірка наявності ознак для об'єднання
-            if not feature_dataframes:
-                raise ValueError(f"Не вдалося створити жодних ознак для {symbol}")
-
-            # Оптимізоване об'єднання з copy=False та ignore_index=False для кращої продуктивності
-            print(f"Об'єднання {len(feature_dataframes)} наборів ознак...")
-            final_features = pd.concat(
-                feature_dataframes,
-                axis=1,
-                copy=False,  # Не копіювати дані без потреби
-                sort=False  # Не сортувати колонки для швидкості
-            )
-
-            # Ефективне видалення дублікатів колонок
-            if final_features.columns.duplicated().any():
-                print("Видалення дублікатних колонок...")
-                # Отримуємо унікальні колонки, зберігаючи порядок
-                unique_columns = final_features.columns[~final_features.columns.duplicated()]
-                final_features = final_features[unique_columns]
-
-            # Додаткова валідація результату
-            if final_features.empty:
-                raise ValueError(f"Результуючий DataFrame порожній для {symbol}")
-
-            print(f"Успішно підготовлено {final_features.shape[1]} ознак для {symbol}")
-            return final_features
-
-        except Exception as e:
-            print(f"Помилка при підготовці ознак для {symbol}: {e}")
-            # Повертаємо базовий набір ознак як fallback
-            try:
-                print(f"Спроба створити базові ознаки для {symbol}...")
-                basic_features = self.indicators.prepare_features_pipeline(df)
-                if not basic_features.empty:
-                    return basic_features
-            except Exception as fallback_error:
-                print(f"Помилка fallback для {symbol}: {fallback_error}")
-
-            raise
-
-    def validate_sequences_format(self, data: np.ndarray, symbol: str, timeframe: str) -> bool:
+    def extract_sequences_from_prepared_data(self, df: pd.DataFrame, target_column: str = 'target_close_1') -> Tuple[
+        np.ndarray, np.ndarray]:
         """
-        Валідація формату послідовностей
+        Витягування послідовностей з підготовлених даних використовуючи sequence_id та sequence_position
 
         Args:
-            data: Масив даних
-            symbol: Символ для логування
-            timeframe: Таймфрейм для логування
+            df: DataFrame з підготовленими даними
+            target_column: Назва цільової колонки
 
         Returns:
-            bool: True якщо формат правильний
+            Кортеж (X, y) де X - послідовності ознак, y - цільові значення
         """
-        self.logger.debug(f"Валідація формату послідовностей для {symbol}-{timeframe}")
+        self.logger.info(f"Витягування послідовностей з підготовлених даних")
 
-        if data.ndim != 3:
-            self.logger.error(f"Неправильна розмірність даних для {symbol}-{timeframe}: "
-                              f"очікується 3D, отримано {data.ndim}D з формою {data.shape}")
-            return False
+        # Перевірка наявності необхідних колонок
+        if 'sequence_id' not in df.columns or 'sequence_position' not in df.columns:
+            self.logger.error("Колонки sequence_id або sequence_position відсутні")
+            raise ValueError("Колонки sequence_id або sequence_position відсутні")
 
-        expected_seq_length = self.get_sequence_length_for_timeframe(timeframe)
-        actual_seq_length = data.shape[1]
+        if target_column not in df.columns:
+            self.logger.error(f"Цільова колонка {target_column} відсутня")
+            raise ValueError(f"Цільова колонка {target_column} відсутня")
 
-        if actual_seq_length != expected_seq_length:
-            self.logger.warning(f"Довжина послідовності для {symbol}-{timeframe} "
-                                f"({actual_seq_length}) відрізняється від очікуваної ({expected_seq_length})")
+        # Визначення ознак для моделі (виключаємо службові колонки)
+        exclude_columns = [
+            'id', 'timeframe', 'sequence_id', 'sequence_position', 'open_time',
+            'target_close_1', 'target_close_5', 'target_close_10',
+            'sequence_length', 'scaling_metadata', 'created_at', 'updated_at'
+        ]
 
-        self.logger.info(f"Формат послідовностей валідний для {symbol}-{timeframe}: {data.shape}")
-        return True
+        feature_columns = [col for col in df.columns if col not in exclude_columns]
+        self.logger.info(f"Використовуємо {len(feature_columns)} ознак: {feature_columns}")
+
+        # Сортування даних по sequence_id та sequence_position
+        df_sorted = df.sort_values(['sequence_id', 'sequence_position'])
+
+        # Групування по sequence_id
+        sequences = []
+        targets = []
+
+        for sequence_id, group in df_sorted.groupby('sequence_id'):
+            # Перевірка послідовності позицій
+            positions = group['sequence_position'].values
+            if not np.array_equal(positions, np.arange(len(positions))):
+                self.logger.warning(f"Непослідовні позиції в sequence_id {sequence_id}")
+                continue
+
+            # Витягування ознак та цільового значення
+            sequence_features = group[feature_columns].values
+            # Берем цільове значення з останньої позиції послідовності
+            target_value = group[target_column].iloc[-1]
+
+            if not np.isnan(target_value):
+                sequences.append(sequence_features)
+                targets.append(target_value)
+
+        if not sequences:
+            self.logger.error("Не вдалося витягти жодної валідної послідовності")
+            raise ValueError("Не вдалося витягати жодної валідної послідовності")
+
+        # Перетворення в numpy arrays
+        X = np.array(sequences)
+        y = np.array(targets)
+
+        self.logger.info(f"Витягнуто {len(sequences)} послідовностей: X {X.shape}, y {y.shape}")
+        return X, y
 
     def preprocess_prepared_data_for_model(self, data: pd.DataFrame, symbol: str, timeframe: str,
                                            model_type: str = 'lstm', validation_split: float = 0.2,
+                                           target_column: str = 'target_close_1',
                                            config: Optional[ModelConfig] = None) -> Tuple[torch.Tensor, torch.Tensor,
     torch.Tensor, torch.Tensor, ModelConfig]:
         """
@@ -439,6 +406,7 @@ class DataPreprocessor:
             timeframe: Часовий інтервал
             model_type: Тип моделі
             validation_split: Розмір валідаційної вибірки
+            target_column: Назва цільової колонки
             config: Опціональна конфігурація моделі
 
         Returns:
@@ -446,72 +414,45 @@ class DataPreprocessor:
         """
         self.logger.info(f"Початок обробки підготовлених даних для {symbol}-{timeframe}-{model_type}")
 
-        # Валідація та базова обробка
-        if "target" not in data.columns:
-            self.logger.error(f"Цільова змінна 'target' не знайдена для {symbol}-{timeframe}")
-            raise ValueError("Цільова змінна 'target' не знайдена в даних")
+        # Валідація підготовлених даних
+        self.validate_prepared_data(data, symbol)
 
-        # Видалення рядків з NaN значеннями тільки якщо це критично
-        initial_len = len(data)
-        data_clean = data.dropna()
-
-        if len(data_clean) == 0:
-            self.logger.error(f"Після видалення NaN не залишилось даних для {symbol}-{timeframe}")
-            raise ValueError("Після видалення NaN значень не залишилось даних")
-
-        if len(data_clean) < initial_len:
-            self.logger.warning(f"Видалено {initial_len - len(data_clean)} рядків з NaN "
-                                f"для {symbol}-{timeframe}")
-
-        # Розділення на ознаки та цільову змінну
-        feature_columns = data_clean.drop(columns=["target"])
-        target_values = data_clean["target"].values
-
-        self.logger.info(f"Розмір ознак: {feature_columns.shape}, розмір target: {target_values.shape}")
+        # Витягування послідовностей з підготовлених даних
+        X, y = self.extract_sequences_from_prepared_data(data, target_column)
 
         # Створення або отримання конфігурації моделі
         if config is None:
-            input_dim = feature_columns.shape[1]
+            input_dim = X.shape[2]  # Кількість ознак
+            actual_seq_length = X.shape[1]  # Фактична довжина послідовності
+
             config = self.create_model_config(input_dim, timeframe)
+            # Оновлюємо sequence_length до фактичного значення
+            config.sequence_length = actual_seq_length
+
             self.set_model_config(symbol, timeframe, model_type, config)
             self.logger.info(f"Створено нову конфігурацію моделі для {symbol}-{timeframe}-{model_type}")
         else:
-            # Оновлення input_dim якщо потрібно
-            if config.input_dim != feature_columns.shape[1]:
+            # Оновлення конфігурації якщо потрібно
+            if config.input_dim != X.shape[2]:
                 old_dim = config.input_dim
-                config.input_dim = feature_columns.shape[1]
-                self.logger.info(f"Оновлено input_dim з {old_dim} на {config.input_dim} "
-                                 f"для {symbol}-{timeframe}-{model_type}")
+                config.input_dim = X.shape[2]
+                self.logger.info(f"Оновлено input_dim з {old_dim} на {config.input_dim}")
 
-        # Перевірка чи дані вже у форматі послідовностей
-        data_values = feature_columns.values
+            if config.sequence_length != X.shape[1]:
+                old_len = config.sequence_length
+                config.sequence_length = X.shape[1]
+                self.logger.info(f"Оновлено sequence_length з {old_len} на {config.sequence_length}")
 
-        if data_values.ndim == 3:
-            # Дані вже у форматі послідовностей (samples, sequence_length, features)
-            self.logger.info(f"Дані вже у форматі послідовностей для {symbol}-{timeframe}: {data_values.shape}")
-            self.validate_sequences_format(data_values, symbol, timeframe)
-            X = data_values
-            y = target_values
-        else:
-            # Потрібно створити послідовності
-            self.logger.info(f"Створення послідовностей з 2D даних для {symbol}-{timeframe}")
-            X, y = self.create_sequences(data_values, target_values, config.sequence_length)
-            self.logger.info(f"Створено послідовності: X {X.shape}, y {y.shape}")
+        # Перевірка на NaN та Inf
+        if np.isnan(X).any() or np.isinf(X).any():
+            self.logger.error(f"Знайдено NaN або Inf значення у ознаках для {symbol}-{timeframe}")
+            # Заміна NaN та Inf на 0 (або інше значення за замовчуванням)
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+            self.logger.warning(f"NaN та Inf значення замінено на 0 для {symbol}-{timeframe}")
 
-        # Збереження "скейлера" для можливості зворотного перетворення
-        # (хоча дані вже відскейлені, зберігаємо для сумісності)
-        scaler_key = f"{symbol}_{timeframe}"
-        if scaler_key not in self.scalers:
-            # Створюємо фіктивний скейлер для сумісності
-            dummy_scaler = StandardScaler()
-            # Підганяємо його під поточні дані (хоча вони вже відскейлені)
-            if data_values.ndim == 2:
-                dummy_scaler.fit(data_values)
-            else:
-                # Для 3D даних беремо перший семпл
-                dummy_scaler.fit(data_values.reshape(-1, data_values.shape[-1]))
-            self.scalers[scaler_key] = dummy_scaler
-            self.logger.debug(f"Створено фіктивний скейлер для {scaler_key}")
+        if np.isnan(y).any() or np.isinf(y).any():
+            self.logger.error(f"Знайдено NaN або Inf значення у цільових значеннях для {symbol}-{timeframe}")
+            raise ValueError("NaN або Inf значення у цільових змінних неприпустимі")
 
         # Розділення на тренувальну та валідаційну вибірки
         X_train, X_val, y_train, y_val = self.split_data(X, y, validation_split)
@@ -528,57 +469,25 @@ class DataPreprocessor:
                 torch.tensor(y_val, dtype=torch.float32),
                 config)
 
-    def create_sequences(self, data: np.ndarray, target: np.ndarray,
-                         seq_length: int) -> Tuple[np.ndarray, np.ndarray]:
-        """Створення послідовностей для RNN моделей (якщо потрібно)"""
-        self.logger.debug(f"Створення послідовностей: вхід {data.shape}, довжина {seq_length}")
-
-        X, y = [], []
-
-        # Перевірка достатності даних
-        if len(data) <= seq_length:
-            self.logger.error(f"Недостатньо даних для створення послідовностей. "
-                              f"Потрібно мінімум {seq_length + 1} записів, є {len(data)}")
-            raise ValueError(f"Недостатньо даних для створення послідовностей. "
-                             f"Потрібно мінімум {seq_length + 1} записів, є {len(data)}")
-
-        # Створення послідовностей
-        for i in range(len(data) - seq_length):
-            X.append(data[i:i + seq_length])
-            y.append(target[i + seq_length])
-
-        X_array = np.array(X)
-        y_array = np.array(y)
-
-        self.logger.debug(f"Створено послідовності: X {X_array.shape}, y {y_array.shape}")
-        return X_array, y_array
-
     def prepare_data_with_config(self, symbol: str, timeframe: str, model_type: str,
-                                 validation_split: float = 0.2) -> Tuple[torch.Tensor, torch.Tensor,
+                                 validation_split: float = 0.2,
+                                 target_column: str = 'target_close_1') -> Tuple[torch.Tensor, torch.Tensor,
     torch.Tensor, torch.Tensor, ModelConfig]:
         """Підготовка попередньо оброблених даних з автоматичним створенням конфігурації"""
         self.logger.info(f"Підготовка даних з конфігурацією для {symbol}-{timeframe}-{model_type}")
 
         # Завантаження попередньо підготовлених даних
         try:
-            raw_data = self.get_data_with_fallback(symbol, timeframe)
-            self.logger.info(f"Завантажено сирі дані для {symbol}-{timeframe}: {raw_data.shape}")
+            prepared_data = self.get_data_with_fallback(symbol, timeframe)
+            self.logger.info(f"Завантажено підготовлені дані для {symbol}-{timeframe}: {prepared_data.shape}")
         except Exception as e:
             self.logger.error(f"Критична помилка завантаження даних для {symbol}-{timeframe}: {e}")
-            raise
-
-        # Мінімальна обробка попередньо підготовлених ознак
-        try:
-            features = self.prepare_features(raw_data, symbol)
-            self.logger.info(f"Підготовлено ознаки для {symbol}: {features.shape}")
-        except Exception as e:
-            self.logger.error(f"Помилка підготовки ознак для {symbol}: {e}")
             raise
 
         # Обробка для моделі
         try:
             result = self.preprocess_prepared_data_for_model(
-                features, symbol, timeframe, model_type, validation_split
+                prepared_data, symbol, timeframe, model_type, validation_split, target_column
             )
             self.logger.info(f"Успішно підготовлено дані для моделі {symbol}-{timeframe}-{model_type}")
             return result
@@ -725,7 +634,7 @@ class DataPreprocessor:
                 'features': {
                     'total_columns': len(data.columns),
                     'numeric_columns': len(data.select_dtypes(include=[np.number]).columns),
-                    'has_target': 'target' in data.columns
+                    'has_target': any('target' in col for col in data.columns)
                 },
                 'data_quality': {
                     'null_values': data.isnull().sum().sum(),
@@ -782,3 +691,217 @@ class DataPreprocessor:
             'approximate_memory_mb': (scalers_memory + configs_memory) / (1024 * 1024),
             'scalers_keys': list(self.scalers.keys())[:10]  # Перші 10 ключів
         }
+
+    def prepare_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """Підготовка ознак для моделі з використанням всіх доступних модулів"""
+        try:
+            self.logger.info(f"Початок підготовки ознак для {symbol}")
+            # Список для зберігання DataFrames перед об'єднанням
+            feature_dataframes = []
+
+            # Базові OHLCV ознаки (з оригінального DataFrame)
+            self.logger.debug(f"Додавання базових OHLCV ознак для {symbol}")
+            base_features = df[['open', 'high', 'low', 'close', 'volume']].copy()
+            feature_dataframes.append(base_features)
+
+            # Отримання трендових ознак
+            self.logger.debug(f"Підготовка трендових ознак для {symbol}")
+            try:
+                trend_features = self.trend.prepare_ml_trend_features(df)
+                if trend_features is not None and not trend_features.empty:
+                    feature_dataframes.append(trend_features)
+                    self.logger.info(f"Додано {trend_features.shape[1]} трендових ознак")
+                else:
+                    self.logger.warning(f"Трендові ознаки для {symbol} порожні")
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні трендових ознак для {symbol}: {e}")
+
+            # Отримання ознак волатильності
+            self.logger.debug(f"Підготовка ознак волатильності для {symbol}")
+            try:
+                volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
+                if volatility_features is not None and not volatility_features.empty:
+                    feature_dataframes.append(volatility_features)
+                    self.logger.info(f"Додано {volatility_features.shape[1]} ознак волатильності")
+                else:
+                    self.logger.warning(f"Ознаки волатильності для {symbol} порожні")
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні ознак волатильності для {symbol}: {e}")
+
+            # Отримання циклічних ознак
+            self.logger.debug(f"Підготовка циклічних ознак для {symbol}")
+            try:
+                cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
+                if cycle_features is not None and not cycle_features.empty:
+                    feature_dataframes.append(cycle_features)
+                    self.logger.info(f"Додано {cycle_features.shape[1]} циклічних ознак")
+                else:
+                    self.logger.warning(f"Циклічні ознаки для {symbol} порожні")
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні циклічних ознак для {symbol}: {e}")
+
+            # Отримання технічних індикаторів
+            self.logger.debug(f"Підготовка технічних індикаторів для {symbol}")
+            try:
+                indicator_features = self.indicators.prepare_features_pipeline(df)
+                if indicator_features is not None and not indicator_features.empty:
+                    feature_dataframes.append(indicator_features)
+                    self.logger.info(f"Додано {indicator_features.shape[1]} технічних індикаторів")
+                else:
+                    self.logger.warning(f"Технічні індикатори для {symbol} порожні")
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні технічних індикаторів для {symbol}: {e}")
+
+            # Перевірка наявності ознак для об'єднання
+            if not feature_dataframes:
+                raise ValueError(f"Не вдалося створити жодних ознак для {symbol}")
+
+            # Оптимізоване об'єднання з обробкою індексів
+            self.logger.debug(f"Об'єднання {len(feature_dataframes)} наборів ознак для {symbol}")
+
+            # Вирівнюємо всі DataFrame по індексу першого (базового)
+            base_index = feature_dataframes[0].index
+            aligned_dataframes = []
+
+            for i, features_df in enumerate(feature_dataframes):
+                try:
+                    # Вирівнюємо по базовому індексу
+                    aligned_df = features_df.reindex(base_index, method='ffill')
+                    aligned_dataframes.append(aligned_df)
+                except Exception as e:
+                    self.logger.warning(f"Помилка вирівнювання DataFrame {i} для {symbol}: {e}")
+                    # Спробуємо додати як є
+                    aligned_dataframes.append(features_df)
+
+            # Об'єднання з обробкою помилок
+            try:
+                final_features = pd.concat(
+                    aligned_dataframes,
+                    axis=1,
+                    join='outer',  # Зовнішнє об'єднання для збереження всіх індексів
+                    copy=False,
+                    sort=False
+                )
+            except Exception as e:
+                self.logger.error(f"Помилка при concat для {symbol}: {e}")
+                # Fallback - використовуємо тільки базові ознаки
+                final_features = feature_dataframes[0].copy()
+
+            # Ефективне видалення дублікатів колонок
+            if final_features.columns.duplicated().any():
+                self.logger.debug(f"Видалення дублікатних колонок для {symbol}")
+                # Отримуємо унікальні колонки, зберігаючи порядок
+                unique_columns = final_features.columns[~final_features.columns.duplicated()]
+                final_features = final_features[unique_columns]
+
+            # Обробка NaN значень
+            initial_nan_count = final_features.isnull().sum().sum()
+            if initial_nan_count > 0:
+                self.logger.warning(f"Знайдено {initial_nan_count} NaN значень для {symbol}")
+                # Заповнення NaN методом forward fill, потім backward fill
+                final_features = final_features.fillna(method='ffill').fillna(method='bfill')
+
+                # Якщо все ще є NaN, заповнюємо нулями
+                remaining_nan = final_features.isnull().sum().sum()
+                if remaining_nan > 0:
+                    self.logger.warning(f"Заповнення залишкових {remaining_nan} NaN нулями для {symbol}")
+                    final_features = final_features.fillna(0)
+
+            # Додаткова валідація результату
+            if final_features.empty:
+                raise ValueError(f"Результуючий DataFrame порожній для {symbol}")
+
+            # Видалення колонок з постійними значеннями (нульова дисперсія)
+            constant_columns = []
+            for col in final_features.columns:
+                if final_features[col].nunique() <= 1:
+                    constant_columns.append(col)
+
+            if constant_columns:
+                self.logger.warning(f"Видалення {len(constant_columns)} колонок з постійними значеннями для {symbol}")
+                final_features = final_features.drop(columns=constant_columns)
+
+            # Збереження інформації про ознаки
+            feature_info = {
+                'total_features': final_features.shape[1],
+                'feature_names': list(final_features.columns),
+                'nan_count': final_features.isnull().sum().sum(),
+                'constant_columns_removed': len(constant_columns)
+            }
+
+            key = f"{symbol}_features"
+            self.feature_configs[key] = feature_info
+
+            self.logger.info(f"Успішно підготовлено {final_features.shape[1]} ознак для {symbol}")
+            self.logger.debug(f"Форма фінального DataFrame: {final_features.shape}")
+
+            return final_features
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при підготовці ознак для {symbol}: {e}")
+            # Повертаємо базовий набір ознак як fallback
+            try:
+                self.logger.warning(f"Спроба створити базові ознаки для {symbol}")
+                basic_features = self.indicators.prepare_features_pipeline(df)
+                if basic_features is not None and not basic_features.empty:
+                    self.logger.info(f"Повернуто базові ознаки для {symbol}: {basic_features.shape}")
+                    return basic_features
+                else:
+                    # Останній fallback - тільки OHLCV
+                    self.logger.warning(f"Повертаємо тільки OHLCV для {symbol}")
+                    return df[['open', 'high', 'low', 'close', 'volume']].copy()
+            except Exception as fallback_error:
+                self.logger.error(f"Помилка fallback для {symbol}: {fallback_error}")
+                # Критичний fallback - тільки ціна закриття
+                return pd.DataFrame({'close': df['close']})
+
+    def create_enhanced_sequences_with_features(self, df: pd.DataFrame, symbol: str,
+                                                sequence_length: int = 60) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Створення послідовностей з розширеними ознаками для навчання моделі
+        """
+        self.logger.info(f"Створення розширених послідовностей для {symbol}")
+
+        try:
+            # Підготовка розширених ознак
+            enhanced_features = self.prepare_features(df, symbol)
+
+            # Створення цільової змінної (прогноз ціни закриття на наступний період)
+            target = enhanced_features['close'].shift(-1).dropna()
+
+            # Видалення останнього рядка з ознак (для якого немає цілі)
+            features_aligned = enhanced_features.iloc[:-1]
+
+            # Перевірка вирівнювання
+            if len(features_aligned) != len(target):
+                min_len = min(len(features_aligned), len(target))
+                features_aligned = features_aligned.iloc[:min_len]
+                target = target.iloc[:min_len]
+                self.logger.warning(f"Вирівняно дані до {min_len} записів для {symbol}")
+
+            # Створення послідовностей
+            sequences = []
+            targets = []
+
+            for i in range(sequence_length, len(features_aligned)):
+                # Послідовність ознак
+                sequence = features_aligned.iloc[i - sequence_length:i].values
+                sequences.append(sequence)
+
+                # Цільове значення
+                targets.append(target.iloc[i])
+
+            if not sequences:
+                raise ValueError(f"Не вдалося створити послідовності для {symbol}")
+
+            X = np.array(sequences)
+            y = np.array(targets)
+
+            self.logger.info(f"Створено {len(sequences)} послідовностей для {symbol}: "
+                             f"X shape: {X.shape}, y shape: {y.shape}")
+
+            return X, y
+
+        except Exception as e:
+            self.logger.error(f"Помилка створення розширених послідовностей для {symbol}: {e}")
+            raise
