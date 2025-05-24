@@ -5,7 +5,6 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Tuple,  Optional, Any
-from torch.utils.data import DataLoader, TensorDataset
 import os
 from datetime import datetime, timedelta
 import json
@@ -593,28 +592,6 @@ class DeepLearning:
 
         return True
 
-    def _prepare_training_data(self, symbol: str, timeframe: str,
-                               sequence_length: int, validation_split: float) -> Tuple:
-        """Підготовка даних для навчання"""
-        try:
-            # Отримання даних
-            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, 'lstm')
-            data = data_loader()
-
-            # Підготовка ознак
-            processed_data = self.data_preprocessor.prepare_features(data, symbol)
-
-            # Розділення на тренувальні та валідаційні дані
-            split_idx = int(len(processed_data) * (1 - validation_split))
-
-            train_data = processed_data[:split_idx]
-            val_data = processed_data[split_idx:]
-
-            return train_data, val_data
-
-        except Exception as e:
-            self.logger.error(f"Помилка підготовки даних для {symbol}-{timeframe}: {str(e)}")
-            raise
 
     def online_learning(self, symbol: str, timeframe: str, model_type: str,
                         new_data: pd.DataFrame, epochs: int = 10) -> Dict[str, Any]:
@@ -1275,3 +1252,400 @@ class DeepLearning:
                 'supported_timeframes': self.TIMEFRAMES,
                 'supported_model_types': self.MODEL_TYPES
             }
+
+
+
+
+
+    def full_training_pipeline(self,
+                                   symbols: Optional[List[str]] = None,
+                                   timeframes: Optional[List[str]] = None,
+                                   model_types: Optional[List[str]] = None,
+                                   validation_split: float = 0.2,
+                                   epochs: int = 100,
+                                   batch_size: int = 32) -> Dict[str, Dict[str, Any]]:
+            """
+            Complete training pipeline from data loading to model evaluation.
+
+            Args:
+                symbols: List of cryptocurrency symbols to train on
+                timeframes: List of timeframes to train on
+                model_types: List of model types to train
+                validation_split: Ratio of data to use for validation
+                epochs: Number of training epochs
+                batch_size: Batch size for training
+
+            Returns:
+                Dictionary containing training results for each model
+            """
+            results = {}
+
+            # Use default values if not specified
+            symbols = symbols or self.SYMBOLS
+            timeframes = timeframes or self.TIMEFRAMES
+            model_types = model_types or self.MODEL_TYPES
+
+            for symbol in symbols:
+                for timeframe in timeframes:
+                    for model_type in model_types:
+                        try:
+                            model_key = f"{symbol}_{timeframe}_{model_type}"
+                            self.logger.info(f"Starting training for {model_key}")
+
+                            # 1. Data Loading
+                            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+                            raw_data = data_loader()
+
+                            # 2. Feature Engineering
+                            features = self.data_preprocessor.prepare_features(raw_data, symbol)
+                            input_dim = features.shape[1] - 1  # Subtract target column
+
+                            # 3. Model Training
+                            train_result = self.train_model(
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                model_type=model_type,
+                                data=features,
+                                input_dim=input_dim,
+                                validation_split=validation_split,
+                                epochs=epochs,
+                                batch_size=batch_size
+                            )
+
+                            # 4. Model Evaluation
+                            metrics = self.evaluate_model(symbol, timeframe, model_type, features)
+
+                            # 5. Save Results
+                            results[model_key] = {
+                                'training_result': train_result,
+                                'metrics': metrics
+                            }
+
+                            self.logger.info(f"Completed training for {model_key} with RMSE: {metrics.get('RMSE')}")
+
+                        except Exception as e:
+                            self.logger.error(f"Error training {symbol}-{timeframe}-{model_type}: {str(e)}")
+                            results[f"{symbol}_{timeframe}_{model_type}"] = {'error': str(e)}
+                            continue
+
+            return results
+
+    def prediction_pipeline(self,
+                                symbol: str,
+                                timeframe: str,
+                                model_type: str,
+                                steps_ahead: int = 1,
+                                input_data: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+            """
+            Complete prediction pipeline from data loading to prediction storage.
+
+            Args:
+                symbol: Cryptocurrency symbol
+                timeframe: Timeframe for prediction
+                model_type: Type of model to use
+                steps_ahead: Number of steps to predict ahead
+                input_data: Optional input data (uses latest data if None)
+
+            Returns:
+                Dictionary containing predictions and metadata
+            """
+            try:
+                # 1. Load or prepare data
+                if input_data is None:
+                    data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+                    input_data = data_loader()
+
+                # 2. Make prediction
+                prediction_result = self.predict(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type,
+                    input_data=input_data,
+                    steps_ahead=steps_ahead
+                )
+
+                self.logger.info(f"Prediction completed for {symbol}-{timeframe}-{model_type}")
+
+                # 3. Format results
+                formatted_predictions = []
+                for i, pred in enumerate(prediction_result['predictions']):
+                    formatted_predictions.append({
+                        'step': i + 1,
+                        'prediction': float(pred),
+                        'confidence': prediction_result['confidence']
+                    })
+
+                return {
+                    'status': 'success',
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type,
+                    'predictions': formatted_predictions,
+                    'timestamp': datetime.now().isoformat()
+                }
+
+            except Exception as e:
+                self.logger.error(f"Prediction failed for {symbol}-{timeframe}-{model_type}: {str(e)}")
+                return {
+                    'status': 'error',
+                    'error': str(e),
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type
+                }
+
+    def online_learning_pipeline(self,model_key: str,
+                                     symbol: str,
+                                     timeframe: str,
+                                     model_type: str,
+                                     new_data: pd.DataFrame,
+                                     epochs: int = 10) -> Dict[str, Any]:
+            """
+            Online learning pipeline to update models with new data.
+
+            Args:
+                symbol: Cryptocurrency symbol
+                timeframe: Timeframe for the model
+                model_type: Type of model to update
+                new_data: New data for online learning
+                epochs: Number of epochs for online training
+
+            Returns:
+                Dictionary containing online learning results
+            """
+            try:
+                # 1. Prepare features
+                processed_data = self.data_preprocessor.prepare_features(new_data, symbol)
+
+                # 2. Perform online learning
+                result = self.online_learning(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type,
+                    new_data=processed_data,
+                    epochs=epochs
+                )
+
+                self.logger.info(f"Online learning completed for {symbol}-{timeframe}-{model_type}")
+
+                return {
+                    'status': 'success',
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type,
+                    'metrics': result['metrics'],
+                    'training_duration': result['training_duration']
+                }
+
+            except Exception as e:
+                self.logger.error(f"Online learning failed for {symbol}-{timeframe}-{model_type}: {str(e)}")
+                return {
+                    'status': 'error',
+                    'error': str(e),
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type
+                }
+
+    def model_evaluation_pipeline(self,model_key: str,
+                                      symbol: str,
+                                      timeframe: str,
+                                      model_type: str,
+                                      test_data: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
+            """
+            Complete model evaluation pipeline.
+
+            Args:
+                symbol: Cryptocurrency symbol
+                timeframe: Timeframe for the model
+                model_type: Type of model to evaluate
+                test_data: Optional test data (uses latest data if None)
+
+            Returns:
+                Dictionary containing evaluation metrics
+            """
+            try:
+                # 1. Load or prepare test data
+                if test_data is None:
+                    data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+                    test_data = data_loader()
+
+                # 2. Evaluate model
+                metrics = self.evaluate_model(
+                    model_key =model_key,
+                    test_data=test_data
+                )
+
+                self.logger.info(f"Evaluation completed for {symbol}-{timeframe}-{model_type}")
+
+                return {
+                    'status': 'success',
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type,
+                    'metrics': metrics
+                }
+
+            except Exception as e:
+                self.logger.error(f"Evaluation failed for {symbol}-{timeframe}-{model_type}: {str(e)}")
+                return {
+                    'status': 'error',
+                    'error': str(e),
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type
+                }
+
+    def model_interpretation_pipeline(self,
+                                          symbol: str,
+                                          timeframe: str,
+                                          model_type: str) -> Dict[str, Any]:
+            """
+            Model interpretation pipeline including feature importance and error analysis.
+
+            Args:
+                symbol: Cryptocurrency symbol
+                timeframe: Timeframe for the model
+                model_type: Type of model to interpret
+
+            Returns:
+                Dictionary containing interpretation results
+            """
+            try:
+                # 1. Get feature importance
+                feature_importance = self.feature_importance_analysis(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type
+                )
+
+                # 2. Get model interpretation
+                interpretation = self.model_interpretation(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type
+                )
+
+                self.logger.info(f"Interpretation completed for {symbol}-{timeframe}-{model_type}")
+
+                return {
+                    'status': 'success',
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type,
+                    'feature_importance': feature_importance,
+                    'interpretation': interpretation
+                }
+
+            except Exception as e:
+                self.logger.error(f"Interpretation failed for {symbol}-{timeframe}-{model_type}: {str(e)}")
+                return {
+                    'status': 'error',
+                    'error': str(e),
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'model_type': model_type
+                }
+
+    def ensemble_prediction_pipeline(self,
+                                         symbol: str,
+                                         timeframe: str,
+                                         steps_ahead: int = 1,
+                                         weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
+            """
+            Ensemble prediction pipeline combining predictions from multiple models.
+
+            Args:
+                symbol: Cryptocurrency symbol
+                timeframe: Timeframe for prediction
+                steps_ahead: Number of steps to predict ahead
+                weights: Optional weights for each model type
+
+            Returns:
+                Dictionary containing ensemble predictions
+            """
+            try:
+                # 1. Get ensemble prediction
+                ensemble_result = self.ensemble_predict(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    steps_ahead=steps_ahead,
+                    weights=weights
+                )
+
+                self.logger.info(f"Ensemble prediction completed for {symbol}-{timeframe}")
+
+                # 2. Format results
+                formatted_predictions = []
+                for i in range(steps_ahead):
+                    formatted_predictions.append({
+                        'step': i + 1,
+                        'ensemble_prediction': float(ensemble_result['ensemble_predictions'][i]),
+                        'individual_predictions': {
+                            model_type: float(preds[i])
+                            for model_type, preds in ensemble_result['individual_predictions'].items()
+                        }
+                    })
+
+                return {
+                    'status': 'success',
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'predictions': formatted_predictions,
+                    'weights': ensemble_result['weights'],
+                    'timestamp': datetime.now().isoformat()
+                }
+
+            except Exception as e:
+                self.logger.error(f"Ensemble prediction failed for {symbol}-{timeframe}: {str(e)}")
+                return {
+                    'status': 'error',
+                    'error': str(e),
+                    'symbol': symbol,
+                    'timeframe': timeframe
+                }
+
+def main():
+        """
+        Main function to execute the deep learning pipeline.
+        """
+        # Initialize pipeline
+        pipeline = DeepLearning()
+
+        # Example 1: Full training pipeline for BTC and ETH on 1h and 4h timeframes
+        training_results = pipeline.full_training_pipeline(
+            symbols=['BTC', 'ETH'],
+            timeframes=['1h', '4h'],
+            model_types=['lstm', 'gru', 'transformer'],
+            epochs=50,
+            batch_size=64
+        )
+
+        # Example 2: Make predictions for BTC on 1h timeframe
+        btc_predictions = pipeline.prediction_pipeline(
+            symbol='BTC',
+            timeframe='1h',
+            model_type='lstm',
+            steps_ahead=5
+        )
+        print("BTC Predictions:", btc_predictions)
+
+        # Example 3: Ensemble prediction for ETH on 4h timeframe
+        eth_ensemble = pipeline.ensemble_prediction_pipeline(
+            symbol='ETH',
+            timeframe='4h',
+            steps_ahead=3,
+            weights={'lstm': 0.4, 'gru': 0.3, 'transformer': 0.3}
+        )
+        print("ETH Ensemble Predictions:", eth_ensemble)
+
+        # Example 4: Model interpretation for SOL on 1d timeframe
+        sol_interpretation = pipeline.model_interpretation_pipeline(
+            symbol='SOL',
+            timeframe='1d',
+            model_type='transformer'
+        )
+        print("SOL Model Interpretation:", sol_interpretation)
+
+if __name__ == "__main__":
+        main()

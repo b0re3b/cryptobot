@@ -1,5 +1,5 @@
 from dataclasses import field, dataclass
-from typing import Dict, Tuple, Callable, List, Any
+from typing import Dict, Tuple, Callable, List, Optional, Any
 import pandas as pd
 import numpy as np
 import torch
@@ -56,11 +56,11 @@ class DataPreprocessor:
         self.db_manager = DatabaseManager()
 
     def get_sequence_length_for_timeframe(self, timeframe: str) -> int:
-
+        """Отримання довжини послідовності для конкретного таймфрейму"""
         return self.TIMEFRAME_SEQUENCES.get(timeframe, 60)
 
     def create_model_config(self, input_dim: int, timeframe: str, **kwargs) -> ModelConfig:
-
+        """Створення конфігурації моделі"""
         sequence_length = self.get_sequence_length_for_timeframe(timeframe)
 
         config_params = {
@@ -71,18 +71,18 @@ class DataPreprocessor:
 
         return ModelConfig(**config_params)
 
-    def get_model_config(self, symbol: str, timeframe: str, model_type: str) -> ModelConfig:
-
+    def get_model_config(self, symbol: str, timeframe: str, model_type: str) -> Optional[ModelConfig]:
+        """Отримання конфігурації моделі"""
         key = f"{symbol}_{timeframe}_{model_type}"
         return self.model_configs.get(key)
 
     def set_model_config(self, symbol: str, timeframe: str, model_type: str, config: ModelConfig):
-
+        """Збереження конфігурації моделі"""
         key = f"{symbol}_{timeframe}_{model_type}"
         self.model_configs[key] = config
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
-
+        """Отримання функції завантаження даних"""
         if symbol == 'BTC':
             return lambda: self.db_manager.get_btc_lstm_sequence(timeframe)
         elif symbol == 'ETH':
@@ -93,31 +93,43 @@ class DataPreprocessor:
             raise ValueError(f"Непідтримуваний символ: {symbol}")
 
     def prepare_features(self, df: pd.DataFrame, symbol: str) -> tuple[DataFrame, Series] | DataFrame | Any:
-
+        """Підготовка ознак для моделі"""
         try:
             # Список для зберігання DataFrames перед об'єднанням
             feature_dataframes = []
 
             # Отримання різних типів ознак
             print(f"Підготовка трендових ознак для {symbol}...")
-            trend_features = self.trend.prepare_ml_trend_features(df)
-            if not trend_features.empty:
-                feature_dataframes.append(trend_features)
+            try:
+                trend_features = self.trend.prepare_ml_trend_features(df)
+                if not trend_features.empty:
+                    feature_dataframes.append(trend_features)
+            except Exception as e:
+                print(f"Помилка при створенні трендових ознак: {e}")
 
             print(f"Підготовка ознак волатильності для {symbol}...")
-            volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
-            if not volatility_features.empty:
-                feature_dataframes.append(volatility_features)
+            try:
+                volatility_features = self.vol.prepare_volatility_features_for_ml(df, symbol)
+                if not volatility_features.empty:
+                    feature_dataframes.append(volatility_features)
+            except Exception as e:
+                print(f"Помилка при створенні ознак волатильності: {e}")
 
             print(f"Підготовка циклічних ознак для {symbol}...")
-            cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
-            if not cycle_features.empty:
-                feature_dataframes.append(cycle_features)
+            try:
+                cycle_features = self.cycle.prepare_cycle_ml_features(df, symbol)
+                if not cycle_features.empty:
+                    feature_dataframes.append(cycle_features)
+            except Exception as e:
+                print(f"Помилка при створенні циклічних ознак: {e}")
 
             print(f"Підготовка технічних індикаторів для {symbol}...")
-            indicator_features = self.indicators.prepare_features_pipeline(df)
-            if not indicator_features.empty:
-                feature_dataframes.append(indicator_features)
+            try:
+                indicator_features = self.indicators.prepare_features_pipeline(df)
+                if not indicator_features.empty:
+                    feature_dataframes.append(indicator_features)
+            except Exception as e:
+                print(f"Помилка при створенні технічних індикаторів: {e}")
 
             # Перевірка наявності ознак для об'єднання
             if not feature_dataframes:
@@ -161,7 +173,7 @@ class DataPreprocessor:
 
     def preprocess_data_for_model(self, data: pd.DataFrame, symbol: str, timeframe: str,
                                   model_type: str = 'lstm', validation_split: float = 0.2,
-                                  config: ModelConfig = None) -> Tuple[torch.Tensor, torch.Tensor,
+                                  config: Optional[ModelConfig] = None) -> Tuple[torch.Tensor, torch.Tensor,
     torch.Tensor, torch.Tensor, ModelConfig]:
         """
         Препроцесинг даних для моделі з використанням ModelConfig
@@ -227,7 +239,7 @@ class DataPreprocessor:
 
     def create_sequences(self, data: np.ndarray, target: np.ndarray,
                          seq_length: int) -> Tuple[np.ndarray, np.ndarray]:
-
+        """Створення послідовностей для RNN моделей"""
         X, y = [], []
 
         # Перевірка достатності даних
@@ -245,7 +257,7 @@ class DataPreprocessor:
     def prepare_data_with_config(self, symbol: str, timeframe: str, model_type: str,
                                  validation_split: float = 0.2) -> Tuple[torch.Tensor, torch.Tensor,
     torch.Tensor, torch.Tensor, ModelConfig]:
-
+        """Підготовка даних з автоматичним створенням конфігурації"""
         # Завантаження даних
         data_loader = self.get_data_loader(symbol, timeframe, model_type)
         raw_data = data_loader()
@@ -260,7 +272,7 @@ class DataPreprocessor:
 
     def get_optimal_config_for_timeframe(self, timeframe: str, input_dim: int,
                                          **custom_params) -> ModelConfig:
-
+        """Отримання оптимальної конфігурації для конкретного таймфрейму"""
         # Базові параметри залежно від таймфрейму
         timeframe_configs = {
             '1m': {'hidden_dim': 128, 'num_layers': 3, 'dropout': 0.3, 'learning_rate': 0.0005},
@@ -277,7 +289,7 @@ class DataPreprocessor:
 
     def denormalize_predictions(self, predictions: np.ndarray, symbol: str,
                                 timeframe: str) -> np.ndarray:
-
+        """Денормалізація прогнозів"""
         key = f"{symbol}_{timeframe}"
         scaler = self.scalers.get(key)
 
@@ -285,16 +297,32 @@ class DataPreprocessor:
             raise ValueError(f"Скейлер для {key} не знайдено. "
                              f"Доступні скейлери: {list(self.scalers.keys())}")
 
+        # Створення фіктивного масиву з правильною кількістю ознак
+        if hasattr(scaler, 'n_features_in_'):
+            n_features = scaler.n_features_in_
+        else:
+            # Fallback для старих версій sklearn
+            n_features = len(scaler.scale_) if hasattr(scaler, 'scale_') else 1
+
         # Перевірка розмірності
         if predictions.ndim == 1:
             predictions = predictions.reshape(-1, 1)
+
+        # Якщо прогнози стосуються лише однієї ознаки (target),
+        # створюємо фіктивний масив для всіх ознак
+        if predictions.shape[1] == 1 and n_features > 1:
+            # Створюємо масив з нулями для всіх ознак окрім останньої (target)
+            dummy_array = np.zeros((predictions.shape[0], n_features))
+            dummy_array[:, -1] = predictions.flatten()  # Припускаємо, що target - остання колонка
+            denormalized = scaler.inverse_transform(dummy_array)
+            return denormalized[:, -1]  # Повертаємо лише target колонку
 
         return scaler.inverse_transform(predictions).flatten()
 
     def split_data(self, X: np.ndarray, y: np.ndarray,
                    validation_split: float) -> Tuple[np.ndarray, np.ndarray,
     np.ndarray, np.ndarray]:
-
+        """Розділення даних на тренувальну та валідаційну вибірки"""
         # Перевірка валідності параметрів
         if not 0 < validation_split < 1:
             raise ValueError(f"validation_split має бути між 0 та 1, отримано: {validation_split}")
@@ -311,42 +339,8 @@ class DataPreprocessor:
 
         return X[:split_index], X[split_index:], y[:split_index], y[split_index:]
 
-    def normalize_features(self, data: pd.DataFrame, symbol: str, timeframe: str,
-                           scaler_type: str = 'standard') -> pd.DataFrame:
-
-        key = f"{symbol}_{timeframe}"
-
-        # Вибір типу скейлера
-        if scaler_type == 'standard':
-            scaler = StandardScaler()
-        elif scaler_type == 'minmax':
-            scaler = MinMaxScaler()
-        else:
-            raise ValueError(f"Непідтримуваний тип скейлера: {scaler_type}")
-
-        # Нормалізація даних
-        numeric_columns = data.select_dtypes(include=[np.number]).columns
-        data_normalized = data.copy()
-
-        if len(numeric_columns) > 0:
-            data_normalized[numeric_columns] = scaler.fit_transform(data[numeric_columns])
-            # Збереження скейлера
-            self.scalers[key] = scaler
-        else:
-            print(f"Попередження: не знайдено числових колонок для нормалізації в {key}")
-
-        return data_normalized
-
-    def get_feature_importance(self, symbol: str) -> Dict:
-
-        return self.feature_configs.get(symbol, {})
-
-    def set_feature_config(self, symbol: str, config: Dict):
-
-        self.feature_configs[symbol] = config
-
     def validate_data(self, data: pd.DataFrame) -> bool:
-
+        """Валідація даних"""
         if data.empty:
             raise ValueError("DataFrame порожній")
 
@@ -355,7 +349,7 @@ class DataPreprocessor:
 
         return True
 
-    def get_scaler(self, symbol: str, timeframe: str):
-
+    def get_scaler(self, symbol: str, timeframe: str) -> Optional[StandardScaler]:
+        """Отримання скейлера"""
         key = f"{symbol}_{timeframe}"
         return self.scalers.get(key)
