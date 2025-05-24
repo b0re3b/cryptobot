@@ -1,0 +1,110 @@
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-lstm: invalid input syntax for type integer: "h"
+LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
+                                                                    ^
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_gru
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_lstm
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_gru
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_lstm
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 15:59:39 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_gru
+2025-05-24 15:59:39 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-lstm: invalid input syntax for type integer: "h"
+LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
+                                                                    ^
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_gru
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_lstm
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_gru
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_lstm
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:18:01 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_gru
+2025-05-24 16:18:01 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-lstm: invalid input syntax for type integer: "h"
+LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
+                                                                    ^
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_gru
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_lstm
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_gru
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_lstm
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-lstm: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:26:02 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_gru
+2025-05-24 16:26:02 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-gru: current transaction is aborted, commands ignored until end of transaction block
+
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-lstm: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_gru
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-gru: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_lstm
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-lstm: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_gru
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-gru: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_lstm
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-lstm: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:28:51 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_gru
+2025-05-24 16:28:51 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-gru: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-lstm: Не вдалося створити жодних ознак для BTC
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_gru
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1h-gru: Не вдалося створити жодних ознак для BTC
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: Не вдалося створити жодних ознак для BTC
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: Не вдалося створити жодних ознак для BTC
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_lstm
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-lstm: Не вдалося створити жодних ознак для ETH
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1h_gru
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1h-gru: Не вдалося створити жодних ознак для ETH
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_lstm
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-lstm: Не вдалося створити жодних ознак для ETH
+2025-05-24 16:52:58 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_gru
+2025-05-24 16:52:58 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-gru: Не вдалося створити жодних ознак для ETH

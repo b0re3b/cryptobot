@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 import json
 import pickle
 import matplotlib.pyplot as plt
-from ML import LSTMModel, GRUModel, TransformerModel
+from ML.LSTM import LSTMModel
+from ML.GRU import GRUModel
+from ML.transformer import TransformerModel
 from ML.ModelTrainer import ModelTrainer
 from data.db import DatabaseManager
 from timeseriesmodels import ModelEvaluator

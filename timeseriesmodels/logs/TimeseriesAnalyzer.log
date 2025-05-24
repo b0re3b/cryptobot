@@ -1659,3 +1659,43 @@
 2025-05-24 12:14:07 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0)}
 2025-05-24 12:14:07 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
 2025-05-24 12:14:07 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0)}
+2025-05-24 15:58:32 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-24 15:58:32 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-24 15:58:32 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-24 15:58:32 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 354
+2025-05-24 15:58:33 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-24 15:58:33 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-24 15:58:34 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-24 15:58:34 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 354
+2025-05-24 15:58:36 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:37 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (1, 0, 0)}
+2025-05-24 15:58:38 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:38 - TimeseriesAnalyzer - INFO - [logger.py:103] - No strong seasonality detected, using default: 7
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (1, 0, 0), 'seasonal_order': (0, 0, 0, 7), 'seasonal_period': 7}
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: False
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-24 15:58:41 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: False
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (1, 0, 0)}
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 288
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Початок аналізу сезонності
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Перетворення decimal.Decimal значень у float для обчислень
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Аналіз сезонності завершено: True
+2025-05-24 15:58:42 - TimeseriesAnalyzer - INFO - [logger.py:103] - Основний сезонний період: 288
+2025-05-24 15:58:43 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:43 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0)}
+2025-05-24 15:58:43 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:43 - TimeseriesAnalyzer - INFO - [logger.py:103] - No strong seasonality detected, using default: 7
+2025-05-24 15:58:44 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0), 'seasonal_order': (0, 0, 0, 7), 'seasonal_period': 7}
+2025-05-24 15:58:44 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:44 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0)}
+2025-05-24 15:58:44 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:44 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0)}
+2025-05-24 15:58:45 - TimeseriesAnalyzer - INFO - [logger.py:103] - Starting optimal parameters search
+2025-05-24 15:58:45 - TimeseriesAnalyzer - INFO - [logger.py:103] - Found optimal parameters: {'order': (0, 0, 0)}
