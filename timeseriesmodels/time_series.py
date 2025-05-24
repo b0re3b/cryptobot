@@ -636,6 +636,8 @@ class TimeSeriesModels:
 
         return self.modeler.auto_determine_order(data)
 
+
+
     def full_pipeline(self, symbol: str, interval: str = '1d',
                       forecast_steps: int = 24) -> Dict:
         """Complete pipeline from data to forecast"""
@@ -773,243 +775,7 @@ class TimeSeriesModels:
             }
         }
 
-    def ensemble_forecast(self, data: pd.Series, models: List[str],
-                          forecast_steps: int = 24, weights: Optional[List[float]] = None) -> Dict:
 
-        try:
-            self.logger.info(f"Creating ensemble forecast with models: {models}")
-
-            # Validate input data
-            if data is None:
-                self.logger.error("Input data is None")
-                return {"status": "error", "message": "Input data cannot be None"}
-
-            # Ensure data is a pandas Series with DatetimeIndex
-            if not isinstance(data, pd.Series):
-                self.logger.warning("Input data is not a pandas Series, attempting to convert")
-                try:
-                    data = pd.Series(data)
-                except Exception as e:
-                    self.logger.error(f"Failed to convert input data to pandas Series: {str(e)}")
-                    return {"status": "error", "message": f"Cannot convert input to pandas Series: {str(e)}"}
-
-            # Ensure index is DatetimeIndex
-            if not isinstance(data.index, pd.DatetimeIndex):
-                self.logger.warning("Input data does not have DatetimeIndex, attempting to convert")
-                try:
-                    # Try to identify if there's a datetime column that should be used as index
-                    if any(isinstance(idx, (str, int)) for idx in data.index):
-                        # If index seems to be string dates or timestamps
-                        try:
-                            data.index = pd.to_datetime(data.index)
-                        except Exception as dt_err:
-                            self.logger.warning(f"Could not convert index to datetime: {str(dt_err)}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to convert index to DatetimeIndex: {str(e)}")
-                    # We'll continue anyway, but log the warning
-
-            # Ensure data is sorted by index
-            if isinstance(data.index, pd.DatetimeIndex) and not data.index.is_monotonic_increasing:
-                self.logger.warning("Data index is not sorted, sorting now")
-                data = data.sort_index()
-
-            # Check for NaN values and handle them
-            if data.isnull().any():
-                self.logger.warning(f"Input data contains {data.isnull().sum()} NaN values, interpolating")
-                data = data.interpolate(method='time')
-
-                # If there are still NaN values (e.g., at the beginning), forward/backward fill
-                if data.isnull().any():
-                    data = data.fillna(method='ffill').fillna(method='bfill')
-
-                if data.isnull().any():
-                    self.logger.error("Failed to handle all NaN values in data")
-                    return {"status": "error",
-                            "message": "Cannot process data with NaN values that couldn't be interpolated"}
-
-            # Check if models list is valid
-            valid_models = ['arima', 'sarima', 'auto_arima', 'exponential_smoothing', 'prophet']
-            if not models:
-                self.logger.error("No models specified")
-                return {"status": "error", "message": "No models specified for ensemble forecast"}
-
-            invalid_models = [m for m in models if m not in valid_models]
-            if invalid_models:
-                self.logger.error(f"Invalid model types: {invalid_models}")
-                return {"status": "error",
-                        "message": f"Invalid model types: {invalid_models}. Supported models: {valid_models}"}
-
-            # Validate weights
-            if weights is not None:
-                if len(weights) != len(models):
-                    self.logger.error(
-                        f"Number of weights ({len(weights)}) does not match number of models ({len(models)})")
-                    return {"status": "error", "message": "Weights and models count mismatch"}
-
-                # Check that weights are numeric
-                if not all(isinstance(w, (int, float)) for w in weights):
-                    self.logger.error("Non-numeric weights provided")
-                    return {"status": "error", "message": "All weights must be numeric values"}
-
-                # Check that weights are non-negative
-                if any(w < 0 for w in weights):
-                    self.logger.error("Negative weights provided")
-                    return {"status": "error", "message": "All weights must be non-negative"}
-            else:
-                # If weights are not provided, use equal weights
-                weights = [1 / len(models)] * len(models)
-
-            # Validate forecast_steps
-            if not isinstance(forecast_steps, int) or forecast_steps <= 0:
-                self.logger.error(f"Invalid forecast_steps: {forecast_steps}")
-                return {"status": "error", "message": "forecast_steps must be a positive integer"}
-
-            # Normalize weights to sum to 1
-            sum_weights = sum(weights)
-            if sum_weights == 0:
-                self.logger.error("Sum of weights is zero")
-                return {"status": "error", "message": "Sum of weights cannot be zero"}
-
-            weights = [w / sum_weights for w in weights]
-
-            forecasts = []
-            model_keys = []
-            model_info = []
-
-            for i, model_type in enumerate(models):
-                self.logger.info(f"Training {model_type} model...")
-
-                # Analyze data for seasonality if needed for SARIMA
-                if model_type == 'sarima':
-                    seasonality = self.analyzer.detect_seasonality(data)
-                    has_seasonality = seasonality.get('has_seasonality', False)
-
-                    if not has_seasonality:
-                        self.logger.warning(
-                            f"No seasonality detected for {model_type}, using default seasonal parameters")
-                        # If no seasonality detected, we'll use a default period of 7 (weekly) or 12 (monthly)
-                        if len(data) >= 365:  # If we have at least a year of data
-                            seasonal_period = 12  # Monthly seasonality
-                        else:
-                            seasonal_period = 7  # Weekly seasonality
-                    else:
-                        seasonal_period = seasonality.get('primary_period', 12)
-
-                    self.logger.info(f"Using seasonal period of {seasonal_period} for SARIMA model")
-
-                # Train model based on type - використовуємо auto_determine_order
-                try:
-                    if model_type == 'arima':
-                        # Використовуємо auto_determine_order для ARIMA
-                        result = self.train_model(data, 'arima')
-                    elif model_type == 'sarima':
-                        # Використовуємо auto_determine_order для SARIMA
-                        result = self.train_model(
-                            data, 'sarima',
-                            seasonal_order=(1, 1, 1, seasonal_period)
-                        )
-                    elif model_type == 'auto_arima':
-                        # Змінюємо також auto_arima для використання auto_determine_order
-                        order = self.auto_determine_order(data)
-                        result = self.train_model(data, 'arima', order=order)
-                    else:
-                        # Skip this model type as it's not implemented yet
-                        self.logger.warning(f"Model type {model_type} is recognized but not implemented yet")
-                        continue
-
-                    # Решта функції незмінна
-                    if result['status'] == 'success':
-                        # Get forecast
-                        model_key = result['model_key']
-                        model_keys.append(model_key)
-
-
-                        forecast = self.forecast(model_key, steps=forecast_steps)
-
-                        # Ensure forecast is properly formatted
-                        if forecast is None or (isinstance(forecast, pd.Series) and len(forecast) == 0):
-                            self.logger.warning(f"Empty forecast generated for {model_type}")
-                            continue
-
-                        # If forecast is not a pandas Series, try to convert it
-                        if not isinstance(forecast, pd.Series):
-                            try:
-                                if isinstance(forecast, dict) and 'forecast' in forecast:
-                                    forecast = forecast['forecast']
-
-                                if not isinstance(forecast, pd.Series):
-                                    forecast = pd.Series(forecast)
-
-                                self.logger.warning(f"Converted forecast to pandas Series for {model_type}")
-                            except Exception as e:
-                                self.logger.error(f"Failed to convert forecast to pandas Series: {str(e)}")
-                                continue
-
-                        forecasts.append((forecast, weights[i]))
-                        model_info.append({
-                            "type": model_type,
-                            "model_key": model_key,
-                            "weight": weights[i]
-                        })
-                    else:
-                        self.logger.warning(
-                            f"Failed to train {model_type} model: {result.get('message', 'Unknown error')}")
-                except Exception as model_err:
-                    self.logger.error(f"Error training {model_type} model: {str(model_err)}")
-                    continue
-
-            if not forecasts:
-                self.logger.error("No successful forecasts generated")
-                return {"status": "error", "message": "No successful forecasts generated for any model type"}
-
-            # Combine forecasts
-            ensemble_forecast = None
-
-            # First, we need to create a common index for all forecasts
-            # Get all unique timestamps across all forecasts
-            all_timestamps = set()
-            for forecast, _ in forecasts:
-                all_timestamps.update(forecast.index)
-
-            common_index = sorted(list(all_timestamps))
-
-            # Now combine the forecasts using the weights
-            for forecast, weight in forecasts:
-                # Reindex to the common index and fill NaN values
-                reindexed_forecast = forecast.reindex(common_index)
-
-                # Fill NaN values by interpolation when possible
-                if reindexed_forecast.isnull().any():
-                    reindexed_forecast = reindexed_forecast.interpolate(method='time')
-                    # Forward/backward fill any remaining NaNs
-                    reindexed_forecast = reindexed_forecast.fillna(method='ffill').fillna(method='bfill')
-
-                # Apply weight and add to ensemble
-                if ensemble_forecast is None:
-                    ensemble_forecast = reindexed_forecast * weight
-                else:
-                    ensemble_forecast += reindexed_forecast * weight
-
-            # Create metadata about the ensemble forecast
-            ensemble_metadata = {
-                "num_models": len(model_keys),
-                "model_types": [info["type"] for info in model_info],
-                "weights": [info["weight"] for info in model_info],
-                "forecast_steps": forecast_steps,
-                "created_at": datetime.now().isoformat()
-            }
-
-            return {
-                "status": "success",
-                "ensemble_forecast": ensemble_forecast,
-                "component_models": model_keys,
-                "model_info": model_info,
-                "metadata": ensemble_metadata
-            }
-
-        except Exception as e:
-            self.logger.error(f"Error creating ensemble forecast: {str(e)}")
-            return {"status": "error", "message": str(e)}
 
     def visualize_forecast(self, historical_data: pd.Series, forecast_data: pd.Series,
                            save_path: Optional[str] = None) -> Dict:
@@ -1109,7 +875,6 @@ def main():
 
     # Use earliest possible start date (for all available data)
     end_date = datetime.now()
-    # Instead of 2 years, we'll try to get all data from 2017
     start_date = datetime(2017, 1, 1)
 
     print(f"🔄 Loading data for {', '.join(symbols)} from {start_date.date()} to {end_date.date()}...")
@@ -1142,12 +907,10 @@ def main():
 
             data_dict[symbol] = df
 
-            # Check for price column with modified logic to handle preprocessed data
+            # Check for price column
             price_columns = [
                 "close", "Close", "price", "Price", "value", "Value",
-                "original_close",  # Add the column from your database
-                "close_log",  # Alternative preprocessed column
-                "close_diff"  # Another alternative
+                "original_close", "close_log", "close_diff"
             ]
 
             for col in price_columns:
@@ -1156,7 +919,6 @@ def main():
                     price_series_dict[symbol] = df[col]
                     break
             else:
-                # If no suitable column is found
                 print(f"❌ No suitable price column found in data for {symbol}.")
                 print(f"Available columns: {', '.join(df.columns)}")
 
@@ -1189,63 +951,41 @@ def main():
         test_data = price_series[train_size:]
         print(f"📊 Data split: {train_size} training points, {len(test_data)} testing points")
 
-        # Try ensemble forecast with multiple models
-        print(f"🔄 Creating ensemble forecast for {symbol}...")
-        ensemble_result = model.ensemble_forecast(
-            data=train_data,
-            models=['arima', 'sarima'],
+        # Use standard ARIMA/SARIMA forecasting
+        print(f"🔄 Running standard ARIMA/SARIMA forecast for {symbol}...")
+
+        # Run full pipeline which includes ARIMA/SARIMA modeling
+        pipeline_result = model.full_pipeline(
+            symbol=symbol,
+            interval=timeframe,
             forecast_steps=forecast_steps
         )
 
-        if ensemble_result.get('status') == 'success':
-            ensemble_forecast = ensemble_result.get('ensemble_forecast')
-            component_models = ensemble_result.get('component_models')
-            print(f"✅ Ensemble forecast created using {len(component_models)} models")
-            print(f"📈 First 5 forecast values: {ensemble_forecast.head().to_dict()}")
+        if pipeline_result.get("status") == "success":
+            print(f"✅ Pipeline completed successfully for {symbol}")
 
-            # Store result
-            results[symbol] = {
-                "status": "success",
-                "forecast": ensemble_forecast,
-                "component_models": component_models
-            }
-        else:
-            print(f"❌ Ensemble forecast failed: {ensemble_result.get('message', 'Unknown error')}")
+            # Get forecast from pipeline result
+            forecast = pipeline_result.get("forecast")
+            model_key = pipeline_result.get("best_model")
 
-            # Fallback to simple ARIMA forecast
-            print(f"🔄 Falling back to standard ARIMA forecast for {symbol}...")
-            forecast_result = model.forecaster.run_auto_forecast(
-                data=price_series,
-                test_size=0.2,
-                forecast_steps=forecast_steps,
-                symbol=symbol
-            )
-
-            if forecast_result.get("status") == "success" and "model_key" in forecast_result:
-                model_key = forecast_result["model_key"]
-                print(f"✅ Model created with key: {model_key}")
-
-                # Get forecast
-                forecast = model.forecast(model_key, steps=forecast_steps)
-                if forecast is not None:
-                    # Store result
-                    results[symbol] = {
-                        "status": "success",
-                        "forecast": forecast,
-                        "model_key": model_key
-                    }
-                    print(f"📈 Forecast generated successfully")
-                    print(f"  - Forecast length: {len(forecast)} points")
-                    print(f"  - First 5 values: {forecast.head().to_dict()}")
-                else:
-                    results[symbol] = {"status": "error", "message": "Failed to generate forecast"}
-                    print("❌ Failed to generate forecast.")
-            else:
+            if forecast is not None:
                 results[symbol] = {
-                    "status": "error",
-                    "message": forecast_result.get('message', 'Unknown error')
+                    "status": "success",
+                    "forecast": forecast,
+                    "model_key": model_key
                 }
-                print(f"❌ Auto forecast failed: {forecast_result.get('message', 'Unknown error')}")
+                print(f"📈 Forecast generated successfully")
+                print(f"  - Forecast length: {len(forecast)} points")
+                print(f"  - First 5 values: {forecast.head().to_dict()}")
+            else:
+                results[symbol] = {"status": "error", "message": "No forecast in pipeline result"}
+                print("❌ Pipeline completed but no forecast returned.")
+        else:
+            results[symbol] = {
+                "status": "error",
+                "message": pipeline_result.get('message', 'Unknown error')
+            }
+            print(f"❌ Pipeline failed: {pipeline_result.get('message', 'Unknown error')}")
 
     # Process all symbols together using batch processing
     print("\n--- Batch processing all symbols together ---")

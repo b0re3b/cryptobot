@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Union, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from decimal import Decimal
@@ -27,36 +27,377 @@ class Forecaster:
     def _convert_decimal_series(self, series: pd.Series) -> pd.Series:
         """Convert decimal.Decimal objects to float for numpy compatibility"""
         try:
-            # Check if series contains Decimal objects
             if series.dtype == 'object' and len(series) > 0:
-                # Check first non-null value
                 first_val = series.dropna().iloc[0] if len(series.dropna()) > 0 else None
                 if isinstance(first_val, Decimal):
                     self.logger.info("Converting Decimal objects to float for numpy compatibility")
-                    # Convert Decimal to float
                     converted_series = series.apply(lambda x: float(x) if isinstance(x, Decimal) else x)
-                    # Ensure numeric dtype
                     converted_series = pd.to_numeric(converted_series, errors='coerce')
                     return converted_series
 
-            # If not Decimal objects, ensure numeric dtype anyway
             return pd.to_numeric(series, errors='coerce')
         except Exception as e:
             self.logger.warning(f"Error during decimal conversion: {str(e)}")
-            # Fallback: try to convert to numeric
             return pd.to_numeric(series, errors='coerce')
+
+    def _validate_input_data(self, data: pd.Series, min_length: int = 30) -> Dict:
+        """Validate and preprocess input data"""
+        try:
+            if data is None or len(data) == 0:
+                return {"status": "error", "message": "Input data is empty or None"}
+
+            # Convert to pandas Series if needed
+            if not isinstance(data, pd.Series):
+                try:
+                    data = pd.Series(data)
+                except Exception as e:
+                    return {"status": "error", "message": f"Cannot convert input to pandas Series: {str(e)}"}
+
+            # Convert decimal objects
+            data = self._convert_decimal_series(data)
+
+            # Check for minimum length
+            if len(data) < min_length:
+                return {"status": "error",
+                        "message": f"Not enough data points (min {min_length} required, got {len(data)})"}
+
+            # Handle NaN values
+            if data.isnull().any():
+                self.logger.warning(f"Data contains {data.isnull().sum()} NaN values. Cleaning data.")
+                data = data.dropna()
+
+                if len(data) < min_length:
+                    return {"status": "error", "message": f"After removing NaN values, not enough data points remain"}
+
+            # Ensure index is datetime if possible
+            if not isinstance(data.index, pd.DatetimeIndex):
+                try:
+                    data.index = pd.to_datetime(data.index)
+                except:
+                    # If conversion fails, create a simple range index
+                    data.index = pd.RangeIndex(len(data))
+
+            # Sort by index
+            if isinstance(data.index, pd.DatetimeIndex) and not data.index.is_monotonic_increasing:
+                data = data.sort_index()
+
+            return {"status": "success", "data": data}
+
+        except Exception as e:
+            return {"status": "error", "message": f"Error validating input data: {str(e)}"}
+
+    def _create_forecast_index(self, data: pd.Series, steps: int) -> pd.Index:
+        """Create appropriate index for forecast values"""
+        if isinstance(data.index, pd.DatetimeIndex):
+            last_date = data.index[-1]
+
+            # Try to determine frequency
+            if len(data) >= 2:
+                freq = pd.infer_freq(data.index)
+                if freq:
+                    forecast_index = pd.date_range(
+                        start=last_date + pd.Timedelta(seconds=1),
+                        periods=steps,
+                        freq=freq
+                    )
+                else:
+                    # Estimate median interval
+                    time_diff = data.index[1:] - data.index[:-1]
+                    median_diff = pd.Timedelta(np.median([d.total_seconds() for d in time_diff]), unit='s')
+                    forecast_index = pd.date_range(
+                        start=last_date + median_diff,
+                        periods=steps,
+                        freq=median_diff
+                    )
+            else:
+                # Default to daily frequency
+                forecast_index = pd.date_range(
+                    start=last_date + pd.Timedelta(days=1),
+                    periods=steps
+                )
+        else:
+            # For numeric indices
+            last_idx = data.index[-1]
+            idx_diff = data.index[1] - data.index[0] if len(data) >= 2 else 1
+            forecast_index = pd.RangeIndex(
+                start=last_idx + idx_diff,
+                stop=last_idx + idx_diff * (steps + 1),
+                step=idx_diff
+            )
+
+        return forecast_index
+
+    def _ensure_model_loaded(self, model_key: str) -> Dict:
+        """Ensure model is loaded in memory"""
+        if model_key not in self.models:
+            if self.db_manager is not None:
+                try:
+                    self.logger.info(f"Loading model {model_key} from database")
+                    loaded = self.db_manager.load_complete_model(model_key)
+                    if not loaded:
+                        return {"status": "error", "message": f"Model {model_key} not found in database"}
+
+                    if model_key not in self.models:
+                        return {"status": "error", "message": f"Model {model_key} loaded but not available in memory"}
+
+                    self.logger.info(f"Model {model_key} successfully loaded")
+                    return {"status": "success"}
+                except Exception as e:
+                    return {"status": "error", "message": f"Error loading model {model_key}: {str(e)}"}
+            else:
+                return {"status": "error", "message": f"Model {model_key} not found and no database manager available"}
+
+        return {"status": "success"}
+
+    def _generate_model_forecast(self, model_key: str, steps: int, alpha: Optional[float] = None) -> Dict:
+        """Core forecast generation method"""
+        try:
+            model_info = self.models[model_key]
+            fit_result = model_info.get("fit_result")
+            metadata = model_info.get("metadata", {})
+
+            if fit_result is None:
+                return {"status": "error", "message": f"Model {model_key} has no fit result"}
+
+            model_type = metadata.get("model_type", "ARIMA")
+
+            # Generate forecast based on model type and requirements
+            if alpha is not None:
+                # Generate forecast with confidence intervals
+                forecast_result = fit_result.get_forecast(steps=steps)
+                predicted_mean = forecast_result.predicted_mean
+                confidence_intervals = forecast_result.conf_int(alpha=alpha)
+
+                return {
+                    "status": "success",
+                    "forecast": predicted_mean,
+                    "lower_bound": confidence_intervals.iloc[:, 0],
+                    "upper_bound": confidence_intervals.iloc[:, 1],
+                    "confidence_level": 1.0 - alpha
+                }
+            else:
+                # Generate point forecast only
+                if model_type == "ARIMA":
+                    forecast_result = fit_result.forecast(steps=steps)
+                else:  # SARIMA or other
+                    forecast_result = fit_result.get_forecast(steps=steps)
+                    forecast_result = forecast_result.predicted_mean
+
+                return {
+                    "status": "success",
+                    "forecast": forecast_result
+                }
+
+        except Exception as e:
+            return {"status": "error", "message": f"Error generating forecast: {str(e)}"}
+
+    def _apply_transformations(self, data: pd.Series, reverse: bool = False,
+                               transformations: Optional[Dict] = None) -> pd.Series:
+        """Apply or reverse data transformations"""
+        if not transformations or not transformations.get("method"):
+            return data
+
+        try:
+            method = transformations["method"]
+
+            if reverse:
+                # Apply inverse transformation
+                return self.transformer.inverse_transform(
+                    data,
+                    method=method,
+                    lambda_param=transformations.get("lambda_param")
+                )
+            else:
+                # Apply forward transformation
+                if method == "diff":
+                    return self.transformer.difference_series(data, order=1)
+                elif method == "diff_2":
+                    temp = self.transformer.difference_series(data, order=1)
+                    return self.transformer.difference_series(temp, order=1)
+                # Add other transformation methods as needed
+
+        except Exception as e:
+            self.logger.warning(f"Error during transformation: {str(e)}")
+
+        return data
+
+    def _save_forecast_to_db(self, model_key: str, forecast_data: Dict) -> bool:
+        """Save forecast results to database"""
+        if self.db_manager is None:
+            return False
+
+        try:
+            self.db_manager.save_model_forecasts(model_key, forecast_data)
+            self.logger.info(f"Forecast for model {model_key} saved to database")
+            return True
+        except Exception as e:
+            self.logger.warning(f"Error saving forecast to database: {str(e)}")
+            return False
+
+    def forecast(self, model_key: str, steps: int = 24) -> pd.Series:
+        """Generate point forecast for a specified number of steps"""
+        self.logger.info(f"Starting forecast for model {model_key} with {steps} steps")
+
+        # Ensure model is loaded
+        load_result = self._ensure_model_loaded(model_key)
+        if load_result["status"] == "error":
+            self.logger.error(load_result["message"])
+            return pd.Series([], dtype=float, name='forecast_error')
+
+        # Generate forecast
+        forecast_result = self._generate_model_forecast(model_key, steps)
+        if forecast_result["status"] == "error":
+            self.logger.error(forecast_result["message"])
+            return pd.Series([], dtype=float, name='forecast_error')
+
+        try:
+            # Get model metadata for index creation
+            model_info = self.models[model_key]
+            metadata = model_info.get("metadata", {})
+
+            # Create training data series for index generation
+            fit_result = model_info["fit_result"]
+            if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
+                train_data = pd.Series(fit_result.model.data.orig_endog)
+                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                    train_data.index = fit_result.model.data.dates
+            else:
+                train_data = pd.Series(range(100))  # Fallback
+
+            # Create forecast index and series
+            forecast_index = self._create_forecast_index(train_data, steps)
+            forecast_series = pd.Series(forecast_result["forecast"], index=forecast_index, name='forecast')
+
+            # Apply inverse transformations if needed
+            transformations = None
+            if self.db_manager is not None:
+                try:
+                    transformations = self.db_manager.get_data_transformations(model_key)
+                except:
+                    pass
+
+            if transformations:
+                forecast_series = self._apply_transformations(forecast_series, reverse=True,
+                                                              transformations=transformations)
+
+            # Save to database
+            forecast_data = {
+                "model_key": model_key,
+                "timestamp": datetime.now(),
+                "forecast_horizon": steps,
+                "values": forecast_series.to_dict(),
+                "start_date": forecast_index[0].isoformat() if isinstance(forecast_index[0], datetime) else str(
+                    forecast_index[0]),
+                "end_date": forecast_index[-1].isoformat() if isinstance(forecast_index[-1], datetime) else str(
+                    forecast_index[-1])
+            }
+            self._save_forecast_to_db(model_key, forecast_data)
+
+            self.logger.info(f"Forecast for model {model_key} completed successfully")
+            return forecast_series
+
+        except Exception as e:
+            self.logger.error(f"Error processing forecast results: {str(e)}")
+            return pd.Series([], dtype=float, name='forecast_error')
+
+    def forecast_with_intervals(self, model_key: str, steps: int = 24, alpha: float = 0.05) -> Dict:
+        """Generate forecast with confidence intervals"""
+        self.logger.info(f"Starting forecast with intervals for model {model_key}, steps={steps}, alpha={alpha}")
+
+        # Validate alpha
+        if alpha <= 0 or alpha >= 1:
+            return {"status": "error", "message": f"Invalid alpha value ({alpha}). Must be between 0 and 1."}
+
+        # Ensure model is loaded
+        load_result = self._ensure_model_loaded(model_key)
+        if load_result["status"] == "error":
+            return {"status": "error", "message": load_result["message"]}
+
+        # Generate forecast with intervals
+        forecast_result = self._generate_model_forecast(model_key, steps, alpha=alpha)
+        if forecast_result["status"] == "error":
+            return {"status": "error", "message": forecast_result["message"]}
+
+        try:
+            # Get model info
+            model_info = self.models[model_key]
+            metadata = model_info.get("metadata", {})
+            model_type = metadata.get("model_type", "unknown")
+
+            # Create training data for index generation
+            fit_result = model_info["fit_result"]
+            if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
+                train_data = pd.Series(fit_result.model.data.orig_endog)
+                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
+                    train_data.index = fit_result.model.data.dates
+            else:
+                train_data = pd.Series(range(100))
+
+            # Create forecast index
+            forecast_index = self._create_forecast_index(train_data, steps)
+
+            # Create series
+            forecast_series = pd.Series(forecast_result["forecast"], index=forecast_index)
+            lower_bound = pd.Series(forecast_result["lower_bound"].values, index=forecast_index)
+            upper_bound = pd.Series(forecast_result["upper_bound"].values, index=forecast_index)
+
+            # Apply inverse transformations if needed
+            transformations = None
+            if self.db_manager is not None:
+                try:
+                    transformations = self.db_manager.get_data_transformations(model_key)
+                except:
+                    pass
+
+            if transformations:
+                forecast_series = self._apply_transformations(forecast_series, reverse=True,
+                                                              transformations=transformations)
+                lower_bound = self._apply_transformations(lower_bound, reverse=True,
+                                                          transformations=transformations)
+                upper_bound = self._apply_transformations(upper_bound, reverse=True,
+                                                          transformations=transformations)
+
+            # Format results
+            forecast_data = {
+                "forecast": forecast_series.tolist(),
+                "lower_bound": lower_bound.tolist(),
+                "upper_bound": upper_bound.tolist(),
+                "indices": [str(idx) for idx in forecast_index],
+                "confidence_level": 1.0 - alpha
+            }
+
+            # Save to database
+            forecast_db_data = {
+                "model_key": model_key,
+                "forecast_timestamp": datetime.now(),
+                "steps": steps,
+                "alpha": alpha,
+                "forecast_data": forecast_data
+            }
+            self._save_forecast_to_db(model_key, forecast_db_data)
+
+            result = {
+                "status": "success",
+                "model_key": model_key,
+                "model_type": model_type,
+                "forecast_timestamp": datetime.now().isoformat(),
+                "steps": steps,
+                "alpha": alpha,
+                "forecast_data": forecast_data
+            }
+
+            self.logger.info(f"Forecast with intervals for model {model_key} completed successfully")
+            return result
+
+        except Exception as e:
+            return {"status": "error", "message": f"Error processing forecast with intervals: {str(e)}"}
 
     def check_stationarity(self, series: pd.Series) -> Dict:
         """Check if a time series is stationary using Augmented Dickey-Fuller test"""
         try:
-            # Convert decimals to float if needed
             series = self._convert_decimal_series(series)
-
-            # ADF test
             result = adfuller(series.dropna())
             adf_stat, p_value = result[0], result[1]
-
-            # Interpret test results
             is_stationary = p_value < 0.05
 
             return {
@@ -67,678 +408,244 @@ class Forecaster:
             }
         except Exception as e:
             self.logger.error(f"Error in stationarity check: {str(e)}")
-            # Default to non-stationary if test fails
             return {"is_stationary": False, "error": str(e)}
 
-    def _create_forecast_index(self, data: pd.Series, steps: int, forecast_steps=24) -> pd.Index:
-        """Create appropriate index for forecast values"""
-        if isinstance(data.index, pd.DatetimeIndex):
-            last_date = data.index[-1]
-
-            # Try to determine frequency
-            if len(data) >= 2:
-                freq = pd.infer_freq(data.index)
-                if freq:
-                    forecast_index = pd.date_range(start=last_date + pd.Timedelta(seconds=1),
-                                                   periods=steps,
-                                                   freq=freq)
-                else:
-                    # If frequency detection fails, estimate median interval
-                    time_diff = data.index[1:] - data.index[:-1]
-                    median_diff = pd.Timedelta(np.median([d.total_seconds() for d in time_diff]), unit='s')
-                    forecast_index = pd.date_range(start=last_date + median_diff,
-                                                   periods=steps,
-                                                   freq=median_diff)
-            else:
-                # Default to daily frequency if not enough data points
-                forecast_index = pd.date_range(start=last_date + pd.Timedelta(days=1),
-                                               periods=steps)
-        else:
-            # For numeric indices
-            last_idx = data.index[-1]
-            idx_diff = data.index[1] - data.index[0] if len(data) >= 2 else 1
-            forecast_index = pd.RangeIndex(start=last_idx + idx_diff,
-                                           stop=last_idx + idx_diff * (forecast_steps + 1),
-                                           step=idx_diff)
-
-        return forecast_index
-
-    def forecast(self, model_key: str, steps: int = 24) -> pd.Series:
-        """Generate forecast for a specified number of steps using a trained model"""
-        self.logger.info(f"Starting forecast for model {model_key} with {steps} steps")
-
-        # Check if model exists in memory
-        if model_key not in self.models:
-            # Try to load model from database
-            if self.db_manager is not None:
-                try:
-                    self.logger.info(f"Model {model_key} not found in memory, trying to load from database")
-                    loaded = self.db_manager.load_complete_model(model_key)
-                    if not loaded:
-                        error_msg = f"Failed to load model {model_key} from database - model does not exist or is corrupted"
-                        self.logger.error(error_msg)
-                        return pd.Series([], dtype=float, name='forecast_error')
-                    else:
-                        self.logger.info(f"Model {model_key} successfully loaded from database")
-                        # Verify the model was actually loaded into memory
-                        if model_key not in self.models:
-                            error_msg = f"Model {model_key} loaded from database but not available in memory"
-                            self.logger.error(error_msg)
-                            return pd.Series([], dtype=float, name='forecast_error')
-                except Exception as e:
-                    error_msg = f"Error loading model {model_key} from database: {str(e)}"
-                    self.logger.error(error_msg)
-                    return pd.Series([], dtype=float, name='forecast_error')
-            else:
-                error_msg = f"Model {model_key} not found and no database manager provided"
-                self.logger.error(error_msg)
-                return pd.Series([], dtype=float, name='forecast_error')
-
-        # Get the trained model
+    def auto_determine_order(self, data: pd.Series, max_p: int = 5, max_d: int = 2, max_q: int = 5) -> Tuple[
+        int, int, int]:
+        """Automatically determine optimal ARIMA order"""
         try:
-            model_info = self.models[model_key]
-            fit_result = model_info.get("fit_result")
-            metadata = model_info.get("metadata", {})
+            optimal_params = self.analyzer.find_optimal_params(
+                data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=False
+            )
 
-            if fit_result is None:
-                error_msg = f"Model {model_key} has no fit result"
-                self.logger.error(error_msg)
-                return pd.Series([], dtype=float, name='forecast_error')
-
-            # Determine model type for appropriate forecasting method
-            model_type = metadata.get("model_type", "ARIMA")
-
-            # Get last date from training data to build forecast index
-            data_range = metadata.get("data_range", {})
-            end_date_str = data_range.get("end")
-
-            if end_date_str:
-                try:
-                    # Parse end date of training data
-                    if isinstance(end_date_str, str):
-                        try:
-                            end_date = pd.to_datetime(end_date_str)
-                        except:
-                            end_date = datetime.now()  # Fallback to current date if parsing fails
-                    else:
-                        end_date = end_date_str
-                except Exception as e:
-                    self.logger.warning(f"Could not parse end date: {str(e)}, using current date")
-                    end_date = datetime.now()
+            if isinstance(optimal_params, dict) and "parameters" in optimal_params:
+                return optimal_params["parameters"].get("order", (1, 1, 1))
+            elif isinstance(optimal_params, dict) and "order" in optimal_params:
+                return optimal_params["order"]
             else:
-                self.logger.warning("No end date in metadata, using current date")
-                end_date = datetime.now()
-
-            # Generate forecast
-            self.logger.info(f"Forecasting {steps} steps ahead with {model_type} model")
-
-            # Use appropriate forecasting method based on model type
-            if model_type == "ARIMA":
-                # For ARIMA use direct forecast method
-                forecast_result = fit_result.forecast(steps=steps)
-            elif model_type == "SARIMA":
-                # For SARIMA use get_forecast
-                forecast_result = fit_result.get_forecast(steps=steps)
-                forecast_result = forecast_result.predicted_mean
-            else:
-                error_msg = f"Unknown model type: {model_type}"
-                self.logger.error(error_msg)
-                return pd.Series([], dtype=float, name='forecast_error')
-
-            # Get training data from fit_result to create forecast index
-            if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
-                train_data = pd.Series(fit_result.model.data.orig_endog)
-                if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
-                    train_data.index = fit_result.model.data.dates
-            else:
-                # Create dummy series with numeric index as fallback
-                train_data = pd.Series(range(100))  # Arbitrary length
-
-            # Create index for forecast using the utility method
-            forecast_index = self._create_forecast_index(train_data, steps)
-
-            # Create Series with forecast and index
-            forecast_series = pd.Series(forecast_result, index=forecast_index, name='forecast')
-
-            # Save forecast to database if connection available
-            if self.db_manager is not None:
-                try:
-                    self.logger.info(f"Saving forecast for model {model_key} to database")
-                    # Create forecast data dictionary for storage
-                    forecast_data = {
-                        "model_key": model_key,
-                        "timestamp": datetime.now(),
-                        "forecast_horizon": steps,
-                        "values": forecast_series.to_dict(),
-                        "start_date": forecast_index[0].isoformat() if isinstance(forecast_index[0], datetime) else str(
-                            forecast_index[0]),
-                        "end_date": forecast_index[-1].isoformat() if isinstance(forecast_index[-1], datetime) else str(
-                            forecast_index[-1])
-                    }
-                    self.db_manager.save_model_forecasts(model_key, forecast_data)
-                    self.logger.info(f"Forecast for model {model_key} saved successfully")
-                except Exception as e:
-                    # Don't fail the forecast if saving fails, just log the error
-                    self.logger.error(
-                        f"Error saving forecast to database: {str(e)} - forecast will continue without saving")
-
-            self.logger.info(f"Forecast for model {model_key} completed successfully")
-            return forecast_series
+                return (1, 1, 1)  # Default fallback
 
         except Exception as e:
-            error_msg = f"Error during forecasting with model {model_key}: {str(e)}"
-            self.logger.error(error_msg)
-            return pd.Series([], dtype=float, name='forecast_error')
+            self.logger.warning(f"Error in auto order determination: {str(e)}")
+            return (1, 1, 1)
 
-    def forecast_with_intervals(self, model_key: str, steps: int = 24, alpha: float = 0.05) -> Dict:
-        """Generate forecast with confidence intervals"""
-        self.logger.info(f"Starting forecast with intervals for model {model_key}, steps={steps}, alpha={alpha}")
-
-        # Validate alpha
-        if alpha <= 0 or alpha >= 1:
-            error_msg = f"Invalid alpha value ({alpha}). Must be between 0 and 1."
-            self.logger.error(error_msg)
-            return {"status": "error", "message": error_msg}
-
-        # Check model availability
-        if model_key not in self.models:
-            # Try to load model from database
-            if self.db_manager is not None:
-                try:
-                    model_loaded = self.db_manager.load_complete_model(model_key)
-                    if not model_loaded:
-                        error_msg = f"Model {model_key} not found in database"
-                        self.logger.error(error_msg)
-                        return {"status": "error", "message": error_msg}
-                    self.logger.info(f"Model {model_key} loaded from database")
-                except Exception as e:
-                    error_msg = f"Error loading model {model_key} from database: {str(e)}"
-                    self.logger.error(error_msg)
-                    return {"status": "error", "message": error_msg}
-            else:
-                error_msg = f"Model {model_key} not found and no database manager available"
-                self.logger.error(error_msg)
-                return {"status": "error", "message": error_msg}
-
+    def train_model(self, data: pd.Series, model_type: str = 'arima',
+                    order: Optional[Tuple[int, int, int]] = None,
+                    seasonal_order: Optional[Tuple[int, int, int, int]] = None,
+                    symbol: str = 'auto') -> Dict:
+        """Train a model with unified interface"""
         try:
-            # Get model information
-            model_info = self.models.get(model_key)
-            if not model_info:
-                error_msg = f"Model {model_key} information not available"
-                self.logger.error(error_msg)
-                return {"status": "error", "message": error_msg}
+            # Validate input data
+            validation_result = self._validate_input_data(data)
+            if validation_result["status"] == "error":
+                return validation_result
 
-            fit_result = model_info.get("fit_result")
-            if not fit_result:
-                error_msg = f"Fit result for model {model_key} not available"
-                self.logger.error(error_msg)
-                return {"status": "error", "message": error_msg}
+            data = validation_result["data"]
 
-            metadata = model_info.get("metadata", {})
-            model_type = metadata.get("model_type", "unknown")
+            # Auto-determine order if not provided
+            if order is None:
+                order = self.auto_determine_order(data)
 
-            # Get data transformation information
-            transformations = None
-            if self.db_manager is not None:
-                try:
-                    transformations = self.db_manager.get_data_transformations(model_key)
-                    if transformations:
-                        self.logger.info(f"Found data transformations for model {model_key}")
-                except Exception as e:
-                    self.logger.warning(f"Error getting data transformations: {str(e)}")
+            # Generate model key
+            model_key = f"{symbol}_{model_type}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-            # Generate forecast with confidence intervals
-            try:
-                # Generate forecast with confidence intervals
-                forecast_result = fit_result.get_forecast(steps=steps)
+            # Train based on model type
+            if model_type.lower() == 'sarima' and seasonal_order:
+                fit_result = self.modeler.fit_sarima(data, order=order,
+                                                     seasonal_order=seasonal_order,
+                                                     symbol=symbol)
+            else:
+                fit_result = self.modeler.fit_arima(data, order=order, symbol=symbol)
 
-                # Get prediction values and intervals
-                predicted_mean = forecast_result.predicted_mean
-                confidence_intervals = forecast_result.conf_int(alpha=alpha)
-
-                # Get training data from model for index creation
-                if hasattr(fit_result.model, 'data') and hasattr(fit_result.model.data, 'orig_endog'):
-                    train_data = pd.Series(fit_result.model.data.orig_endog)
-                    if hasattr(fit_result.model.data, 'dates') and fit_result.model.data.dates is not None:
-                        train_data.index = fit_result.model.data.dates
-                else:
-                    # Create dummy series with numeric index
-                    train_data = pd.Series(range(100))  # Arbitrary length
-
-                # Create time indices for forecast using the utility method
-                forecast_index = self._create_forecast_index(train_data, steps)
-
-                # Create Series for forecast and intervals
-                forecast_series = pd.Series(predicted_mean, index=forecast_index)
-                lower_bound = pd.Series(confidence_intervals.iloc[:, 0].values, index=forecast_index)
-                upper_bound = pd.Series(confidence_intervals.iloc[:, 1].values, index=forecast_index)
-
-                # Apply inverse transformation if needed
-                if transformations:
-                    try:
-                        transform_method = transformations.get("method")
-                        transform_param = transformations.get("lambda_param")
-
-                        if transform_method:
-                            self.logger.info(f"Applying inverse transformation: {transform_method}")
-                            forecast_series = self.transformer.inverse_transform(
-                                forecast_series,
-                                method=transform_method,
-                                lambda_param=transform_param
-                            )
-                            lower_bound = self.transformer.inverse_transform(
-                                lower_bound,
-                                method=transform_method,
-                                lambda_param=transform_param
-                            )
-                            upper_bound = self.transformer.inverse_transform(
-                                upper_bound,
-                                method=transform_method,
-                                lambda_param=transform_param
-                            )
-                    except Exception as e:
-                        self.logger.warning(f"Error during inverse transformation: {str(e)}")
-
-                # Format forecast results
-                forecast_data = {
-                    "forecast": forecast_series.tolist(),
-                    "lower_bound": lower_bound.tolist(),
-                    "upper_bound": upper_bound.tolist(),
-                    "indices": [str(idx) for idx in forecast_index],
-                    "confidence_level": 1.0 - alpha
-                }
-
-                # Save forecast results to database
-                if self.db_manager is not None:
-                    try:
-                        forecast_db_data = {
-                            "model_key": model_key,
-                            "forecast_timestamp": datetime.now(),
-                            "steps": steps,
-                            "alpha": alpha,
-                            "forecast_data": {
-                                "values": forecast_series.tolist(),
-                                "lower_bound": lower_bound.tolist(),
-                                "upper_bound": upper_bound.tolist(),
-                                "indices": [str(idx) for idx in forecast_index],
-                                "confidence_level": 1.0 - alpha
-                            }
-                        }
-                        self.db_manager.save_model_forecasts(model_key, forecast_db_data)
-                        self.logger.info(f"Forecast results for model {model_key} saved to database")
-                    except Exception as e:
-                        self.logger.warning(f"Error saving forecast results to database: {str(e)}")
-
-                # Complete result
-                result = {
+            if isinstance(fit_result, dict) and fit_result.get("status") == "success":
+                return {
                     "status": "success",
-                    "model_key": model_key,
-                    "model_type": model_type,
-                    "forecast_timestamp": datetime.now().isoformat(),
-                    "steps": steps,
-                    "alpha": alpha,
-                    "forecast_data": forecast_data
+                    "model_key": fit_result.get("model_key", model_key),
+                    "model_info": fit_result.get("model_info"),
+                    "model_type": model_type.upper()
                 }
-
-                self.logger.info(f"Forecast with intervals for model {model_key} completed successfully")
-                return result
-
-            except Exception as e:
-                error_msg = f"Error during forecasting: {str(e)}"
-                self.logger.error(error_msg)
-                return {"status": "error", "message": error_msg}
+            else:
+                return {"status": "error", "message": "Model training failed"}
 
         except Exception as e:
-            error_msg = f"Unexpected error during forecast with intervals: {str(e)}"
-            self.logger.error(error_msg)
-            return {"status": "error", "message": error_msg}
+            return {"status": "error", "message": f"Error training model: {str(e)}"}
 
     def run_auto_forecast(self, data: pd.Series, test_size: float = 0.2,
                           forecast_steps: int = 24, symbol: str = 'auto') -> Dict:
-        """Automatically analyze time series, fit optimal model, and generate forecasts"""
+        """Automatically analyze, train optimal model, and generate forecasts"""
         self.logger.info(f"Starting auto forecasting process for symbol: {symbol}")
 
-        # Convert decimal objects to float if needed
-        data = self._convert_decimal_series(data)
-
-        if data.isnull().any():
-            self.logger.warning("Data contains NaN values. Removing them before auto forecasting.")
-            data = data.dropna()
-
-        if len(data) < 30:  # Minimum number of points for meaningful analysis
-            error_msg = "Not enough data points for auto forecasting (min 30 required)"
-            self.logger.error(error_msg)
+        # Validate input data
+        validation_result = self._validate_input_data(data)
+        if validation_result["status"] == "error":
             return {
                 "status": "error",
-                "message": error_msg,
+                "message": validation_result["message"],
                 "model_key": None,
                 "forecasts": None,
                 "performance": None
             }
 
-        # Initialize variables for error handling
+        data = validation_result["data"]
         model_key = None
-        model_info = None
-        transformations = None
 
         try:
-            # Generate unique key for model
+            # Generate unique model key
             model_key = f"{symbol}_auto_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-            # 1. Split data into training and test sets
+            # Split data
             train_size = int(len(data) * (1 - test_size))
             train_data = data.iloc[:train_size]
             test_data = data.iloc[train_size:]
 
             self.logger.info(f"Split data: train={len(train_data)}, test={len(test_data)}")
 
-            # 2. Check stationarity and apply transformations
+            # Check stationarity and apply transformations
             stationarity_check = self.check_stationarity(train_data)
             transformed_data = train_data.copy()
             transform_method = None
-            lambda_param = None
 
-            # If series is non-stationary, apply differencing
             if not stationarity_check["is_stationary"]:
                 self.logger.info("Time series is non-stationary. Applying differencing.")
-
-                diff_result = self.transformer.difference_series(train_data, order=1)
-                # Fixed: Check if diff_result is dict and has status key
-                if isinstance(diff_result, dict) and diff_result.get("status") == "success":
-                    transformed_data = diff_result["differenced_data"]
+                try:
+                    transformed_data = self.transformer.difference_series(train_data, order=1)
                     transform_method = "diff"
-                    self.logger.info("First-order differencing applied")
 
                     # Check if second-order differencing is needed
-                    diff_stationary = self.check_stationarity(transformed_data)["is_stationary"]
-                    if not diff_stationary and len(transformed_data) > 10:
-                        self.logger.info("Series still non-stationary. Applying second-order differencing.")
-                        diff2_result = self.transformer.difference_series(transformed_data, order=1)
-                        # Fixed: Check if diff2_result is dict and has status key
-                        if isinstance(diff2_result, dict) and diff2_result.get("status") == "success":
-                            transformed_data = diff2_result["differenced_data"]
-                            transform_method = "diff_2"
-                            self.logger.info("Second-order differencing applied")
-                else:
-                    # Fixed: Handle case when diff_result doesn't have expected structure
-                    error_msg = "Data transformation failed"
-                    if isinstance(diff_result, dict) and "message" in diff_result:
-                        error_msg = f"Data transformation failed: {diff_result['message']}"
-                    elif not isinstance(diff_result, dict):
-                        error_msg = f"Data transformation returned unexpected format: {type(diff_result)}"
+                    if not self.check_stationarity(transformed_data)["is_stationary"] and len(transformed_data) > 10:
+                        transformed_data = self.transformer.difference_series(transformed_data, order=1)
+                        transform_method = "diff_2"
 
-                    self.logger.error(error_msg)
-                    return {
-                        "status": "error",
-                        "message": error_msg,
-                        "model_key": model_key,
-                        "forecasts": None,
-                        "performance": None
-                    }
+                except Exception as e:
+                    return {"status": "error", "message": f"Data transformation failed: {str(e)}"}
 
-            # 3. Detect seasonality
+            # Detect seasonality
             seasonal = False
             seasonal_period = None
 
-            if len(transformed_data) > 50:  # Enough data for seasonality analysis
-                max_lag = min(len(transformed_data) // 2, 365)  # Limit maximum lag
+            if len(transformed_data) > 50:
                 try:
+                    max_lag = min(len(transformed_data) // 2, 365)
                     acf_vals = acf(transformed_data, nlags=max_lag, fft=True)
 
-                    # Look for peaks in autocorrelation (potential seasonal periods)
-                    potential_periods = []
-
-                    # Check typical periods for financial data
                     for period in [7, 14, 30, 90, 180, 365]:
-                        if period < len(acf_vals):
-                            if acf_vals[period] > 0.3:  # Significant autocorrelation
-                                potential_periods.append((period, acf_vals[period]))
+                        if period < len(acf_vals) and acf_vals[period] > 0.3:
+                            seasonal = True
+                            seasonal_period = period
+                            break
 
-                    if potential_periods:
-                        # Choose period with strongest autocorrelation
-                        potential_periods.sort(key=lambda x: x[1], reverse=True)
-                        seasonal = True
-                        seasonal_period = potential_periods[0][0]
-                        self.logger.info(f"Detected seasonality with period: {seasonal_period}")
                 except Exception as e:
                     self.logger.warning(f"Error in seasonality detection: {str(e)}")
 
-            # 4. Find optimal model parameters
+            # Find optimal parameters
             if seasonal and seasonal_period:
-                # For seasonal series
                 optimal_params = self.analyzer.find_optimal_params(
-                    transformed_data,
-                    max_p=3, max_d=1, max_q=3,
-                    seasonal=True,
+                    transformed_data, max_p=3, max_d=1, max_q=3, seasonal=True
                 )
-            else:
-                # For non-seasonal series
-                optimal_params = self.analyzer.find_optimal_params(
-                    transformed_data,
-                    max_p=5, max_d=1, max_q=5,
-                    seasonal=False
-                )
-
-            # Fixed: Check if optimal_params is dict and has status key
-            if isinstance(optimal_params, dict) and optimal_params.get("status") == "error":
-                error_msg = "Parameter search failed"
-                if "message" in optimal_params:
-                    error_msg = f"Parameter search failed: {optimal_params['message']}"
-                self.logger.error(error_msg)
-                return {
-                    "status": "error",
-                    "message": error_msg,
-                    "model_key": model_key,
-                    "forecasts": None,
-                    "performance": None
-                }
-            elif not isinstance(optimal_params, dict):
-                error_msg = f"Parameter search returned unexpected format: {type(optimal_params)}"
-                self.logger.error(error_msg)
-                return {
-                    "status": "error",
-                    "message": error_msg,
-                    "model_key": model_key,
-                    "forecasts": None,
-                    "performance": None
-                }
-
-            # 5. Train model with optimal parameters
-            if seasonal and seasonal_period:
-                # SARIMA model
-                order = optimal_params.get("parameters", {}).get("order", (1, 1, 1))
-                seasonal_order = optimal_params.get("parameters", {}).get("seasonal_order", (1, 1, 1, seasonal_period))
-
-                fit_result = self.modeler.fit_sarima(
-                    transformed_data,
-                    order=order,
-                    seasonal_order=seasonal_order,
-                    symbol=symbol
-                )
-
                 model_type = "SARIMA"
             else:
-                # ARIMA model
-                order = optimal_params.get("parameters", {}).get("order", (1, 1, 1))
-
-                fit_result = self.modeler.fit_arima(
-                    transformed_data,
-                    order=order,
-                    symbol=symbol
+                optimal_params = self.analyzer.find_optimal_params(
+                    transformed_data, max_p=5, max_d=1, max_q=5, seasonal=False
                 )
-
                 model_type = "ARIMA"
 
-            # Fixed: Check if fit_result is dict and has status key
-            if isinstance(fit_result, dict) and fit_result.get("status") == "error":
-                error_msg = "Model fitting failed"
-                if "message" in fit_result:
-                    error_msg = f"Model fitting failed: {fit_result['message']}"
-                self.logger.error(error_msg)
-                return {
-                    "status": "error",
-                    "message": error_msg,
-                    "model_key": model_key,
-                    "forecasts": None,
-                    "performance": None
-                }
-            elif not isinstance(fit_result, dict):
-                error_msg = f"Model fitting returned unexpected format: {type(fit_result)}"
-                self.logger.error(error_msg)
-                return {
-                    "status": "error",
-                    "message": error_msg,
-                    "model_key": model_key,
-                    "forecasts": None,
-                    "performance": None
-                }
+            if isinstance(optimal_params, dict) and optimal_params.get("status") == "error":
+                return {"status": "error", "message": f"Parameter optimization failed: {optimal_params.get('message')}"}
 
-            # Save trained model key
+            # Extract order parameters
+            if isinstance(optimal_params, dict):
+                if "parameters" in optimal_params:
+                    order = optimal_params["parameters"].get("order", (1, 1, 1))
+                    seasonal_order = optimal_params["parameters"].get("seasonal_order")
+                else:
+                    order = optimal_params.get("order", (1, 1, 1))
+                    seasonal_order = optimal_params.get("seasonal_order")
+            else:
+                order = (1, 1, 1)
+                seasonal_order = None
+
+            # Train model
+            if seasonal and seasonal_period:
+                if seasonal_order is None:
+                    seasonal_order = (1, 1, 1, seasonal_period)
+                fit_result = self.modeler.fit_sarima(transformed_data, order=order,
+                                                     seasonal_order=seasonal_order, symbol=symbol)
+            else:
+                fit_result = self.modeler.fit_arima(transformed_data, order=order, symbol=symbol)
+
+            if not (isinstance(fit_result, dict) and fit_result.get("status") == "success"):
+                return {"status": "error", "message": "Model fitting failed"}
+
             model_key = fit_result.get("model_key", model_key)
             model_info = fit_result.get("model_info")
 
-            # Store transformation information in database
+            # Save transformations to database
             if transform_method and self.db_manager is not None:
                 try:
-                    transformations = {
-                        "method": transform_method
-                    }
+                    transformations = {"method": transform_method}
                     self.db_manager.save_data_transformations(model_key, transformations)
-                    self.logger.info(f"Data transformations for model {model_key} saved to database")
                 except Exception as e:
-                    self.logger.warning(f"Error saving data transformations: {str(e)}")
+                    self.logger.warning(f"Error saving transformations: {str(e)}")
 
-            # 6. Generate forecast for test data (if available)
+            # Generate test forecast for performance evaluation
             test_performance = None
             if len(test_data) > 0:
                 try:
-                    model_obj = self.models[model_key]["fit_result"]
+                    test_forecast = self.forecast(model_key, steps=len(test_data))
 
-                    # Use get_forecast for confidence intervals
-                    test_forecast_result = model_obj.get_forecast(len(test_data))
-                    test_forecast = test_forecast_result.predicted_mean
+                    if len(test_forecast) > 0:
+                        # Align forecasts with test data
+                        min_len = min(len(test_data), len(test_forecast))
+                        test_actual = test_data.iloc[:min_len].values
+                        test_pred = test_forecast.iloc[:min_len].values
 
-                    # Apply inverse transformation if needed
-                    if transform_method:
-                        try:
-                            test_forecast_series = pd.Series(test_forecast, index=test_data.index)
-                            test_forecast_series = self.transformer.inverse_transform(
-                                test_forecast_series,
-                                method=transform_method
-                            )
-                            test_forecast = test_forecast_series.values
-                        except Exception as e:
-                            self.logger.warning(f"Error during inverse transformation for test forecast: {str(e)}")
+                        test_performance = {
+                            "mse": float(mean_squared_error(test_actual, test_pred)),
+                            "rmse": float(np.sqrt(mean_squared_error(test_actual, test_pred))),
+                            "mae": float(mean_absolute_error(test_actual, test_pred))
+                        }
 
-                    # Calculate performance metrics
-                    test_performance = {
-                        "mse": float(mean_squared_error(test_data.values, test_forecast)),
-                        "rmse": float(np.sqrt(mean_squared_error(test_data.values, test_forecast))),
-                        "mae": float(mean_absolute_error(test_data.values, test_forecast))
-                    }
-
-                    # Calculate MAPE if no zero values
-                    if all(test_data != 0):
-                        mape = np.mean(np.abs((test_data.values - test_forecast) / test_data.values)) * 100
-                        test_performance["mape"] = float(mape)
-
-                    self.logger.info(f"Test performance calculated: RMSE={test_performance['rmse']:.4f}")
+                        if all(test_actual != 0):
+                            mape = np.mean(np.abs((test_actual - test_pred) / test_actual)) * 100
+                            test_performance["mape"] = float(mape)
 
                 except Exception as e:
                     self.logger.error(f"Error during test forecast: {str(e)}")
                     test_performance = {"error": str(e)}
 
-            # 7. Forecast future periods
-            try:
-                model_obj = self.models[model_key]["fit_result"]
+            # Generate future forecast
+            future_forecast = self.forecast(model_key, steps=forecast_steps)
 
-                # Use get_forecast for consistency
-                future_forecast_result = model_obj.get_forecast(forecast_steps)
-                future_forecast = future_forecast_result.predicted_mean
+            if len(future_forecast) == 0:
+                return {"status": "error", "message": "Future forecast generation failed"}
 
-                # Create forecast index
-                forecast_index = self._create_forecast_index(data, forecast_steps)
-
-                # Create Series for forecast with proper index
-                future_forecast = pd.Series(future_forecast, index=forecast_index)
-
-                # Apply inverse transformation if needed
-                if transform_method:
-                    try:
-                        future_forecast = self.transformer.inverse_transform(
-                            future_forecast,
-                            method=transform_method
-                        )
-                        self.logger.info(f"Applied inverse transformation: {transform_method}")
-                    except Exception as e:
-                        self.logger.error(f"Error during inverse transformation: {str(e)}")
-                        return {
-                            "status": "error",
-                            "message": f"Error during inverse transformation: {str(e)}",
-                            "model_key": model_key,
-                            "forecasts": None,
-                            "performance": test_performance
-                        }
-
-                self.logger.info(f"Forecast completed: {len(future_forecast)} steps")
-            except Exception as e:
-                self.logger.error(f"Error during future forecast: {str(e)}")
-                return {
-                    "status": "error",
-                    "message": f"Error during future forecast: {str(e)}",
-                    "model_key": model_key,
-                    "forecasts": None,
-                    "performance": test_performance
-                }
-
-            # 8. Save results to database (if available)
-            if self.db_manager is not None:
+            # Save performance metrics
+            if test_performance and "error" not in test_performance and self.db_manager is not None:
                 try:
-                    # Save forecast data
-                    forecast_data = {
-                        "model_key": model_key,
-                        "timestamp": datetime.now(),
-                        "forecast_horizon": forecast_steps,
-                        "values": future_forecast.to_dict(),
-                        "start_date": forecast_index[0].isoformat() if isinstance(forecast_index[0], datetime) else str(
-                            forecast_index[0]),
-                        "end_date": forecast_index[-1].isoformat() if isinstance(forecast_index[-1], datetime) else str(
-                            forecast_index[-1])
-                    }
-                    self.db_manager.save_model_forecasts(model_key, forecast_data)
-                    self.logger.info(f"Forecast data for model {model_key} saved to database")
-
-                    # Save performance metrics if available
-                    if test_performance and "error" not in test_performance:
-                        self.db_manager.save_model_metrics(model_key, test_performance)
-                        self.logger.info(f"Performance metrics for model {model_key} saved to database")
-
+                    self.db_manager.save_model_metrics(model_key, test_performance)
                 except Exception as e:
-                    self.logger.warning(f"Error saving results to database: {str(e)}")
+                    self.logger.warning(f"Error saving metrics: {str(e)}")
 
-            # 9. Format result
+            # Format result
             result = {
                 "status": "success",
                 "message": f"{model_type} model trained and forecast completed successfully",
                 "model_key": model_key,
                 "model_info": model_info,
                 "model_type": model_type,
-                "transformations": {
-                    "method": transform_method
-                } if transform_method else None,
+                "transformations": {"method": transform_method} if transform_method else None,
                 "forecasts": {
                     "values": future_forecast.to_dict(),
                     "steps": forecast_steps,
-                    "start_date": forecast_index[0].isoformat() if isinstance(forecast_index[0], datetime) else str(
-                        forecast_index[0]),
-                    "end_date": forecast_index[-1].isoformat() if isinstance(forecast_index[-1], datetime) else str(
-                        forecast_index[-1])
+                    "start_date": future_forecast.index[0].isoformat() if isinstance(future_forecast.index[0],
+                                                                                     datetime) else str(
+                        future_forecast.index[0]),
+                    "end_date": future_forecast.index[-1].isoformat() if isinstance(future_forecast.index[-1],
+                                                                                    datetime) else str(
+                        future_forecast.index[-1])
                 },
                 "performance": test_performance,
-                "seasonality": {
-                    "detected": seasonal,
-                    "period": seasonal_period
-                } if seasonal else None
+                "seasonality": {"detected": seasonal, "period": seasonal_period} if seasonal else None
             }
 
             self.logger.info(f"Auto forecast completed successfully for symbol: {symbol}")
@@ -749,7 +656,8 @@ class Forecaster:
             return {
                 "status": "error",
                 "message": f"Error during auto forecasting: {str(e)}",
-                "model_key": model_key if 'model_key' in locals() else None,
+                "model_key": model_key,
                 "forecasts": None,
                 "performance": None
             }
+
