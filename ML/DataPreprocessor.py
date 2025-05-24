@@ -227,6 +227,7 @@ class DataPreprocessor:
         # Створення послідовностей з використанням sequence_length з конфігурації
         X, y = self.create_sequences(data_values_scaled, target_values, config.sequence_length)
 
+
         # Розділення на тренувальну та валідаційну вибірки
         X_train, X_val, y_train, y_val = self.split_data(X, y, validation_split)
 

@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import json
 import pickle
 import matplotlib.pyplot as plt
+from ML import LSTMModel, GRUModel, TransformerModel
 from ML.ModelTrainer import ModelTrainer
 from data.db import DatabaseManager
 from timeseriesmodels import ModelEvaluator
@@ -55,9 +56,9 @@ class DeepLearning:
         self.model_trainer = ModelTrainer()
         self.model_evaluator = ModelEvaluator()
         # Ініціалізація моделей з правильними параметрами
-        self.lstm = None  # Будуть створені при потребі
-        self.gru = None
-        self.transformer = None
+        self.lstm = LSTMModel()  # Будуть створені при потребі
+        self.gru = GRUModel()
+        self.transformer = TransformerModel()
 
         # Словники для зберігання навчених моделей та їх конфігурацій
         self.models = {}  # {model_key: model}
@@ -1605,47 +1606,179 @@ class DeepLearning:
                     'timeframe': timeframe
                 }
 
+
 def main():
-        """
-        Main function to execute the deep learning pipeline.
-        """
-        # Initialize pipeline
-        pipeline = DeepLearning()
+    """
+    Main function to execute the deep learning pipeline with all major methods.
+    """
+    # Initialize pipeline
+    pipeline = DeepLearning()
 
-        # Example 1: Full training pipeline for BTC and ETH on 1h and 4h timeframes
-        training_results = pipeline.full_training_pipeline(
-            symbols=['BTC', 'ETH'],
-            timeframes=['1h', '4h'],
-            model_types=['lstm', 'gru', 'transformer'],
-            epochs=50,
-            batch_size=64
-        )
+    # 1. System Information
+    print("\n=== System Information ===")
+    system_info = pipeline.get_system_info()
+    print(json.dumps(system_info, indent=2))
 
-        # Example 2: Make predictions for BTC on 1h timeframe
-        btc_predictions = pipeline.prediction_pipeline(
+    # 2. Full Training Pipeline
+    print("\n=== Training Models ===")
+    training_results = pipeline.full_training_pipeline(
+        symbols=['BTC', 'ETH'],
+        timeframes=['1h', '4h'],
+        model_types=['lstm', 'gru'],
+        epochs=50,
+        batch_size=64
+    )
+    print("Training completed for", len(training_results), "models")
+
+    # 3. List Trained Models
+    print("\n=== Trained Models ===")
+    trained_models = pipeline.list_trained_models()
+    print(pd.DataFrame(trained_models))
+
+    # 4. Individual Predictions
+    print("\n=== Making Predictions ===")
+    for symbol in ['BTC', 'ETH']:
+        for timeframe in ['1h', '4h']:
+            try:
+                pred = pipeline.predict(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type='lstm',
+                    steps_ahead=3
+                )
+                print(f"{symbol}-{timeframe} LSTM prediction:", pred['predictions'])
+            except Exception as e:
+                print(f"Prediction failed for {symbol}-{timeframe}: {str(e)}")
+
+    # 5. Multiple Steps Prediction
+    print("\n=== Multi-step Prediction ===")
+    btc_multi = pipeline.predict_multiple_steps('BTC', '1h', 'lstm', steps=5)
+    print(btc_multi)
+
+    # 6. Ensemble Prediction
+    print("\n=== Ensemble Prediction ===")
+    ensemble_pred = pipeline.ensemble_prediction_pipeline(
+        symbol='BTC',
+        timeframe='1h',
+        steps_ahead=3,
+        weights={'lstm': 0.4, 'gru': 0.3, 'transformer': 0.3}
+    )
+    print("Ensemble prediction:", ensemble_pred)
+
+    # 7. Model Evaluation
+    print("\n=== Model Evaluation ===")
+    for symbol in ['BTC', 'ETH']:
+        for timeframe in ['1h', '4h']:
+            try:
+                metrics = pipeline.evaluate_model(
+                    model_key=f"{symbol}_{timeframe}_lstm",
+                    test_data=None
+                )
+                print(f"{symbol}-{timeframe} metrics:", metrics)
+            except Exception as e:
+                print(f"Evaluation failed for {symbol}-{timeframe}: {str(e)}")
+
+    # 8. Model Comparison
+    print("\n=== Model Comparison ===")
+    comparison = pipeline.compare_models('BTC', '1h')
+    print(pd.DataFrame(comparison).T)
+
+    # 9. Feature Importance
+    print("\n=== Feature Importance ===")
+    feature_imp = pipeline.feature_importance_analysis('BTC', '1h', 'lstm')
+    print("Top features:", dict(sorted(feature_imp.items(), key=lambda x: x[1], reverse=True)[:5]))
+
+    # 10. Model Interpretation
+    print("\n=== Model Interpretation ===")
+    interpretation = pipeline.model_interpretation('BTC', '1h', 'lstm')
+    print("Interpretation keys:", interpretation.keys())
+
+    # 11. Online Learning
+    print("\n=== Online Learning ===")
+    try:
+        # Load some new data (in a real scenario, this would be fresh data)
+        data_loader = pipeline.data_preprocessor.get_data_loader('BTC', '1h', 'lstm')
+        new_data = data_loader().tail(100)  # Use last 100 points as new data
+
+        online_result = pipeline.online_learning(
             symbol='BTC',
             timeframe='1h',
             model_type='lstm',
-            steps_ahead=5
+            new_data=new_data,
+            epochs=5
         )
-        print("BTC Predictions:", btc_predictions)
+        print("Online learning result:", online_result)
+    except Exception as e:
+        print("Online learning failed:", str(e))
 
-        # Example 3: Ensemble prediction for ETH on 4h timeframe
-        eth_ensemble = pipeline.ensemble_prediction_pipeline(
-            symbol='ETH',
-            timeframe='4h',
-            steps_ahead=3,
-            weights={'lstm': 0.4, 'gru': 0.3, 'transformer': 0.3}
-        )
-        print("ETH Ensemble Predictions:", eth_ensemble)
+    # 12. Hyperparameter Optimization
+    print("\n=== Hyperparameter Optimization ===")
+    param_space = {
+        'hidden_dim': [32, 64, 128],
+        'num_layers': [1, 2],
+        'learning_rate': [0.001, 0.01],
+        'dropout': [0.1, 0.2]
+    }
 
-        # Example 4: Model interpretation for SOL on 1d timeframe
-        sol_interpretation = pipeline.model_interpretation_pipeline(
-            symbol='SOL',
-            timeframe='1d',
-            model_type='transformer'
+    try:
+        opt_result = pipeline.hyperparameter_optimization(
+            symbol='BTC',
+            timeframe='1h',
+            model_type='lstm',
+            param_space=param_space,
+            optimization_method='random_search',
+            max_iterations=10
         )
-        print("SOL Model Interpretation:", sol_interpretation)
+        print("Best params:", opt_result['best_params'])
+        print("Best score:", opt_result['best_score'])
+    except Exception as e:
+        print("Optimization failed:", str(e))
+
+    # 13. Visualization
+    print("\n=== Generating Visualizations ===")
+    try:
+        # Model Comparison Plot
+        pipeline.plot_model_comparison('BTC', '1h')
+
+        # Feature Importance Plot
+        pipeline.plot_feature_importance('BTC', '1h', 'lstm', top_n=10)
+
+        # Prediction vs Actual Plot
+        pipeline.plot_prediction_vs_actual('BTC', '1h', 'lstm', n_points=50)
+
+        # Training History Plot
+        pipeline.plot_training_history('BTC', '1h', 'lstm')
+    except Exception as e:
+        print("Visualization failed:", str(e))
+
+    # 14. Model Management
+    print("\n=== Model Management ===")
+    # Get model info
+    model_info = pipeline.get_model_info('BTC', '1h', 'lstm')
+    print("Model info:", model_info.keys())
+
+    # Performance report
+    print("\n=== Performance Report ===")
+    perf_report = pipeline.model_performance_report()
+    print(perf_report.head())
+
+    # Cleanup old models
+    deleted_count = pipeline.cleanup_old_models(days_old=7)
+    print(f"Deleted {deleted_count} old model files")
+
+    # 15. Export Model for Production
+    print("\n=== Model Export ===")
+    try:
+        export_path = pipeline.export_model_for_production(
+            symbol='BTC',
+            timeframe='1h',
+            model_type='lstm',
+            export_format='onnx'
+        )
+        print(f"Model exported to: {export_path}")
+    except Exception as e:
+        print("Export failed:", str(e))
+
 
 if __name__ == "__main__":
-        main()
+    main()
