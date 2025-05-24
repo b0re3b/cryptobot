@@ -1,21 +1,3 @@
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю lstm
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для BTC: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю gru
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для BTC: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для BTC: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для BTC: DatabaseManager.get_btc_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1h та моделлю lstm
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для ETH: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1h та моделлю gru
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для ETH: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю lstm
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для ETH: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
-2025-05-24 16:52:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю gru
-2025-05-24 16:52:58 - DataPreprocessor - ERROR - [logger.py:111] - Помилка завантаження даних у data_loader для ETH: DatabaseManager.get_eth_lstm_sequence() got an unexpected keyword argument 'timeframe_value'
 2025-05-25 01:56:01 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
 2025-05-25 01:56:01 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними
 2025-05-25 01:56:01 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю lstm

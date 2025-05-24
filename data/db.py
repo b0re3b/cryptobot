@@ -2914,110 +2914,6 @@ class DatabaseManager:
             print(f"Помилка при збереженні BTC ARIMA даних: {e}")
             return []
 
-    def get_btc_arima_data_by_id(self, id: int) -> Optional[Dict[str, Any]]:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query = ("""
-                                SELECT id,
-                                       timeframe,
-                                       open_time,
-                                       original_close,
-                                       close_diff,
-                                       close_diff2,
-                                       close_log,
-                                       close_log_diff,
-                                       close_pct_change,
-                                       close_seasonal_diff,
-                                       close_combo_diff,
-                                       adf_pvalue,
-                                       kpss_pvalue,
-                                       is_stationary,
-                                       significant_lags,
-                                       residual_variance,
-                                       aic_score,
-                                       bic_score,
-                                       created_at,
-                                       updated_at
-                                FROM btc_arima_data
-                                WHERE id = %s
-                                """)
-                cursor.execute(query, (id,))
-                row = cursor.fetchone()
-
-                if row:
-                    # Створюємо словник з результатів
-                    column_names = [desc[0] for desc in cursor.description]
-                    result = dict(zip(column_names, row))
-
-                    # Парсимо JSON для significant_lags
-                    if result['significant_lags']:
-                        result['significant_lags'] = json.loads(result['significant_lags'])
-
-                    return result
-                return None
-
-    def get_btc_arima_data_by_timeframe(self, timeframe: str,
-                                        start_time: Optional[datetime] = None,
-                                        end_time: Optional[datetime] = None,
-                                        limit: int = 1000) -> List[Dict[str, Any]]:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query_parts = [
-                    ("SELECT id, timeframe, open_time, original_close, close_diff, close_diff2, "
-                            "close_log, close_log_diff, close_pct_change, close_seasonal_diff, "
-                            "close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags, "
-                            "residual_variance, aic_score, bic_score, created_at, updated_at "
-                            "FROM btc_arima_data "
-                            "WHERE timeframe = %s")
-                ]
-                params = [timeframe]
-
-                if start_time:
-                    query_parts.append(("AND open_time >= %s"))
-                    params.append(start_time)
-
-                if end_time:
-                    query_parts.append(("AND open_time <= %s"))
-                    params.append(end_time)
-
-                query_parts.append(("ORDER BY open_time"))
-                query_parts.append(("LIMIT %s"))
-                params.append(limit)
-
-                query = (" ").join(query_parts)
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-
-                # Створюємо словники з результатів
-                column_names = [desc[0] for desc in cursor.description]
-                results = []
-
-                for row in rows:
-                    result = dict(zip(column_names, row))
-
-                    # Парсимо JSON для significant_lags
-                    if result['significant_lags']:
-                        result['significant_lags'] = json.loads(result['significant_lags'])
-
-                    results.append(result)
-
-                return results
-
-    def delete_btc_arima_data(self, id: int) -> bool:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query = ("""
-                                DELETE
-                                FROM btc_arima_data
-                                WHERE id = %s RETURNING id
-                                """)
-                cursor.execute(query, (id,))
-                result = cursor.fetchone()
-                conn.commit()
-                return result is not None
 
     # --------- ETH ARIMA Data функції ---------
 
@@ -3104,111 +3000,6 @@ class DatabaseManager:
             print(f"Помилка при збереженні ETH ARIMA даних: {e}")
             return []
 
-    def get_eth_arima_data_by_id(self, id: int) -> Optional[Dict[str, Any]]:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query = ("""
-                                SELECT id,
-                                       timeframe,
-                                       open_time,
-                                       original_close,
-                                       close_diff,
-                                       close_diff2,
-                                       close_log,
-                                       close_log_diff,
-                                       close_pct_change,
-                                       close_seasonal_diff,
-                                       close_combo_diff,
-                                       adf_pvalue,
-                                       kpss_pvalue,
-                                       is_stationary,
-                                       significant_lags,
-                                       residual_variance,
-                                       aic_score,
-                                       bic_score,
-                                       created_at,
-                                       updated_at
-                                FROM eth_arima_data
-                                WHERE id = %s
-                                """)
-                cursor.execute(query, (id,))
-                row = cursor.fetchone()
-
-                if row:
-                    # Створюємо словник з результатів
-                    column_names = [desc[0] for desc in cursor.description]
-                    result = dict(zip(column_names, row))
-
-                    # Парсимо JSON для significant_lags
-                    if result['significant_lags']:
-                        result['significant_lags'] = json.loads(result['significant_lags'])
-
-                    return result
-                return None
-
-    def get_eth_arima_data_by_timeframe(self, timeframe: str,
-                                        start_time: Optional[datetime] = None,
-                                        end_time: Optional[datetime] = None,
-                                        limit: int = 1000) -> List[Dict[str, Any]]:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query_parts = [
-                    ("SELECT id, timeframe, open_time, original_close, close_diff, close_diff2, "
-                            "close_log, close_log_diff, close_pct_change, close_seasonal_diff, "
-                            "close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags, "
-                            "residual_variance, aic_score, bic_score, created_at, updated_at "
-                            "FROM eth_arima_data "
-                            "WHERE timeframe = %s")
-                ]
-                params = [timeframe]
-
-                if start_time:
-                    query_parts.append(("AND open_time >= %s"))
-                    params.append(start_time)
-
-                if end_time:
-                    query_parts.append(("AND open_time <= %s"))
-                    params.append(end_time)
-
-                query_parts.append(("ORDER BY open_time"))
-                query_parts.append(("LIMIT %s"))
-                params.append(limit)
-
-                query = (" ").join(query_parts)
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-
-                # Створюємо словники з результатів
-                column_names = [desc[0] for desc in cursor.description]
-                results = []
-
-                for row in rows:
-                    result = dict(zip(column_names, row))
-
-                    # Парсимо JSON для significant_lags
-                    if result['significant_lags']:
-                        result['significant_lags'] = json.loads(result['significant_lags'])
-
-                    results.append(result)
-
-                return results
-
-    def delete_eth_arima_data(self, id: int) -> bool:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query = ("""
-                                DELETE
-                                FROM eth_arima_data
-                                WHERE id = %s RETURNING id
-                                """)
-                cursor.execute(query, (id,))
-                result = cursor.fetchone()
-                conn.commit()
-                return result is not None
-
     def save_sol_arima_data(self, data_list: List[Dict[str, Any]]) -> List[int]:
         results = []
 
@@ -3292,110 +3083,7 @@ class DatabaseManager:
             self.conn.rollback()
             return []
 
-    def get_sol_arima_data_by_id(self, id: int) -> Optional[Dict[str, Any]]:
 
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query = ("""
-                         SELECT id,
-                                timeframe,
-                                open_time,
-                                original_close,
-                                close_diff,
-                                close_diff2,
-                                close_log,
-                                close_log_diff,
-                                close_pct_change,
-                                close_seasonal_diff,
-                                close_combo_diff,
-                                adf_pvalue,
-                                kpss_pvalue,
-                                is_stationary,
-                                significant_lags,
-                                residual_variance,
-                                aic_score,
-                                bic_score,
-                                created_at,
-                                updated_at
-                         FROM sol_arima_data
-                         WHERE id = %s
-                         """)
-                cursor.execute(query, (id,))
-                row = cursor.fetchone()
-
-                if row:
-                    # Створюємо словник з результатів
-                    column_names = [desc[0] for desc in cursor.description]
-                    result = dict(zip(column_names, row))
-
-                    # Парсимо JSON для significant_lags
-                    if result['significant_lags']:
-                        result['significant_lags'] = json.loads(result['significant_lags'])
-
-                    return result
-                return None
-
-    def get_sol_arima_data_by_timeframe(self, timeframe: str,
-                                        start_time: Optional[datetime] = None,
-                                        end_time: Optional[datetime] = None,
-                                        limit: int = 1000) -> List[Dict[str, Any]]:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query_parts = [
-                    ("SELECT id, timeframe, open_time, original_close, close_diff, close_diff2, "
-                     "close_log, close_log_diff, close_pct_change, close_seasonal_diff, "
-                     "close_combo_diff, adf_pvalue, kpss_pvalue, is_stationary, significant_lags, "
-                     "residual_variance, aic_score, bic_score, created_at, updated_at "
-                     "FROM sol_arima_data "
-                     "WHERE timeframe = %s")
-                ]
-                params = [timeframe]
-
-                if start_time:
-                    query_parts.append(("AND open_time >= %s"))
-                    params.append(start_time)
-
-                if end_time:
-                    query_parts.append(("AND open_time <= %s"))
-                    params.append(end_time)
-
-                query_parts.append(("ORDER BY open_time"))
-                query_parts.append(("LIMIT %s"))
-                params.append(limit)
-
-                query = (" ").join(query_parts)
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-
-                # Створюємо словники з результатів
-                column_names = [desc[0] for desc in cursor.description]
-                results = []
-
-                for row in rows:
-                    result = dict(zip(column_names, row))
-
-                    # Парсимо JSON для significant_lags
-                    if result['significant_lags']:
-                        result['significant_lags'] = json.loads(result['significant_lags'])
-
-                    results.append(result)
-
-                return results
-
-    def delete_sol_arima_data(self, id: int) -> bool:
-
-        with self.connect() as conn:
-            with conn.cursor() as cursor:
-                query = ("""
-                         DELETE
-                         FROM sol_arima_data
-                         WHERE id = %s RETURNING id
-                         """)
-                cursor.execute(query, (id,))
-                result = cursor.fetchone()
-                conn.commit()
-                return result is not None
 
     def save_eth_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
         inserted_ids = []
@@ -3481,284 +3169,6 @@ class DatabaseManager:
         self.conn.commit()
         return inserted_ids
 
-    def get_eth_lstm_sequence(self, timeframe: str) -> List[Dict[str, Any]]:
-
-
-        with self.conn.cursor() as cursor:
-            query = """
-                    SELECT id, \
-                           timeframe, \
-                           sequence_id, \
-                           sequence_position, \
-                           open_time, \
-                           open_scaled, \
-                           high_scaled, \
-                           low_scaled, \
-                           close_scaled, \
-                           volume_scaled, \
-                           hour_sin, \
-                           hour_cos, \
-                           day_of_week_sin, \
-                           day_of_week_cos, \
-                           month_sin, \
-                           month_cos, \
-                           day_of_month_sin, \
-                           day_of_month_cos, \
-                           target_close_1, \
-                           target_close_5, \
-                           target_close_10, \
-                           sequence_length, \
-                           scaling_metadata, \
-                           created_at, \
-                           updated_at
-                    FROM eth_lstm_data
-                    WHERE timeframe = %s \
-                      AND sequence_id = %s
-                    ORDER BY open_time \
-                    """
-            cursor.execute(query, (timeframe))
-            results = cursor.fetchall()
-
-            sequence_data = []
-            for row in results:
-                sequence_data.append({
-                    'id': row[0],
-                    'timeframe': row[1],
-                    'sequence_id': row[2],
-                    'sequence_position': row[3],
-                    'open_time': row[4],
-                    'open_scaled': float(row[5]),
-                    'high_scaled': float(row[6]),
-                    'low_scaled': float(row[7]),
-                    'close_scaled': float(row[8]),
-                    'volume_scaled': float(row[9]),
-                    'hour_sin': float(row[10]) if row[10] is not None else None,
-                    'hour_cos': float(row[11]) if row[11] is not None else None,
-                    'day_of_week_sin': float(row[12]) if row[12] is not None else None,
-                    'day_of_week_cos': float(row[13]) if row[13] is not None else None,
-                    'month_sin': float(row[14]) if row[14] is not None else None,
-                    'month_cos': float(row[15]) if row[15] is not None else None,
-                    'day_of_month_sin': float(row[16]) if row[16] is not None else None,
-                    'day_of_month_cos': float(row[17]) if row[17] is not None else None,
-                    'target_close_1': float(row[18]) if row[18] is not None else None,
-                    'target_close_5': float(row[19]) if row[19] is not None else None,
-                    'target_close_10': float(row[20]) if row[20] is not None else None,
-                    'sequence_length': row[21],
-                    'scaling_metadata': json.loads(row[22]) if row[22] else None,
-                    'created_at': row[23],
-                    'updated_at': row[24]
-                })
-
-        return sequence_data
-
-    def get_eth_lstm_batch(
-            self,
-            timeframe: str,
-            sequence_length: int,
-            batch_size: int,
-            offset: int = 0,
-            include_targets: bool = True
-    ) -> Tuple[List[List[Dict[str, Any]]], List[List[float]]]:
-
-
-        with self.conn.cursor() as cursor:
-            sequence_query = """
-                             SELECT DISTINCT sequence_id
-                             FROM eth_lstm_data
-                             WHERE timeframe = %s \
-                               AND sequence_length = %s
-                                 LIMIT %s \
-                             OFFSET %s \
-                             """
-            cursor.execute(sequence_query, (timeframe, sequence_length, batch_size, offset))
-            sequence_ids = [row[0] for row in cursor.fetchall()]
-
-            if not sequence_ids:
-                return [], []
-
-            sequences = []
-            targets = []
-
-            for seq_id in sequence_ids:
-                sequence_data_query = """
-                                      SELECT id, \
-                                             timeframe, \
-                                             sequence_id, \
-                                             sequence_position, \
-                                             open_time, \
-                                             open_scaled, \
-                                             high_scaled, \
-                                             low_scaled, \
-                                             close_scaled, \
-                                             volume_scaled, \
-                                             hour_sin, \
-                                             hour_cos, \
-                                             day_of_week_sin, \
-                                             day_of_week_cos, \
-                                             month_sin, \
-                                             month_cos, \
-                                             day_of_month_sin, \
-                                             day_of_month_cos, \
-                                             target_close_1, \
-                                             target_close_5, \
-                                             target_close_10, \
-                                             sequence_length, \
-                                             scaling_metadata
-                                      FROM eth_lstm_data
-                                      WHERE timeframe = %s \
-                                        AND sequence_id = %s
-                                      ORDER BY open_time \
-                                      """
-                cursor.execute(sequence_data_query, (timeframe, seq_id))
-                rows = cursor.fetchall()
-
-                seq = []
-                seq_targets = []
-
-                for row in rows:
-                    data_point = {
-                        'id': row[0],
-                        'timeframe': row[1],
-                        'sequence_id': row[2],
-                        'sequence_position': row[3],
-                        'open_time': row[4],
-                        'open_scaled': float(row[5]),
-                        'high_scaled': float(row[6]),
-                        'low_scaled': float(row[7]),
-                        'close_scaled': float(row[8]),
-                        'volume_scaled': float(row[9]),
-                        'hour_sin': float(row[10]) if row[10] is not None else None,
-                        'hour_cos': float(row[11]) if row[11] is not None else None,
-                        'day_of_week_sin': float(row[12]) if row[12] is not None else None,
-                        'day_of_week_cos': float(row[13]) if row[13] is not None else None,
-                        'month_sin': float(row[14]) if row[14] is not None else None,
-                        'month_cos': float(row[15]) if row[15] is not None else None,
-                        'day_of_month_sin': float(row[16]) if row[16] is not None else None,
-                        'day_of_month_cos': float(row[17]) if row[17] is not None else None,
-                        'scaling_metadata': json.loads(row[21]) if row[21] else None,
-                    }
-
-                    seq.append(data_point)
-
-                    if include_targets:
-                        target = [
-                            float(row[18]) if row[18] is not None else None,  # target_close_1
-                            float(row[19]) if row[19] is not None else None,  # target_close_5
-                            float(row[20]) if row[20] is not None else None  # target_close_10
-                        ]
-                        seq_targets.append(target)
-
-                sequences.append(seq)
-                if include_targets:
-                    targets.append(seq_targets)
-
-        return (sequences, targets) if include_targets else (sequences, [])
-
-    def delete_eth_lstm_sequence(self, timeframe: str, sequence_id: int) -> int:
-
-
-        with self.conn.cursor() as cursor:
-            query = """
-                    DELETE \
-                    FROM eth_lstm_data
-                    WHERE timeframe = %s \
-                      AND sequence_id = %s \
-                    """
-            cursor.execute(query, (timeframe, sequence_id))
-            deleted_count = cursor.rowcount
-
-        self.conn.commit()
-        return deleted_count
-
-    def get_eth_latest_sequences(
-            self,
-            timeframe: str,
-            num_sequences: int = 10,
-            sequence_length: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-
-
-        with self.conn.cursor() as cursor:
-            conditions = ["timeframe = %s"]
-            params = [timeframe]
-
-            if sequence_length is not None:
-                conditions.append("sequence_length = %s")
-                params.append(sequence_length)
-
-            condition_str = " AND ".join(conditions)
-
-            query = f"""
-            SELECT 
-                sequence_id, 
-                MAX(open_time) as latest_time,
-                MIN(open_time) as earliest_time,
-                COUNT(*) as points_count,
-                MAX(sequence_length) as sequence_length
-            FROM eth_lstm_data
-            WHERE {condition_str}
-            GROUP BY sequence_id
-            ORDER BY latest_time DESC
-            LIMIT %s
-            """
-            params.append(num_sequences)
-
-            cursor.execute(query, tuple(params))
-            results = cursor.fetchall()
-
-            sequences = []
-            for row in results:
-                sequences.append({
-                    'sequence_id': row[0],
-                    'latest_time': row[1],
-                    'earliest_time': row[2],
-                    'points_count': row[3],
-                    'sequence_length': row[4]
-                })
-
-        return sequences
-
-    def get_eth_scaling_metadata(self, timeframe: str) -> Dict[str, Any]:
-
-
-        with self.conn.cursor() as cursor:
-            query = """
-                    SELECT scaling_metadata
-                    FROM eth_lstm_data
-                    WHERE timeframe = %s \
-                      AND scaling_metadata IS NOT NULL LIMIT 1 \
-                    """
-            cursor.execute(query, (timeframe,))
-            result = cursor.fetchone()
-
-            if result and result[0]:
-                return json.loads(result[0])
-
-        return {}
-
-    def count_eth_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
-
-
-        with self.conn.cursor() as cursor:
-            conditions = ["timeframe = %s"]
-            params = [timeframe]
-
-            if sequence_length is not None:
-                conditions.append("sequence_length = %s")
-                params.append(sequence_length)
-
-            condition_str = " AND ".join(conditions)
-
-            query = f"""
-            SELECT COUNT(DISTINCT sequence_id)
-            FROM eth_lstm_data
-            WHERE {condition_str}
-            """
-
-            cursor.execute(query, tuple(params))
-            result = cursor.fetchone()
-
-            return result[0] if result else 0
 
     def save_btc_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
         inserted_ids = []
@@ -3844,177 +3254,6 @@ class DatabaseManager:
         self.conn.commit()
         return inserted_ids
 
-    def get_btc_lstm_sequence(self, timeframe: str) -> List[Dict[str, Any]]:
-        with self.conn.cursor() as cursor:
-            query = """
-                    SELECT id, \
-                           timeframe, \
-                           sequence_id, \
-                           sequence_position, \
-                           open_time, \
-                           open_scaled, \
-                           high_scaled, \
-                           low_scaled, \
-                           close_scaled, \
-                           volume_scaled, \
-                           hour_sin, \
-                           hour_cos, \
-                           day_of_week_sin, \
-                           day_of_week_cos, \
-                           month_sin, \
-                           month_cos, \
-                           day_of_month_sin, \
-                           day_of_month_cos, \
-                           target_close_1, \
-                           target_close_5, \
-                           target_close_10, \
-                           sequence_length, \
-                           scaling_metadata, \
-                           created_at, \
-                           updated_at
-                    FROM btc_lstm_data
-                    WHERE timeframe = %s \
-                      AND sequence_id = %s
-                    ORDER BY open_time \
-                    """
-            cursor.execute(query, (timeframe))
-            results = cursor.fetchall()
-
-            sequence_data = []
-            for row in results:
-                sequence_data.append({
-                    'id': row[0],
-                    'timeframe': row[1],
-                    'sequence_id': row[2],
-                    'sequence_position': row[3],
-                    'open_time': row[4],
-                    'open_scaled': float(row[5]),
-                    'high_scaled': float(row[6]),
-                    'low_scaled': float(row[7]),
-                    'close_scaled': float(row[8]),
-                    'volume_scaled': float(row[9]),
-                    'hour_sin': float(row[10]) if row[10] is not None else None,
-                    'hour_cos': float(row[11]) if row[11] is not None else None,
-                    'day_of_week_sin': float(row[12]) if row[12] is not None else None,
-                    'day_of_week_cos': float(row[13]) if row[13] is not None else None,
-                    'month_sin': float(row[14]) if row[14] is not None else None,
-                    'month_cos': float(row[15]) if row[15] is not None else None,
-                    'day_of_month_sin': float(row[16]) if row[16] is not None else None,
-                    'day_of_month_cos': float(row[17]) if row[17] is not None else None,
-                    'target_close_1': float(row[18]) if row[18] is not None else None,
-                    'target_close_5': float(row[19]) if row[19] is not None else None,
-                    'target_close_10': float(row[20]) if row[20] is not None else None,
-                    'sequence_length': row[21],
-                    'scaling_metadata': json.loads(row[22]) if row[22] else None,
-                    'created_at': row[23],
-                    'updated_at': row[24]
-                })
-
-            return sequence_data
-
-    def delete_btc_lstm_sequence(self, timeframe: str, sequence_id: int) -> int:
-
-            with self.conn.cursor() as cursor:
-                query = """
-                        DELETE \
-                        FROM btc_lstm_data
-                        WHERE timeframe = %s \
-                          AND sequence_id = %s \
-                        """
-                cursor.execute(query, (timeframe, sequence_id))
-                deleted_count = cursor.rowcount
-
-            self.conn.commit()
-            return deleted_count
-
-    def get_btc_latest_sequences(
-                self,
-                timeframe: str,
-                num_sequences: int = 10,
-                sequence_length: Optional[int] = None
-        ) -> List[Dict[str, Any]]:
-
-            with self.conn.cursor() as cursor:
-                conditions = ["timeframe = %s"]
-                params = [timeframe]
-
-                if sequence_length is not None:
-                    conditions.append("sequence_length = %s")
-                    params.append(sequence_length)
-
-                condition_str = " AND ".join(conditions)
-
-                query = f"""
-                SELECT 
-                    sequence_id, 
-                    MAX(open_time) as latest_time,
-                    MIN(open_time) as earliest_time,
-                    COUNT(*) as points_count,
-                    MAX(sequence_length) as sequence_length
-                FROM btc_lstm_data
-                WHERE {condition_str}
-                GROUP BY sequence_id
-                ORDER BY latest_time DESC
-                LIMIT %s
-                """
-                params.append(num_sequences)
-
-                cursor.execute(query, tuple(params))
-                results = cursor.fetchall()
-
-                sequences = []
-                for row in results:
-                    sequences.append({
-                        'sequence_id': row[0],
-                        'latest_time': row[1],
-                        'earliest_time': row[2],
-                        'points_count': row[3],
-                        'sequence_length': row[4]
-                    })
-
-            return sequences
-
-
-    def get_btc_scaling_metadata(self, timeframe: str) -> Dict[str, Any]:
-        with self.conn.cursor() as cursor:
-            query = """
-                    SELECT scaling_metadata
-                    FROM btc_lstm_data
-                    WHERE timeframe = %s \
-                      AND scaling_metadata IS NOT NULL LIMIT 1 \
-                    """
-            cursor.execute(query, (timeframe,))
-            result = cursor.fetchone()
-
-            if result and result[0]:
-                return json.loads(result[0])
-
-        return {}
-
-
-    def count_btc_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
-
-            with self.conn.cursor() as cursor:
-                conditions = ["timeframe = %s"]
-                params = [timeframe]
-
-                if sequence_length is not None:
-                    conditions.append("sequence_length = %s")
-                    params.append(sequence_length)
-
-                condition_str = " AND ".join(conditions)
-
-                query = f"""
-                SELECT COUNT(DISTINCT sequence_id)
-                FROM btc_lstm_data
-                WHERE {condition_str}
-                """
-
-                cursor.execute(query, tuple(params))
-                result = cursor.fetchone()
-
-                return result[0] if result else 0
-
     def save_sol_lstm_sequence(self, data_points: List[Dict[str, Any]]) -> List[int]:
         inserted_ids = []
 
@@ -4099,41 +3338,76 @@ class DatabaseManager:
         self.conn.commit()
         return inserted_ids
 
-    def get_sol_lstm_sequence(self, timeframe: str) -> List[Dict[str, Any]]:
-
+    def get_eth_lstm_sequence(self, timeframe: str, sequence_id: int = None) -> List[Dict[str, Any]]:
         with self.conn.cursor() as cursor:
-            query = """
-                    SELECT id, \
-                           timeframe, \
-                           sequence_id, \
-                           sequence_position, \
-                           open_time, \
-                           open_scaled, \
-                           high_scaled, \
-                           low_scaled, \
-                           close_scaled, \
-                           volume_scaled, \
-                           hour_sin, \
-                           hour_cos, \
-                           day_of_week_sin, \
-                           day_of_week_cos, \
-                           month_sin, \
-                           month_cos, \
-                           day_of_month_sin, \
-                           day_of_month_cos, \
-                           target_close_1, \
-                           target_close_5, \
-                           target_close_10, \
-                           sequence_length, \
-                           scaling_metadata, \
-                           created_at, \
-                           updated_at
-                    FROM sol_lstm_data
-                    WHERE timeframe = %s \
-                      AND sequence_id = %s
-                    ORDER BY open_time \
-                    """
-            cursor.execute(query, (timeframe))
+            if sequence_id is not None:
+                # Запит для конкретного sequence_id
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM eth_lstm_data
+                        WHERE timeframe = %s
+                          AND sequence_id = %s
+                        ORDER BY open_time
+                        """
+                cursor.execute(query, (timeframe, sequence_id))
+            else:
+                # Запит для всіх sequence_id у timeframe
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM eth_lstm_data
+                        WHERE timeframe = %s
+                        ORDER BY sequence_id, open_time
+                        """
+                cursor.execute(query, (timeframe,))
+
             results = cursor.fetchall()
 
             sequence_data = []
@@ -4168,209 +3442,209 @@ class DatabaseManager:
 
         return sequence_data
 
-    def get_sol_lstm_batch(
-            self,
-            timeframe: str,
-            sequence_length: int,
-            batch_size: int,
-            offset: int = 0,
-            include_targets: bool = True
-    ) -> Tuple[List[List[Dict[str, Any]]], List[List[float]]]:
-
+    def get_btc_lstm_sequence(self, timeframe: str, sequence_id: int = None) -> List[Dict[str, Any]]:
         with self.conn.cursor() as cursor:
-            sequence_query = """
-                             SELECT DISTINCT sequence_id
-                             FROM sol_lstm_data
-                             WHERE timeframe = %s \
-                               AND sequence_length = %s
-                                 LIMIT %s \
-                             OFFSET %s \
-                             """
-            cursor.execute(sequence_query, (timeframe, sequence_length, batch_size, offset))
-            sequence_ids = [row[0] for row in cursor.fetchall()]
+            if sequence_id is not None:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM btc_lstm_data
+                        WHERE timeframe = %s
+                          AND sequence_id = %s
+                        ORDER BY open_time
+                        """
+                cursor.execute(query, (timeframe, sequence_id))
+            else:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM btc_lstm_data
+                        WHERE timeframe = %s
+                        ORDER BY sequence_id, open_time
+                        """
+                cursor.execute(query, (timeframe,))
 
-            if not sequence_ids:
-                return [], []
-
-            sequences = []
-            targets = []
-
-            for seq_id in sequence_ids:
-                sequence_data_query = """
-                                      SELECT id, \
-                                             timeframe, \
-                                             sequence_id, \
-                                             sequence_position, \
-                                             open_time, \
-                                             open_scaled, \
-                                             high_scaled, \
-                                             low_scaled, \
-                                             close_scaled, \
-                                             volume_scaled, \
-                                             hour_sin, \
-                                             hour_cos, \
-                                             day_of_week_sin, \
-                                             day_of_week_cos, \
-                                             month_sin, \
-                                             month_cos, \
-                                             day_of_month_sin, \
-                                             day_of_month_cos, \
-                                             target_close_1, \
-                                             target_close_5, \
-                                             target_close_10, \
-                                             sequence_length, \
-                                             scaling_metadata
-                                      FROM sol_lstm_data
-                                      WHERE timeframe = %s \
-                                        AND sequence_id = %s
-                                      ORDER BY sequence_position \
-                                      """
-                cursor.execute(sequence_data_query, (timeframe, seq_id))
-                rows = cursor.fetchall()
-
-                seq = []
-                seq_targets = []
-
-                for row in rows:
-                    data_point = {
-                        'id': row[0],
-                        'timeframe': row[1],
-                        'sequence_id': row[2],
-                        'sequence_position': row[3],
-                        'open_time': row[4],
-                        'open_scaled': float(row[5]),
-                        'high_scaled': float(row[6]),
-                        'low_scaled': float(row[7]),
-                        'close_scaled': float(row[8]),
-                        'volume_scaled': float(row[9]),
-                        'hour_sin': float(row[10]) if row[10] is not None else None,
-                        'hour_cos': float(row[11]) if row[11] is not None else None,
-                        'day_of_week_sin': float(row[12]) if row[12] is not None else None,
-                        'day_of_week_cos': float(row[13]) if row[13] is not None else None,
-                        'month_sin': float(row[14]) if row[14] is not None else None,
-                        'month_cos': float(row[15]) if row[15] is not None else None,
-                        'day_of_month_sin': float(row[16]) if row[16] is not None else None,
-                        'day_of_month_cos': float(row[17]) if row[17] is not None else None,
-                        'scaling_metadata': json.loads(row[21]) if row[21] else None,
-                    }
-
-                    seq.append(data_point)
-
-                    if include_targets:
-                        target = [
-                            float(row[18]) if row[18] is not None else None,  # target_close_1
-                            float(row[19]) if row[19] is not None else None,  # target_close_5
-                            float(row[20]) if row[20] is not None else None  # target_close_10
-                        ]
-                        seq_targets.append(target)
-
-                sequences.append(seq)
-                if include_targets:
-                    targets.append(seq_targets)
-
-        return (sequences, targets) if include_targets else (sequences, [])
-
-    def delete_sol_lstm_sequence(self, timeframe: str, sequence_id: int) -> int:
-
-        with self.conn.cursor() as cursor:
-            query = """
-                    DELETE \
-                    FROM sol_lstm_data
-                    WHERE timeframe = %s \
-                      AND sequence_id = %s \
-                    """
-            cursor.execute(query, (timeframe, sequence_id))
-            deleted_count = cursor.rowcount
-
-        self.conn.commit()
-        return deleted_count
-
-    def get_sol_latest_sequences(
-            self,
-            timeframe: str,
-            num_sequences: int = 10,
-            sequence_length: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-
-        with self.conn.cursor() as cursor:
-            conditions = ["timeframe = %s"]
-            params = [timeframe]
-
-            if sequence_length is not None:
-                conditions.append("sequence_length = %s")
-                params.append(sequence_length)
-
-            condition_str = " AND ".join(conditions)
-
-            query = f"""
-            SELECT 
-                sequence_id, 
-                MAX(open_time) as latest_time,
-                MIN(open_time) as earliest_time,
-                COUNT(*) as points_count,
-                MAX(sequence_length) as sequence_length
-            FROM sol_lstm_data
-            WHERE {condition_str}
-            GROUP BY sequence_id
-            ORDER BY latest_time DESC
-            LIMIT %s
-            """
-            params.append(num_sequences)
-
-            cursor.execute(query, tuple(params))
             results = cursor.fetchall()
 
-            sequences = []
+            sequence_data = []
             for row in results:
-                sequences.append({
-                    'sequence_id': row[0],
-                    'latest_time': row[1],
-                    'earliest_time': row[2],
-                    'points_count': row[3],
-                    'sequence_length': row[4]
+                sequence_data.append({
+                    'id': row[0],
+                    'timeframe': row[1],
+                    'sequence_id': row[2],
+                    'sequence_position': row[3],
+                    'open_time': row[4],
+                    'open_scaled': float(row[5]),
+                    'high_scaled': float(row[6]),
+                    'low_scaled': float(row[7]),
+                    'close_scaled': float(row[8]),
+                    'volume_scaled': float(row[9]),
+                    'hour_sin': float(row[10]) if row[10] is not None else None,
+                    'hour_cos': float(row[11]) if row[11] is not None else None,
+                    'day_of_week_sin': float(row[12]) if row[12] is not None else None,
+                    'day_of_week_cos': float(row[13]) if row[13] is not None else None,
+                    'month_sin': float(row[14]) if row[14] is not None else None,
+                    'month_cos': float(row[15]) if row[15] is not None else None,
+                    'day_of_month_sin': float(row[16]) if row[16] is not None else None,
+                    'day_of_month_cos': float(row[17]) if row[17] is not None else None,
+                    'target_close_1': float(row[18]) if row[18] is not None else None,
+                    'target_close_5': float(row[19]) if row[19] is not None else None,
+                    'target_close_10': float(row[20]) if row[20] is not None else None,
+                    'sequence_length': row[21],
+                    'scaling_metadata': json.loads(row[22]) if row[22] else None,
+                    'created_at': row[23],
+                    'updated_at': row[24]
                 })
 
-        return sequences
+            return sequence_data
 
-    def get_sol_scaling_metadata(self, timeframe: str) -> Dict[str, Any]:
-
+    def get_sol_lstm_sequence(self, timeframe: str, sequence_id: int = None) -> List[Dict[str, Any]]:
         with self.conn.cursor() as cursor:
-            query = """
-                    SELECT scaling_metadata
-                    FROM sol_lstm_data
-                    WHERE timeframe = %s \
-                      AND scaling_metadata IS NOT NULL LIMIT 1 \
-                    """
-            cursor.execute(query, (timeframe,))
-            result = cursor.fetchone()
+            if sequence_id is not None:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM sol_lstm_data
+                        WHERE timeframe = %s
+                          AND sequence_id = %s
+                        ORDER BY open_time
+                        """
+                cursor.execute(query, (timeframe, sequence_id))
+            else:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM sol_lstm_data
+                        WHERE timeframe = %s
+                        ORDER BY sequence_id, open_time
+                        """
+                cursor.execute(query, (timeframe,))
 
-            if result and result[0]:
-                return json.loads(result[0])
+            results = cursor.fetchall()
 
-        return {}
+            sequence_data = []
+            for row in results:
+                sequence_data.append({
+                    'id': row[0],
+                    'timeframe': row[1],
+                    'sequence_id': row[2],
+                    'sequence_position': row[3],
+                    'open_time': row[4],
+                    'open_scaled': float(row[5]),
+                    'high_scaled': float(row[6]),
+                    'low_scaled': float(row[7]),
+                    'close_scaled': float(row[8]),
+                    'volume_scaled': float(row[9]),
+                    'hour_sin': float(row[10]) if row[10] is not None else None,
+                    'hour_cos': float(row[11]) if row[11] is not None else None,
+                    'day_of_week_sin': float(row[12]) if row[12] is not None else None,
+                    'day_of_week_cos': float(row[13]) if row[13] is not None else None,
+                    'month_sin': float(row[14]) if row[14] is not None else None,
+                    'month_cos': float(row[15]) if row[15] is not None else None,
+                    'day_of_month_sin': float(row[16]) if row[16] is not None else None,
+                    'day_of_month_cos': float(row[17]) if row[17] is not None else None,
+                    'target_close_1': float(row[18]) if row[18] is not None else None,
+                    'target_close_5': float(row[19]) if row[19] is not None else None,
+                    'target_close_10': float(row[20]) if row[20] is not None else None,
+                    'sequence_length': row[21],
+                    'scaling_metadata': json.loads(row[22]) if row[22] else None,
+                    'created_at': row[23],
+                    'updated_at': row[24]
+                })
 
-
-    def count_sol_sequences(self, timeframe: str, sequence_length: Optional[int] = None) -> int:
-        with self.conn.cursor() as cursor:
-            conditions = ["timeframe = %s"]
-            params = [timeframe]
-
-            if sequence_length is not None:
-                conditions.append("sequence_length = %s")
-                params.append(sequence_length)
-
-            condition_str = " AND ".join(conditions)
-
-            query = f"""
-                SELECT COUNT(DISTINCT sequence_id)
-                FROM sol_lstm_data
-                WHERE {condition_str}
-                """
-
-            cursor.execute(query, tuple(params))
-            result = cursor.fetchone()
-
-            return result[0] if result else 0
+            return sequence_data
 
     def safe_json_loads(value: str) -> dict:
 

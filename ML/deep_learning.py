@@ -45,7 +45,7 @@ class DeepLearning:
 
     SYMBOLS = ['BTC', 'ETH', 'SOL']
     TIMEFRAMES = ['1m', '1h', '4h', '1d', '1w']
-    MODEL_TYPES = ['lstm', 'gru', 'transformer']
+    MODEL_TYPES = ['lstm', 'gru', 'transformer']  # Додано transformer
 
     def __init__(self, models_dir: str = "models/deep_learning"):
 

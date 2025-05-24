@@ -996,3 +996,81 @@
 2025-05-24 15:58:45 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
 2025-05-24 15:58:45 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
 2025-05-24 15:58:45 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1381, Result length: 1380
+2025-05-25 01:55:41 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:41 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying volatility calculation with window 20
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting decimal.Decimal objects to float
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Detected daily data frequency
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Volatility calculation completed. Annualization factor: 15.87
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Valid volatility values: 2814/2834
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying volatility calculation with window 20
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting decimal.Decimal objects to float
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Detected daily data frequency
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Volatility calculation completed. Annualization factor: 15.87
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Valid volatility values: 2814/2834
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying preprocessing pipeline with 1 operations
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying operation 1: diff
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2834, Result length: 2833
+2025-05-25 01:55:42 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Preprocessing pipeline applied successfully. Original length: 2834, Processed length: 2833
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying volatility calculation with window 20
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting decimal.Decimal objects to float
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Detected daily data frequency
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Volatility calculation completed. Annualization factor: 15.87
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Valid volatility values: 2814/2834
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:48 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying volatility calculation with window 20
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting decimal.Decimal objects to float
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Detected daily data frequency
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Volatility calculation completed. Annualization factor: 15.87
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Valid volatility values: 2814/2834
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying preprocessing pipeline with 1 operations
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying operation 1: diff
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2834, Result length: 2833
+2025-05-25 01:55:49 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Preprocessing pipeline applied successfully. Original length: 2834, Processed length: 2833
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying volatility calculation with window 20
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting decimal.Decimal objects to float
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Detected daily data frequency
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Volatility calculation completed. Annualization factor: 15.87
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Valid volatility values: 1708/1728
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying volatility calculation with window 20
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting decimal.Decimal objects to float
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Detected daily data frequency
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Volatility calculation completed. Annualization factor: 15.87
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Valid volatility values: 1708/1728
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying preprocessing pipeline with 1 operations
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applying operation 1: diff
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1728, Result length: 1727
+2025-05-25 01:55:50 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Preprocessing pipeline applied successfully. Original length: 1728, Processed length: 1727
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2266, Result length: 2265
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2267, Result length: 2266
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 2266, Result length: 2265
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converting DataFrame columns to float
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Converted 5 columns to float out of 24 total columns
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1382, Result length: 1381
+2025-05-25 01:55:52 - TimeseriesModelEvaluator - INFO - [logger.py:103] - Applied 1-order differencing. Original length: 1381, Result length: 1380

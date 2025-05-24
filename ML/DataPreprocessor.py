@@ -44,15 +44,6 @@ class DataPreprocessor:
         '1w': 12
     }
 
-    # Мапінг таймфреймів на числові значення для бази даних
-    TIMEFRAME_MAPPING = {
-        '1m': {'timeframe': 1, 'unit': 'minute'},
-        '1h': {'timeframe': 1, 'unit': 'hour'},
-        '4h': {'timeframe': 4, 'unit': 'hour'},
-        '1d': {'timeframe': 1, 'unit': 'day'},
-        '1w': {'timeframe': 1, 'unit': 'week'}
-    }
-
     def __init__(self):
         self.scalers = {}  # Словник для зберігання скейлерів (для зворотного перетворення)
         self.feature_configs = {}  # Конфігурації ознак
@@ -69,46 +60,6 @@ class DataPreprocessor:
         self.time_features_prepared = True
 
         self.logger.info("DataPreprocessor ініціалізовано для роботи з підготовленими даними")
-
-    def parse_timeframe(self, timeframe: str) -> Dict[str, Any]:
-        """
-        Парсинг рядка таймфрейму на компоненти для бази даних
-
-        Args:
-            timeframe: Рядок таймфрейму (наприклад, '1h', '4h', '1d')
-
-        Returns:
-            Словник з компонентами таймфрейму
-        """
-        self.logger.debug(f"Парсинг таймфрейму: {timeframe}")
-
-        if timeframe in self.TIMEFRAME_MAPPING:
-            result = self.TIMEFRAME_MAPPING[timeframe].copy()
-            self.logger.debug(f"Знайдено мапінг для {timeframe}: {result}")
-            return result
-
-        # Якщо таймфрейм не в мапінгу, спробуємо парсити вручну
-        import re
-        match = re.match(r'(\d+)([mhdw])', timeframe.lower())
-        if not match:
-            self.logger.error(f"Невідомий формат таймфрейму: {timeframe}")
-            raise ValueError(f"Невідомий формат таймфрейму: {timeframe}")
-
-        number, unit_char = match.groups()
-        unit_mapping = {
-            'm': 'minute',
-            'h': 'hour',
-            'd': 'day',
-            'w': 'week'
-        }
-
-        result = {
-            'timeframe': int(number),
-            'unit': unit_mapping[unit_char]
-        }
-
-        self.logger.debug(f"Розпарсено таймфрейм {timeframe}: {result}")
-        return result
 
     def get_sequence_length_for_timeframe(self, timeframe: str) -> int:
         """Отримання довжини послідовності для конкретного таймфрейму"""
@@ -152,9 +103,12 @@ class DataPreprocessor:
         self.logger.info(f"Збережено конфігурацію моделі для {key}")
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
-
+        """
+        Створення завантажувача даних
+        """
         try:
             symbol = symbol.upper()
+
             self.logger.info(f"Підготовка завантажувача даних для {symbol} з таймфреймом {timeframe} "
                              f"та моделлю {model_type}")
 
@@ -173,13 +127,11 @@ class DataPreprocessor:
                 self.logger.error(f"Непідтримуваний символ: {symbol}")
                 raise ValueError(f"Непідтримуваний символ: {symbol}")
 
-            method = symbol_methods[symbol]
-
             def data_loader():
                 try:
                     self.logger.debug(f"Завантаження даних для {symbol} з таймфреймом {timeframe}")
 
-                    # Викликаємо метод напряму через db_manager з timeframe як позиційним аргументом
+                    # Викликаємо метод з таймфреймом
                     if symbol == 'BTC':
                         data = self.db_manager.get_btc_lstm_sequence(timeframe)
                     elif symbol == 'ETH':
@@ -220,10 +172,21 @@ class DataPreprocessor:
             data_loader = self.get_data_loader(symbol, timeframe, 'lstm')
             data = data_loader()
 
-            if data is not None and not data.empty:
-                self.logger.info(f"Успішно завантажено дані для {symbol}-{timeframe}: "
-                                 f"форма {data.shape}")
-                return data
+            if data is not None and len(data) > 0:
+                # Перевірка чи це DataFrame
+                if isinstance(data, pd.DataFrame) and not data.empty:
+                    self.logger.info(f"Успішно завантажено DataFrame для {symbol}-{timeframe}: "
+                                     f"форма {data.shape}")
+                    return data
+                # Якщо це список словників, конвертуємо в DataFrame
+                elif isinstance(data, list) and len(data) > 0:
+                    df = pd.DataFrame(data)
+                    self.logger.info(f"Конвертовано список в DataFrame для {symbol}-{timeframe}: "
+                                     f"форма {df.shape}")
+                    return df
+                else:
+                    self.logger.warning(f"Невідомий тип даних для {symbol}-{timeframe}: {type(data)}")
+                    raise ValueError("Невірний тип завантажених даних")
             else:
                 self.logger.warning(f"Основний метод повернув порожні дані для {symbol}-{timeframe}")
                 raise ValueError("Порожні дані з основного методу")
@@ -308,6 +271,11 @@ class DataPreprocessor:
                              f"з максимальною позицією {max_position} для {symbol}")
         else:
             self.logger.warning(f"Колонки sequence_id або sequence_position відсутні для {symbol}")
+
+        # Валідація таймфрейму в даних
+        if 'timeframe' in df.columns:
+            unique_timeframes = df['timeframe'].unique()
+            self.logger.info(f"Унікальні таймфрейми в даних для {symbol}: {unique_timeframes}")
 
         # Статистика по NaN
         nan_counts = df.isnull().sum()
@@ -576,18 +544,6 @@ class DataPreprocessor:
             self.logger.error(f"Помилка зворотного перетворення для {scaler_key}: {e}")
             return predictions
 
-    def get_feature_importance_info(self, symbol: str, timeframe: str) -> Dict[str, Any]:
-        """Отримання інформації про важливість ознак"""
-        key = f"{symbol}_{timeframe}"
-
-        return {
-            'total_features': self.feature_configs.get(f"{key}_count", 0),
-            'feature_types': self.feature_configs.get(f"{key}_types", {}),
-            'time_features': self.feature_configs.get(f"{key}_time_features", []),
-            'scaled': self.data_is_scaled,
-            'sequences_ready': self.sequences_prepared
-        }
-
     def validate_model_input(self, X: torch.Tensor, config: ModelConfig,
                              symbol: str, timeframe: str) -> bool:
         """Валідація вхідних даних для моделі"""
@@ -692,7 +648,7 @@ class DataPreprocessor:
             'scalers_keys': list(self.scalers.keys())[:10]  # Перші 10 ключів
         }
 
-    def prepare_features(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    def prepare_features(self, df: pd.DataFrame, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
         """Підготовка ознак для моделі з використанням всіх доступних модулів"""
         try:
             self.logger.info(f"Початок підготовки ознак для {symbol}")
