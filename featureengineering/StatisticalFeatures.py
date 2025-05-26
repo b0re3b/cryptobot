@@ -8,7 +8,7 @@ from utils.logger import CryptoLogger
 
 class StatisticalFeatures():
     def __init__(self):
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('Statistical Features')
     def create_volatility_features(self, data: pd.DataFrame,
                                    price_column: str = 'close',
                                    window_sizes: List[int] = [5, 10, 20, 50]) -> pd.DataFrame:

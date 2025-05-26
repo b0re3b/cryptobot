@@ -11,7 +11,7 @@ class CrossFeatures():
     def __init__(self):
         super().__init__()
         self.added_features = []  # Відстеження доданих ознак
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('Cross Features')
 
     def _validate_columns(self, data: pd.DataFrame,
                           column_lists: List[List[str]],

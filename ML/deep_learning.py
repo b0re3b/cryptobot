@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import json
 import pickle
 import matplotlib.pyplot as plt
+from numpy import floating
+
 from ML.LSTM import LSTMModel
 from ML.GRU import GRUModel
 from ML.transformer import TransformerModel
@@ -1038,7 +1040,7 @@ class DeepLearning:
                     predictions) != 0 else float('inf')
             }
 
-    def _calculate_skewness(self, data: np.ndarray) -> float:
+    def _calculate_skewness(self, data: np.ndarray) -> float | floating[Any]:
             """Розрахунок асиметрії"""
             mean_val = np.mean(data)
             std_val = np.std(data)

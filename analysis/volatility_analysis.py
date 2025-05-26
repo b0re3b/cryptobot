@@ -24,7 +24,7 @@ class VolatilityAnalysis:
         self.data_cleaner = DataCleaner()
         self.anomaly_detector = AnomalyDetector()
         self.feature_engineer = FeatureEngineering()
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('volatility_analysis')
         # Оптимізація: налаштування паралельних обчислень
         self.use_parallel = use_parallel
         self.max_workers = max_workers

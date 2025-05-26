@@ -1,5 +1,4 @@
 import os
-import logging
 from dataclasses import dataclass, field
 from datetime import time, datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -13,6 +12,7 @@ from ML.DataPreprocessor import DataPreprocessor
 from ML.base import BaseDeepModel
 from data.db import DatabaseManager
 from featureengineering.feature_engineering import FeatureEngineering
+from utils.logger import CryptoLogger
 
 
 @dataclass
@@ -71,13 +71,8 @@ class ModelTrainer:
         self.processor = DataPreprocessor()
 
         # Налаштування логування
-        self.logger = logging.getLogger(__name__)
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+        self.logger = CryptoLogger('trainer')
+
 
         # Створення директорії для моделей
         if not os.path.exists(self.models_dir):

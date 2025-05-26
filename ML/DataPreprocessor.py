@@ -218,16 +218,7 @@ class DataPreprocessor:
         raise NotImplementedError("Fallback метод не реалізований")
 
     def validate_prepared_data(self, df: pd.DataFrame, symbol: str) -> bool:
-        """
-        Валідація попередньо підготовлених даних з новою структурою колонок
 
-        Args:
-            df: DataFrame з підготовленими даними
-            symbol: Символ для логування
-
-        Returns:
-            bool: True якщо дані валідні
-        """
         self.logger.info(f"Валідація підготовлених даних для {symbol}")
 
         # Перевірка що це DataFrame
@@ -288,34 +279,38 @@ class DataPreprocessor:
             unique_timeframes = df['timeframe'].unique()
             self.logger.info(f"Унікальні таймфрейми в даних для {symbol}: {unique_timeframes}")
 
-        # Статистика по NaN
-        nan_counts = df.isnull().sum()
-        total_nans = nan_counts.sum()
-        if total_nans > 0:
-            self.logger.warning(
-                f"Знайдено {total_nans} NaN значень у {len(nan_counts[nan_counts > 0])} колонках для {symbol}")
-            # Логування топ-колонок з найбільшою кількістю NaN
-            top_nan_cols = nan_counts[nan_counts > 0].head(5)
-            for col, count in top_nan_cols.items():
-                self.logger.debug(f"  {col}: {count} NaN значень")
-        else:
-            self.logger.info(f"NaN значення не знайдені для {symbol}")
+        # НЕ ЛОГУЄМО NaN для lag-колонок, оскільки це нормально
+        self._validate_nan_values(df, symbol)
 
         self.logger.info(f"Валідація завершена для {symbol}: форма даних {df.shape}")
         return True
 
+    def _validate_nan_values(self, df: pd.DataFrame, symbol: str):
+        """Валідація NaN значень з урахуванням lag-колонок"""
+        # Виключаємо lag-колонки з перевірки NaN, оскільки для них це нормально
+        lag_columns = [col for col in df.columns if '_lag_' in col]
+        non_lag_columns = [col for col in df.columns if '_lag_' not in col]
+
+        if non_lag_columns:
+            non_lag_df = df[non_lag_columns]
+            nan_counts = non_lag_df.isnull().sum()
+            total_nans = nan_counts.sum()
+
+            if total_nans > 0:
+                self.logger.warning(f"Знайдено {total_nans} NaN значень у non-lag колонках для {symbol}")
+                # Логування топ-колонок з найбільшою кількістю NaN
+                top_nan_cols = nan_counts[nan_counts > 0].head(5)
+                for col, count in top_nan_cols.items():
+                    self.logger.debug(f"  {col}: {count} NaN значень")
+            else:
+                self.logger.info(f"NaN значення в non-lag колонках не знайдені для {symbol}")
+
+        if lag_columns:
+            self.logger.debug(f"Знайдено {len(lag_columns)} lag-колонок для {symbol} (NaN в них є нормальним)")
+
     def extract_sequences_from_prepared_data(self, df: pd.DataFrame, target_column: str = 'target_close_1') -> Tuple[
         np.ndarray, np.ndarray]:
-        """
-        Витягування послідовностей з підготовлених даних використовуючи sequence_id та sequence_position
 
-        Args:
-            df: DataFrame з підготовленими даними
-            target_column: Назва цільової колонки
-
-        Returns:
-            Кортеж (X, y) де X - послідовності ознак, y - цільові значення
-        """
         self.logger.info(f"Витягування послідовностей з підготовлених даних")
 
         # Перевірка що це DataFrame
@@ -332,15 +327,19 @@ class DataPreprocessor:
             self.logger.error(f"Цільова колонка {target_column} відсутня")
             raise ValueError(f"Цільова колонка {target_column} відсутня")
 
-        # Визначення ознак для моделі (виключаємо службові колонки)
         exclude_columns = [
             'id', 'timeframe', 'sequence_id', 'sequence_position', 'open_time',
             'target_close_1', 'target_close_5', 'target_close_10',
             'sequence_length', 'scaling_metadata', 'created_at', 'updated_at'
         ]
 
+        # Додаємо всі lag-колонки до виключених
+        lag_columns = [col for col in df.columns if '_lag_' in col]
+        exclude_columns.extend(lag_columns)
+
         feature_columns = [col for col in df.columns if col not in exclude_columns]
-        self.logger.info(f"Використовуємо {len(feature_columns)} ознак: {feature_columns}")
+        self.logger.info(
+            f"Використовуємо {len(feature_columns)} ознак (виключено {len(lag_columns)} lag-колонок): {feature_columns[:10]}...")
 
         # Сортування даних по sequence_id та sequence_position
         df_sorted = df.sort_values(['sequence_id', 'sequence_position'])
@@ -358,6 +357,12 @@ class DataPreprocessor:
 
             # Витягування ознак та цільового значення
             sequence_features = group[feature_columns].values
+
+            # Перевірка на NaN в ознаках (після виключення lag-колонок)
+            if np.isnan(sequence_features).any():
+                self.logger.warning(f"NaN значення в ознаках для sequence_id {sequence_id}, пропускаємо")
+                continue
+
             # Берем цільове значення з останньої позиції послідовності
             target_value = group[target_column].iloc[-1]
 
@@ -381,21 +386,7 @@ class DataPreprocessor:
                                            target_column: str = 'target_close_1',
                                            config: Optional[ModelConfig] = None) -> Tuple[torch.Tensor, torch.Tensor,
     torch.Tensor, torch.Tensor, ModelConfig]:
-        """
-        Обробка попередньо підготовлених та відскейлених даних для моделі
 
-        Args:
-            data: DataFrame з попередньо підготовленими ознаками
-            symbol: Символ криптовалюти
-            timeframe: Часовий інтервал
-            model_type: Тип моделі
-            validation_split: Розмір валідаційної вибірки
-            target_column: Назва цільової колонки
-            config: Опціональна конфігурація моделі
-
-        Returns:
-            Кортеж (X_train, y_train, X_val, y_val, model_config)
-        """
         self.logger.info(f"Початок обробки підготовлених даних для {symbol}-{timeframe}-{model_type}")
 
         # Валідація підготовлених даних
@@ -427,12 +418,11 @@ class DataPreprocessor:
                 config.sequence_length = X.shape[1]
                 self.logger.info(f"Оновлено sequence_length з {old_len} на {config.sequence_length}")
 
-        # Перевірка на NaN та Inf
+        # ВИПРАВЛЕНО: Не обробляємо NaN та Inf, оскільки їх не повинно бути після правильного виключення lag-колонок
         if np.isnan(X).any() or np.isinf(X).any():
-            self.logger.error(f"Знайдено NaN або Inf значення у ознаках для {symbol}-{timeframe}")
-            # Заміна NaN та Inf на 0 (або інше значення за замовчуванням)
-            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-            self.logger.warning(f"NaN та Inf значення замінено на 0 для {symbol}-{timeframe}")
+            self.logger.error(f"КРИТИЧНА ПОМИЛКА: Знайдено NaN або Inf значення у ознаках для {symbol}-{timeframe}")
+            self.logger.error("Це не повинно відбуватися після правильного виключення lag-колонок")
+            raise ValueError("NaN або Inf значення у ознаках після виключення lag-колонок")
 
         if np.isnan(y).any() or np.isinf(y).any():
             self.logger.error(f"Знайдено NaN або Inf значення у цільових значеннях для {symbol}-{timeframe}")

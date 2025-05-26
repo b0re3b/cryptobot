@@ -15,7 +15,7 @@ from utils.logger import CryptoLogger
 
 class DimensionalityReducer():
     def __init__(self):
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('Dimensionality Reducer')
     def select_features(self, X: pd.DataFrame, y: pd.Series,
                         n_features: Optional[int] = None,
                         method: str = 'f_regression') -> Tuple[pd.DataFrame, List[str]]:

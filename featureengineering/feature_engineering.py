@@ -8,14 +8,12 @@ from featureengineering.CrossFeatures import CrossFeatures
 from featureengineering.StatisticalFeatures import StatisticalFeatures
 from featureengineering.TechnicalFeatures import TechnicalFeatures
 from featureengineering.TimeFeatures import TimeFeatures
-
+from utils.logger import CryptoLogger
 class FeatureEngineering:
-    def __init__(self, log_level=logging.INFO):
-        self.log_level = log_level
+    def __init__(self):
         self.db_manager = DatabaseManager()
         self.supported_symbols = self.db_manager.supported_symbols
-        logging.basicConfig(level=self.log_level)
-        self.logger = logging.getLogger(__name__)
+        self.logger = CryptoLogger('Feature Engineering')
         self.logger.info("Ініціалізація Feature Engineering Pipeline...")
         self.ready = True
 

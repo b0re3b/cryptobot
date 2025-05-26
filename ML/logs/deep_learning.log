@@ -199,3 +199,6 @@ LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
 2025-05-25 02:34:14 - deep_learning - ERROR - [logger.py:111] - Error training ETH-4h-gru: Очікується DataFrame, отримано <class 'list'>
 2025-05-25 02:38:11 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
 2025-05-25 02:43:18 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-26 23:56:58 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-27 00:00:25 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-27 00:07:16 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm

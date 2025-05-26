@@ -25,7 +25,7 @@ class TrendDetection:
         self.min_points_for_level = self.config.get('min_points_for_level', 3)
 
         # Ініціалізація логера
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('trend_detection')
 
     def detect_trend(self, data: pd.DataFrame, window_size: int = 14) -> str:
         try:

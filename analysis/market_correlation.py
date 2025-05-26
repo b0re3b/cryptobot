@@ -1,22 +1,21 @@
+from datetime import datetime, timedelta
+from typing import List, Dict, Tuple, Optional, Union
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional, Union
-from datetime import datetime, timedelta
-from data.db import DatabaseManager
 from DMP.market_data_processor import MarketDataProcessor
-from utils.logger import setup_logger
+from data.db import DatabaseManager
 from utils.config import *
-logger = setup_logger(__name__)
+from utils.logger import CryptoLogger
 
 
 class MarketCorrelation:
 
     def __init__(self):
-
+        self.logger = CryptoLogger('correlation')
         self.db_manager = DatabaseManager()
         self.data_processor = MarketDataProcessor()
 
-        logger.info("Ініціалізація аналізатора ринкової кореляції")
+        self.logger.info("Ініціалізація аналізатора ринкової кореляції")
 
         self.config = DEFAULT_CONFIG.copy()
 
@@ -27,7 +26,7 @@ class MarketCorrelation:
             if key in target_dict and isinstance(target_dict[key], dict) and isinstance(value, dict):
                 self._update_config_recursive(target_dict[key], value)
             else:
-                logger.debug(f"Оновлення параметра конфігурації: {key} = {value}")
+                self.logger.debug(f"Оновлення параметра конфігурації: {key} = {value}")
                 target_dict[key] = value
 
     def calculate_price_correlation(self, symbols: List[str],
@@ -40,7 +39,7 @@ class MarketCorrelation:
         timeframe = self.config['default_timeframe']
         method = self.config['default_correlation_method']
 
-        logger.info(f"Розрахунок кореляції цін для {len(symbols)} символів з таймфреймом {timeframe}")
+        self.logger.info(f"Розрахунок кореляції цін для {len(symbols)} символів з таймфреймом {timeframe}")
 
         # Встановлення кінцевого часу як поточний, якщо не вказано
         end_time = end_time or datetime.now()
@@ -49,13 +48,13 @@ class MarketCorrelation:
         if start_time is None:
             lookback_days = self.config['default_lookback_days']
             start_time = end_time - timedelta(days=lookback_days)
-            logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
+            self.logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
 
         try:
             # Отримання цінових даних для всіх символів з бази даних замість Binance API
             price_data = {}
             for symbol in symbols:
-                logger.debug(f"Отримання даних для {symbol}")
+                self.logger.debug(f"Отримання даних для {symbol}")
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 price_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
@@ -74,13 +73,13 @@ class MarketCorrelation:
             # Перевірка на відсутні дані
             if df.isnull().values.any():
                 missing_count = df.isnull().sum().sum()
-                logger.warning(f"Виявлено {missing_count} відсутніх значень. Заповнення методом forward fill")
+                self.logger.warning(f"Виявлено {missing_count} відсутніх значень. Заповнення методом forward fill")
                 df = df.fillna(method='ffill')
 
             # Розрахунок матриці кореляції
             correlation_matrix = df.corr(method=method)
 
-            logger.info(f"Матриця кореляції цін успішно розрахована з використанням методу {method}")
+            self.logger.info(f"Матриця кореляції цін успішно розрахована з використанням методу {method}")
 
             # Збереження результатів у базу даних
             self.save_correlation_to_db(
@@ -95,7 +94,7 @@ class MarketCorrelation:
             return correlation_matrix
 
         except Exception as e:
-            logger.error(f"Помилка при розрахунку кореляції цін: {str(e)}")
+            self.logger.error(f"Помилка при розрахунку кореляції цін: {str(e)}")
             raise
 
     def calculate_volume_correlation(self, symbols: List[str],
@@ -108,7 +107,7 @@ class MarketCorrelation:
         timeframe = timeframe or self.config['default_timeframe']
         method = method or self.config['default_correlation_method']
 
-        logger.info(f"Розрахунок кореляції об'ємів торгівлі для {len(symbols)} символів з таймфреймом {timeframe}")
+        self.logger.info(f"Розрахунок кореляції об'ємів торгівлі для {len(symbols)} символів з таймфреймом {timeframe}")
 
         # Встановлення кінцевого часу як поточний, якщо не вказано
         end_time = end_time or datetime.now()
@@ -117,13 +116,13 @@ class MarketCorrelation:
         if start_time is None:
             lookback_days = self.config['default_lookback_days']
             start_time = end_time - timedelta(days=lookback_days)
-            logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
+            self.logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
 
         try:
             # Отримання даних про об'єми торгівлі для всіх символів з бази даних
             volume_data = {}
             for symbol in symbols:
-                logger.debug(f"Отримання даних про об'єми для {symbol}")
+                self.logger.debug(f"Отримання даних про об'єми для {symbol}")
                 volume_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
                     timeframe=timeframe,
@@ -140,7 +139,7 @@ class MarketCorrelation:
             # Перевірка на відсутні значення
             if df.isnull().values.any():
                 missing_count = df.isnull().sum().sum()
-                logger.warning(f"Виявлено {missing_count} відсутніх значень об'єму. Заповнення методом forward fill")
+                self.logger.warning(f"Виявлено {missing_count} відсутніх значень об'єму. Заповнення методом forward fill")
                 df = df.fillna(method='ffill')
 
             # Фільтрація даних для усунення викидів
@@ -153,14 +152,14 @@ class MarketCorrelation:
                 outliers_mask = df[column] > upper_limit
                 if outliers_mask.any():
                     outlier_count = outliers_mask.sum()
-                    logger.warning(
+                    self.logger.warning(
                         f"Виявлено {outlier_count} викидів об'єму для {column}. Заміна значеннями за медіаною")
                     df.loc[outliers_mask, column] = df[column].median()
 
             # Розрахунок матриці кореляції
             correlation_matrix = df.corr(method=method)
 
-            logger.info(f"Матриця кореляції об'ємів торгівлі успішно розрахована з використанням методу {method}")
+            self.logger.info(f"Матриця кореляції об'ємів торгівлі успішно розрахована з використанням методу {method}")
 
             # Збереження результатів у базу даних
             self.save_correlation_to_db(
@@ -175,7 +174,7 @@ class MarketCorrelation:
             return correlation_matrix
 
         except Exception as e:
-            logger.error(f"Помилка при розрахунку кореляції об'ємів торгівлі: {str(e)}")
+            self.logger.error(f"Помилка при розрахунку кореляції об'ємів торгівлі: {str(e)}")
             raise
 
     def calculate_returns_correlation(self, symbols: List[str],
@@ -189,7 +188,7 @@ class MarketCorrelation:
         timeframe = timeframe or self.config['default_timeframe']
         method = method or self.config['default_correlation_method']
 
-        logger.info(
+        self.logger.info(
             f"Розрахунок кореляції доходності для {len(symbols)} символів з таймфреймом {timeframe} та періодом {period}")
 
         # Встановлення кінцевого часу як поточний, якщо не вказано
@@ -199,13 +198,13 @@ class MarketCorrelation:
         if start_time is None:
             lookback_days = self.config['default_lookback_days']
             start_time = end_time - timedelta(days=lookback_days)
-            logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
+            self.logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
 
         try:
             # Отримання цінових даних для всіх символів з бази даних
             price_data = {}
             for symbol in symbols:
-                logger.debug(f"Отримання даних для {symbol}")
+                self.logger.debug(f"Отримання даних для {symbol}")
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 price_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
@@ -224,7 +223,7 @@ class MarketCorrelation:
             # Перевірка на відсутні дані
             if df.isnull().values.any():
                 missing_count = df.isnull().sum().sum()
-                logger.warning(f"Виявлено {missing_count} відсутніх значень. Заповнення методом forward fill")
+                self.logger.warning(f"Виявлено {missing_count} відсутніх значень. Заповнення методом forward fill")
                 df = df.fillna(method='ffill')
 
             # Розрахунок доходності
@@ -236,7 +235,7 @@ class MarketCorrelation:
             # Розрахунок матриці кореляції доходності
             correlation_matrix = returns_df.corr(method=method)
 
-            logger.info(f"Матриця кореляції доходності успішно розрахована з використанням методу {method}")
+            self.logger.info(f"Матриця кореляції доходності успішно розрахована з використанням методу {method}")
 
             # Збереження результатів у базу даних
             self.save_correlation_to_db(
@@ -251,7 +250,7 @@ class MarketCorrelation:
             return correlation_matrix
 
         except Exception as e:
-            logger.error(f"Помилка при розрахунку кореляції доходності: {str(e)}")
+            self.logger.error(f"Помилка при розрахунку кореляції доходності: {str(e)}")
             raise
 
     def calculate_volatility_correlation(self, symbols: List[str],
@@ -266,7 +265,7 @@ class MarketCorrelation:
         window = window or self.config['default_correlation_window']
         method = method or self.config['default_correlation_method']
 
-        logger.info(
+        self.logger.info(
             f"Розрахунок кореляції волатильності для {len(symbols)} символів з таймфреймом {timeframe} та вікном {window}")
 
         # Встановлення кінцевого часу як поточний, якщо не вказано
@@ -276,13 +275,13 @@ class MarketCorrelation:
         if start_time is None:
             lookback_days = self.config['default_lookback_days']
             start_time = end_time - timedelta(days=lookback_days)
-            logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
+            self.logger.debug(f"Використання періоду за замовчуванням: {lookback_days} днів")
 
         try:
             # Отримання цінових даних для всіх символів з бази даних
             price_data = {}
             for symbol in symbols:
-                logger.debug(f"Отримання даних для {symbol}")
+                self.logger.debug(f"Отримання даних для {symbol}")
                 # Використовуємо db_manager.get_klines замість binance_client.get_historical_prices
                 price_data[symbol] = self.db_manager.get_klines(
                     symbol=symbol,
@@ -301,7 +300,7 @@ class MarketCorrelation:
             # Перевірка на відсутні дані
             if price_df.isnull().values.any():
                 missing_count = price_df.isnull().sum().sum()
-                logger.warning(f"Виявлено {missing_count} відсутніх значень. Заповнення методом forward fill")
+                self.logger.warning(f"Виявлено {missing_count} відсутніх значень. Заповнення методом forward fill")
                 price_df = price_df.fillna(method='ffill')
 
             # Розрахунок доходності
@@ -319,7 +318,7 @@ class MarketCorrelation:
             # Розрахунок матриці кореляції волатильності
             correlation_matrix = volatility_df.corr(method=method)
 
-            logger.info(f"Матриця кореляції волатильності успішно розрахована з використанням методу {method}")
+            self.logger.info(f"Матриця кореляції волатильності успішно розрахована з використанням методу {method}")
 
             # Збереження результатів у базу даних
             self.save_correlation_to_db(
@@ -334,7 +333,7 @@ class MarketCorrelation:
             return correlation_matrix
 
         except Exception as e:
-            logger.error(f"Помилка при розрахунку кореляції волатильності: {str(e)}")
+            self.logger.error(f"Помилка при розрахунку кореляції волатильності: {str(e)}")
             raise
 
     def get_correlated_pairs(self, correlation_matrix: pd.DataFrame,
@@ -362,7 +361,7 @@ class MarketCorrelation:
         # Sort pairs by correlation value in descending order
         correlated_pairs.sort(key=lambda x: x[2], reverse=True)
 
-        logger.info(f"Found {len(correlated_pairs)} highly correlated pairs with threshold {threshold}")
+        self.logger.info(f"Found {len(correlated_pairs)} highly correlated pairs with threshold {threshold}")
         return correlated_pairs
 
     def get_anticorrelated_pairs(self, correlation_matrix: pd.DataFrame,
@@ -390,7 +389,7 @@ class MarketCorrelation:
         # Sort pairs by correlation value in ascending order (most negative first)
         anticorrelated_pairs.sort(key=lambda x: x[2])
 
-        logger.info(f"Found {len(anticorrelated_pairs)} highly anti-correlated pairs with threshold {threshold}")
+        self.logger.info(f"Found {len(anticorrelated_pairs)} highly anti-correlated pairs with threshold {threshold}")
         return anticorrelated_pairs
 
     def calculate_rolling_correlation(self, symbol1: str, symbol2: str,
@@ -411,7 +410,7 @@ class MarketCorrelation:
             # Add extra data to accommodate the window size
             start_time = end_time - timedelta(days=window + 30)  # +30 days buffer
 
-        logger.info(f"Calculating rolling correlation between {symbol1} and {symbol2} with window={window}")
+        self.logger.info(f"Calculating rolling correlation between {symbol1} and {symbol2} with window={window}")
 
         try:
             # Fetch price data for both symbols
@@ -445,11 +444,11 @@ class MarketCorrelation:
             # Calculate rolling correlation (method='pearson' only)
             rolling_corr = returns[symbol1].rolling(window=window).corr(returns[symbol2])
 
-            logger.info(f"Successfully calculated rolling correlation with {len(rolling_corr)} data points")
+            self.logger.info(f"Successfully calculated rolling correlation with {len(rolling_corr)} data points")
             return rolling_corr
 
         except Exception as e:
-            logger.error(f"Error calculating rolling correlation: {str(e)}")
+            self.logger.error(f"Error calculating rolling correlation: {str(e)}")
             raise
 
     def detect_correlation_breakdowns(self, symbol1: str, symbol2: str,
@@ -464,7 +463,7 @@ class MarketCorrelation:
         window = window or self.config['default_correlation_window']
         threshold = threshold or self.config['breakdown_threshold']
 
-        logger.info(f"Detecting correlation breakdowns between {symbol1} and {symbol2} with threshold {threshold}")
+        self.logger.info(f"Detecting correlation breakdowns between {symbol1} and {symbol2} with threshold {threshold}")
 
         try:
             # Calculate rolling correlation between the two symbols
@@ -483,7 +482,7 @@ class MarketCorrelation:
             # Identify points where correlation changes more than the threshold
             breakdown_points = correlation_changes[correlation_changes > threshold].index.tolist()
 
-            logger.info(f"Found {len(breakdown_points)} correlation breakdown points")
+            self.logger.info(f"Found {len(breakdown_points)} correlation breakdown points")
 
             # Save breakdown data to database
             breakdown_data = []
@@ -516,12 +515,12 @@ class MarketCorrelation:
                         timeframe=timeframe,
                         window_size=window
                     )
-                logger.debug(f"Saved {len(breakdown_data)} breakdown points to database")
+                self.logger.debug(f"Saved {len(breakdown_data)} breakdown points to database")
 
             return breakdown_points
 
         except Exception as e:
-            logger.error(f"Error detecting correlation breakdowns: {str(e)}")
+            self.logger.error(f"Error detecting correlation breakdowns: {str(e)}")
             raise
 
     def calculate_market_beta(self, symbol: str, market_symbol: str = 'BTC',
@@ -534,7 +533,7 @@ class MarketCorrelation:
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
 
-        logger.info(f"Calculating market beta for {symbol} relative to {market_symbol}")
+        self.logger.info(f"Calculating market beta for {symbol} relative to {market_symbol}")
 
         # Set default time range if not specified
         end_time = end_time or datetime.now()
@@ -610,7 +609,7 @@ class MarketCorrelation:
                         window_size=window
                     )
 
-                    logger.debug(f"Saved {len(beta_records)} beta values to database")
+                    self.logger.debug(f"Saved {len(beta_records)} beta values to database")
 
                 return rolling_beta
             else:
@@ -628,12 +627,12 @@ class MarketCorrelation:
                 }
 
                 self.db_manager.save_market_beta([beta_record])
-                logger.info(f"Saved beta value {beta} for {symbol} to database")
+                self.logger.info(f"Saved beta value {beta} for {symbol} to database")
 
                 return beta
 
         except Exception as e:
-            logger.error(f"Error calculating market beta for {symbol}: {str(e)}")
+            self.logger.error(f"Error calculating market beta for {symbol}: {str(e)}")
             raise
 
 
@@ -647,7 +646,7 @@ class MarketCorrelation:
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
 
-        logger.info(f"Saving {correlation_type} correlation matrix to database")
+        self.logger.info(f"Saving {correlation_type} correlation matrix to database")
 
         try:
             # Create a record for the correlation matrix
@@ -702,13 +701,13 @@ class MarketCorrelation:
             # Save to correlated_pairs table
             if pairs_data:
                 self.db_manager.insert_correlated_pair(pairs_data,method='pearson')
-                logger.debug(f"Saved {len(pairs_data)} correlated pairs to database")
+                self.logger.debug(f"Saved {len(pairs_data)} correlated pairs to database")
 
-            logger.info(f"Successfully saved correlation matrix with ID {matrix_id}")
+            self.logger.info(f"Successfully saved correlation matrix with ID {matrix_id}")
             return True
 
         except Exception as e:
-            logger.error(f"Error saving correlation to database: {str(e)}")
+            self.logger.error(f"Error saving correlation to database: {str(e)}")
             return False
 
     def load_correlation_from_db(self, correlation_type: str,
@@ -720,7 +719,7 @@ class MarketCorrelation:
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
 
-        logger.info(f"Loading {correlation_type} correlation matrix from database")
+        self.logger.info(f"Loading {correlation_type} correlation matrix from database")
 
         try:
             # Create the matrix ID for lookup
@@ -734,14 +733,14 @@ class MarketCorrelation:
                 matrix_json = matrix_data.get('matrix_json')
                 if matrix_json:
                     correlation_matrix = pd.read_json(matrix_json)
-                    logger.info(f"Successfully loaded correlation matrix with ID {matrix_id}")
+                    self.logger.info(f"Successfully loaded correlation matrix with ID {matrix_id}")
                     return correlation_matrix
 
-            logger.warning(f"No correlation matrix found with ID {matrix_id}")
+            self.logger.warning(f"No correlation matrix found with ID {matrix_id}")
             return None
 
         except Exception as e:
-            logger.error(f"Error loading correlation from database: {str(e)}")
+            self.logger.error(f"Error loading correlation from database: {str(e)}")
             return None
 
     def correlation_time_series(self, symbols_pair: Tuple[str, str],
@@ -755,7 +754,7 @@ class MarketCorrelation:
         timeframe = timeframe or self.config['default_timeframe']
 
         symbol1, symbol2 = symbols_pair
-        logger.info(f"Calculating correlation time series between {symbol1} and {symbol2}")
+        self.logger.info(f"Calculating correlation time series between {symbol1} and {symbol2}")
 
         # Set time range
         end_time = datetime.now()
@@ -773,11 +772,11 @@ class MarketCorrelation:
             )
 
             if correlation_series is not None and not correlation_series.empty:
-                logger.info(f"Found existing correlation time series in database")
+                self.logger.info(f"Found existing correlation time series in database")
                 return correlation_series
 
             # If not found in database, calculate it
-            logger.info(f"Calculating new correlation time series")
+            self.logger.info(f"Calculating new correlation time series")
 
             # Calculate rolling correlation
             rolling_corr = self.calculate_rolling_correlation(
@@ -805,12 +804,12 @@ class MarketCorrelation:
             # Save to correlation_time_series table
             if correlation_data:
                 self.db_manager.save_correlation_time_series(correlation_data,method='pearson')
-                logger.debug(f"Saved {len(correlation_data)} correlation values to database")
+                self.logger.debug(f"Saved {len(correlation_data)} correlation values to database")
 
             return rolling_corr
 
         except Exception as e:
-            logger.error(f"Error calculating correlation time series: {str(e)}")
+            self.logger.error(f"Error calculating correlation time series: {str(e)}")
             raise
 
     def find_leading_indicators(self, target_symbol: str,
@@ -824,7 +823,7 @@ class MarketCorrelation:
         lag_periods = lag_periods or self.config['default_lag_periods']
         timeframe = timeframe or self.config['default_timeframe']
 
-        logger.info(f"Finding leading indicators for {target_symbol} among {len(candidate_symbols)} candidates")
+        self.logger.info(f"Finding leading indicators for {target_symbol} among {len(candidate_symbols)} candidates")
 
         # Set default time range if not specified
         end_time = end_time or datetime.now()
@@ -854,7 +853,7 @@ class MarketCorrelation:
                 if symbol == target_symbol:
                     continue
 
-                logger.debug(f"Testing {symbol} as a leading indicator")
+                self.logger.debug(f"Testing {symbol} as a leading indicator")
 
                 # Fetch candidate data
                 candidate_data = self.db_manager.get_klines(
@@ -871,7 +870,7 @@ class MarketCorrelation:
                 # Align time series
                 common_index = target_returns.index.intersection(candidate_returns.index)
                 if len(common_index) < max(lag_periods) + 10:  # Need enough data points
-                    logger.warning(f"Insufficient aligned data points for {symbol}")
+                    self.logger.warning(f"Insufficient aligned data points for {symbol}")
                     continue
 
                 aligned_target = target_returns.loc[common_index]
@@ -912,12 +911,12 @@ class MarketCorrelation:
             # Save to leading_indicators table
             if leading_indicators_records:
                 self.db_manager.save_leading_indicators(leading_indicators_records)
-                logger.debug(f"Saved {len(leading_indicators_records)} leading indicator records to database")
+                self.logger.debug(f"Saved {len(leading_indicators_records)} leading indicator records to database")
 
             return leading_indicators
 
         except Exception as e:
-            logger.error(f"Error finding leading indicators: {str(e)}")
+            self.logger.error(f"Error finding leading indicators: {str(e)}")
             raise
 
     def correlated_movement_prediction(self, symbol: str,
@@ -929,7 +928,7 @@ class MarketCorrelation:
         prediction_horizon = prediction_horizon or self.config['default_prediction_horizon']
         timeframe = timeframe or self.config['default_timeframe']
 
-        logger.info(
+        self.logger.info(
             f"Predicting movement for {symbol} using {len(correlated_symbols)} correlated symbols with horizon {prediction_horizon}")
 
         # Set default time range - we need more historical data for training
@@ -966,7 +965,7 @@ class MarketCorrelation:
             # Handle any missing data
             if all_returns.isnull().values.any():
                 missing_count = all_returns.isnull().sum().sum()
-                logger.warning(f"Found {missing_count} missing values in returns. Filling with forward fill.")
+                self.logger.warning(f"Found {missing_count} missing values in returns. Filling with forward fill.")
                 all_returns = all_returns.fillna(method='ffill')
 
             # Create prediction features by shifting correlated symbols' returns
@@ -987,7 +986,7 @@ class MarketCorrelation:
             model_data = model_data.dropna()
 
             if len(model_data) < 30:  # Need sufficient data for reliable prediction
-                logger.warning(f"Insufficient data for prediction after preprocessing: {len(model_data)} rows")
+                self.logger.warning(f"Insufficient data for prediction after preprocessing: {len(model_data)} rows")
                 return {"error": "Insufficient data for prediction"}
 
             # Split data into training and testing sets
@@ -1010,7 +1009,7 @@ class MarketCorrelation:
             y_test = test_data['target'].astype(float)
 
             test_score = model.score(X_test, y_test)
-            logger.info(f"Prediction model R² score: {test_score:.4f}")
+            self.logger.info(f"Prediction model R² score: {test_score:.4f}")
 
             # Get the most recent data for prediction
             latest_data = feature_df.iloc[-1:].astype(float)
@@ -1071,11 +1070,11 @@ class MarketCorrelation:
 
             # self.db_manager.save_prediction(prediction_record)
 
-            logger.info(f"Successfully generated prediction for {symbol} with {prediction_horizon} periods horizon")
+            self.logger.info(f"Successfully generated prediction for {symbol} with {prediction_horizon} periods horizon")
             return results
 
         except Exception as e:
-            logger.error(f"Error in correlated movement prediction: {str(e)}")
+            self.logger.error(f"Error in correlated movement prediction: {str(e)}")
             return {"error": str(e)}
 
 
@@ -1086,7 +1085,7 @@ class MarketCorrelation:
         # Use default timeframe from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
 
-        logger.info(
+        self.logger.info(
             f"Analyzing market regime correlations for {len(symbols)} symbols across {len(market_regimes)} regimes")
 
         # Dictionary to store results by regime
@@ -1098,11 +1097,11 @@ class MarketCorrelation:
         try:
             # Process each market regime
             for (regime_start, regime_end), regime_name in market_regimes.items():
-                logger.info(f"Analyzing regime '{regime_name}' from {regime_start} to {regime_end}")
+                self.logger.info(f"Analyzing regime '{regime_name}' from {regime_start} to {regime_end}")
 
                 # Skip regimes with invalid time ranges
                 if regime_start >= regime_end:
-                    logger.warning(f"Invalid time range for regime {regime_name}: {regime_start} to {regime_end}")
+                    self.logger.warning(f"Invalid time range for regime {regime_name}: {regime_start} to {regime_end}")
                     continue
 
                 # Initialize regime entry in results dictionary if not exists
@@ -1118,9 +1117,9 @@ class MarketCorrelation:
                         end_time=regime_end
                     )
                     regime_correlations[regime_name]['price'] = price_corr
-                    logger.debug(f"Calculated price correlation for regime {regime_name}")
+                    self.logger.debug(f"Calculated price correlation for regime {regime_name}")
                 except Exception as e:
-                    logger.warning(f"Error calculating price correlation for regime {regime_name}: {str(e)}")
+                    self.logger.warning(f"Error calculating price correlation for regime {regime_name}: {str(e)}")
 
                 # Calculate returns correlation
                 try:
@@ -1131,9 +1130,9 @@ class MarketCorrelation:
                         end_time=regime_end
                     )
                     regime_correlations[regime_name]['returns'] = returns_corr
-                    logger.debug(f"Calculated returns correlation for regime {regime_name}")
+                    self.logger.debug(f"Calculated returns correlation for regime {regime_name}")
                 except Exception as e:
-                    logger.warning(f"Error calculating returns correlation for regime {regime_name}: {str(e)}")
+                    self.logger.warning(f"Error calculating returns correlation for regime {regime_name}: {str(e)}")
 
                 # Calculate volatility correlation
                 try:
@@ -1144,9 +1143,9 @@ class MarketCorrelation:
                         end_time=regime_end
                     )
                     regime_correlations[regime_name]['volatility'] = volatility_corr
-                    logger.debug(f"Calculated volatility correlation for regime {regime_name}")
+                    self.logger.debug(f"Calculated volatility correlation for regime {regime_name}")
                 except Exception as e:
-                    logger.warning(f"Error calculating volatility correlation for regime {regime_name}: {str(e)}")
+                    self.logger.warning(f"Error calculating volatility correlation for regime {regime_name}: {str(e)}")
 
                 # Calculate volume correlation
                 try:
@@ -1157,9 +1156,9 @@ class MarketCorrelation:
                         end_time=regime_end
                     )
                     regime_correlations[regime_name]['volume'] = volume_corr
-                    logger.debug(f"Calculated volume correlation for regime {regime_name}")
+                    self.logger.debug(f"Calculated volume correlation for regime {regime_name}")
                 except Exception as e:
-                    logger.warning(f"Error calculating volume correlation for regime {regime_name}: {str(e)}")
+                    self.logger.warning(f"Error calculating volume correlation for regime {regime_name}: {str(e)}")
 
                 # Calculate average correlations for this regime
                 if 'returns' in regime_correlations[regime_name]:
@@ -1172,7 +1171,7 @@ class MarketCorrelation:
                             corr_values.append(returns_matrix.iloc[i, j])
 
                     avg_corr = sum(corr_values) / len(corr_values) if corr_values else 0
-                    logger.info(f"Regime {regime_name} - Average correlation: {avg_corr:.4f}")
+                    self.logger.info(f"Regime {regime_name} - Average correlation: {avg_corr:.4f}")
 
             # Save regime correlation analysis to database
             for regime_name, correlation_data in regime_correlations.items():
@@ -1199,13 +1198,13 @@ class MarketCorrelation:
                         # Assuming we have a method to save regime correlation data
                         if hasattr(self.db_manager, 'save_market_regime_correlation'):
                             self.db_manager.save_market_regime_correlation(record)
-                            logger.debug(f"Saved {corr_type} correlation for regime {regime_name} to database")
+                            self.logger.debug(f"Saved {corr_type} correlation for regime {regime_name} to database")
 
-            logger.info(f"Market regime correlation analysis complete for {len(regime_correlations)} regimes")
+            self.logger.info(f"Market regime correlation analysis complete for {len(regime_correlations)} regimes")
             return regime_correlations
 
         except Exception as e:
-            logger.error(f"Error analyzing market regime correlations: {str(e)}")
+            self.logger.error(f"Error analyzing market regime correlations: {str(e)}")
             raise
 
 

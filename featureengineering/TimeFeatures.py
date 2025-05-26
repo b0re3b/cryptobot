@@ -7,7 +7,7 @@ from utils.logger import CryptoLogger
 
 class TimeFeatures():
     def __init__(self):
-        self.logger = CryptoLogger('INFO')
+        self.logger = CryptoLogger('TimeFeatures')
     def create_lagged_features(self, data: pd.DataFrame,
                                columns: Optional[List[str]] = None,
                                lag_periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
