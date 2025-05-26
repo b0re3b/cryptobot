@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from datetime import time, datetime
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Generator
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,6 +13,13 @@ from ML.base import BaseDeepModel
 from data.db import DatabaseManager
 from featureengineering.feature_engineering import FeatureEngineering
 from utils.logger import CryptoLogger
+
+
+@dataclass
+class ChunkConfig:
+    chunk_size: int = 10000
+    overlap_size: int = 100
+    max_chunks_in_memory: int = 5
 
 
 @dataclass
@@ -34,7 +41,7 @@ class ModelConfig:
     @classmethod
     def get_sequence_length_for_timeframe(cls, timeframe: str) -> int:
         """
-        Возвращает рекомендуемую длину последовательности для таймфрейма
+        Повертає рекомендовану довжину послідовності для таймфрейму
         """
         sequence_mapping = {
             '1m': 60,
@@ -55,9 +62,7 @@ class CryptoConfig:
 
 class ModelTrainer:
 
-
     def __init__(self, device: Optional[torch.device] = None, models_dir: str = "models"):
-
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.models: Dict[str, BaseDeepModel] = {}
         self.model_configs: Dict[str, ModelConfig] = {}
@@ -66,17 +71,404 @@ class ModelTrainer:
         self.training_history: Dict[str, List[float]] = {}
         self.models_dir = models_dir
         self.db_manager = DatabaseManager()
+
         # Ініціалізація компонентів
         self.feature_engineering = FeatureEngineering()
         self.processor = DataPreprocessor()
 
+        # Конфігурація для роботи з чанками
+        self.chunk_config = ChunkConfig()
+
         # Налаштування логування
         self.logger = CryptoLogger('trainer')
-
 
         # Створення директорії для моделей
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
+
+    def _create_data_chunks(self, data: pd.DataFrame) -> Generator[pd.DataFrame, None, None]:
+        """
+        Створює чанки даних з перекриттям для безперервного навчання
+        """
+        total_rows = len(data)
+        self.logger.info(f"Розділення {total_rows} рядків на чанки розміром {self.chunk_config.chunk_size}")
+
+        chunk_count = 0
+        start_idx = 0
+
+        while start_idx < total_rows:
+            end_idx = min(start_idx + self.chunk_config.chunk_size, total_rows)
+
+            # Додаємо перекриття для збереження контексту послідовностей
+            if start_idx > 0:
+                actual_start = max(0, start_idx - self.chunk_config.overlap_size)
+            else:
+                actual_start = start_idx
+
+            chunk = data.iloc[actual_start:end_idx].copy()
+            chunk_count += 1
+
+            self.logger.info(f"Створено чанк {chunk_count}: рядки {actual_start}-{end_idx - 1} ({len(chunk)} рядків)")
+
+            yield chunk
+
+            # Переходимо до наступного чанку
+            start_idx = end_idx
+
+            # Якщо залишилося менше overlap_size рядків, завершуємо
+            if total_rows - start_idx < self.chunk_config.overlap_size:
+                break
+
+    def _prepare_chunk_sequences(self, chunk: pd.DataFrame, sequence_length: int,
+                                 previous_chunk: Optional[pd.DataFrame] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Підготовляє послідовності з чанку з урахуванням попереднього чанку для контексту
+        """
+        # Об'єднуємо з попереднім чанком для контексту, якщо він є
+        if previous_chunk is not None:
+            # Беремо останні sequence_length рядків з попереднього чанку
+            context_rows = min(sequence_length, len(previous_chunk))
+            context_data = previous_chunk.tail(context_rows)
+            combined_data = pd.concat([context_data, chunk], ignore_index=True)
+        else:
+            combined_data = chunk
+
+        features = combined_data.drop(columns=["target"]).values
+        targets = combined_data["target"].values
+
+        # Створюємо послідовності
+        X, y = [], []
+        start_idx = sequence_length if previous_chunk is not None else sequence_length
+
+        for i in range(start_idx, len(features)):
+            X.append(features[i - sequence_length:i])
+            y.append(targets[i])
+
+        self.logger.debug(f"З чанку розміром {len(chunk)} створено {len(X)} послідовностей")
+
+        return np.array(X), np.array(y)
+
+    def train_model_chunked(self, symbol: str, timeframe: str, model_type: str,
+                            data: pd.DataFrame, input_dim: int,
+                            config: Optional[ModelConfig] = None,
+                            validation_split: float = 0.2,
+                            patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
+        """
+        Навчання моделі на даних по чанках
+        """
+        self.logger.info(f"Початок чанкового навчання моделі {symbol}_{timeframe}_{model_type}")
+        training_start_time = time()
+
+        # Створюємо або використовуємо надану конфігурацію
+        if config is None:
+            config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
+
+        # Створюємо модель
+        model = self._build_model_from_config(model_type, config).to(self.device)
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+
+        # Налаштування оптимізатора та функції втрат
+        optimizer, criterion = self.setup_optimizer_and_loss(model, config.learning_rate)
+
+        # Створюємо валідаційний набір з кінця даних
+        val_size = int(len(data) * validation_split)
+        train_data = data.iloc[:-val_size] if val_size > 0 else data
+        val_data = data.tail(val_size) if val_size > 0 else None
+
+        self.logger.info(
+            f"Тренувальних даних: {len(train_data)}, валідаційних: {len(val_data) if val_data is not None else 0}")
+
+        # Підготовка валідаційних даних
+        val_tensor = None
+        if val_data is not None and len(val_data) >= config.sequence_length:
+            X_val, y_val = self._prepare_sequence_data(val_data, config.sequence_length)
+            val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
+            self.logger.info(f"Підготовлено валідаційний набір: {len(X_val)} послідовностей")
+
+        # Навчання по чанках
+        all_losses = []
+        best_loss = float('inf')
+        best_model_state = None
+        patience_counter = 0
+        previous_chunk = None
+        epoch = 0
+
+        for epoch_num in range(config.epochs):
+            epoch = epoch_num + 1
+            self.logger.info(f"Епоха {epoch}/{config.epochs}")
+
+            epoch_losses = []
+            chunk_count = 0
+
+            # Навчання на кожному чанку
+            for chunk in self._create_data_chunks(train_data):
+                chunk_count += 1
+
+                try:
+                    # Підготовка послідовностей з урахуванням контексту
+                    X_chunk, y_chunk = self._prepare_chunk_sequences(
+                        chunk, config.sequence_length, previous_chunk
+                    )
+
+                    if len(X_chunk) == 0:
+                        self.logger.warning(f"Чанк {chunk_count} не містить достатньо даних для послідовностей")
+                        continue
+
+                    # Навчання на чанку
+                    chunk_tensor = (torch.tensor(X_chunk).float(), torch.tensor(y_chunk).float())
+                    chunk_loss = self._train_chunk(model, chunk_tensor, optimizer, criterion, config.batch_size)
+
+                    epoch_losses.append(chunk_loss)
+                    self.logger.debug(f"Чанк {chunk_count}: loss = {chunk_loss:.6f}")
+
+                    # Зберігаємо частину поточного чанку для контексту наступного
+                    if len(chunk) > self.chunk_config.overlap_size:
+                        previous_chunk = chunk.tail(self.chunk_config.overlap_size)
+
+                    # Очищення пам'яті після кожного чанку
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+                except Exception as e:
+                    self.logger.error(f"Помилка обробки чанку {chunk_count}: {str(e)}")
+                    continue
+
+            # Обчислення середньої втрати епохи
+            if epoch_losses:
+                avg_epoch_loss = np.mean(epoch_losses)
+                all_losses.append(avg_epoch_loss)
+
+                # Валідація, якщо є валідаційні дані
+                val_loss = None
+                if val_tensor is not None:
+                    val_loss = self._validate_chunk(model, val_tensor, criterion)
+
+                    # Early stopping на основі валідаційної втрати
+                    if val_loss < best_loss:
+                        best_loss = val_loss
+                        best_model_state = model.state_dict().copy()
+                        patience_counter = 0
+                    else:
+                        patience_counter += 1
+
+                # Логування прогресу
+                log_msg = f"Епоха {epoch}: Train Loss = {avg_epoch_loss:.6f}"
+                if val_loss is not None:
+                    log_msg += f", Val Loss = {val_loss:.6f}"
+                self.logger.info(log_msg)
+
+                # Early stopping
+                if patience_counter >= patience:
+                    self.logger.info(f"Early stopping на епосі {epoch}")
+                    break
+            else:
+                self.logger.warning(f"Епоха {epoch}: немає даних для навчання")
+
+        # Завантаження найкращих ваг
+        if best_model_state:
+            model.load_state_dict(best_model_state)
+            self.logger.info("Завантажено найкращі ваги моделі")
+
+        # Збереження моделі та конфігурації
+        self.models[model_key] = model
+        self.model_configs[model_key] = config
+        self.training_history[model_key] = all_losses
+
+        # Оцінка моделі
+        metrics = {}
+        if val_tensor is not None:
+            metrics = self.evaluate(model, val_tensor)
+            self.model_metrics[model_key] = metrics
+
+        # Час завершення навчання
+        training_end_time = time()
+        training_duration = training_end_time - training_start_time
+
+        # Збереження в БД
+        model_id = None
+        try:
+            if model_data is None:
+                model_data = self._create_model_data_dict(symbol, timeframe, model_type, config)
+            model_id = self.db_manager.save_ml_model(model_data)
+
+            if metrics:
+                metrics_data = {
+                    'model_id': model_id,
+                    'mse': metrics.get('MSE', metrics.get('mse')),
+                    'rmse': metrics.get('RMSE', metrics.get('rmse')),
+                    'mae': metrics.get('MAE', metrics.get('mae')),
+                    'r2_score': metrics.get('R2', metrics.get('r2_score', metrics.get('r2'))),
+                    'test_date': datetime.now(),
+                    'training_duration_seconds': int(training_duration),
+                    'epochs_completed': epoch
+                }
+                metrics_id = self.db_manager.save_ml_model_metrics(metrics_data)
+                self.logger.info(f"Модель збережена в БД. Model ID: {model_id}, Metrics ID: {metrics_id}")
+
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні в БД: {str(e)}")
+
+        self.logger.info(f"Чанкове навчання моделі {model_key} завершено за {training_duration:.2f} секунд")
+
+        return {
+            'config': config.__dict__,
+            'metrics': metrics,
+            'history': all_losses,
+            'model_id': model_id,
+            'training_duration': training_duration,
+            'epochs_completed': epoch,
+            'chunks_processed': chunk_count if 'chunk_count' in locals() else 0
+        }
+
+    def _train_chunk(self, model: BaseDeepModel, chunk_data: Tuple[torch.Tensor, torch.Tensor],
+                     optimizer, criterion, batch_size: int) -> float:
+        """
+        Навчання моделі на одному чанку даних
+        """
+        model.train()
+        X_chunk, y_chunk = chunk_data
+        X_chunk, y_chunk = X_chunk.to(self.device), y_chunk.to(self.device)
+
+        # Створюємо DataLoader для чанку
+        chunk_dataset = torch.utils.data.TensorDataset(X_chunk, y_chunk)
+        chunk_loader = torch.utils.data.DataLoader(
+            chunk_dataset, batch_size=batch_size, shuffle=True
+        )
+
+        total_loss = 0
+        batch_count = 0
+
+        for X_batch, y_batch in chunk_loader:
+            optimizer.zero_grad()
+            output = model(X_batch).squeeze()
+            loss = criterion(output, y_batch)
+            loss.backward()
+
+            # Gradient clipping для стабільності
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+            optimizer.step()
+            total_loss += loss.item()
+            batch_count += 1
+
+        return total_loss / batch_count if batch_count > 0 else 0
+
+    def _validate_chunk(self, model: BaseDeepModel, val_data: Tuple[torch.Tensor, torch.Tensor],
+                        criterion) -> float:
+        """
+        Валідація моделі на валідаційних даних
+        """
+        model.eval()
+        X_val, y_val = val_data
+        X_val, y_val = X_val.to(self.device), y_val.to(self.device)
+
+        with torch.no_grad():
+            output = model(X_val).squeeze()
+            loss = criterion(output, y_val)
+
+        return loss.item()
+
+    # Оновлений основний метод навчання
+    def train_model(self, symbol: str, timeframe: str, model_type: str,
+                    data: pd.DataFrame, input_dim: int,
+                    config: Optional[ModelConfig] = None,
+                    validation_split: float = 0.2,
+                    patience: int = 10, model_data=None,
+                    use_chunked_training: bool = True, **kwargs) -> Dict[str, Any]:
+        """
+        Навчання моделі з можливістю вибору чанкового або звичайного режиму
+        """
+
+        if use_chunked_training and len(data) > self.chunk_config.chunk_size:
+            self.logger.info("Використовується чанкове навчання")
+            return self.train_model_chunked(
+                symbol, timeframe, model_type, data, input_dim,
+                config, validation_split, patience, model_data, **kwargs
+            )
+        else:
+            self.logger.info("Використовується звичайне навчання")
+            return self.train_model_standard(
+                symbol, timeframe, model_type, data, input_dim,
+                config, validation_split, patience, model_data, **kwargs
+            )
+
+    def train_model_standard(self, symbol: str, timeframe: str, model_type: str,
+                             data: pd.DataFrame, input_dim: int,
+                             config: Optional[ModelConfig] = None,
+                             validation_split: float = 0.2,
+                             patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
+        """
+        Стандартне навчання моделі (оригінальна логіка)
+        """
+        self.logger.info(f"Початок стандартного навчання моделі {symbol}_{timeframe}_{model_type}")
+        training_start_time = time()
+
+        if config is None:
+            config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
+
+        # Підготовка даних з урахуванням sequence_length
+        X, y = self._prepare_sequence_data(data, config.sequence_length)
+
+        split = int(len(X) * (1 - validation_split))
+        X_train, X_val = X[:split], X[split:]
+        y_train, y_val = y[:split], y[split:]
+
+        train_tensor = (torch.tensor(X_train).float(), torch.tensor(y_train).float())
+        val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
+
+        # Створення та навчання моделі
+        model = self._build_model_from_config(model_type, config).to(self.device)
+        history = self._train_loop(model, train_tensor, val_tensor,
+                                   config.epochs, config.batch_size,
+                                   config.learning_rate, patience)
+
+        training_end_time = time()
+        training_duration = training_end_time - training_start_time
+
+        # Збереження моделі та конфігурації
+        model_key = self._create_model_key(symbol, timeframe, model_type)
+        self.models[model_key] = model
+        self.model_configs[model_key] = config
+
+        # Оцінка моделі
+        metrics = self.evaluate(model, val_tensor)
+        self.model_metrics[model_key] = metrics
+        self.training_history[model_key] = history
+
+        # Збереження в БД
+        model_id = None
+        try:
+            if model_data is None:
+                model_data = self._create_model_data_dict(symbol, timeframe, model_type, config)
+            model_id = self.db_manager.save_ml_model(model_data)
+
+            metrics_data = {
+                'model_id': model_id,
+                'mse': metrics.get('MSE', metrics.get('mse')),
+                'rmse': metrics.get('RMSE', metrics.get('rmse')),
+                'mae': metrics.get('MAE', metrics.get('mae')),
+                'r2_score': metrics.get('R2', metrics.get('r2_score', metrics.get('r2'))),
+                'test_date': datetime.now(),
+                'training_duration_seconds': int(training_duration),
+                'epochs_completed': len(history.get('train_loss', []))
+            }
+
+            metrics_id = self.db_manager.save_ml_model_metrics(metrics_data)
+            self.logger.info(f"Модель {model_key} збережена в БД. Model ID: {model_id}, Metrics ID: {metrics_id}")
+
+        except Exception as e:
+            self.logger.error(f"Помилка при збереженні в БД: {str(e)}")
+
+        self.logger.info(
+            f"Стандартне навчання моделі {model_key} завершено. RMSE: {metrics.get('RMSE', metrics.get('rmse', 'N/A'))}")
+
+        return {
+            'config': config.__dict__,
+            'metrics': metrics,
+            'history': history,
+            'model_id': model_id,
+            'training_duration': training_duration
+        }
 
     def create_model_config(self, symbol: str, timeframe: str, model_type: str,
                             input_dim: int, **kwargs) -> ModelConfig:
@@ -106,117 +498,48 @@ class ModelTrainer:
 
         return config
 
-    def train_model(self, symbol: str, timeframe: str, model_type: str,
-                    data: pd.DataFrame, input_dim: int,
-                    config: Optional[ModelConfig] = None,
-                    validation_split: float = 0.2,
-                    patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
-
-        self.logger.info(f"Початок навчання моделі {symbol}_{timeframe}_{model_type}")
-
-        # Час початку навчання
-        training_start_time = time()
-
-        # Створення або використання наданої конфігурації
-        if config is None:
-            config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
-
-        # Підготовка даних з урахуванням sequence_length
-        X, y = self._prepare_sequence_data(data, config.sequence_length)
-
-        split = int(len(X) * (1 - validation_split))
-        X_train, X_val = X[:split], X[split:]
-        y_train, y_val = y[:split], y[split:]
-
-        train_tensor = (torch.tensor(X_train).float(), torch.tensor(y_train).float())
-        val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
-
-        # Створення та навчання моделі
-        model = self._build_model_from_config(model_type, config).to(self.device)
-        history = self._train_loop(model, train_tensor, val_tensor,
-                                   config.epochs, config.batch_size,
-                                   config.learning_rate, patience)
-
-        # Час завершення навчання
-        training_end_time = time()
-        training_duration = training_end_time - training_start_time
-
-        # Збереження моделі та конфігурації
-        model_key = self._create_model_key(symbol, timeframe, model_type)
-        self.models[model_key] = model
-        self.model_configs[model_key] = config
-
-        # Оцінка моделі
-        metrics = self.evaluate(model, val_tensor)
-        self.model_metrics[model_key] = metrics
-        self.training_history[model_key] = history
-
-        # Збереження в БД
-        model_id = None
-        try:
-            # Спочатку зберігаємо модель і отримуємо її ID
-            if model_data is None:
-                model_data = self._create_model_data_dict(symbol, timeframe, model_type, config)
-            model_id = self.db_manager.save_ml_model(model_data)
-
-            # Потім зберігаємо метрики з правильним model_id
-            metrics_data = {
-                'model_id': model_id,
-                'mse': metrics.get('MSE', metrics.get('mse')),
-                'rmse': metrics.get('RMSE', metrics.get('rmse')),
-                'mae': metrics.get('MAE', metrics.get('mae')),
-                'r2_score': metrics.get('R2', metrics.get('r2_score', metrics.get('r2'))),
-                'test_date': datetime.now(),
-                'training_duration_seconds': int(training_duration),
-                'epochs_completed': len(history.get('train_loss', []))
-            }
-
-            metrics_id = self.db_manager.save_ml_model_metrics(metrics_data)
-            self.logger.info(
-                f"Модель {model_key} успішно збережена в БД. Model ID: {model_id}, Metrics ID: {metrics_id}")
-
-        except Exception as e:
-            self.logger.error(f"Помилка при збереженні в БД: {str(e)}")
-            # Можна додати rollback логіку якщо потрібно
-
-        self.logger.info(
-            f"Навчання моделі {model_key} завершено. RMSE: {metrics.get('RMSE', metrics.get('rmse', 'N/A'))}")
-
-        return {
-            'config': config.__dict__,
-            'metrics': metrics,
-            'history': history,
-            'model_id': model_id,
-            'training_duration': training_duration
-        }
-
-    # Додатковий допоміжний метод для створення словника метрик
-    def _prepare_metrics_data(self, model_id: int, metrics: Dict[str, Any],
-                              training_duration: float, epochs_completed: int) -> Dict[str, Any]:
-
-        return {
-            'model_id': model_id,
-            'mse': metrics.get('MSE', metrics.get('mse')),
-            'rmse': metrics.get('RMSE', metrics.get('rmse')),
-            'mae': metrics.get('MAE', metrics.get('mae')),
-            'r2_score': metrics.get('R2', metrics.get('r2_score', metrics.get('r2'))),
-            'test_date': datetime.now(),
-            'training_duration_seconds': int(training_duration),
-            'epochs_completed': epochs_completed
-        }
-
-    def _prepare_sequence_data(self, data: pd.DataFrame, sequence_length: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _prepare_sequence_data(self, data: pd.DataFrame, sequence_length: int,
+                                       batch_size: int = 10000) -> Tuple[np.ndarray, np.ndarray]:
 
         features = data.drop(columns=["target"]).values
         targets = data["target"].values
 
-        # Створення послідовностей
-        X, y = [], []
-        for i in range(sequence_length, len(features)):
-            X.append(features[i - sequence_length:i])
-            y.append(targets[i])
+        total_sequences = len(features) - sequence_length
+        if total_sequences <= 0:
+            return np.array([]), np.array([])
 
-        return np.array(X), np.array(y)
+        # Розраховуємо кількість батчів
+        num_batches = (total_sequences + batch_size - 1) // batch_size
+
+        X_batches = []
+        y_batches = []
+
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, total_sequences)
+
+            X_batch = []
+            y_batch = []
+
+            for i in range(start_idx, end_idx):
+                seq_start = i
+                seq_end = i + sequence_length
+                X_batch.append(features[seq_start:seq_end])
+                y_batch.append(targets[seq_end])
+
+            X_batches.append(np.array(X_batch))
+            y_batches.append(np.array(y_batch))
+
+            # Логування прогресу
+            if batch_idx % 10 == 0:
+                self.logger.debug(f"Оброблено батч {batch_idx + 1}/{num_batches}")
+
+        # Об'єднуємо всі батчі
+        X = np.vstack(X_batches) if X_batches else np.array([])
+        y = np.concatenate(y_batches) if y_batches else np.array([])
+
+        self.logger.info(f"Створено {len(X)} послідовностей з {len(data)} рядків даних")
+        return X, y
 
     def _build_model_from_config(self, model_type: str, config: ModelConfig) -> BaseDeepModel:
 
@@ -298,11 +621,11 @@ class ModelTrainer:
         for epoch in range(epochs):
             # Тренування
             model.train()
-            train_loss = self.train_epoch(model, train_loader, optimizer, criterion)
+            train_loss = self.train_epoch(model, train_loader, optimizer, criterion, batch_size)
 
             # Валідація
             model.eval()
-            val_loss = self.validate_epoch(model, val_loader, criterion)
+            val_loss = self.validate_epoch(model, val_loader, criterion, batch_size)
             val_losses.append(val_loss)
 
             # Early stopping logic
@@ -326,33 +649,69 @@ class ModelTrainer:
 
         return val_losses
 
-    def train_epoch(self, model: BaseDeepModel, train_loader, optimizer, criterion) -> float:
+    def train_epoch(self, model: BaseDeepModel, train_data: Tuple[torch.Tensor, torch.Tensor],
+                             optimizer, criterion, batch_size: int) -> float:
+
+        X_train, y_train = train_data
+
+        # Створення DataLoader
+        train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True
+        )
 
         total_loss = 0
+        batch_count = 0
+
         for X_batch, y_batch in train_loader:
             X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
+
             optimizer.zero_grad()
             output = model(X_batch).squeeze()
             loss = criterion(output, y_batch)
             loss.backward()
 
-            # Gradient clipping для стабільності (особливо важливо для Transformer)
+            # Gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             optimizer.step()
             total_loss += loss.item()
-        return total_loss / len(train_loader)
+            batch_count += 1
 
-    def validate_epoch(self, model: BaseDeepModel, val_loader, criterion) -> float:
+            # Очищення пам'яті після кожного батчу
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        return total_loss / batch_count if batch_count > 0 else 0
+
+    def validate_epoch(self, model: BaseDeepModel, val_data: Tuple[torch.Tensor, torch.Tensor],
+                                criterion, batch_size: int) -> float:
+
+        X_val, y_val = val_data
+
+        # Створення DataLoader
+        val_dataset = torch.utils.data.TensorDataset(X_val, y_val)
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=batch_size, shuffle=False
+        )
 
         total_loss = 0
+        batch_count = 0
+
         with torch.no_grad():
             for X_batch, y_batch in val_loader:
                 X_batch, y_batch = X_batch.to(self.device), y_batch.to(self.device)
+
                 output = model(X_batch).squeeze()
                 loss = criterion(output, y_batch)
                 total_loss += loss.item()
-        return total_loss / len(val_loader)
+                batch_count += 1
+
+                # Очищення пам'яті після кожного батчу
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        return total_loss / batch_count if batch_count > 0 else 0
 
     def evaluate(self, model: BaseDeepModel, test_data: Tuple[torch.Tensor, torch.Tensor]) -> Dict[str, float]:
 
@@ -365,6 +724,52 @@ class ModelTrainer:
 
         y_true = y_true.cpu().numpy()
         return self.calculate_metrics(y_true, y_pred)
+
+    def evaluate_batched(self, model: BaseDeepModel, test_data: Tuple[torch.Tensor, torch.Tensor],
+                         batch_size: int = 1000) -> Dict[str, float]:
+        """
+        Оцінка моделі по батчах для великих наборів даних
+        """
+        model.eval()
+        X_test, y_true = test_data
+
+        # Якщо дані невеликі, використовуємо звичайну оцінку
+        if len(X_test) <= batch_size:
+            return self.evaluate(model, test_data)
+
+        self.logger.info(f"Початок батчевої оцінки на {len(X_test)} зразках")
+
+        all_predictions = []
+
+        # Створюємо DataLoader для батчевої обробки
+        test_dataset = torch.utils.data.TensorDataset(X_test, y_true)
+        test_loader = torch.utils.data.DataLoader(
+            test_dataset, batch_size=batch_size, shuffle=False
+        )
+
+        with torch.no_grad():
+            for batch_idx, (X_batch, y_batch) in enumerate(test_loader):
+                X_batch = X_batch.to(self.device)
+
+                # Отримання прогнозів для батчу
+                y_pred_batch = model(X_batch).squeeze().cpu().numpy()
+                all_predictions.append(y_pred_batch)
+
+                # Очищення пам'яті GPU після кожного батчу
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                if batch_idx % 50 == 0:
+                    self.logger.debug(f"Оброблено батч {batch_idx + 1}/{len(test_loader)}")
+
+        # Об'єднання всіх прогнозів
+        y_pred = np.concatenate(all_predictions)
+        y_true_np = y_true.cpu().numpy()
+
+        metrics = self.calculate_metrics(y_true_np, y_pred)
+        self.logger.info(f"Батчева оцінка завершена. RMSE: {metrics.get('RMSE', 'N/A'):.6f}")
+
+        return metrics
 
     def calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
 
@@ -666,18 +1071,29 @@ class ModelTrainer:
         return summary
 
     def cross_validate_model(self, symbol: str, timeframe: str, model_type: str,
-                             k_folds: int = 5, **model_params) -> Dict[str, List[float]]:
+                                     k_folds: int = 5, batch_size: int = 1000,
+                                     **model_params) -> Dict[str, List[float]]:
+        """
+        Крос-валідація з батчевою обробкою для великих наборів даних
+        """
+        self.logger.info(f"Початок батчевої крос-валідації для {symbol}_{timeframe}_{model_type}")
 
-        self.logger.info(f"Початок крос-валідації для {symbol}_{timeframe}_{model_type}")
-
-        # Завантаження даних
+        # Завантаження та підготовка даних
         data = self.processor.get_data_loader(symbol, timeframe, model_type)
         if data is None:
             raise ValueError(f"Не вдалося завантажити дані для {symbol}_{timeframe}")
 
         processed_data = self.processor.prepare_features(data, symbol)
-        X = processed_data.drop(columns=["target"]).values
-        y = processed_data["target"].values
+
+        # Отримання конфігурації моделі
+        input_dim = processed_data.shape[1] - 1
+        config = self.create_model_config(symbol, timeframe, model_type, input_dim, **model_params)
+
+        # Підготовка послідовностей з батчевою обробкою
+        X, y = self._prepare_sequence_data(processed_data, config.sequence_length, batch_size)
+
+        if len(X) == 0:
+            raise ValueError("Недостатньо даних для створення послідовностей")
 
         # Ініціалізація крос-валідації
         kfold = KFold(n_splits=k_folds, shuffle=True, random_state=42)
@@ -698,44 +1114,67 @@ class ModelTrainer:
             X_train, X_val = X[train_idx], X[val_idx]
             y_train, y_val = y[train_idx], y[val_idx]
 
-            # Створення та навчання моделі
-            input_dim = X_train.shape[1]
-            model = self._build_model(
-                model_type,
-                input_dim,
-                model_params.get('hidden_dim', 64),
-                model_params.get('num_layers', 2)
-            ).to(self.device)
+            # Створення моделі
+            model = self._build_model_from_config(model_type, config).to(self.device)
 
-            # Підготовка даних для навчання
+            # Підготовка тензорів
             train_tensor = (torch.tensor(X_train).float(), torch.tensor(y_train).float())
             val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
 
-            # Навчання моделі
-            self._train_loop(
-                model, train_tensor, val_tensor,
-                epochs=model_params.get('epochs', 100),
-                batch_size=model_params.get('batch_size', 32),
-                learning_rate=model_params.get('learning_rate', 0.001),
-                patience=model_params.get('patience', 10)
-            )
+            # Навчання моделі з батчевою обробкою
+            optimizer, criterion = self.setup_optimizer_and_loss(model, config.learning_rate)
 
-            # Оцінка моделі
-            metrics = self.evaluate(model, val_tensor)
+            # Тренувальний цикл з батчами
+            best_val_loss = float('inf')
+            patience_counter = 0
+
+            for epoch in range(config.epochs):
+                # Навчання по батчах
+                model.train()
+                train_loss = self._train_epoch_batched(
+                    model, train_tensor, optimizer, criterion, batch_size
+                )
+
+                # Валідація по батчах
+                model.eval()
+                val_loss = self._validate_epoch_batched(
+                    model, val_tensor, criterion, batch_size
+                )
+
+                # Early stopping
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+
+                if patience_counter >= model_params.get('patience', 10):
+                    self.logger.debug(f"Early stopping на епосі {epoch + 1} для фолда {fold + 1}")
+                    break
+
+            # Оцінка моделі з батчевою обробкою
+            metrics = self.evaluate_batched(model, val_tensor, batch_size)
 
             # Збереження результатів
             for metric_name, value in metrics.items():
-                fold_results[metric_name].append(value)
+                if metric_name in fold_results:
+                    fold_results[metric_name].append(value)
 
-        # Обчислення середніх значень та стандартних відхилень
+            # Очищення пам'яті
+            del model, train_tensor, val_tensor
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        # Обчислення статистики
         summary = {}
         for metric_name, values in fold_results.items():
-            summary[f'{metric_name}_mean'] = np.mean(values)
-            summary[f'{metric_name}_std'] = np.std(values)
-            summary[f'{metric_name}_values'] = values
+            if values:  # Перевіряємо, що список не пустий
+                summary[f'{metric_name}_mean'] = np.mean(values)
+                summary[f'{metric_name}_std'] = np.std(values)
+                summary[f'{metric_name}_values'] = values
 
         self.logger.info(
-            f"Крос-валідація завершена. Середній RMSE: {summary['RMSE_mean']:.6f} ± {summary['RMSE_std']:.6f}")
+            f"Батчева крос-валідація завершена. Середній RMSE: {summary.get('RMSE_mean', 'N/A'):.6f} ± {summary.get('RMSE_std', 'N/A'):.6f}")
 
         return summary
 

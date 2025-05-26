@@ -1,5 +1,5 @@
 from dataclasses import field, dataclass
-from typing import Dict, Tuple, Callable, List, Optional, Any
+from typing import Dict, Tuple, Callable, List, Optional, Any, Generator
 import pandas as pd
 import numpy as np
 import torch
@@ -32,8 +32,15 @@ class CryptoConfig:
     model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru'])
 
 
+@dataclass
+class ChunkConfig:
+    chunk_size: int = 10000
+    overlap_size: int = 100
+    max_chunks_in_memory: int = 5
+
+
 class DataPreprocessor:
-    """Клас для обробки попередньо підготовлених та відскейлених даних для моделей"""
+    """Клас для обробки попередньо підготовлених та відскейлених даних для моделей з підтримкою чанків"""
 
     # Константи для розмірів послідовностей по таймфреймам
     TIMEFRAME_SEQUENCES = {
@@ -44,7 +51,7 @@ class DataPreprocessor:
         '1w': 12
     }
 
-    def __init__(self):
+    def __init__(self, chunk_config: Optional[ChunkConfig] = None):
         self.scalers = {}  # Словник для зберігання скейлерів (для зворотного перетворення)
         self.feature_configs = {}  # Конфігурації ознак
         self.model_configs = {}  # Конфігурації моделей
@@ -54,12 +61,21 @@ class DataPreprocessor:
         self.cycle = CryptoCycles()
         self.vol = VolatilityAnalysis()
         self.trend = TrendDetection()
+
+        # Конфігурація чанків
+        self.chunk_config = chunk_config or ChunkConfig()
+
         # Флажки для відстеження стану даних
         self.data_is_scaled = True
         self.sequences_prepared = True
         self.time_features_prepared = True
 
-        self.logger.info("DataPreprocessor ініціалізовано для роботи з підготовленими даними")
+        # Кеш для чанків
+        self._chunk_cache = {}
+        self._cache_usage_order = []  # Для LRU кешування
+
+        self.logger.info(
+            f"DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size={self.chunk_config.chunk_size})")
 
     def get_sequence_length_for_timeframe(self, timeframe: str) -> int:
         """Отримання довжини послідовності для конкретного таймфрейму"""
@@ -84,27 +100,188 @@ class DataPreprocessor:
                          f"num_layers={config.num_layers}, sequence_length={config.sequence_length}")
         return config
 
-    def get_model_config(self, symbol: str, timeframe: str, model_type: str) -> Optional[ModelConfig]:
-        """Отримання конфігурації моделі"""
-        key = f"{symbol}_{timeframe}_{model_type}"
-        config = self.model_configs.get(key)
-
-        if config:
-            self.logger.debug(f"Знайдено конфігурацію для {key}")
-        else:
-            self.logger.warning(f"Конфігурація для {key} не знайдена")
-
-        return config
-
     def set_model_config(self, symbol: str, timeframe: str, model_type: str, config: ModelConfig):
         """Збереження конфігурації моделі"""
         key = f"{symbol}_{timeframe}_{model_type}"
         self.model_configs[key] = config
         self.logger.info(f"Збережено конфігурацію моделі для {key}")
 
+    def _manage_chunk_cache(self, key: str, data: pd.DataFrame):
+        """Управління кешем чанків з LRU стратегією"""
+        # Видаляємо старі чанки якщо кеш переповнений
+        while len(self._chunk_cache) >= self.chunk_config.max_chunks_in_memory:
+            oldest_key = self._cache_usage_order.pop(0)
+            if oldest_key in self._chunk_cache:
+                del self._chunk_cache[oldest_key]
+                self.logger.debug(f"Видалено з кешу: {oldest_key}")
+
+        # Додаємо новий чанк
+        self._chunk_cache[key] = data
+        if key in self._cache_usage_order:
+            self._cache_usage_order.remove(key)
+        self._cache_usage_order.append(key)
+
+    def get_chunked_data_generator(self, symbol: str, timeframe: str) -> Generator[pd.DataFrame, None, None]:
+
+        try:
+            symbol = symbol.upper()
+            self.logger.info(f"Створення генератора чанків для {symbol}-{timeframe}")
+
+            # Мапування символів на методи завантаження
+            chunked_methods = {
+                'BTC': self.db_manager.get_btc_lstm_sequence_chunked,
+                'ETH': self.db_manager.get_eth_lstm_sequence_chunked,
+                'SOL': self.db_manager.get_sol_lstm_sequence_chunked
+            }
+
+            if symbol not in chunked_methods:
+                self.logger.error(f"Непідтримуваний символ: {symbol}")
+                raise ValueError(f"Непідтримуваний символ: {symbol}")
+
+            method = chunked_methods[symbol]
+            chunk_num = 0
+
+            while True:
+                try:
+                    # Генерація ключа для кешу
+                    cache_key = f"{symbol}_{timeframe}_chunk_{chunk_num}"
+
+                    # Перевірка кешу
+                    if cache_key in self._chunk_cache:
+                        self.logger.debug(f"Використання кешованого чанку: {cache_key}")
+                        # Оновлюємо порядок використання
+                        self._cache_usage_order.remove(cache_key)
+                        self._cache_usage_order.append(cache_key)
+                        yield self._chunk_cache[cache_key]
+                        chunk_num += 1
+                        continue
+
+                    self.logger.debug(f"Завантаження чанку {chunk_num} для {symbol}-{timeframe}")
+
+                    # Завантаження чанку з БД
+                    chunk_data = method(
+                        timeframe=timeframe,
+                        chunk_size=self.chunk_config.chunk_size,
+                        offset=chunk_num * self.chunk_config.chunk_size
+                    )
+
+                    if chunk_data is None or len(chunk_data) == 0:
+                        self.logger.info(
+                            f"Завершено завантаження чанків для {symbol}-{timeframe} (пустий чанк {chunk_num})")
+                        break
+
+                    # Конвертація в DataFrame якщо потрібно
+                    if isinstance(chunk_data, list):
+                        chunk_df = pd.DataFrame(chunk_data)
+                    elif isinstance(chunk_data, pd.DataFrame):
+                        chunk_df = chunk_data.copy()
+                    else:
+                        self.logger.error(f"Невідомий тип чанку: {type(chunk_data)}")
+                        break
+
+                    if chunk_df.empty:
+                        self.logger.info(
+                            f"Завершено завантаження чанків для {symbol}-{timeframe} (порожній чанк {chunk_num})")
+                        break
+
+                    self.logger.info(f"Завантажено чанк {chunk_num}: {chunk_df.shape} для {symbol}-{timeframe}")
+
+                    # Додавання в кеш
+                    self._manage_chunk_cache(cache_key, chunk_df)
+
+                    yield chunk_df
+                    chunk_num += 1
+
+                except Exception as e:
+                    self.logger.error(f"Помилка завантаження чанку {chunk_num} для {symbol}-{timeframe}: {e}")
+                    break
+
+        except Exception as e:
+            self.logger.error(f"Помилка створення генератора чанків для {symbol}-{timeframe}: {e}")
+            raise
+
+    def get_data_loader_chunked(self, symbol: str, timeframe: str, model_type: str) -> Callable:
+        """
+        Створення завантажувача даних з підтримкою чанків
+        """
+        try:
+            symbol = symbol.upper()
+            self.logger.info(f"Підготовка chunked завантажувача даних для {symbol} з таймфреймом {timeframe}")
+
+            def data_loader_chunked():
+                try:
+                    self.logger.debug(f"Завантаження chunked даних для {symbol} з таймфреймом {timeframe}")
+
+                    # Повертаємо генератор чанків
+                    return self.get_chunked_data_generator(symbol, timeframe)
+
+                except Exception as e:
+                    self.logger.error(f"Помилка завантаження chunked даних для {symbol}: {str(e)}")
+                    return None
+
+            return data_loader_chunked
+
+        except Exception as e:
+            self.logger.error(f"Помилка підготовки chunked завантажувача даних для {symbol}: {str(e)}")
+            raise
+
+    def get_data_with_fallback(self, symbol: str, timeframe: str) -> Generator[pd.DataFrame, None, None]:
+        """
+        Завантаження підготовлених даних чанками з fallback механізмом
+        """
+        try:
+            self.logger.info(f"Спроба завантаження chunked даних для {symbol}-{timeframe}")
+
+            # Спробуємо основний метод
+            data_loader = self.get_data_loader_chunked(symbol, timeframe, 'lstm')
+            chunk_generator = data_loader()
+
+            if chunk_generator is not None:
+                chunk_count = 0
+                for chunk in chunk_generator:
+                    if chunk is not None and not chunk.empty:
+                        self.logger.debug(f"Отримано чанк {chunk_count} для {symbol}-{timeframe}: форма {chunk.shape}")
+                        chunk_count += 1
+                        yield chunk
+                    else:
+                        self.logger.warning(f"Порожній чанк {chunk_count} для {symbol}-{timeframe}")
+                        break
+
+                if chunk_count == 0:
+                    self.logger.warning(f"Жодного валідного чанку не отримано для {symbol}-{timeframe}")
+                    raise ValueError("Жодного валідного чанку не отримано")
+                else:
+                    self.logger.info(f"Успішно завантажено {chunk_count} чанків для {symbol}-{timeframe}")
+            else:
+                raise ValueError("Генератор чанків повернув None")
+
+        except Exception as e:
+            self.logger.error(f"Помилка завантаження chunked даних для {symbol}-{timeframe}: {e}")
+            # Fallback до звичайного методу
+            try:
+                self.logger.info(f"Спроба fallback завантаження для {symbol}-{timeframe}")
+                fallback_data = self._fallback_data_loader(symbol, timeframe)
+                # Розбиваємо fallback дані на чанки
+                for chunk in self._split_dataframe_to_chunks(fallback_data):
+                    yield chunk
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback також не спрацював для {symbol}-{timeframe}: {fallback_error}")
+                raise e
+
+    def _split_dataframe_to_chunks(self, df: pd.DataFrame) -> Generator[pd.DataFrame, None, None]:
+        """Розбиття DataFrame на чанки"""
+        chunk_size = self.chunk_config.chunk_size
+        total_rows = len(df)
+
+        for start in range(0, total_rows, chunk_size):
+            end = min(start + chunk_size, total_rows)
+            chunk = df.iloc[start:end].copy()
+            if not chunk.empty:
+                yield chunk
+
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
         """
-        Створення завантажувача даних
+        Створення завантажувача даних (збережено для зворотної сумісності)
         """
         try:
             symbol = symbol.upper()
@@ -143,7 +320,6 @@ class DataPreprocessor:
 
                     if data is not None and len(data) > 0:
                         self.logger.info(f"Успішно завантажено {len(data)} записів для {symbol}-{timeframe}")
-                        # Якщо data - це список словників, можна перевірити ключі першого елемента
                         if isinstance(data, list) and len(data) > 0:
                             self.logger.debug(f"Ключі у завантажених даних: {list(data[0].keys())}")
                     else:
@@ -161,52 +337,179 @@ class DataPreprocessor:
             self.logger.error(f"Помилка підготовки завантажувача даних для {symbol}: {str(e)}")
             raise
 
-    def get_data_with_fallback(self, symbol: str, timeframe: str) -> pd.DataFrame:
+    def process_chunks_in_batches(self, symbol: str, timeframe: str,
+                                  batch_processor: Callable[[List[pd.DataFrame]], Any],
+                                  batch_size: int = 3) -> List[Any]:
         """
-        Завантаження підготовлених даних з fallback механізмом
+        Обробка чанків батчами для оптимізації пам'яті
         """
+        self.logger.info(f"Початок batch обробки чанків для {symbol}-{timeframe}")
+        results = []
+        current_batch = []
+
         try:
-            self.logger.info(f"Спроба завантаження даних для {symbol}-{timeframe}")
+            for chunk in self.get_data_with_fallback(symbol, timeframe):
+                current_batch.append(chunk)
 
-            # Спробуємо основний метод
-            data_loader = self.get_data_loader(symbol, timeframe, 'lstm')
-            data = data_loader()
+                if len(current_batch) >= batch_size:
+                    self.logger.debug(f"Обробка batch з {len(current_batch)} чанків")
+                    batch_result = batch_processor(current_batch)
+                    if batch_result is not None:
+                        results.append(batch_result)
 
-            if data is not None and len(data) > 0:
-                # Перевірка чи це DataFrame
-                if isinstance(data, pd.DataFrame) and not data.empty:
-                    self.logger.info(f"Успішно завантажено DataFrame для {symbol}-{timeframe}: "
-                                     f"форма {data.shape}")
-                    return data
-                # Якщо це список словників, конвертуємо в DataFrame
-                elif isinstance(data, list) and len(data) > 0:
-                    # Перевірка що елементи списку - це словники
-                    if isinstance(data[0], dict):
-                        df = pd.DataFrame(data)
-                        self.logger.info(f"Конвертовано список словників в DataFrame для {symbol}-{timeframe}: "
-                                         f"форма {df.shape}")
-                        return df
-                    else:
-                        self.logger.error(
-                            f"Неочікуваний тип елементів списку для {symbol}-{timeframe}: {type(data[0])}")
-                        raise ValueError(f"Елементи списку повинні бути словниками, а не {type(data[0])}")
-                else:
-                    self.logger.warning(f"Невідомий тип даних для {symbol}-{timeframe}: {type(data)}")
-                    raise ValueError(f"Невірний тип завантажених даних: {type(data)}")
-            else:
-                self.logger.warning(f"Основний метод повернув порожні дані для {symbol}-{timeframe}")
-                raise ValueError("Порожні дані з основного методу")
+                    # Очищення пам'яті
+                    current_batch.clear()
+
+            # Обробка залишкових чанків
+            if current_batch:
+                self.logger.debug(f"Обробка останнього batch з {len(current_batch)} чанків")
+                batch_result = batch_processor(current_batch)
+                if batch_result is not None:
+                    results.append(batch_result)
+
+            self.logger.info(f"Завершено batch обробку для {symbol}-{timeframe}: {len(results)} результатів")
+            return results
 
         except Exception as e:
-            self.logger.error(f"Помилка завантаження даних для {symbol}-{timeframe}: {e}")
+            self.logger.error(f"Помилка batch обробки для {symbol}-{timeframe}: {e}")
+            raise
 
-            # Fallback: спробуємо альтернативний метод завантаження
-            try:
-                self.logger.info(f"Спроба fallback завантаження для {symbol}-{timeframe}")
-                return self._fallback_data_loader(symbol, timeframe)
-            except Exception as fallback_error:
-                self.logger.error(f"Fallback також не спрацював для {symbol}-{timeframe}: {fallback_error}")
-                raise e
+    def preprocess_chunked_data_for_model(self, symbol: str, timeframe: str,
+                                          model_type: str = 'lstm', validation_split: float = 0.2,
+                                          target_column: str = 'target_close_1',
+                                          config: Optional[ModelConfig] = None) -> Tuple[torch.utils.data.DataLoader,
+    torch.utils.data.DataLoader,
+    ModelConfig]:
+        """
+        Препроцесинг chunked даних для моделі з створенням DataLoader
+        """
+        self.logger.info(f"Початок chunked препроцесингу для {symbol}-{timeframe}-{model_type}")
+
+        # Збирання всіх послідовностей з чанків
+        all_sequences = []
+        all_targets = []
+        input_dim = None
+
+        def process_chunk_batch(chunks: List[pd.DataFrame]) -> Tuple[List[np.ndarray], List[float], int]:
+            batch_sequences = []
+            batch_targets = []
+            batch_input_dim = None
+
+            for chunk in chunks:
+                try:
+                    # Валідація чанку
+                    self.validate_prepared_data(chunk, f"{symbol}_chunk")
+
+                    # Витягування послідовностей з чанку
+                    X_chunk, y_chunk = self.extract_sequences_from_prepared_data(chunk, target_column)
+
+                    if len(X_chunk) > 0:
+                        batch_sequences.extend(X_chunk)
+                        batch_targets.extend(y_chunk)
+                        if batch_input_dim is None:
+                            batch_input_dim = X_chunk.shape[2]
+
+                except Exception as e:
+                    self.logger.warning(f"Помилка обробки чанку для {symbol}: {e}")
+                    continue
+
+            return batch_sequences, batch_targets, batch_input_dim
+
+        # Обробка всіх чанків
+        try:
+            batch_results = self.process_chunks_in_batches(symbol, timeframe, process_chunk_batch)
+
+            for batch_sequences, batch_targets, batch_input_dim in batch_results:
+                all_sequences.extend(batch_sequences)
+                all_targets.extend(batch_targets)
+                if input_dim is None and batch_input_dim is not None:
+                    input_dim = batch_input_dim
+
+            if not all_sequences:
+                raise ValueError(f"Не вдалося витягти жодної послідовності для {symbol}-{timeframe}")
+
+            # Конвертація в numpy arrays
+            X = np.array(all_sequences)
+            y = np.array(all_targets)
+
+            self.logger.info(f"Зібрано {len(all_sequences)} послідовностей: X {X.shape}, y {y.shape}")
+
+        except Exception as e:
+            self.logger.error(f"Помилка збирання chunked даних для {symbol}-{timeframe}: {e}")
+            raise
+
+        # Створення або оновлення конфігурації моделі
+        if config is None:
+            actual_seq_length = X.shape[1]
+            config = self.create_model_config(input_dim, timeframe)
+            config.sequence_length = actual_seq_length
+            self.set_model_config(symbol, timeframe, model_type, config)
+        else:
+            if config.input_dim != X.shape[2]:
+                config.input_dim = X.shape[2]
+            if config.sequence_length != X.shape[1]:
+                config.sequence_length = X.shape[1]
+
+        # Перевірка на NaN та Inf
+        if np.isnan(X).any() or np.isinf(X).any():
+            self.logger.error(f"Знайдено NaN або Inf значення у ознаках для {symbol}-{timeframe}")
+            raise ValueError("NaN або Inf значення у ознаках")
+
+        if np.isnan(y).any() or np.isinf(y).any():
+            self.logger.error(f"Знайдено NaN або Inf значення у цільових значеннях для {symbol}-{timeframe}")
+            raise ValueError("NaN або Inf значення у цільових змінних")
+
+        # Розділення на тренувальну та валідаційну вибірки
+        X_train, X_val, y_train, y_val = self.split_data(X, y, validation_split)
+
+        # Створення DataLoaders
+        from torch.utils.data import TensorDataset, DataLoader
+
+        train_dataset = TensorDataset(
+            torch.tensor(X_train, dtype=torch.float32),
+            torch.tensor(y_train, dtype=torch.float32)
+        )
+        val_dataset = TensorDataset(
+            torch.tensor(X_val, dtype=torch.float32),
+            torch.tensor(y_val, dtype=torch.float32)
+        )
+
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=config.batch_size,
+            shuffle=True,
+            num_workers=2,
+            pin_memory=torch.cuda.is_available()
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=2,
+            pin_memory=torch.cuda.is_available()
+        )
+
+        self.logger.info(f"Створено DataLoaders для {symbol}-{timeframe}: "
+                         f"train batches: {len(train_loader)}, val batches: {len(val_loader)}")
+
+        return train_loader, val_loader, config
+
+    def clear_chunk_cache(self):
+        """Очищення кешу чанків"""
+        cleared_count = len(self._chunk_cache)
+        self._chunk_cache.clear()
+        self._cache_usage_order.clear()
+        self.logger.info(f"Очищено кеш чанків: {cleared_count} елементів")
+
+    def get_chunk_cache_info(self) -> Dict[str, Any]:
+        """Інформація про кеш чанків"""
+        return {
+            'cached_chunks': len(self._chunk_cache),
+            'max_chunks': self.chunk_config.max_chunks_in_memory,
+            'chunk_size': self.chunk_config.chunk_size,
+            'cache_keys': list(self._chunk_cache.keys()),
+            'usage_order': self._cache_usage_order.copy()
+        }
 
     def _fallback_data_loader(self, symbol: str, timeframe: str) -> pd.DataFrame:
         """
@@ -655,7 +958,7 @@ class DataPreprocessor:
         }
 
     def prepare_features(self, data, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
-        """Підготовка ознак для моделі з використанням всіх доступних модулів"""
+        """Підготовка ознак для моделі з використанням всіх доступних модулів та підтримкою chunked даних"""
         try:
             self.logger.info(f"Початок підготовки ознак для {symbol}")
 
@@ -665,7 +968,6 @@ class DataPreprocessor:
                 if not data:
                     raise ValueError(f"Порожній список даних для {symbol}")
 
-                # Перевірка що елементи списку - це словники
                 if not isinstance(data[0], dict):
                     raise ValueError(f"Елементи списку повинні бути словниками для {symbol}")
 
@@ -676,9 +978,23 @@ class DataPreprocessor:
                 df = data.copy()
                 self.logger.debug(f"Використовується існуючий DataFrame для {symbol}")
 
+            elif isinstance(data, Generator):
+                # Обробка генератора чанків
+                self.logger.info(f"Обробка генератора чанків для {symbol}")
+                chunks = []
+                for chunk in data:
+                    if isinstance(chunk, pd.DataFrame) and not chunk.empty:
+                        chunks.append(chunk)
+
+                if not chunks:
+                    raise ValueError(f"Не отримано жодного валідного чанку для {symbol}")
+
+                df = pd.concat(chunks, ignore_index=False)
+                self.logger.info(f"Об'єднано {len(chunks)} чанків для {symbol}, загальна форма: {df.shape}")
+
             else:
                 self.logger.error(f"Невідомий тип вхідних даних для {symbol}: {type(data)}")
-                raise ValueError(f"Очікується DataFrame або список словників, отримано {type(data)}")
+                raise ValueError(f"Очікується DataFrame, список словників або генератор, отримано {type(data)}")
 
             # Перевірка що DataFrame не порожній
             if df.empty:
@@ -708,63 +1024,45 @@ class DataPreprocessor:
             feature_dataframes.append(base_features)
             self.logger.info(f"Додано {len(available_base_columns)} базових ознак для {symbol}")
 
-            # Якщо у нас є scaled колонки, створимо також unscaled версії для аналізу
+            # Для аналізу потрібні unscaled дані
+            analysis_df = df.copy()
             scaled_columns = [col for col in available_base_columns if col.endswith('_scaled')]
-            if scaled_columns:
-                self.logger.debug(f"Знайдено {len(scaled_columns)} scaled колонок для {symbol}")
+            unscaled_map = {
+                'open_scaled': 'open',
+                'high_scaled': 'high',
+                'low_scaled': 'low',
+                'close_scaled': 'close',
+                'volume_scaled': 'volume'
+            }
 
-                # Для аналізу потрібні unscaled дані, але якщо їх немає, спробуємо використати scaled
-                unscaled_map = {
-                    'open_scaled': 'open',
-                    'high_scaled': 'high',
-                    'low_scaled': 'low',
-                    'close_scaled': 'close',
-                    'volume_scaled': 'volume'
-                }
-
-                # Створимо unscaled версії якщо їх немає (для технічного аналізу)
-                analysis_df = df.copy()
-                for scaled_col in scaled_columns:
-                    unscaled_col = unscaled_map.get(scaled_col)
-                    if unscaled_col and unscaled_col not in analysis_df.columns:
-                        # Використовуємо scaled дані як базу для аналізу
-                        analysis_df[unscaled_col] = analysis_df[scaled_col]
-                        self.logger.debug(f"Створено {unscaled_col} з {scaled_col} для аналізу")
-            else:
-                analysis_df = df.copy()
+            # Створимо unscaled версії якщо їх немає (для технічного аналізу)
+            for scaled_col in scaled_columns:
+                unscaled_col = unscaled_map.get(scaled_col)
+                if unscaled_col and unscaled_col not in analysis_df.columns:
+                    analysis_df[unscaled_col] = analysis_df[scaled_col]
+                    self.logger.debug(f"Створено {unscaled_col} з {scaled_col} для аналізу")
 
             # Отримання трендових ознак
             self.logger.debug(f"Підготовка трендових ознак для {symbol}")
             try:
-                # Виправлення: prepare_ml_trend_features повертає кортеж, а не DataFrame
                 trend_result = self.trend.prepare_ml_trend_features(analysis_df)
 
                 if trend_result is not None and len(trend_result) == 3:
                     X, y, regimes = trend_result
-                    # Створюємо DataFrame з трендових ознак
                     if X is not None and len(X) > 0:
-                        # Конвертуємо 3D масив X в 2D DataFrame
-                        # X має форму (samples, timesteps, features), візьмемо останній timestep
-                        if len(X.shape) == 3:
-                            trend_features_array = X[:, -1, :]  # Останній timestep для кожного sample
-                        else:
-                            trend_features_array = X
-
-                        # Створюємо назви колонок для трендових ознак
+                        trend_features_array = X[:, -1, :] if len(X.shape) == 3 else X
                         trend_feature_names = [
                             'close_norm', 'volume_norm', 'adx_norm', 'di_plus_norm', 'di_minus_norm',
                             'rsi_norm', 'macd_norm', 'macd_signal_norm', 'trend_strength_norm',
                             'speed_20_norm', 'volatility_20_norm'
                         ]
 
-                        # Обрізуємо назви якщо є більше ознак ніж очікувалося
                         if trend_features_array.shape[1] > len(trend_feature_names):
                             trend_feature_names.extend([f'trend_feature_{i}' for i in
                                                         range(len(trend_feature_names), trend_features_array.shape[1])])
                         elif trend_features_array.shape[1] < len(trend_feature_names):
                             trend_feature_names = trend_feature_names[:trend_features_array.shape[1]]
 
-                        # Створюємо DataFrame з правильним індексом
                         start_idx = len(analysis_df) - len(trend_features_array)
                         trend_index = analysis_df.index[start_idx:]
 
@@ -774,7 +1072,6 @@ class DataPreprocessor:
                             columns=trend_feature_names
                         )
 
-                        # Додаємо режими ринку як окрему колонку
                         if regimes is not None and len(regimes) == len(trend_features):
                             trend_features['market_regime'] = regimes
 
@@ -854,13 +1151,11 @@ class DataPreprocessor:
             aligned_dataframes = []
             for i, features_df in enumerate(feature_dataframes):
                 try:
-                    # Додаткова перевірка що це DataFrame
                     if not isinstance(features_df, pd.DataFrame):
                         self.logger.warning(f"DataFrame {i} не є DataFrame для {symbol}: {type(features_df)}")
                         continue
 
                     if common_index is not None:
-                        # Вирівнюємо по спільному індексу
                         aligned_df = features_df.reindex(common_index, method='ffill')
                     else:
                         aligned_df = features_df.copy()
@@ -868,7 +1163,6 @@ class DataPreprocessor:
                     aligned_dataframes.append(aligned_df)
                 except Exception as e:
                     self.logger.warning(f"Помилка вирівнювання DataFrame {i} для {symbol}: {e}")
-                    # Спробуємо додати як є, якщо це DataFrame
                     if isinstance(features_df, pd.DataFrame):
                         aligned_dataframes.append(features_df)
 
@@ -882,19 +1176,16 @@ class DataPreprocessor:
                 final_features = pd.concat(
                     aligned_dataframes,
                     axis=1,
-                    join='outer',  # Зовнішнє об'єднання для збереження всіх індексів
+                    join='outer',
                     copy=False,
                     sort=False
                 )
             except Exception as e:
                 self.logger.error(f"Помилка при concat для {symbol}: {e}")
-                # Fallback - використовуємо тільки базові ознаки
                 final_features = feature_dataframes[0].copy()
 
             # Ефективне видалення дублікатів колонок
             if final_features.columns.duplicated().any():
-                self.logger.debug(f"Видалення дублікатних колонок для {symbol}")
-                # Отримуємо унікальні колонки, зберігаючи порядок
                 unique_columns = final_features.columns[~final_features.columns.duplicated()]
                 final_features = final_features[unique_columns]
 
@@ -902,10 +1193,7 @@ class DataPreprocessor:
             initial_nan_count = final_features.isnull().sum().sum()
             if initial_nan_count > 0:
                 self.logger.warning(f"Знайдено {initial_nan_count} NaN значень для {symbol}")
-                # Заповнення NaN методом forward fill, потім backward fill
                 final_features = final_features.fillna(method='ffill').fillna(method='bfill')
-
-                # Якщо все ще є NaN, заповнюємо нулями
                 remaining_nan = final_features.isnull().sum().sum()
                 if remaining_nan > 0:
                     self.logger.warning(f"Заповнення залишкових {remaining_nan} NaN нулями для {symbol}")
@@ -915,7 +1203,7 @@ class DataPreprocessor:
             if final_features.empty:
                 raise ValueError(f"Результуючий DataFrame порожній для {symbol}")
 
-            # Видалення колонок з постійними значеннями (нульова дисперсія)
+            # Видалення колонок з постійними значеннями
             constant_columns = []
             for col in final_features.columns:
                 if final_features[col].nunique() <= 1:
@@ -947,18 +1235,19 @@ class DataPreprocessor:
             try:
                 self.logger.warning(f"Спроба створити базові ознаки для {symbol}")
 
-                # Спочатку переконуємося що у нас є DataFrame
                 if isinstance(data, list):
                     if not data:
                         raise ValueError(f"Порожній список даних для fallback {symbol}")
                     df = pd.DataFrame(data)
                 elif isinstance(data, pd.DataFrame):
                     df = data.copy()
+                elif isinstance(data, Generator):
+                    chunks = [chunk for chunk in data if isinstance(chunk, pd.DataFrame) and not chunk.empty]
+                    df = pd.concat(chunks, ignore_index=False) if chunks else pd.DataFrame()
                 else:
                     raise ValueError(f"Невідомий тип даних для fallback {symbol}: {type(data)}")
 
                 if not df.empty:
-                    # Перевірка наявності базових колонок
                     basic_columns = ['open', 'high', 'low', 'close', 'volume',
                                      'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
                     available_basic = [col for col in basic_columns if col in df.columns]
@@ -968,18 +1257,11 @@ class DataPreprocessor:
                         self.logger.info(f"Повернуто базові ознаки для {symbol}: {basic_features.shape}")
                         return basic_features
                     else:
-                        # Останній fallback - спробуємо технічні індикатори з базового DataFrame
-                        basic_features = self.indicators.prepare_features_pipeline(df)
-                        if basic_features is not None and not basic_features.empty:
-                            self.logger.info(f"Повернуто технічні індикатори для {symbol}: {basic_features.shape}")
-                            return basic_features
+                        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+                        if numeric_columns:
+                            return df[numeric_columns].copy()
                         else:
-                            # Критичний fallback - тільки доступні числові колонки
-                            numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
-                            if numeric_columns:
-                                return df[numeric_columns].copy()
-                            else:
-                                raise ValueError(f"Жодної числової колонки не знайдено для {symbol}")
+                            raise ValueError(f"Жодної числової колонки не знайдено для {symbol}")
                 else:
                     raise ValueError(f"DataFrame невалідний для {symbol}")
             except Exception as fallback_error:
@@ -988,9 +1270,7 @@ class DataPreprocessor:
 
     def create_enhanced_sequences_with_features(self, df: pd.DataFrame, symbol: str,
                                                 sequence_length: int = 60) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Створення послідовностей з розширеними ознаками для навчання моделі
-        """
+
         self.logger.info(f"Створення розширених послідовностей для {symbol}")
 
         try:

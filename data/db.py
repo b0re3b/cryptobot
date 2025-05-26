@@ -3648,18 +3648,7 @@ class DatabaseManager:
 
     def get_eth_lstm_sequence_chunked(self, timeframe: str, chunk_size: int = 10000, offset: int = 0,
                                       sequence_id: int = None) -> List[Dict[str, Any]]:
-        """
-        Получить данные ETH LSTM по чанкам
 
-        Args:
-            timeframe: временной интервал
-            chunk_size: размер чанка (по умолчанию 10000)
-            offset: смещение для пагинации
-            sequence_id: конкретный sequence_id (опционально)
-
-        Returns:
-            List[Dict[str, Any]]: список данных последовательностей
-        """
         with self.conn.cursor() as cursor:
             if sequence_id is not None:
                 query = """
