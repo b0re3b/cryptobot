@@ -1,13 +1,15 @@
-import json
 from datetime import datetime
-from scipy.stats import linregress
+from typing import Dict, List, Optional, Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Any
-from scipy import stats
-from data.db import DatabaseManager
 import pandas_ta as ta
+from numpy import ndarray, dtype
+from scipy import stats
+
+from data.db import DatabaseManager
 from utils.logger import CryptoLogger
+
 
 class TrendDetection:
 
@@ -1932,8 +1934,11 @@ class TrendDetection:
                 'message': str(e)
             }
 
-    def prepare_ml_trend_features(self, data: pd.DataFrame, lookback_window: int = 30) -> pd.DataFrame:
-
+    def prepare_ml_trend_features(self, data: pd.DataFrame, lookback_window: int = 30) -> tuple[None, None, None] | \
+                                                                                          tuple[
+                                                                                              ndarray[Any, dtype[Any]],
+                                                                                              ndarray[Any, dtype[
+                                                                                                  Any]], Any]:
         try:
             # Копіюємо дані щоб уникнути попереджень
             df = data.copy()
@@ -1957,7 +1962,7 @@ class TrendDetection:
             # 4. Нормалізація даних (важливо для LSTM/GRU)
             from sklearn.preprocessing import MinMaxScaler
             scaler = MinMaxScaler()
-            feature_cols = ['close', 'volume', 'adx', '+di', '-di', 'rsi',
+            feature_cols = ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi',
                             'MACD_12_26_9', 'MACDs_12_26_9', 'trend_strength',
                             'speed_20', 'volatility_20']
 

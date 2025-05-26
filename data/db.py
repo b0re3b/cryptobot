@@ -3646,6 +3646,248 @@ class DatabaseManager:
 
             return sequence_data
 
+    def get_eth_lstm_sequence_chunked(self, timeframe: str, chunk_size: int = 10000, offset: int = 0,
+                                      sequence_id: int = None) -> List[Dict[str, Any]]:
+        """
+        Получить данные ETH LSTM по чанкам
+
+        Args:
+            timeframe: временной интервал
+            chunk_size: размер чанка (по умолчанию 10000)
+            offset: смещение для пагинации
+            sequence_id: конкретный sequence_id (опционально)
+
+        Returns:
+            List[Dict[str, Any]]: список данных последовательностей
+        """
+        with self.conn.cursor() as cursor:
+            if sequence_id is not None:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM eth_lstm_data
+                        WHERE timeframe = %s
+                          AND sequence_id = %s
+                        ORDER BY open_time
+                            LIMIT %s \
+                        OFFSET %s
+                        """
+                cursor.execute(query, (timeframe, sequence_id, chunk_size, offset))
+            else:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM eth_lstm_data
+                        WHERE timeframe = %s
+                        ORDER BY sequence_id, open_time
+                            LIMIT %s \
+                        OFFSET %s
+                        """
+                cursor.execute(query, (timeframe, chunk_size, offset))
+
+            results = cursor.fetchall()
+            return results
+
+    def get_btc_lstm_sequence_chunked(self, timeframe: str, chunk_size: int = 10000, offset: int = 0,
+                                      sequence_id: int = None) -> tuple:
+
+        with self.conn.cursor() as cursor:
+            if sequence_id is not None:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM btc_lstm_data
+                        WHERE timeframe = %s
+                          AND sequence_id = %s
+                        ORDER BY open_time
+                            LIMIT %s \
+                        OFFSET %s
+                        """
+                cursor.execute(query, (timeframe, sequence_id, chunk_size, offset))
+            else:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM btc_lstm_data
+                        WHERE timeframe = %s
+                        ORDER BY sequence_id, open_time
+                            LIMIT %s \
+                        OFFSET %s
+                        """
+                cursor.execute(query, (timeframe, chunk_size, offset))
+
+            results = cursor.fetchall()
+            return results
+
+    def get_sol_lstm_sequence_chunked(self, timeframe: str, chunk_size: int = 10000, offset: int = 0,
+                                      sequence_id: int = None) -> str:
+
+        with self.conn.cursor() as cursor:
+            if sequence_id is not None:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM sol_lstm_data
+                        WHERE timeframe = %s
+                          AND sequence_id = %s
+                        ORDER BY open_time
+                            LIMIT %s \
+                        OFFSET %s
+                        """
+                cursor.execute(query, (timeframe, sequence_id, chunk_size, offset))
+            else:
+                query = """
+                        SELECT id,
+                               timeframe,
+                               sequence_id,
+                               sequence_position,
+                               open_time,
+                               open_scaled,
+                               high_scaled,
+                               low_scaled,
+                               close_scaled,
+                               volume_scaled,
+                               hour_sin,
+                               hour_cos,
+                               day_of_week_sin,
+                               day_of_week_cos,
+                               month_sin,
+                               month_cos,
+                               day_of_month_sin,
+                               day_of_month_cos,
+                               target_close_1,
+                               target_close_5,
+                               target_close_10,
+                               sequence_length,
+                               scaling_metadata,
+                               created_at,
+                               updated_at
+                        FROM sol_lstm_data
+                        WHERE timeframe = %s
+                        ORDER BY sequence_id, open_time
+                            LIMIT %s \
+                        OFFSET %s
+                        """
+                cursor.execute(query, (timeframe, chunk_size, offset))
+
+            results = cursor.fetchall()
+            return results
+
     def safe_json_loads(value: str) -> dict:
 
         if not value:

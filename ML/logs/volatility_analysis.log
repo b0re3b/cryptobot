@@ -1,0 +1,2 @@
+2025-05-27 00:15:43 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами BTC
+2025-05-27 00:15:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'

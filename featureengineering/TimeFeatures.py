@@ -8,6 +8,40 @@ from utils.logger import CryptoLogger
 class TimeFeatures():
     def __init__(self):
         self.logger = CryptoLogger('TimeFeatures')
+
+    def _ensure_datetime_index(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Перевіряє та перетворює індекс в DatetimeIndex якщо це можливо.
+        """
+        if isinstance(data.index, pd.DatetimeIndex):
+            return data
+
+        # Спробуємо перетворити індекс в datetime
+        try:
+            # Якщо індекс числовий, спробуємо трактувати як timestamp
+            if pd.api.types.is_numeric_dtype(data.index):
+                # Перевіряємо, чи це Unix timestamp
+                if data.index.min() > 1e9:  # Приблизно після 2001 року
+                    new_index = pd.to_datetime(data.index, unit='s')
+                    self.logger.info("Індекс успішно перетворено з Unix timestamp в DatetimeIndex")
+                else:
+                    # Можливо це timestamp в мілісекундах
+                    new_index = pd.to_datetime(data.index, unit='ms')
+                    self.logger.info("Індекс успішно перетворено з timestamp (ms) в DatetimeIndex")
+            else:
+                # Спробуємо стандартне перетворення
+                new_index = pd.to_datetime(data.index)
+                self.logger.info("Індекс успішно перетворено в DatetimeIndex")
+
+            # Створюємо копію з новим індексом
+            result_df = data.copy()
+            result_df.index = new_index
+            return result_df
+
+        except (ValueError, TypeError, pd.errors.OutOfBoundsDatetime) as e:
+            self.logger.warning(f"Не вдалося перетворити індекс в DatetimeIndex: {str(e)}")
+            return data
+
     def create_lagged_features(self, data: pd.DataFrame,
                                columns: Optional[List[str]] = None,
                                lag_periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
@@ -16,8 +50,8 @@ class TimeFeatures():
         """
         self.logger.info("Створення лагових ознак...")
 
-        # Створюємо копію даних
-        result_df = data.copy()
+        # Створюємо копію даних та намагаємося перетворити індекс
+        result_df = self._ensure_datetime_index(data.copy())
 
         # Перевіряємо, що індекс часовий для правильного зсуву
         if not isinstance(result_df.index, pd.DatetimeIndex):
@@ -60,8 +94,8 @@ class TimeFeatures():
         """
         self.logger.info("Створення ознак на основі ковзного вікна...")
 
-        # Створюємо копію даних
-        result_df = data.copy()
+        # Створюємо копію даних та намагаємося перетворити індекс
+        result_df = self._ensure_datetime_index(data.copy())
 
         # Перевіряємо, що індекс часовий для правильного розрахунку
         if not isinstance(result_df.index, pd.DatetimeIndex):
@@ -154,8 +188,8 @@ class TimeFeatures():
         """
         self.logger.info("Створення ознак на основі експоненціально зваженого вікна...")
 
-        # Створюємо копію даних
-        result_df = data.copy()
+        # Створюємо копію даних та намагаємося перетворити індекс
+        result_df = self._ensure_datetime_index(data.copy())
 
         # Вибираємо числові стовпці, якщо columns не вказано
         if columns is None:
@@ -239,15 +273,14 @@ class TimeFeatures():
         """
         self.logger.info("Створення ознак на основі дати і часу...")
 
+        # Створюємо копію даних та намагаємося перетворити індекс
+        result_df = self._ensure_datetime_index(data.copy())
+
         # Перевірити, що індекс є DatetimeIndex
-        if not isinstance(data.index, pd.DatetimeIndex):
+        if not isinstance(result_df.index, pd.DatetimeIndex):
             self.logger.warning("Індекс даних не є DatetimeIndex. Часові ознаки не будуть створені.")
-            return data
+            return result_df
 
-        # Створюємо копію, щоб не модифікувати оригінальні дані
-        result_df = data.copy()
-
-        # Використовуємо векторизовані операції для створення часових ознак
         # DataFrame для зберігання всіх нових ознак
         datetime_features = pd.DataFrame(index=result_df.index)
 

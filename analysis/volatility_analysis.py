@@ -1479,7 +1479,7 @@ class VolatilityAnalysis:
 
 def main():
     # Parameters for test
-    symbols = ['BTC', 'SOL', 'ETH']  # List of symbols
+    symbols = ['BTC', 'SOL', 'ETH']
     timeframe = '1d'
 
     print(f"=== Starting volatility analysis for {', '.join(symbols)} on timeframe {timeframe} ===")

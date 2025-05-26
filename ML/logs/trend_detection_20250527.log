@@ -1,0 +1,1 @@
+2025-05-27 00:15:43 - trend_detection - ERROR - [logger.py:111] - Error preparing ML features: "['+di', '-di'] not in index"
