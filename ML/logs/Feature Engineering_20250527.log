@@ -1659,3 +1659,387 @@
 2025-05-27 16:24:46 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_candle_pattern_features: Cannot convert non-finite values (NA or inf) to integer
 2025-05-27 16:24:46 - Feature Engineering - WARNING - [logger.py:107] - Група candle_patterns: нові ознаки не додані
 2025-05-27 16:24:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:00:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:00:21 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:00:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:00:25 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:00:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:00:26 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:00:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:00:26 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:00:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:00:30 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:00:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:00:31 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:00:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:00:32 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:00:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:00:32 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:00:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:00:32 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_candle_pattern_features: Cannot convert non-finite values (NA or inf) to integer
+2025-05-27 17:00:32 - Feature Engineering - WARNING - [logger.py:107] - Група candle_patterns: нові ознаки не додані
+2025-05-27 17:00:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:00:36 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:00:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:00:36 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:00:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:00:37 - Feature Engineering - INFO - [logger.py:103] - Група polynomial: додано 100 нових ознак
+2025-05-27 17:00:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:00:37 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:00:37 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:00:37 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:00:37 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:00:37 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:00:37 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.012569207613664701
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:00:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:03:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:03:07 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:03:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:03:07 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:03:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:03:08 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:03:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:03:12 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:03:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:03:12 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:03:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:03:13 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:03:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:03:13 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:03:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:03:13 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_candle_pattern_features: Cannot convert non-finite values (NA or inf) to integer
+2025-05-27 17:03:13 - Feature Engineering - WARNING - [logger.py:107] - Група candle_patterns: нові ознаки не додані
+2025-05-27 17:03:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:28:51 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:28:51 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:28:51 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:28:51 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:28:51 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:30:56 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:30:56 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:30:56 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:30:56 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:30:56 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:31:04 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:31:11 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:31:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:31:14 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:31:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:31:27 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:31:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:31:32 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:31:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:31:33 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:31:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:31:36 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:31:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:31:37 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:31:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:31:38 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_candle_pattern_features: Cannot convert non-finite values (NA or inf) to integer
+2025-05-27 17:31:39 - Feature Engineering - WARNING - [logger.py:107] - Група candle_patterns: нові ознаки не додані
+2025-05-27 17:31:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:31:40 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:31:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:31:43 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:31:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:31:52 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 17:31:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:31:58 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:31:58 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:31:58 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:31:59 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:31:59 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:31:59 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008465088944791255
+2025-05-27 17:32:09 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:32:09 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:32:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:32:09 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:32:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:32:10 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:32:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:32:15 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:32:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:32:16 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:32:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:32:27 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:32:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:32:32 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:32:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:32:33 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:32:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:32:36 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:32:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:32:37 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:32:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:32:38 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_candle_pattern_features: Cannot convert non-finite values (NA or inf) to integer
+2025-05-27 17:32:39 - Feature Engineering - WARNING - [logger.py:107] - Група candle_patterns: нові ознаки не додані
+2025-05-27 17:32:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:32:40 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:32:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:32:43 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:32:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:32:50 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 17:32:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:32:57 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:32:57 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:32:57 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:32:58 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:32:58 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:32:58 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008465088944791255
+2025-05-27 17:33:05 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:33:05 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:33:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:33:05 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:33:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:33:07 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:33:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:33:11 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:33:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:33:12 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:33:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:50:25 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:50:25 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:50:25 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:50:25 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:50:25 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 17:50:32 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:50:32 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:50:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:50:32 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:50:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:50:33 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:50:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:50:38 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:50:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:50:39 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:50:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:50:50 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:50:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:50:55 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:50:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:50:56 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:50:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:50:58 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:50:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:50:59 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:50:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:51:00 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 27 нових ознак
+2025-05-27 17:51:00 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:51:02 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:51:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:51:04 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:51:04 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:51:11 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 17:51:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:51:18 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:51:18 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:51:18 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:51:19 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:51:19 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:51:19 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008465088944791255
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:51:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:51:33 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:51:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:51:34 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:51:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:51:45 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:51:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:51:50 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:51:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:51:51 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:51:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:51:53 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:51:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:51:55 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:51:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:51:56 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 27 нових ознак
+2025-05-27 17:51:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:51:57 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:51:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:52:00 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:52:00 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:52:06 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 17:52:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:52:13 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:52:13 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:52:13 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:52:14 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:52:14 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:52:14 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008465088944791255
+2025-05-27 17:52:21 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:52:21 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:52:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:52:21 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:52:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:52:22 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:52:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:52:27 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:52:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:52:27 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:52:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:52:38 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:52:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:52:43 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:52:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:52:44 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:52:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:52:47 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:52:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:52:48 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:52:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:52:49 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 27 нових ознак
+2025-05-27 17:52:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:52:50 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:52:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:52:53 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:52:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:52:59 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 17:52:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:53:06 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:53:06 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:53:06 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:53:07 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:53:07 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:53:07 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008465088944791255
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 17:53:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 17:53:20 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 17:53:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 17:53:21 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 17:53:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 17:53:31 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 17:53:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 17:53:36 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 17:53:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 17:53:37 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 17:53:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 17:53:40 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 17:53:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 17:53:41 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 17:53:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 17:53:42 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 27 нових ознак
+2025-05-27 17:53:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 17:53:44 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 17:53:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 17:53:46 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 17:53:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 17:53:52 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 17:53:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 17:53:59 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:53:59 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 17:53:59 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 17:54:00 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 17:54:00 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 17:54:00 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008218229610298389
+2025-05-27 18:18:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 18:18:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 18:18:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 18:18:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 18:18:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 18:18:16 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 18:18:16 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 18:18:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 18:18:17 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 18:18:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 18:18:17 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 18:18:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 18:18:22 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 18:18:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 18:18:23 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 18:18:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 18:18:34 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 18:18:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 18:18:39 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 18:18:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 18:18:40 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 18:18:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 18:18:42 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 18:18:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 18:18:44 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 18:18:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 18:18:45 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 27 нових ознак
+2025-05-27 18:18:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 18:18:46 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 18:18:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 18:18:49 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 18:18:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 18:18:56 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 18:18:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 18:20:46 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:20:46 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 18:20:46 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 18:20:47 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 18:20:47 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 26 NaN значень
+2025-05-27 18:20:47 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008465088944791255
+2025-05-27 18:20:57 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 18:20:57 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 18:20:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 18:20:57 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 18:20:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 18:20:58 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 18:20:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 18:21:02 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 18:21:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 18:21:02 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 18:21:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 18:21:13 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 18:21:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 18:21:18 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 18:21:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 18:21:19 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 18:21:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 18:21:22 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 18:21:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 18:21:23 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 18:21:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 18:21:24 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 27 нових ознак
+2025-05-27 18:21:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 18:21:26 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 18:21:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 18:21:29 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 18:21:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 18:21:37 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 18:21:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster

@@ -1342,3 +1342,243 @@
 2025-05-27 16:24:45 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
 2025-05-27 16:24:45 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
 2025-05-27 16:24:46 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:00:30 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:00:30 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:00:31 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:00:31 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:00:31 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:00:32 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:03:12 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:03:12 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:03:12 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:03:13 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:31:32 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:31:33 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:31:33 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:31:36 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:32:32 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:32:33 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:32:33 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:32:36 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:50:55 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:50:56 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:50:56 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:50:58 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:51:50 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:51:51 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:51:51 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:51:53 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:52:43 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:52:44 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:52:44 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:52:47 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 17:53:36 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 17:53:37 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 17:53:37 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 17:53:40 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 18:18:39 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:18:40 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 18:18:40 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 18:18:42 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів
+2025-05-27 18:21:18 - Cross Features - INFO - [logger.py:103] - Створення ознак-співвідношень...
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник volume містить 18 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник open містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник high містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник low містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - WARNING - [logger.py:107] - Знаменник close містить 1 нульових значень
+2025-05-27 18:21:19 - Cross Features - INFO - [logger.py:103] - Додано 20 ознак-співвідношень
+2025-05-27 18:21:19 - Cross Features - INFO - [logger.py:103] - Створення ознак перетинів індикаторів...
+2025-05-27 18:21:22 - Cross Features - INFO - [logger.py:103] - Додано 175 ознак перетинів індикаторів

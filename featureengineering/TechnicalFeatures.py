@@ -186,7 +186,7 @@ class TechnicalFeatures:
                         else:
                             self.logger.warning("Parabolic SAR повернув неочікуваний тип даних")
 
-                # Ichimoku Cloud - FIXED
+                # Ichimoku Cloud
                 elif indicator == 'ichimoku':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         try:
@@ -233,31 +233,6 @@ class TechnicalFeatures:
 
             except Exception as e:
                 self.logger.error(f"Помилка при розрахунку індикатора {indicator}: {str(e)}")
-
-        # Заповнюємо NaN значення - FIXED
-        original_columns = set(data.columns)
-        for col in result_df.columns:
-            if col not in original_columns:  # перевіряємо, що це нова ознака
-                try:
-                    # Перевіряємо наявність NaN значень більш надійним способом
-                    if result_df[col].isnull().sum() > 0:
-                        self.logger.debug(f"Заповнення NaN значень у стовпці {col}")
-
-                        # Використовуємо нову синтаксис для forward fill та backward fill
-                        result_df[col] = result_df[col].ffill().bfill()
-
-                        # Якщо все ще є NaN, заповнюємо медіаною
-                        if result_df[col].isnull().sum() > 0:
-                            median_val = result_df[col].median()
-                            if pd.isna(median_val):
-                                result_df[col] = result_df[col].fillna(0)
-                            else:
-                                result_df[col] = result_df[col].fillna(median_val)
-
-                except Exception as fill_error:
-                    self.logger.warning(f"Помилка при заповненні NaN у стовпці {col}: {str(fill_error)}")
-                    # Якщо все інше не працює, просто заповнюємо нулями
-                    result_df[col] = result_df[col].fillna(0)
 
         self.logger.info(f"Додано {added_features_count} технічних індикаторів")
 
@@ -354,20 +329,32 @@ class TechnicalFeatures:
 
         # 7. Розмір відносно попередніх N свічок (новий індикатор)
         window = 20
-        result_df['rel_candle_size'] = result_df['candle_body'] / result_df['candle_body'].rolling(window=window).mean()
+        avg_body = result_df['candle_body'].rolling(window=window).mean()
+        result_df['rel_candle_size'] = np.where(
+            (avg_body.notna()) & (avg_body != 0),
+            result_df['candle_body'] / avg_body,
+            1.0
+        )
         added_features_count += 1
 
         # --- Використання pandas_ta для патернів свічок ---
-        # pandas_ta має вбудовані функції для розпізнавання патернів свічок
-        patterns = ta.cdl_pattern(open_=result_df['open'], high=result_df['high'],
-                                  low=result_df['low'], close=result_df['close'])
-        result_df = pd.concat([result_df, patterns], axis=1)
-        added_features_count += len(patterns.columns)
+        try:
+            patterns = ta.cdl_pattern(open_=result_df['open'], high=result_df['high'],
+                                      low=result_df['low'], close=result_df['close'])
+            result_df = pd.concat([result_df, patterns], axis=1)
+            added_features_count += len(patterns.columns)
+        except Exception as e:
+            self.logger.warning(f"Помилка при використанні pandas_ta patterns: {e}")
+
+        # --- Функція для безпечного перетворення boolean в int ---
+        def safe_bool_to_int(series):
+            """Безпечно перетворює boolean серію в int, обробляючи NaN значення"""
+            return series.fillna(False).astype(bool).astype(int)
 
         # --- Патерни з однієї свічки (додаткові) ---
         # 1. Дожі (тіло менше X% від розмаху) - векторизовано
         doji_threshold = 0.1  # 10% від повного розмаху
-        result_df['doji'] = (result_df['rel_body_size'] < doji_threshold).astype(int)
+        result_df['doji'] = safe_bool_to_int(result_df['rel_body_size'] < doji_threshold)
         added_features_count += 1
 
         # 2. Молот (векторизовано)
@@ -376,7 +363,7 @@ class TechnicalFeatures:
                 (result_df['lower_shadow'] > 2 * result_df['candle_body']) &  # довга нижня тінь
                 (result_df['upper_shadow'] < 0.2 * result_df['lower_shadow'])  # коротка верхня тінь
         )
-        result_df['hammer'] = hammer_conditions.astype(int)
+        result_df['hammer'] = safe_bool_to_int(hammer_conditions)
         added_features_count += 1
 
         # 3. Перевернутий молот (векторизовано)
@@ -385,13 +372,14 @@ class TechnicalFeatures:
                 (result_df['upper_shadow'] > 2 * result_df['candle_body']) &  # довга верхня тінь
                 (result_df['lower_shadow'] < 0.2 * result_df['upper_shadow'])  # коротка нижня тінь
         )
-        result_df['inverted_hammer'] = inv_hammer_conditions.astype(int)
+        result_df['inverted_hammer'] = safe_bool_to_int(inv_hammer_conditions)
         added_features_count += 1
 
         # 4. Довгі свічки (векторизовано)
         window = 20
         avg_body = result_df['candle_body'].rolling(window=window).mean()
-        result_df['long_candle'] = (result_df['candle_body'] > 1.5 * avg_body).astype(int)
+        long_candle_condition = (result_df['candle_body'] > 1.5 * avg_body) & avg_body.notna()
+        result_df['long_candle'] = safe_bool_to_int(long_candle_condition)
         added_features_count += 1
 
         # 5. Марібозу (векторизовано)
@@ -401,7 +389,7 @@ class TechnicalFeatures:
                 (result_df['lower_shadow'] < marubozu_threshold * result_df['candle_range']) &
                 (result_df['rel_body_size'] > 0.9)  # тіло займає більше 90% розмаху
         )
-        result_df['marubozu'] = marubozu_conditions.astype(int)
+        result_df['marubozu'] = safe_bool_to_int(marubozu_conditions)
         added_features_count += 1
 
         # 6. Висока хвиля (High Wave) - новий патерн
@@ -410,7 +398,7 @@ class TechnicalFeatures:
                 ((result_df['upper_shadow'] > 3 * result_df['candle_body']) |
                  (result_df['lower_shadow'] > 3 * result_df['candle_body']))  # довга тінь (верхня або нижня)
         )
-        result_df['high_wave'] = high_wave_conditions.astype(int)
+        result_df['high_wave'] = safe_bool_to_int(high_wave_conditions)
         added_features_count += 1
 
         # 7. Світлячок (Firefly) - новий патерн
@@ -419,7 +407,7 @@ class TechnicalFeatures:
                 (result_df['upper_shadow'] < 0.1 * result_df['candle_range']) &  # майже немає верхньої тіні
                 (result_df['lower_shadow'] > 2.5 * result_df['candle_body'])  # дуже довга нижня тінь
         )
-        result_df['firefly'] = firefly_conditions.astype(int)
+        result_df['firefly'] = safe_bool_to_int(firefly_conditions)
         added_features_count += 1
 
         # --- Патерни з декількох свічок (векторизовано) ---
@@ -431,7 +419,7 @@ class TechnicalFeatures:
                 (result_df['open'] < result_df['close'].shift(1)) &  # відкриття нижче закриття попередньої
                 (result_df['close'] > result_df['open'].shift(1))  # закриття вище відкриття попередньої
         )
-        result_df['bullish_engulfing'] = bullish_engulfing.astype(int)
+        result_df['bullish_engulfing'] = safe_bool_to_int(bullish_engulfing)
         added_features_count += 1
 
         # Ведмеже поглинання
@@ -441,7 +429,7 @@ class TechnicalFeatures:
                 (result_df['open'] > result_df['close'].shift(1)) &  # відкриття вище закриття попередньої
                 (result_df['close'] < result_df['open'].shift(1))  # закриття нижче відкриття попередньої
         )
-        result_df['bearish_engulfing'] = bearish_engulfing.astype(int)
+        result_df['bearish_engulfing'] = safe_bool_to_int(bearish_engulfing)
         added_features_count += 1
 
         # 2. Ранкова зірка
@@ -451,7 +439,7 @@ class TechnicalFeatures:
                 (result_df['candle_direction'] == 1) &  # третя свічка бичача
                 (result_df['close'] > (result_df['open'].shift(2) + result_df['close'].shift(2)) / 2)
         )
-        result_df['morning_star'] = morning_star.astype(int)
+        result_df['morning_star'] = safe_bool_to_int(morning_star)
         added_features_count += 1
 
         # 3. Вечірня зірка
@@ -461,7 +449,7 @@ class TechnicalFeatures:
                 (result_df['candle_direction'] == -1) &  # третя свічка ведмежа
                 (result_df['close'] < (result_df['open'].shift(2) + result_df['close'].shift(2)) / 2)
         )
-        result_df['evening_star'] = evening_star.astype(int)
+        result_df['evening_star'] = safe_bool_to_int(evening_star)
         added_features_count += 1
 
         # 4. Три білих солдати
@@ -472,7 +460,7 @@ class TechnicalFeatures:
                 (result_df['close'].shift(1) > result_df['close'].shift(2)) &  # друга закривається вище першої
                 (result_df['close'] > result_df['close'].shift(1))  # третя закривається вище другої
         )
-        result_df['three_white_soldiers'] = three_white_soldiers.astype(int)
+        result_df['three_white_soldiers'] = safe_bool_to_int(three_white_soldiers)
         added_features_count += 1
 
         # 5. Три чорні ворони
@@ -483,11 +471,11 @@ class TechnicalFeatures:
                 (result_df['close'].shift(1) < result_df['close'].shift(2)) &  # друга закривається нижче першої
                 (result_df['close'] < result_df['close'].shift(1))  # третя закривається нижче другої
         )
-        result_df['three_black_crows'] = three_black_crows.astype(int)
+        result_df['three_black_crows'] = safe_bool_to_int(three_black_crows)
         added_features_count += 1
 
         # 6. Зірка доджі
-        result_df['doji_star'] = (result_df['doji'] & (result_df['doji'].shift(1) == 0)).astype(int)
+        result_df['doji_star'] = safe_bool_to_int(result_df['doji'] & (result_df['doji'].shift(1) == 0))
         added_features_count += 1
 
         # 7. Пінцет (зверху/знизу)
@@ -498,7 +486,7 @@ class TechnicalFeatures:
                 (np.abs(result_df['high'] - result_df['high'].shift(1)) < pinbar_tolerance * result_df['high']) &
                 (result_df['candle_direction'].shift(1) != result_df['candle_direction'])  # різний напрямок свічок
         )
-        result_df['top_pinbar'] = top_pinbar.astype(int)
+        result_df['top_pinbar'] = safe_bool_to_int(top_pinbar)
         added_features_count += 1
 
         # Нижній пінцет (однакові мінімуми)
@@ -506,7 +494,7 @@ class TechnicalFeatures:
                 (np.abs(result_df['low'] - result_df['low'].shift(1)) < pinbar_tolerance * result_df['low']) &
                 (result_df['candle_direction'].shift(1) != result_df['candle_direction'])  # різний напрямок свічок
         )
-        result_df['bottom_pinbar'] = bottom_pinbar.astype(int)
+        result_df['bottom_pinbar'] = safe_bool_to_int(bottom_pinbar)
         added_features_count += 1
 
         # 8. Харамі (нові патерни)
@@ -518,7 +506,7 @@ class TechnicalFeatures:
                 (result_df['close'] < result_df['open'].shift(1)) &  # закриття нижче відкриття попередньої
                 (result_df['candle_body'] < result_df['candle_body'].shift(1) * 0.6)  # тіло менше 60% попереднього
         )
-        result_df['bullish_harami'] = bullish_harami.astype(int)
+        result_df['bullish_harami'] = safe_bool_to_int(bullish_harami)
         added_features_count += 1
 
         # Ведмеже харамі
@@ -529,7 +517,7 @@ class TechnicalFeatures:
                 (result_df['close'] > result_df['open'].shift(1)) &  # закриття вище відкриття попередньої
                 (result_df['candle_body'] < result_df['candle_body'].shift(1) * 0.6)  # тіло менше 60% попереднього
         )
-        result_df['bearish_harami'] = bearish_harami.astype(int)
+        result_df['bearish_harami'] = safe_bool_to_int(bearish_harami)
         added_features_count += 1
 
         # 9. Висхідний трикутник (новий патерн)
@@ -541,10 +529,10 @@ class TechnicalFeatures:
             # Умови для висхідного трикутника
             ascending_triangle = (
                     (result_df['low'] > min_low.shift(1)) &  # поточний мінімум вище попереднього мінімуму
-                    (np.abs(result_df['high'] - max_high.shift(1)) < pinbar_tolerance * result_df['high'])
-            # максимуми рівні
+                    (np.abs(result_df['high'] - max_high.shift(1)) < pinbar_tolerance * result_df['high']) &
+                    min_low.shift(1).notna() & max_high.shift(1).notna()  # переконуємося, що значення не NaN
             )
-            result_df[f'ascending_triangle_{period}'] = ascending_triangle.astype(int)
+            result_df[f'ascending_triangle_{period}'] = safe_bool_to_int(ascending_triangle)
             added_features_count += 1
 
         # 10. Низхідний трикутник (новий патерн)
@@ -556,16 +544,11 @@ class TechnicalFeatures:
             # Умови для низхідного трикутника
             descending_triangle = (
                     (result_df['high'] < max_high.shift(1)) &  # поточний максимум нижче попереднього максимуму
-                    (np.abs(result_df['low'] - min_low.shift(1)) < pinbar_tolerance * result_df['low'])
-            # мінімуми рівні
+                    (np.abs(result_df['low'] - min_low.shift(1)) < pinbar_tolerance * result_df['low']) &
+                    min_low.shift(1).notna() & max_high.shift(1).notna()  # переконуємося, що значення не NaN
             )
-            result_df[f'descending_triangle_{period}'] = descending_triangle.astype(int)
+            result_df[f'descending_triangle_{period}'] = safe_bool_to_int(descending_triangle)
             added_features_count += 1
-
-        # Заповнюємо пропущені значення (особливо на початку ряду через використання .shift())
-        for col in result_df.columns:
-            if col not in data.columns:  # перевіряємо, що це нова ознака
-                result_df[col] = result_df[col].fillna(0)  # для бінарних ознак підходить 0
 
         self.logger.info(f"Додано {added_features_count} ознак на основі патернів свічок")
 
@@ -715,7 +698,7 @@ class TechnicalFeatures:
         # --- Специфічні для криптовалют індикатори (потребують усіх OHLCV даних) ---
         if 'ohlcv' in available_groups:
             try:
-                # 1. Волатильність за годину/добу/тиждень (специфічно для крипторинку, що працює 24/7)
+                # 1. Волатільність за годину/добу/тиждень (специфічно для крипторинку, що працює 24/7)
                 for periods in [24, 24 * 7]:  # година, доба, тиждень у годинних даних
                     high_period = result_df['high'].rolling(window=periods).max()
                     low_period = result_df['low'].rolling(window=periods).min()
@@ -723,12 +706,12 @@ class TechnicalFeatures:
                     added_features_count += 1
 
                 # 2. Індикатор криптовалютної паніки (аналог "індексу страху і жадібності")
-                # Використовує комбінацію волатильності і об'єму
+                # Використовує комбінацію волатільності і об'єму
                 for window in [24]:
                     volatility = result_df['close'].rolling(window=window).std() / result_df['close'].rolling(
                         window=window).mean()
                     volume_change = result_df['volume'].pct_change(periods=window)
-                    # Індекс страху: висока волатильність + різкий зріст об'єму + зниження ціни
+                    # Індекс страху: висока волатільність + різкий зріст об'єму + зниження ціни
                     fear_index = volatility * np.where(
                         (volume_change > 0) & (result_df['close'].pct_change(periods=window) < 0),
                         volume_change + 1, 1)
@@ -746,7 +729,6 @@ class TechnicalFeatures:
                     added_features_count += 1
 
                 # 4. Індикатор ф'ючерсного ажіотажу (для криптовалют)
-                # На реальних даних тут можна було б використовувати funding rate, але заміняємо на синтетичний розрахунок
                 for window in [24, 48]:
                     close_mean = result_df['close'].rolling(window=window).mean()
                     close_std = result_df['close'].rolling(window=window).std()
@@ -800,16 +782,6 @@ class TechnicalFeatures:
 
             except Exception as e:
                 self.logger.error(f"Помилка при створенні специфічних криптовалютних індикаторів: {str(e)}")
-
-        # Заповнюємо пропущені значення
-        for col in result_df.columns:
-            if col not in data.columns:  # перевіряємо, що це нова ознака
-                # Для заповнення використовуємо forward fill, потім backward fill
-                result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
-
-                # Якщо все ще є NaN, заповнюємо нулями
-                if result_df[col].isna().any():
-                    result_df[col] = result_df[col].fillna(0)
 
         self.logger.info(f"Додано {added_features_count} специфічних індикаторів для криптовалют")
 

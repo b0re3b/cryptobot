@@ -170,3 +170,39 @@
 2025-05-27 16:24:35 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (333, 30, 13), y shape (333,), regime shape (333,)
 2025-05-27 16:24:35 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
 2025-05-27 16:24:35 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [4]
+2025-05-27 17:00:20 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (461, 30, 13), y shape (461,), regime shape (461,)
+2025-05-27 17:00:20 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:00:20 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [3]
+2025-05-27 17:00:38 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (461, 30, 13), y shape (461,), regime shape (461,)
+2025-05-27 17:00:38 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:00:38 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [3]
+2025-05-27 17:03:06 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (461, 30, 13), y shape (461,), regime shape (461,)
+2025-05-27 17:03:06 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:03:06 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [3]
+2025-05-27 17:31:03 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:31:03 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:31:03 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 17:32:09 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:32:09 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:32:09 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 17:33:05 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:33:05 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:33:05 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 17:50:32 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:50:32 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:50:32 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 17:51:28 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:51:28 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:51:28 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 17:52:21 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:52:21 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:52:21 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 17:53:15 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 17:53:15 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 17:53:15 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [15]
+2025-05-27 18:18:16 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 18:18:16 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 18:18:16 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 18:20:57 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 18:20:57 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 18:20:57 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]

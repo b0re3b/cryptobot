@@ -1623,7 +1623,7 @@ def main():
     print("\n=== Training Models ===")
     training_results = pipeline.full_training_pipeline(
         symbols=['BTC', 'ETH', 'SOL'],
-        timeframes=['1w'],
+        timeframes=['4h'],
         model_types=['lstm', 'gru', 'transformer'],
         epochs=50,
         batch_size=64
@@ -1638,7 +1638,7 @@ def main():
     # 4. Individual Predictions
     print("\n=== Making Predictions ===")
     for symbol in ['BTC', 'ETH', 'SOL']:
-        for timeframe in ['1w']:
+        for timeframe in ['4h']:
             try:
                 pred = pipeline.predict(
                     symbol=symbol,
@@ -1652,14 +1652,14 @@ def main():
 
     # 5. Multiple Steps Prediction
     print("\n=== Multi-step Prediction ===")
-    btc_multi = pipeline.predict_multiple_steps('BTC', '1w', 'lstm', steps=5)
+    btc_multi = pipeline.predict_multiple_steps('BTC', '1d', 'lstm', steps=5)
     print(btc_multi)
 
     # 6. Ensemble Prediction
     print("\n=== Ensemble Prediction ===")
     ensemble_pred = pipeline.ensemble_prediction_pipeline(
         symbol='BTC',
-        timeframe='1w',
+        timeframe='4h',
         steps_ahead=3,
         weights={'lstm': 0.4, 'gru': 0.3, 'transformer': 0.3}
     )
@@ -1668,7 +1668,7 @@ def main():
     # 7. Model Evaluation
     print("\n=== Model Evaluation ===")
     for symbol in ['BTC', 'ETH', 'SOL']:
-        for timeframe in ['1w']:
+        for timeframe in ['4h']:
             try:
                 metrics = pipeline.evaluate_model(
                     model_key=f"{symbol}_{timeframe}_lstm",
@@ -1680,24 +1680,24 @@ def main():
 
     # 8. Model Comparison
     print("\n=== Model Comparison ===")
-    comparison = pipeline.compare_models('BTC', '1w')
+    comparison = pipeline.compare_models('BTC', '4h')
     print(pd.DataFrame(comparison).T)
 
     # 9. Feature Importance
     print("\n=== Feature Importance ===")
-    feature_imp = pipeline.feature_importance_analysis('BTC', '1w', 'lstm')
+    feature_imp = pipeline.feature_importance_analysis('BTC', '4h', 'lstm')
     print("Top features:", dict(sorted(feature_imp.items(), key=lambda x: x[1], reverse=True)[:5]))
 
     # 10. Model Interpretation
     print("\n=== Model Interpretation ===")
-    interpretation = pipeline.model_interpretation('BTC', '1w', 'lstm')
+    interpretation = pipeline.model_interpretation('BTC', '4h', 'lstm')
     print("Interpretation keys:", interpretation.keys())
 
     # 11. Online Learning
     print("\n=== Online Learning ===")
     try:
         # Load some new data (in a real scenario, this would be fresh data)
-        data_loader = pipeline.data_preprocessor.get_data_loader('BTC', '1w', 'lstm')
+        data_loader = pipeline.data_preprocessor.get_data_loader('BTC', '4h', 'lstm')
         new_data = data_loader().tail(100)  # Use last 100 points as new data
 
         online_result = pipeline.online_learning(
@@ -1723,7 +1723,7 @@ def main():
     try:
         opt_result = pipeline.hyperparameter_optimization(
             symbol='BTC',
-            timeframe='1w',
+            timeframe='4h',
             model_type='lstm',
             param_space=param_space,
             optimization_method='random_search',
@@ -1738,23 +1738,23 @@ def main():
     print("\n=== Generating Visualizations ===")
     try:
         # Model Comparison Plot
-        pipeline.plot_model_comparison('BTC', '1w' , 'lstm')
+        pipeline.plot_model_comparison('BTC', '4h' , 'lstm')
 
         # Feature Importance Plot
-        pipeline.plot_feature_importance('BTC', '1w', 'lstm', top_n=10)
+        pipeline.plot_feature_importance('BTC', '4h', 'lstm', top_n=10)
 
         # Prediction vs Actual Plot
-        pipeline.plot_prediction_vs_actual('BTC', '1w', 'lstm', n_points=50)
+        pipeline.plot_prediction_vs_actual('BTC', '4h', 'lstm', n_points=50)
 
         # Training History Plot
-        pipeline.plot_training_history('BTC', '1w', 'lstm')
+        pipeline.plot_training_history('BTC', '4h', 'lstm')
     except Exception as e:
         print("Visualization failed:", str(e))
 
     # 14. Model Management
     print("\n=== Model Management ===")
     # Get model info
-    model_info = pipeline.get_model_info('BTC', '1w', 'lstm')
+    model_info = pipeline.get_model_info('BTC', '4h', 'lstm')
     print("Model info:", model_info.keys())
 
     # Performance report
@@ -1771,7 +1771,7 @@ def main():
     try:
         export_path = pipeline.export_model_for_production(
             symbol='BTC',
-            timeframe='1w',
+            timeframe='4h',
             model_type='lstm',
             export_format='onnx'
         )

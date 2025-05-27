@@ -683,3 +683,150 @@
 2025-05-27 16:16:46 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
 2025-05-27 16:16:46 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
 2025-05-27 16:16:46 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23353 числових стовпців
+2025-05-27 17:00:36 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23353). Обмежуємо до 50 найважливіших.
+2025-05-27 17:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.01 GB
+2025-05-27 17:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:00:37 - Dimensionality Reducer - INFO - [logger.py:103] - Обмежуємо кількість поліноміальних ознак до 100
+2025-05-27 17:00:37 - Dimensionality Reducer - INFO - [logger.py:103] - Додано 100 поліноміальних ознак степені 2
+2025-05-27 17:00:37 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:00:37 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:31:43 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:31:44 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23353 числових стовпців
+2025-05-27 17:31:44 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23353). Обмежуємо до 50 найважливіших.
+2025-05-27 17:31:46 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:31:46 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:31:46 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 17:31:47 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:31:48 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:31:48 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 17:31:48 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:31:48 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 17:31:48 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 17:31:51 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:31:51 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:31:51 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 17:31:52 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:31:54 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:32:43 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:32:44 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23353 числових стовпців
+2025-05-27 17:32:44 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23353). Обмежуємо до 50 найважливіших.
+2025-05-27 17:32:46 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:32:46 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:32:46 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 17:32:47 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:32:47 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:32:47 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 17:32:47 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:32:47 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 17:32:47 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 17:32:49 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:32:49 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:32:49 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 17:32:50 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:32:52 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:51:04 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:51:05 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23380 числових стовпців
+2025-05-27 17:51:05 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23380). Обмежуємо до 50 найважливіших.
+2025-05-27 17:51:08 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:51:08 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:51:08 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 17:51:09 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:51:09 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:51:09 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 17:51:09 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:51:09 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 17:51:09 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 17:51:11 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:51:11 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:51:11 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 17:51:11 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:51:13 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:52:00 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:52:01 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23380 числових стовпців
+2025-05-27 17:52:01 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23380). Обмежуємо до 50 найважливіших.
+2025-05-27 17:52:03 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:52:03 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:52:03 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 17:52:04 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:52:04 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:52:04 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 17:52:04 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:52:04 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 17:52:04 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 17:52:06 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:52:06 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:52:06 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 17:52:06 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:52:08 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:52:53 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:52:54 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23380 числових стовпців
+2025-05-27 17:52:54 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23380). Обмежуємо до 50 найважливіших.
+2025-05-27 17:52:57 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:52:57 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:52:57 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 17:52:58 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:52:58 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:52:58 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 17:52:58 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:52:58 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 17:52:58 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 17:52:59 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:52:59 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:52:59 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 17:52:59 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:53:01 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 17:53:46 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:53:47 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23380 числових стовпців
+2025-05-27 17:53:47 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23380). Обмежуємо до 50 найважливіших.
+2025-05-27 17:53:50 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 17:53:50 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 17:53:50 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 17:53:51 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:53:51 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:53:51 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 17:53:51 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 17:53:51 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 17:53:51 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 17:53:52 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 17:53:52 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 17:53:52 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 17:53:52 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 17:53:55 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 18:18:49 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 18:18:50 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23380 числових стовпців
+2025-05-27 18:18:50 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23380). Обмежуємо до 50 найважливіших.
+2025-05-27 18:18:52 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 18:18:52 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 18:18:52 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 18:18:53 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 18:18:53 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:18:53 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 18:18:53 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 18:18:53 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 18:18:53 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 18:18:56 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 18:18:56 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:18:56 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 18:18:56 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 18:18:58 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.
+2025-05-27 18:21:29 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 18:21:30 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23380 числових стовпців
+2025-05-27 18:21:30 - Dimensionality Reducer - WARNING - [logger.py:107] - Занадто багато ознак (23380). Обмежуємо до 50 найважливіших.
+2025-05-27 18:21:33 - Dimensionality Reducer - INFO - [logger.py:103] - Вибрано 50 найбільш варіативних ознак
+2025-05-27 18:21:33 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1326
+2025-05-27 18:21:33 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.17 GB
+2025-05-27 18:21:34 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 18:21:34 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:21:34 - Dimensionality Reducer - INFO - [logger.py:103] - Спроба створити тільки взаємодії
+2025-05-27 18:21:34 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 18:21:34 - Dimensionality Reducer - INFO - [logger.py:103] - Очікувана кількість нових ознак: 1275
+2025-05-27 18:21:34 - Dimensionality Reducer - INFO - [logger.py:103] - Очікуване використання пам'яті: 0.16 GB
+2025-05-27 18:21:37 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-5, 5]
+2025-05-27 18:21:37 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:21:37 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки
+2025-05-27 18:21:37 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 18:21:39 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.

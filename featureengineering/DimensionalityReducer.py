@@ -425,11 +425,16 @@ class DimensionalityReducer():
                         poly_df[col] = 0
                     else:
                         median_val = poly_df[col].median()
-                        # FIXED: Use .item() to extract scalar value for comparison
+                        # FIXED: Proper handling of scalar median values
                         if pd.isna(median_val):
                             poly_df[col] = poly_df[col].fillna(0)
                         else:
-                            poly_df[col] = poly_df[col].fillna(median_val)
+                            # Ensure median_val is a scalar before comparison
+                            if hasattr(median_val, 'item'):
+                                median_scalar = median_val.item() if pd.api.types.is_scalar(median_val) else median_val
+                            else:
+                                median_scalar = median_val
+                            poly_df[col] = poly_df[col].fillna(median_scalar)
 
             # Використовуємо IQR для виявлення викидів
             for col in poly_df.columns:
@@ -452,7 +457,7 @@ class DimensionalityReducer():
                 self.logger.info(f"Видалено {len(constant_cols)} константних стовпців")
                 poly_df = poly_df.drop(columns=constant_cols)
 
-            # НОВИЙ КОД: Обмежуємо кількість фінальних ознак
+            # Обмежуємо кількість фінальних ознак
             max_final_features = 100  # Максимум 100 нових ознак
             if len(poly_df.columns) > max_final_features:
                 self.logger.info(f"Обмежуємо кількість поліноміальних ознак до {max_final_features}")
@@ -526,9 +531,18 @@ class DimensionalityReducer():
         # Замінюємо нескінченні значення
         if np.isinf(X.values).any():
             self.logger.warning("Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.")
-            X = X.replace([np.inf, -np.inf], [X.max().max() * 10, X.min().min() * 10])
+            # Використовуємо більш безпечний підхід для заміни нескінченних значень
+            for col in X.columns:
+                col_data = X[col]
+                finite_data = col_data[np.isfinite(col_data)]
+                if len(finite_data) > 0:
+                    max_val = finite_data.max()
+                    min_val = finite_data.min()
+                    X[col] = X[col].replace([np.inf, -np.inf], [max_val * 10, min_val * 10])
+                else:
+                    X[col] = X[col].replace([np.inf, -np.inf], [1e6, -1e6])
 
-            # Якщо все ще є проблеми, використовуємо більш консервативний підхід
+            # Додаткова перевірка та обрізання
             if np.isinf(X.values).any():
                 X = X.clip(-1e10, 1e10)
 
@@ -592,6 +606,116 @@ class DimensionalityReducer():
         except Exception as e:
             self.logger.error(f"Помилка при кластеризації: {str(e)}")
             return result_df
+
+    def _apply_dbscan_clustering_safe(self, result_df: pd.DataFrame, X: pd.DataFrame,
+                                      X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
+        """Безпечний допоміжний метод для кластеризації DBSCAN"""
+        try:
+            # Визначаємо параметри DBSCAN більш консервативно
+            try:
+                nbrs = NearestNeighbors(n_neighbors=min(len(X), 5)).fit(X_scaled)
+                distances, _ = nbrs.kneighbors(X_scaled)
+
+                # Безпечне обчислення eps
+                knee_distances = distances[:, -1]
+                knee_distances = knee_distances[np.isfinite(knee_distances)]
+
+                if len(knee_distances) > 0:
+                    eps = float(np.median(knee_distances))  # Явне перетворення в float
+                    eps = np.clip(eps, 0.1, 10.0)  # Обмежуємо eps розумними межами
+                else:
+                    eps = 0.5  # Значення за замовчуванням
+
+            except Exception as e:
+                self.logger.warning(f"Помилка при визначенні eps: {str(e)}. Використовуємо значення за замовчуванням.")
+                eps = 0.5
+
+            min_samples = max(3, min(len(X) // 50, 10))  # Більш консервативний min_samples
+
+            self.logger.debug(f"DBSCAN параметри: eps={eps}, min_samples={min_samples}")
+
+            # Застосовуємо DBSCAN
+            dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='euclidean')
+            cluster_labels = dbscan.fit_predict(X_scaled)
+
+            # Додаємо мітки кластерів як нову ознаку
+            result_df['dbscan_cluster'] = cluster_labels
+
+            # Аналізуємо результати кластеризації
+            unique_labels = np.unique(cluster_labels)
+            n_clusters_found = len(unique_labels) - (1 if -1 in unique_labels else 0)
+            n_outliers = int(np.sum(cluster_labels == -1))  # Явне перетворення в int
+
+            self.logger.info(f"DBSCAN знайдено {n_clusters_found} кластерів")
+            self.logger.info(f"Кількість точок-викидів: {n_outliers}")
+
+            # Обробляємо викиди, якщо вони є
+            if -1 in cluster_labels and n_clusters_found > 0:
+                try:
+                    outliers_mask = cluster_labels == -1
+                    non_outliers_mask = ~outliers_mask
+
+                    if np.any(non_outliers_mask) and np.any(outliers_mask):
+                        # Знаходимо найближчий кластер для викидів
+                        n_neighbors = min(3, int(np.sum(non_outliers_mask)))
+                        if n_neighbors > 0:
+                            knn = KNeighborsClassifier(n_neighbors=n_neighbors)
+                            knn.fit(X_scaled[non_outliers_mask], cluster_labels[non_outliers_mask])
+
+                            closest_clusters = knn.predict(X_scaled[outliers_mask])
+
+                            # Створюємо нову колонку з виправленими мітками
+                            fixed_labels = cluster_labels.copy()
+                            fixed_labels[outliers_mask] = closest_clusters
+                            result_df['dbscan_nearest_cluster'] = fixed_labels
+
+                    # Додаємо бінарну ознаку "чи є точка викидом"
+                    result_df['dbscan_is_outlier'] = outliers_mask.astype(int)
+
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обробці викидів: {str(e)}")
+
+            # Обчислюємо відстані до центроїдів кластерів (якщо є кластери)
+            if n_clusters_found > 0:
+                try:
+                    for i in unique_labels:
+                        if i != -1:  # Пропускаємо викиди
+                            cluster_mask = cluster_labels == i
+                            if np.any(cluster_mask):
+                                # Безпечне обчислення центроїда
+                                cluster_points = X_scaled[cluster_mask]
+                                centroid = np.mean(cluster_points, axis=0)
+
+                                # Безпечне обчислення відстаней
+                                distances = np.zeros(X_scaled.shape[0])
+                                for j in range(X_scaled.shape[0]):
+                                    try:
+                                        diff = X_scaled[j] - centroid
+                                        dist_squared = np.sum(diff ** 2)
+
+                                        if np.isfinite(dist_squared) and dist_squared >= 0:
+                                            distances[j] = float(np.sqrt(dist_squared))
+                                        else:
+                                            distances[j] = float(np.sum(np.abs(diff)))
+
+                                    except (OverflowError, FloatingPointError):
+                                        distances[j] = 1e6
+
+                                # Обрізаємо та очищуємо відстані
+                                distances = np.nan_to_num(distances, nan=0.0, posinf=1e6, neginf=0.0)
+                                distances = np.clip(distances, 0, 1e6)
+
+                                result_df[f'distance_to_dbscan_cluster_{i}'] = distances
+
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обчисленні відстаней до центроїдів DBSCAN: {str(e)}")
+
+            self.logger.info(f"Успішно створено ознаки кластеризації DBSCAN")
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при кластеризації DBSCAN: {str(e)}")
+
+        return result_df
 
     def _apply_kmeans_clustering_safe(self, result_df: pd.DataFrame, X: pd.DataFrame,
                                       X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
@@ -695,245 +819,5 @@ class DimensionalityReducer():
 
         except Exception as e:
             self.logger.error(f"Критична помилка при кластеризації KMeans: {str(e)}")
-
-        return result_df
-
-    def _apply_dbscan_clustering_safe(self, result_df: pd.DataFrame, X: pd.DataFrame,
-                                      X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
-        """Безпечний допоміжний метод для кластеризації DBSCAN"""
-        try:
-            # Визначаємо параметри DBSCAN більш консервативно
-            try:
-                nbrs = NearestNeighbors(n_neighbors=min(len(X), 5)).fit(X_scaled)
-                distances, _ = nbrs.kneighbors(X_scaled)
-
-                # Безпечне обчислення eps
-                knee_distances = distances[:, -1]
-                knee_distances = knee_distances[np.isfinite(knee_distances)]
-
-                if len(knee_distances) > 0:
-                    eps = np.median(knee_distances)  # Використовуємо медіану замість середнього
-                    eps = np.clip(eps, 0.1, 10.0)  # Обмежуємо eps розумними межами
-                else:
-                    eps = 0.5  # Значення за замовчуванням
-
-            except Exception as e:
-                self.logger.warning(f"Помилка при визначенні eps: {str(e)}. Використовуємо значення за замовчуванням.")
-                eps = 0.5
-
-            min_samples = max(3, min(len(X) // 50, 10))  # Більш консервативний min_samples
-
-            self.logger.debug(f"DBSCAN параметри: eps={eps}, min_samples={min_samples}")
-
-            # Застосовуємо DBSCAN
-            dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='euclidean')
-            cluster_labels = dbscan.fit_predict(X_scaled)
-
-            # Додаємо мітки кластерів як нову ознаку
-            result_df['dbscan_cluster'] = cluster_labels
-
-            # Аналізуємо результати кластеризації
-            unique_labels = np.unique(cluster_labels)
-            n_clusters_found = len(unique_labels) - (1 if -1 in unique_labels else 0)
-            n_outliers = np.sum(cluster_labels == -1)
-
-            self.logger.info(f"DBSCAN знайдено {n_clusters_found} кластерів")
-            self.logger.info(f"Кількість точок-викидів: {n_outliers}")
-
-            # Обробляємо викиди, якщо вони є
-            if -1 in cluster_labels and n_clusters_found > 0:
-                try:
-                    outliers_mask = cluster_labels == -1
-                    non_outliers_mask = ~outliers_mask
-
-                    if np.any(non_outliers_mask) and np.any(outliers_mask):
-                        # Знаходимо найближчий кластер для викидів
-                        knn = KNeighborsClassifier(n_neighbors=min(3, np.sum(non_outliers_mask)))
-                        knn.fit(X_scaled[non_outliers_mask], cluster_labels[non_outliers_mask])
-
-                        closest_clusters = knn.predict(X_scaled[outliers_mask])
-
-                        # Створюємо нову колонку з виправленими мітками
-                        fixed_labels = cluster_labels.copy()
-                        fixed_labels[outliers_mask] = closest_clusters
-                        result_df['dbscan_nearest_cluster'] = fixed_labels
-
-                    # Додаємо бінарну ознаку "чи є точка викидом"
-                    result_df['dbscan_is_outlier'] = outliers_mask.astype(int)
-
-                except Exception as e:
-                    self.logger.warning(f"Помилка при обробці викидів: {str(e)}")
-
-            # Обчислюємо відстані до центроїдів кластерів (якщо є кластери)
-            if n_clusters_found > 0:
-                try:
-                    for i in unique_labels:
-                        if i != -1:  # Пропускаємо викиди
-                            cluster_mask = cluster_labels == i
-                            if np.any(cluster_mask):
-                                # Безпечне обчислення центроїда
-                                cluster_points = X_scaled[cluster_mask]
-                                centroid = np.mean(cluster_points, axis=0)
-
-                                # Безпечне обчислення відстаней
-                                distances = np.zeros(X_scaled.shape[0])
-                                for j in range(X_scaled.shape[0]):
-                                    try:
-                                        diff = X_scaled[j] - centroid
-                                        dist_squared = np.sum(diff ** 2)
-
-                                        if np.isfinite(dist_squared) and dist_squared >= 0:
-                                            distances[j] = np.sqrt(dist_squared)
-                                        else:
-                                            distances[j] = np.sum(np.abs(diff))
-
-                                    except (OverflowError, FloatingPointError):
-                                        distances[j] = 1e6
-
-                                # Обрізаємо та очищуємо відстані
-                                distances = np.nan_to_num(distances, nan=0.0, posinf=1e6, neginf=0.0)
-                                distances = np.clip(distances, 0, 1e6)
-
-                                result_df[f'distance_to_dbscan_cluster_{i}'] = distances
-
-                except Exception as e:
-                    self.logger.warning(f"Помилка при обчисленні відстаней до центроїдів DBSCAN: {str(e)}")
-
-            self.logger.info(f"Успішно створено ознаки кластеризації DBSCAN")
-
-        except Exception as e:
-            self.logger.error(f"Критична помилка при кластеризації DBSCAN: {str(e)}")
-
-        return result_df
-
-    def _apply_kmeans_clustering(self, result_df: pd.DataFrame, X: pd.DataFrame,
-                                 X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
-        """Допоміжний метод для кластеризації KMeans"""
-        try:
-            # Визначаємо оптимальну кількість кластерів, якщо n_clusters > 10
-            if n_clusters > 10:
-                # Векторизований підхід для оцінки кількості кластерів
-                scores = []
-                range_clusters = range(2, min(11, len(X) // 10))
-
-                for i in range_clusters:
-                    kmeans = KMeans(n_clusters=i, random_state=42, n_init=10)
-                    cluster_labels = kmeans.fit_predict(X_scaled)
-
-                    # Перевіряємо кількість унікальних міток
-                    if len(np.unique(cluster_labels)) < i:
-                        self.logger.warning(f"Для {i} кластерів отримано менше унікальних міток.")
-                        continue
-
-                    silhouette_avg = silhouette_score(X_scaled, cluster_labels)
-                    scores.append(silhouette_avg)
-                    self.logger.debug(f"Для n_clusters = {i}, silhouette score: {silhouette_avg}")
-
-                if scores:
-                    best_n_clusters = range_clusters[np.argmax(scores)]
-                    self.logger.info(f"Оптимальна кількість кластерів за silhouette score: {best_n_clusters}")
-                    n_clusters = best_n_clusters
-
-            # Застосовуємо KMeans з визначеною кількістю кластерів
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-            cluster_labels = kmeans.fit_predict(X_scaled)
-            centers = kmeans.cluster_centers_
-
-            # Додаємо мітки кластерів як нову ознаку
-            result_df['cluster_label'] = cluster_labels
-
-            # Векторизований підхід для обчислення відстаней до центроїдів
-            # Створюємо масив для зберігання всіх відстаней
-            distances_array = np.zeros((X_scaled.shape[0], n_clusters))
-
-            for i in range(n_clusters):
-                # Обчислюємо відстань від кожної точки до центроїда одним викликом
-                distances_array[:, i] = np.linalg.norm(X_scaled - centers[i], axis=1)
-
-            # Додаємо всі відстані як нові ознаки
-            for i in range(n_clusters):
-                result_df[f'distance_to_cluster_{i}'] = distances_array[:, i]
-
-            self.logger.info(f"Створено {n_clusters + 1} ознак на основі кластеризації KMeans")
-
-        except Exception as e:
-            self.logger.error(f"Помилка при кластеризації KMeans: {str(e)}")
-
-        return result_df
-
-    def _apply_dbscan_clustering(self, result_df: pd.DataFrame, X: pd.DataFrame,
-                                 X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
-        """Допоміжний метод для кластеризації DBSCAN"""
-        try:
-            # Визначаємо eps (максимальна відстань між сусідніми точками)
-            # Використовуємо k-найближчих сусідів (векторизований підхід)
-            nbrs = NearestNeighbors(n_neighbors=min(len(X), 5)).fit(X_scaled)
-            distances, _ = nbrs.kneighbors(X_scaled)
-
-            # Сортуємо відстані для визначення точки перегину
-            knee_distances = np.sort(distances[:, -1])
-
-            # Евристика для eps та min_samples
-            eps = np.mean(knee_distances)
-            min_samples = max(5, len(X) // 100)
-
-            self.logger.debug(f"DBSCAN параметри: eps={eps}, min_samples={min_samples}")
-
-            # Застосовуємо DBSCAN
-            dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-            cluster_labels = dbscan.fit_predict(X_scaled)
-
-            # Додаємо мітки кластерів як нову ознаку
-            result_df['dbscan_cluster'] = cluster_labels
-
-            # Рахуємо кількість унікальних кластерів (векторизований підхід)
-            unique_labels = np.unique(cluster_labels)
-            n_clusters_found = len(unique_labels) - (1 if -1 in unique_labels else 0)
-
-            self.logger.info(f"DBSCAN знайдено {n_clusters_found} кластерів")
-            self.logger.info(f"Кількість точок-викидів: {np.sum(cluster_labels == -1)}")
-
-            # Для викидів знаходимо найближчий кластер (векторизований підхід)
-            if -1 in cluster_labels:
-                # Створюємо маски для точок-викидів та не-викидів
-                outliers_mask = cluster_labels == -1
-                non_outliers_mask = ~outliers_mask
-
-                # Перевіряємо, що є не-викиди
-                if np.any(non_outliers_mask):
-                    # Навчаємо класифікатор на точках-не викидах
-                    knn = KNeighborsClassifier(n_neighbors=3)
-                    knn.fit(X_scaled[non_outliers_mask], cluster_labels[non_outliers_mask])
-
-                    # Знаходимо найближчий кластер для викидів
-                    if np.any(outliers_mask):
-                        closest_clusters = knn.predict(X_scaled[outliers_mask])
-
-                        # Створюємо нову колонку з виправленими мітками
-                        fixed_labels = cluster_labels.copy()
-                        fixed_labels[outliers_mask] = closest_clusters
-                        result_df['dbscan_nearest_cluster'] = fixed_labels
-
-                        # Додаємо бінарну ознаку "чи є точка викидом"
-                        result_df['dbscan_is_outlier'] = outliers_mask.astype(int)
-
-            # Якщо знайдено кластери, обчислюємо відстані до центроїдів (векторизований підхід)
-            if n_clusters_found > 0:
-                # Створюємо словник центроїдів
-                centroids = {}
-                for i in unique_labels:
-                    if i != -1:  # Пропускаємо викиди
-                        cluster_mask = cluster_labels == i
-                        if np.any(cluster_mask):
-                            centroids[i] = np.mean(X_scaled[cluster_mask], axis=0)
-
-                # Обчислюємо відстані до всіх центроїдів одночасно
-                for i, centroid in centroids.items():
-                    result_df[f'distance_to_dbscan_cluster_{i}'] = np.sqrt(np.sum((X_scaled - centroid) ** 2, axis=1))
-
-            self.logger.info(f"Створено ознаки на основі кластеризації DBSCAN")
-
-        except Exception as e:
-            self.logger.error(f"Помилка при кластеризації DBSCAN: {str(e)}")
 
         return result_df

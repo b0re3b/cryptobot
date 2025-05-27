@@ -167,14 +167,6 @@ class TimeFeatures():
         # Додаємо всі нові ознаки до результату
         result_df = pd.concat([result_df, pd.DataFrame(new_features_dict)], axis=1)
 
-        # Обробляємо NaN значення для нових ознак
-        # Замість поелементної обробки використовуємо векторизовані операції
-        new_columns = set(result_df.columns) - set(data.columns)
-        if new_columns:
-            # Спочатку заповнюємо фікс. значенням, потім перетворимо на медіани
-            medians = result_df[list(new_columns)].median()
-            result_df[list(new_columns)] = result_df[list(new_columns)].fillna(medians)
-
         self.logger.info(f"Додано {len(new_features_dict)} ознак ковзного вікна")
 
         return result_df
@@ -220,17 +212,10 @@ class TimeFeatures():
         # Підготовка даних для векторизованої обробки
         new_features_dict = {}
 
-        # Заповнюємо пропущені значення в оригінальних стовпцях перед розрахунками
-        numeric_data = result_df[columns].copy()
-        has_na = numeric_data.isna().any()
-        if has_na.any():
-            self.logger.warning(f"Стовпці {has_na[has_na].index.tolist()} містять NaN значення, вони будуть заповнені")
-            numeric_data = numeric_data.fillna(method='ffill').fillna(method='bfill')
-
         # Векторизована обробка для кожного span
         for span in spans:
             # Створюємо об'єкт експоненціально зваженого вікна для всіх стовпців одночасно
-            ewm_data = numeric_data.ewm(span=span, min_periods=1)
+            ewm_data = result_df[columns].ewm(span=span, min_periods=1)
 
             for func_name in functions:
                 # Отримуємо функцію з мапінгу і застосовуємо до всіх стовпців
@@ -246,22 +231,6 @@ class TimeFeatures():
 
         # Додаємо всі нові ознаки до результату
         result_df = pd.concat([result_df, pd.DataFrame(new_features_dict)], axis=1)
-
-        # Обробляємо пропущені значення векторизовано
-        new_columns = set(result_df.columns) - set(data.columns)
-        if new_columns:
-            # Використовуємо векторизовані методи для заповнення NaN
-            result_df[list(new_columns)] = (
-                result_df[list(new_columns)]
-                .fillna(method='ffill')
-                .fillna(method='bfill')
-            )
-
-            # Перевіряємо, чи залишились NaN і заповнюємо медіанами
-            still_has_nan = result_df[list(new_columns)].isna().any()
-            if still_has_nan.any():
-                medians = result_df[list(new_columns)].median()
-                result_df[list(new_columns)] = result_df[list(new_columns)].fillna(medians)
 
         self.logger.info(f"Додано {len(new_features_dict)} ознак експоненціально зваженого вікна")
 
