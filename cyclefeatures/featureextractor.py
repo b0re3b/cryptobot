@@ -649,17 +649,7 @@ class FeatureExtractor:
     def detect_cycle_anomalies(self, processed_data: pd.DataFrame,
                                symbol: str,
                                cycle_type: str = 'auto') -> pd.DataFrame:
-        """
-        Detect anomalies in cryptocurrency cycles based on specified cycle type.
 
-        Args:
-            processed_data: DataFrame with crypto price data
-            symbol: Cryptocurrency symbol
-            cycle_type: Type of cycle analysis to perform ('auto', 'halving', 'bull_bear', 'network_upgrade', 'ecosystem_event')
-
-        Returns:
-            DataFrame containing detected anomalies
-        """
         import logging
         import decimal
 
@@ -713,9 +703,39 @@ class FeatureExtractor:
             result_df['volatility_14d'] = result_df['close'].pct_change().rolling(window=14).std()
 
             # Convert any Decimal columns to float to avoid type errors
-            for col in result_df.select_dtypes(include=[decimal.Decimal]).columns:
-                logger.debug(f"Converting {col} from Decimal to float")
-                result_df[col] = result_df[col].astype(float)
+            # Also handle string columns that might contain time intervals
+            for col in result_df.columns:
+                if result_df[col].dtype == object:
+                    # Check if it's actually numeric data stored as objects (like Decimal)
+                    try:
+                        # Try to convert first non-null value to see if it's numeric
+                        first_non_null = result_df[col].dropna().iloc[0] if not result_df[col].dropna().empty else None
+                        if first_non_null is not None:
+                            if isinstance(first_non_null, decimal.Decimal):
+                                logger.debug(f"Converting {col} from Decimal to float")
+                                result_df[col] = result_df[col].astype(float)
+                            elif isinstance(first_non_null, str):
+                                # Check if it's a time interval string like '1h', '5m', etc.
+                                if any(char in str(first_non_null) for char in ['h', 'm', 's', 'd']):
+                                    logger.debug(f"Skipping conversion of time interval column: {col}")
+                                    continue
+                                else:
+                                    # Try to convert to numeric if possible
+                                    try:
+                                        result_df[col] = pd.to_numeric(result_df[col], errors='coerce')
+                                        logger.debug(f"Converted {col} from string to numeric")
+                                    except:
+                                        logger.debug(f"Could not convert {col} to numeric, keeping as string")
+                            else:
+                                # Try general numeric conversion
+                                try:
+                                    result_df[col] = pd.to_numeric(result_df[col], errors='coerce')
+                                    logger.debug(f"Converted {col} to numeric")
+                                except:
+                                    logger.debug(f"Could not convert {col} to numeric")
+                    except (IndexError, TypeError):
+                        logger.debug(
+                            f"Skipping conversion for column {col} - no valid data or conversion not applicable")
 
             # Calculate rolling metrics for baseline comparison
             logger.debug("Calculating z-scores")
@@ -751,9 +771,16 @@ class FeatureExtractor:
                     halving_df = self.btcycle.calculate_btc_halving_cycle_features(result_df)
 
                     # Convert any Decimal columns to float to avoid type errors
-                    for col in halving_df.select_dtypes(include=[decimal.Decimal]).columns:
-                        logger.debug(f"Converting {col} from Decimal to float in halving_df")
-                        halving_df[col] = halving_df[col].astype(float)
+                    for col in halving_df.columns:
+                        if halving_df[col].dtype == object:
+                            try:
+                                first_non_null = halving_df[col].dropna().iloc[0] if not halving_df[
+                                    col].dropna().empty else None
+                                if first_non_null is not None and isinstance(first_non_null, decimal.Decimal):
+                                    logger.debug(f"Converting {col} from Decimal to float in halving_df")
+                                    halving_df[col] = halving_df[col].astype(float)
+                            except (IndexError, TypeError, ValueError):
+                                logger.debug(f"Skipping conversion for column {col} in halving_df")
 
                     # Merge the relevant columns with result_df
                     for col in ['halving_cycle_phase', 'days_since_last_halving', 'days_to_next_halving',
@@ -843,9 +870,16 @@ class FeatureExtractor:
                     bull_bear_df = self.marketplace.identify_bull_bear_cycles(result_df)
 
                     # Convert any Decimal columns to float to avoid type errors
-                    for col in bull_bear_df.select_dtypes(include=[decimal.Decimal]).columns:
-                        logger.debug(f"Converting {col} from Decimal to float in bull_bear_df")
-                        bull_bear_df[col] = bull_bear_df[col].astype(float)
+                    for col in bull_bear_df.columns:
+                        if bull_bear_df[col].dtype == object:
+                            try:
+                                first_non_null = bull_bear_df[col].dropna().iloc[0] if not bull_bear_df[
+                                    col].dropna().empty else None
+                                if first_non_null is not None and isinstance(first_non_null, decimal.Decimal):
+                                    logger.debug(f"Converting {col} from Decimal to float in bull_bear_df")
+                                    bull_bear_df[col] = bull_bear_df[col].astype(float)
+                            except (IndexError, TypeError, ValueError):
+                                logger.debug(f"Skipping conversion for column {col} in bull_bear_df")
 
                     # Merge the relevant columns with result_df
                     for col in ['cycle_state', 'cycle_id', 'days_in_cycle', 'cycle_max_roi', 'cycle_max_drawdown']:
@@ -859,9 +893,16 @@ class FeatureExtractor:
                             cycles_summary = bull_bear_df.cycles_summary
 
                             # Convert any Decimal columns to float in cycles_summary
-                            for col in cycles_summary.select_dtypes(include=[decimal.Decimal]).columns:
-                                logger.debug(f"Converting {col} from Decimal to float in cycles_summary")
-                                cycles_summary[col] = cycles_summary[col].astype(float)
+                            for col in cycles_summary.columns:
+                                if cycles_summary[col].dtype == object:
+                                    try:
+                                        first_non_null = cycles_summary[col].dropna().iloc[0] if not cycles_summary[
+                                            col].dropna().empty else None
+                                        if first_non_null is not None and isinstance(first_non_null, decimal.Decimal):
+                                            logger.debug(f"Converting {col} from Decimal to float in cycles_summary")
+                                            cycles_summary[col] = cycles_summary[col].astype(float)
+                                    except (IndexError, TypeError, ValueError):
+                                        logger.debug(f"Skipping conversion for column {col} in cycles_summary")
 
                             # Get metrics by cycle type
                             bull_cycles = cycles_summary[cycles_summary['cycle_type'] == 'bull']
