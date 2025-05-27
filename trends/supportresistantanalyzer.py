@@ -1,6 +1,8 @@
 from typing import Dict, List
 import pandas as pd
+
 from utils.logger import CryptoLogger
+
 
 class SupportResistantAnalyzer:
     def __init__(self, config=None):
@@ -134,50 +136,68 @@ class SupportResistantAnalyzer:
 
         # Перевіряємо пробій кожного рівня опору
         for level in resistance_levels:
-            # Знаходимо дні, коли ціна закриття була нижче рівня, а потім пробила вгору
+            # Знаходимо дні, коли ціна була нижче рівня, а потім пробила вгору
             for i in range(1, len(data_copy)):
-                # Перевіряємо, чи ціна закриття була нижче рівня, а потім пробила його вище порогу
-                if (data_copy['close'].iloc[i - 1] < level and
-                        data_copy['close'].iloc[i] > level * (1 + threshold)):
+                current_close = data_copy['close'].iloc[i]
+                previous_close = data_copy['close'].iloc[i - 1]
+                current_high = data_copy['high'].iloc[i]
+
+                # Пробій опору: попередня ціна була нижче рівня, поточна high пробила рівень
+                # і поточна close закрилася вище рівня з урахуванням порогу
+                if (previous_close < level and
+                        current_high > level and
+                        current_close > level * (1 + threshold)):
 
                     breakout = {
                         'type': 'resistance_breakout',
                         'level': level,
                         'date': data_copy['date'].iloc[i],
-                        'price': data_copy['close'].iloc[i],
-                        'strength': (data_copy['close'].iloc[i] - level) / level,
+                        'price': current_close,
+                        'high_price': current_high,  # Додаємо максимальну ціну дня
+                        'strength': (current_close - level) / level,
                         'volume_change': None
                     }
 
                     # Додаємо зміну об'єму, якщо дані доступні
                     if 'volume' in data_copy.columns and i > 0:
-                        if data_copy['volume'].iloc[i - 1] != 0:  # Уникаємо ділення на нуль
-                            volume_change = (data_copy['volume'].iloc[i] / data_copy['volume'].iloc[i - 1]) - 1
+                        prev_volume = data_copy['volume'].iloc[i - 1]
+                        curr_volume = data_copy['volume'].iloc[i]
+                        if prev_volume > 0:  # Уникаємо ділення на нуль
+                            volume_change = (curr_volume / prev_volume) - 1
                             breakout['volume_change'] = volume_change
 
                     breakouts.append(breakout)
 
         # Перевіряємо пробій кожного рівня підтримки
         for level in support_levels:
-            # Знаходимо дні, коли ціна закриття була вище рівня, а потім пробила вниз
+            # Знаходимо дні, коли ціна була вище рівня, а потім пробила вниз
             for i in range(1, len(data_copy)):
-                # Перевіряємо, чи ціна закриття була вище рівня, а потім пробила його нижче порогу
-                if (data_copy['close'].iloc[i - 1] > level and
-                        data_copy['close'].iloc[i] < level * (1 - threshold)):
+                current_close = data_copy['close'].iloc[i]
+                previous_close = data_copy['close'].iloc[i - 1]
+                current_low = data_copy['low'].iloc[i]
+
+                # Пробій підтримки: попередня ціна була вище рівня, поточна low пробила рівень
+                # і поточна close закрилася нижче рівня з урахуванням порогу
+                if (previous_close > level and
+                        current_low < level and
+                        current_close < level * (1 - threshold)):
 
                     breakout = {
                         'type': 'support_breakout',
                         'level': level,
                         'date': data_copy['date'].iloc[i],
-                        'price': data_copy['close'].iloc[i],
-                        'strength': (level - data_copy['close'].iloc[i]) / level,
+                        'price': current_close,
+                        'low_price': current_low,  # Додаємо мінімальну ціну дня
+                        'strength': (level - current_close) / level,
                         'volume_change': None
                     }
 
                     # Додаємо зміну об'єму, якщо дані доступні
                     if 'volume' in data_copy.columns and i > 0:
-                        if data_copy['volume'].iloc[i - 1] != 0:  # Уникаємо ділення на нуль
-                            volume_change = (data_copy['volume'].iloc[i] / data_copy['volume'].iloc[i - 1]) - 1
+                        prev_volume = data_copy['volume'].iloc[i - 1]
+                        curr_volume = data_copy['volume'].iloc[i]
+                        if prev_volume > 0:  # Уникаємо ділення на нуль
+                            volume_change = (curr_volume / prev_volume) - 1
                             breakout['volume_change'] = volume_change
 
                     breakouts.append(breakout)
@@ -270,9 +290,18 @@ class SupportResistantAnalyzer:
 
         return swing_points
 
-    def calculate_fibonacci_levels(self, data: pd.DataFrame, trend_type: str) -> Dict[str, float]:
-        """Розрахунок рівнів Фібоначчі"""
+    def calculate_fibonacci_levels(self, data: pd.DataFrame, trend_type: str,
+                                   lookback_period: int = 30) -> Dict[str, float]:
+        """
+        Розрахунок рівнів Фібоначчі
+
+        Args:
+            data: DataFrame з ціновими даними
+            trend_type: 'uptrend' або 'downtrend'
+            lookback_period: кількість останніх періодів для аналізу
+        """
         if data.empty or len(data) < 2:
+            self.logger.warning("Недостатньо даних для розрахунку рівнів Фібоначчі")
             return {}
 
         # Перевіряємо наявність необхідних колонок
@@ -284,46 +313,113 @@ class SupportResistantAnalyzer:
         if trend_type not in ['uptrend', 'downtrend']:
             raise ValueError("trend_type повинен бути 'uptrend' або 'downtrend'")
 
-        # Використаємо вікно останніх 90 точок або всі дані, якщо їх менше
-        window = min(90, len(data))
-        recent_data = data.iloc[-window:]
+        # Використовуємо останні дані замість всього діапазону
+        window = min(lookback_period, len(data))
+        recent_data = data.tail(window).copy()
 
-        # Знаходимо значення екстремумів для розрахунку
+        self.logger.info(f"Використовуємо останні {len(recent_data)} записів для розрахунку Фібоначчі")
+
+        # Знаходимо значущі swing points у останніх даних
         if trend_type == 'uptrend':
-            # Для висхідного тренду беремо мінімум як стартову точку і максимум як кінцеву
-            start_price = recent_data['low'].min()
-            end_price = recent_data['high'].max()
+            # Для висхідного тренду знаходимо останній значущий мінімум та максимум після нього
+            swing_low_idx = recent_data['low'].idxmin()
+            swing_low_position = recent_data.index.get_loc(swing_low_idx)
+
+            # Шукаємо максимум після цього мінімуму
+            data_after_low = recent_data.iloc[swing_low_position:]
+            if len(data_after_low) > 1:
+                swing_high_idx = data_after_low['high'].idxmax()
+                start_price = recent_data.loc[swing_low_idx, 'low']  # Swing Low
+                end_price = data_after_low.loc[swing_high_idx, 'high']  # Swing High
+            else:
+                # Fallback: використовуємо глобальні екстремуми
+                start_price = recent_data['low'].min()
+                end_price = recent_data['high'].max()
+
         else:  # downtrend
-            # Для низхідного тренду беремо максимум як стартову точку і мінімум як кінцеву
-            start_price = recent_data['high'].max()
-            end_price = recent_data['low'].min()
+            # Для низхідного тренду знаходимо останній значущий максимум та мінімум після нього
+            swing_high_idx = recent_data['high'].idxmax()
+            swing_high_position = recent_data.index.get_loc(swing_high_idx)
 
-        # Рівні ретрейсменту та екстенжн
-        retracement_levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
-        extension_levels = [1.272, 1.618, 2.618]
+            # Шукаємо мінімум після цього максимуму
+            data_after_high = recent_data.iloc[swing_high_position:]
+            if len(data_after_high) > 1:
+                swing_low_idx = data_after_high['low'].idxmin()
+                start_price = recent_data.loc[swing_high_idx, 'high']  # Swing High
+                end_price = data_after_high.loc[swing_low_idx, 'low']  # Swing Low
+            else:
+                # Fallback: використовуємо глобальні екстремуми
+                start_price = recent_data['high'].max()
+                end_price = recent_data['low'].min()
 
-        # Розрахунок цінових рівнів на основі відрізка [start_price, end_price]
-        price_range = end_price - start_price
+        # Перевіряємо значущість ціного діапазону
+        price_range = abs(end_price - start_price)
+        min_significant_range = start_price * 0.005  # Мінімум 0.5% зміни
+
+        if price_range < min_significant_range:
+            self.logger.warning(f"Ціновий діапазон {price_range:.2f} занадто малий для значущих рівнів Фібоначчі")
+            return {}
+
+        # Рівні ретрейсменту Фібоначчі
+        retracement_levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]
+        # Рівні розширення Фібоначчі
+        extension_levels = [1.272, 1.414, 1.618, 2.0, 2.618]
 
         result = {}
-        # Додаємо рівні ретрейсменту
-        for level in retracement_levels:
-            level_str = f"{level:.3f}" if level not in [0, 1] else f"{level:.1f}"
-            if trend_type == 'uptrend':
-                result[level_str] = end_price - (price_range * level)
-            else:
-                result[level_str] = start_price - (price_range * level)
+        current_price = recent_data['close'].iloc[-1]
 
-        # Додаємо рівні екстенжн
-        for level in extension_levels:
-            level_str = f"{level:.3f}"
-            if trend_type == 'uptrend':
-                result[level_str] = end_price + (price_range * (level - 1))
-            else:
-                result[level_str] = start_price - (price_range * level)
+        # Розрахунок рівнів для висхідного тренду
+        if trend_type == 'uptrend':
+            # Рівні ретрейсменту: від swing high вниз до swing low
+            for level in retracement_levels:
+                price_level = end_price - (price_range * level)
+                if level in [0, 1]:
+                    level_name = f"fib_{level:.1f}_retracement"
+                else:
+                    level_name = f"fib_{level:.3f}_retracement"
+                result[level_name] = round(price_level, 2)
 
-        # Додаємо інформацію про використані екстремуми
-        result['swing_high'] = recent_data['high'].max()
-        result['swing_low'] = recent_data['low'].min()
+            # Рівні розширення: від swing high вгору (правильний розрахунок)
+            for level in extension_levels:
+                price_level = end_price + (price_range * (level - 1))
+                level_name = f"fib_{level:.3f}_extension"
+                result[level_name] = round(price_level, 2)
+
+        else:  # downtrend
+            # Рівні ретрейсменту: від swing low вгору до swing high
+            for level in retracement_levels:
+                price_level = end_price + (price_range * level)
+                if level in [0, 1]:
+                    level_name = f"fib_{level:.1f}_retracement"
+                else:
+                    level_name = f"fib_{level:.3f}_retracement"
+                result[level_name] = round(price_level, 2)
+
+            # Рівні розширення: від swing low вниз (правильний розрахунок)
+            for level in extension_levels:
+                price_level = end_price - (price_range * (level - 1))
+                level_name = f"fib_{level:.3f}_extension"
+                result[level_name] = round(price_level, 2)
+
+        # Метадані для перевірки розрахунків
+        result['swing_high'] = round(max(start_price, end_price), 2)
+        result['swing_low'] = round(min(start_price, end_price), 2)
+        result['price_range'] = round(price_range, 2)
+        result['current_price'] = round(current_price, 2)
+        result['trend_type'] = trend_type
+        result['lookback_period_used'] = len(recent_data)
+
+        # Визначаємо найближчі рівні до поточної ціни
+        fib_levels = {k: v for k, v in result.items() if k.startswith('fib_')}
+        if fib_levels:
+            closest_above = min([v for v in fib_levels.values() if v > current_price], default=None)
+            closest_below = max([v for v in fib_levels.values() if v < current_price], default=None)
+
+            result['closest_resistance'] = closest_above
+            result['closest_support'] = closest_below
+
+        self.logger.info(f"Розраховано {len(fib_levels)} рівнів Фібоначчі для {trend_type}")
+        self.logger.info(f"Swing High: {result['swing_high']}, Swing Low: {result['swing_low']}")
+        self.logger.info(f"Поточна ціна: {current_price:.2f}, діапазон: {price_range:.2f}")
 
         return result

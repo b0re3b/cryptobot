@@ -540,3 +540,42 @@ LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
 2025-05-27 01:35:05 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для SOL
 2025-05-27 01:35:05 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для SOL
 2025-05-27 01:35:05 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для SOL
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1w та моделлю lstm
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для BTC-1w
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для BTC
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 12:40:22 - DataPreprocessor - WARNING - [logger.py:107] - Неправильний формат результату трендових ознак для BTC
+2025-05-27 12:40:22 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 12:40:22 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 12:40:37 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'tuple' object has no attribute 'empty'
+2025-05-27 12:40:37 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 1 NaN значень для BTC
+2025-05-27 12:40:37 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 12:40:37 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (396, 5)
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1w та моделлю gru
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для BTC-1w
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для BTC
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 12:40:37 - DataPreprocessor - WARNING - [logger.py:107] - Неправильний формат результату трендових ознак для BTC
+2025-05-27 12:40:37 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 12:40:37 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 12:40:51 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'tuple' object has no attribute 'empty'
+2025-05-27 12:40:51 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 1 NaN значень для BTC
+2025-05-27 12:40:51 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 12:40:51 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (396, 5)
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1w та моделлю transformer
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для BTC-1w
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для BTC
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 12:40:51 - DataPreprocessor - WARNING - [logger.py:107] - Неправильний формат результату трендових ознак для BTC
+2025-05-27 12:40:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 12:40:51 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given

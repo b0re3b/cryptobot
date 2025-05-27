@@ -29,8 +29,10 @@ class TrendDetection:
         # Ініціалізація логера
         self.logger = CryptoLogger('trend_detection')
 
-    def detect_trend_reversal(self, data: pd.DataFrame) -> List[Dict]:
-
+    def detect_trend_reversal(self, data: pd.DataFrame, recent_periods: int = 100) -> List[Dict]:
+        """
+        Виявляє розвороти тренду з фокусом на останні дані
+        """
         if data.empty or len(data) < 30:
             return []
 
@@ -39,22 +41,22 @@ class TrendDetection:
         if not all(col in data.columns for col in required_columns):
             raise ValueError(f"Дані повинні містити колонки: {', '.join(required_columns)}")
 
-        # Підготовка даних
-        if 'date' not in data.columns:
-            data = data.reset_index()
-            if 'date' not in data.columns and isinstance(data.index, pd.DatetimeIndex):
-                data['date'] = data.index
+        # Підготовка даних - беремо тільки останні періоди для аналізу
+        df = data.tail(recent_periods).copy()
 
-        # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
-        df = data.copy()
+        # Додаємо дату якщо її немає
+        if 'date' not in df.columns:
+            if isinstance(df.index, pd.DatetimeIndex):
+                df['date'] = df.index
+            else:
+                df['date'] = pd.to_datetime(df.index)
 
         # 1. Обчислюємо ковзні середні для визначення тренду
         df['sma20'] = ta.sma(df['close'], length=20)
         df['sma50'] = ta.sma(df['close'], length=50)
 
         # 2. Обчислюємо RSI для визначення перекупленості/перепроданості
-        rsi = ta.rsi(df['close'], length=14)
-        df['rsi'] = rsi
+        df['rsi'] = ta.rsi(df['close'], length=14)
 
         # 3. Обчислюємо MACD для підтвердження розвороту
         macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
@@ -62,60 +64,70 @@ class TrendDetection:
         df['macd_signal'] = macd['MACDs_12_26_9']
         df['macd_hist'] = macd['MACDh_12_26_9']
 
-        # 4. Обчислюємо Bollinger Bands для визначення рівнів підтримки/опору
+        # 4. Обчислюємо Bollinger Bands
         bbands = ta.bbands(df['close'], length=20, std=2)
         df['bb_upper'] = bbands['BBU_20_2.0']
         df['bb_middle'] = bbands['BBM_20_2.0']
         df['bb_lower'] = bbands['BBL_20_2.0']
 
-        # 5. Додаємо основні свічкові патерни
+        # Функції для визначення свічкових паттернів
         def identify_engulfing(df, i):
+            if i < 1:
+                return None
             # Бичаче поглинання
-            if (df['close'].iloc[i] > df['open'].iloc[i] and  # Поточна свічка бича
-                    df['close'].iloc[i - 1] < df['open'].iloc[i - 1] and  # Попередня свічка ведмежа
-                    df['close'].iloc[i] > df['open'].iloc[i - 1] and  # Поточне закриття вище попереднього відкриття
-                    df['open'].iloc[i] < df['close'].iloc[i - 1]):  # Поточне відкриття нижче попереднього закриття
+            if (df['close'].iloc[i] > df['open'].iloc[i] and
+                    df['close'].iloc[i - 1] < df['open'].iloc[i - 1] and
+                    df['close'].iloc[i] > df['open'].iloc[i - 1] and
+                    df['open'].iloc[i] < df['close'].iloc[i - 1]):
                 return 'bullish'
             # Ведмеже поглинання
-            elif (df['close'].iloc[i] < df['open'].iloc[i] and  # Поточна свічка ведмежа
-                  df['close'].iloc[i - 1] > df['open'].iloc[i - 1] and  # Попередня свічка бича
-                  df['close'].iloc[i] < df['open'].iloc[i - 1] and  # Поточне закриття нижче попереднього відкриття
-                  df['open'].iloc[i] > df['close'].iloc[i - 1]):  # Поточне відкриття вище попереднього закриття
+            elif (df['close'].iloc[i] < df['open'].iloc[i] and
+                  df['close'].iloc[i - 1] > df['open'].iloc[i - 1] and
+                  df['close'].iloc[i] < df['open'].iloc[i - 1] and
+                  df['open'].iloc[i] > df['close'].iloc[i - 1]):
                 return 'bearish'
             return None
 
         def identify_hammer(df, i):
             body_size = abs(df['close'].iloc[i] - df['open'].iloc[i])
+            if body_size == 0:
+                return False
             lower_shadow = min(df['open'].iloc[i], df['close'].iloc[i]) - df['low'].iloc[i]
             upper_shadow = df['high'].iloc[i] - max(df['open'].iloc[i], df['close'].iloc[i])
 
-            # Якщо нижня тінь хоча б в 2 рази більша за тіло та верхня тінь маленька
             if lower_shadow > 2 * body_size and upper_shadow < 0.5 * body_size:
-                if df['close'].iloc[i] > df['open'].iloc[i]:  # Бича свічка
-                    return True
+                return df['close'].iloc[i] >= df['open'].iloc[i]
             return False
 
         def identify_shooting_star(df, i):
             body_size = abs(df['close'].iloc[i] - df['open'].iloc[i])
+            if body_size == 0:
+                return False
             lower_shadow = min(df['open'].iloc[i], df['close'].iloc[i]) - df['low'].iloc[i]
             upper_shadow = df['high'].iloc[i] - max(df['open'].iloc[i], df['close'].iloc[i])
 
-            # Якщо верхня тінь хоча б в 2 рази більша за тіло та нижня тінь маленька
             if upper_shadow > 2 * body_size and lower_shadow < 0.5 * body_size:
-                if df['close'].iloc[i] < df['open'].iloc[i]:  # Ведмежа свічка
-                    return True
+                return df['close'].iloc[i] <= df['open'].iloc[i]
             return False
-
 
         # Ініціалізуємо список для зберігання результатів
         reversals = []
 
-        # Аналізуємо можливі сигнали розвороту
-        for i in range(50, len(df)):
+        # Аналізуємо сигнали розвороту тільки для останніх даних
+        start_idx = max(50, len(df) - 50)  # Аналізуємо останні 50 свічок
+
+        for i in range(start_idx, len(df)):
+            if i < 1:
+                continue
+
             current_date = df['date'].iloc[i]
             current_price = df['close'].iloc[i]
 
-            # Визначаємо поточний тренд за перетином ковзних середніх
+            # Перевіряємо наявність всіх необхідних значень
+            if pd.isna(df['sma20'].iloc[i]) or pd.isna(df['sma50'].iloc[i]):
+                continue
+
+            # Визначаємо поточний тренд
             current_trend = 'uptrend' if df['sma20'].iloc[i] > df['sma50'].iloc[i] else 'downtrend'
             prev_trend = 'uptrend' if df['sma20'].iloc[i - 1] > df['sma50'].iloc[i - 1] else 'downtrend'
 
@@ -123,64 +135,65 @@ class TrendDetection:
             signal_strength = 0.0
             signal_reasons = []
 
-            # 1. Перетин ковзних середніх (сильний сигнал розвороту)
+            # 1. Перетин ковзних середніх
             if current_trend != prev_trend:
-                if current_trend == 'downtrend':
-                    reversal_signal = 'bearish_crossover'
+                if current_trend == 'uptrend':
+                    reversal_signal = 'bullish_crossover'
                     signal_strength = 0.7
                     signal_reasons.append("SMA20 перетнула SMA50 знизу вгору")
                 else:
-                    reversal_signal = 'bullish_crossover'
+                    reversal_signal = 'bearish_crossover'
                     signal_strength = 0.7
                     signal_reasons.append("SMA20 перетнула SMA50 зверху вниз")
 
-            # 2. Перетин MACD з сигнальною лінією
-            macd_cross_bullish = df['macd'].iloc[i] > df['macd_signal'].iloc[i] and df['macd'].iloc[i - 1] <= \
-                                 df['macd_signal'].iloc[i - 1]
-            macd_cross_bearish = df['macd'].iloc[i] < df['macd_signal'].iloc[i] and df['macd'].iloc[i - 1] >= \
-                                 df['macd_signal'].iloc[i - 1]
+            # 2. MACD сигнали
+            if not pd.isna(df['macd'].iloc[i]) and not pd.isna(df['macd_signal'].iloc[i]):
+                macd_cross_bullish = (df['macd'].iloc[i] > df['macd_signal'].iloc[i] and
+                                      df['macd'].iloc[i - 1] <= df['macd_signal'].iloc[i - 1])
+                macd_cross_bearish = (df['macd'].iloc[i] < df['macd_signal'].iloc[i] and
+                                      df['macd'].iloc[i - 1] >= df['macd_signal'].iloc[i - 1])
 
-            if macd_cross_bearish and current_trend == 'uptrend':
-                if not reversal_signal:
-                    reversal_signal = 'bearish_macd_cross'
-                    signal_strength = 0.6
-                    signal_reasons.append("Ведмежий перетин MACD")
-                else:
-                    signal_strength += 0.2
-                    signal_reasons.append("Підтверджено ведмежим перетином MACD")
-
-            elif macd_cross_bullish and current_trend == 'downtrend':
-                if not reversal_signal:
-                    reversal_signal = 'bullish_macd_cross'
-                    signal_strength = 0.6
-                    signal_reasons.append("Бичачий перетин MACD")
-                else:
-                    signal_strength += 0.2
-                    signal_reasons.append("Підтверджено бичачим перетином MACD")
-
-            # 3. RSI перекупленість/перепроданість
-            if df['rsi'].iloc[i] > 70 and current_trend == 'uptrend':
-                if df['rsi'].iloc[i] < df['rsi'].iloc[i - 1]:
+                if macd_cross_bearish and current_trend == 'uptrend':
                     if not reversal_signal:
-                        reversal_signal = 'overbought'
-                        signal_strength = 0.5
-                        signal_reasons.append(f"RSI перекуплений ({df['rsi'].iloc[i]:.1f}) і почав падати")
+                        reversal_signal = 'bearish_macd_cross'
+                        signal_strength = 0.6
+                        signal_reasons.append("Ведмежий перетин MACD")
                     else:
-                        signal_strength += 0.15
-                        signal_reasons.append(f"Підтверджено перекупленим RSI ({df['rsi'].iloc[i]:.1f})")
+                        signal_strength += 0.2
+                        signal_reasons.append("Підтверджено ведмежим перетином MACD")
 
-            elif df['rsi'].iloc[i] < 30 and current_trend == 'downtrend':
-                if df['rsi'].iloc[i] > df['rsi'].iloc[i - 1]:
+                elif macd_cross_bullish and current_trend == 'downtrend':
                     if not reversal_signal:
-                        reversal_signal = 'oversold'
-                        signal_strength = 0.5
-                        signal_reasons.append(f"RSI перепроданий ({df['rsi'].iloc[i]:.1f}) і почав рости")
+                        reversal_signal = 'bullish_macd_cross'
+                        signal_strength = 0.6
+                        signal_reasons.append("Бичачий перетин MACD")
                     else:
-                        signal_strength += 0.15
-                        signal_reasons.append(f"Підтверджено перепроданим RSI ({df['rsi'].iloc[i]:.1f})")
+                        signal_strength += 0.2
+                        signal_reasons.append("Підтверджено бичачим перетином MACD")
+
+            # 3. RSI сигнали
+            if not pd.isna(df['rsi'].iloc[i]):
+                if df['rsi'].iloc[i] > 70 and current_trend == 'uptrend':
+                    if i > 0 and df['rsi'].iloc[i] < df['rsi'].iloc[i - 1]:
+                        if not reversal_signal:
+                            reversal_signal = 'overbought'
+                            signal_strength = 0.5
+                            signal_reasons.append(f"RSI перекуплений ({df['rsi'].iloc[i]:.1f}) і почав падати")
+                        else:
+                            signal_strength += 0.15
+                            signal_reasons.append(f"Підтверджено перекупленим RSI ({df['rsi'].iloc[i]:.1f})")
+
+                elif df['rsi'].iloc[i] < 30 and current_trend == 'downtrend':
+                    if i > 0 and df['rsi'].iloc[i] > df['rsi'].iloc[i - 1]:
+                        if not reversal_signal:
+                            reversal_signal = 'oversold'
+                            signal_strength = 0.5
+                            signal_reasons.append(f"RSI перепроданий ({df['rsi'].iloc[i]:.1f}) і почав рости")
+                        else:
+                            signal_strength += 0.15
+                            signal_reasons.append(f"Підтверджено перепроданим RSI ({df['rsi'].iloc[i]:.1f})")
 
             # 4. Свічкові патерни
-            # Перевіряємо патерн поглинання
             engulfing = identify_engulfing(df, i)
             if engulfing == 'bearish' and current_trend == 'uptrend':
                 if not reversal_signal:
@@ -189,7 +202,7 @@ class TrendDetection:
                     signal_reasons.append("Ведмежий свічковий патерн: bearish_engulfing")
                 else:
                     signal_strength += 0.15
-                    signal_reasons.append("Підтверджено ведмежим свічковим патерном: bearish_engulfing")
+                    signal_reasons.append("Підтверджено ведмежим свічковим патерном")
             elif engulfing == 'bullish' and current_trend == 'downtrend':
                 if not reversal_signal:
                     reversal_signal = 'bullish_candlestick'
@@ -197,9 +210,9 @@ class TrendDetection:
                     signal_reasons.append("Бичачий свічковий патерн: bullish_engulfing")
                 else:
                     signal_strength += 0.15
-                    signal_reasons.append("Підтверджено бичачим свічковим патерном: bullish_engulfing")
+                    signal_reasons.append("Підтверджено бичачим свічковим патерном")
 
-            # Перевіряємо патерн молот
+            # Молот і падаюча зірка
             if identify_hammer(df, i) and current_trend == 'downtrend':
                 if not reversal_signal:
                     reversal_signal = 'bullish_candlestick'
@@ -209,7 +222,6 @@ class TrendDetection:
                     signal_strength += 0.15
                     signal_reasons.append("Підтверджено бичачим свічковим патерном: hammer")
 
-            # Перевіряємо патерн падаюча зірка
             if identify_shooting_star(df, i) and current_trend == 'uptrend':
                 if not reversal_signal:
                     reversal_signal = 'bearish_candlestick'
@@ -219,42 +231,47 @@ class TrendDetection:
                     signal_strength += 0.15
                     signal_reasons.append("Підтверджено ведмежим свічковим патерном: shooting_star")
 
-            # 5. Тестування рівнів Bollinger Bands
-            # Ціна пробиває верхню лінію і повертається назад (ведмежий сигнал)
-            if current_trend == 'uptrend' and df['close'].iloc[i - 1] > df['bb_upper'].iloc[i - 1] and df['close'].iloc[
-                i] < df['bb_upper'].iloc[i]:
-                if not reversal_signal:
-                    reversal_signal = 'bearish_bb_rejection'
-                    signal_strength = 0.45
-                    signal_reasons.append("Відбиття від верхньої лінії Bollinger Bands")
-                else:
-                    signal_strength += 0.1
-                    signal_reasons.append("Підтверджено відбиттям від верхньої лінії Bollinger Bands")
+            # 5. Bollinger Bands
+            if (not pd.isna(df['bb_upper'].iloc[i]) and not pd.isna(df['bb_lower'].iloc[i]) and
+                    i > 0 and not pd.isna(df['bb_upper'].iloc[i - 1]) and not pd.isna(df['bb_lower'].iloc[i - 1])):
 
-            # Ціна пробиває нижню лінію і повертається назад (бичачий сигнал)
-            elif current_trend == 'downtrend' and df['close'].iloc[i - 1] < df['bb_lower'].iloc[i - 1] and \
-                    df['close'].iloc[i] > df['bb_lower'].iloc[i]:
-                if not reversal_signal:
-                    reversal_signal = 'bullish_bb_rejection'
-                    signal_strength = 0.45
-                    signal_reasons.append("Відбиття від нижньої лінії Bollinger Bands")
-                else:
-                    signal_strength += 0.1
-                    signal_reasons.append("Підтверджено відбиттям від нижньої лінії Bollinger Bands")
+                # Відбиття від верхньої лінії
+                if (current_trend == 'uptrend' and
+                        df['close'].iloc[i - 1] > df['bb_upper'].iloc[i - 1] and
+                        df['close'].iloc[i] < df['bb_upper'].iloc[i]):
+                    if not reversal_signal:
+                        reversal_signal = 'bearish_bb_rejection'
+                        signal_strength = 0.45
+                        signal_reasons.append("Відбиття від верхньої лінії Bollinger Bands")
+                    else:
+                        signal_strength += 0.1
+                        signal_reasons.append("Підтверджено відбиттям від верхньої лінії BB")
 
-            # Якщо виявлено сигнал розвороту, додаємо його до списку
-            if reversal_signal:
+                # Відбиття від нижньої лінії
+                elif (current_trend == 'downtrend' and
+                      df['close'].iloc[i - 1] < df['bb_lower'].iloc[i - 1] and
+                      df['close'].iloc[i] > df['bb_lower'].iloc[i]):
+                    if not reversal_signal:
+                        reversal_signal = 'bullish_bb_rejection'
+                        signal_strength = 0.45
+                        signal_reasons.append("Відбиття від нижньої лінії Bollinger Bands")
+                    else:
+                        signal_strength += 0.1
+                        signal_reasons.append("Підтверджено відбиттям від нижньої лінії BB")
+
+            # Додаємо сигнал розвороту
+            if reversal_signal and signal_strength > 0.3:  # Мінімальний поріг
                 reversal = {
                     'date': current_date,
                     'price': current_price,
                     'signal_type': reversal_signal,
-                    'strength': min(1.0, signal_strength),  # Обмежуємо силу сигналу до 1.0
+                    'strength': min(1.0, signal_strength),
                     'current_trend': current_trend,
-                    'rsi': df['rsi'].iloc[i],
+                    'rsi': df['rsi'].iloc[i] if not pd.isna(df['rsi'].iloc[i]) else None,
                     'reasons': signal_reasons
                 }
 
-                # Додаємо додаткові дані, якщо доступні
+                # Додаємо volume якщо є
                 if 'volume' in df.columns:
                     reversal['volume'] = df['volume'].iloc[i]
 
@@ -262,271 +279,166 @@ class TrendDetection:
 
         return reversals
 
-    def detect_chart_patterns(self, data: pd.DataFrame) -> List[Dict]:
-
-        if data.empty or len(data) < 30:  # Потрібно достатньо точок для аналізу
+    def detect_chart_patterns(self, data: pd.DataFrame, recent_periods: int = 200) -> List[Dict]:
+        """
+        Виявляє графічні паттерни з фокусом на останні дані
+        """
+        if data.empty or len(data) < 30:
             return []
 
         # Перевіряємо наявність необхідних колонок
-        required_columns = ['high', 'low', 'close', 'date']
-        if not all(col in data.columns for col in ['high', 'low', 'close']):
+        required_columns = ['high', 'low', 'close']
+        if not all(col in data.columns for col in required_columns):
             raise ValueError("Дані повинні містити колонки 'high', 'low', 'close'")
 
-        # Якщо немає колонки 'date', використаємо індекс
-        if 'date' not in data.columns:
-            data = data.reset_index()
-            if 'date' not in data.columns and isinstance(data.index, pd.DatetimeIndex):
-                data['date'] = data.index
+        # Беремо останні дані для аналізу
+        df = data.tail(recent_periods).copy()
 
-        # Знаходимо точки розвороту для аналізу паттернів
-        swing_points = self.support.find_swing_points(data, window_size=3)
+        # Додаємо дату якщо її немає
+        if 'date' not in df.columns:
+            if isinstance(df.index, pd.DatetimeIndex):
+                df['date'] = df.index
+            else:
+                df['date'] = pd.to_datetime(df.index)
 
-        # Виявлені паттерни будемо зберігати тут
+        # Знаходимо точки розвороту
+        try:
+            swing_points = self.support.find_swing_points(df, window_size=5)
+        except Exception as e:
+            self.logger.error(f"Error finding swing points: {e}")
+            return []
+
         patterns = []
 
-        # Отримуємо відсортовані за індексом точки розвороту
-        highs = sorted(swing_points['highs'], key=lambda x: x['index'])
-        lows = sorted(swing_points['lows'], key=lambda x: x['index'])
+        # Отримуємо відсортовані точки
+        highs = sorted(swing_points.get('highs', []), key=lambda x: x.get('index', 0))
+        lows = sorted(swing_points.get('lows', []), key=lambda x: x.get('index', 0))
 
-        # 1. Виявлення паттерну "Подвійне дно" (Double Bottom)
-        if len(lows) >= 2:
-            for i in range(len(lows) - 1):
-                # Беремо два послідовних мінімума
-                low1 = lows[i]
-                low2 = lows[i + 1]
+        # Фільтруємо тільки останні точки
+        recent_threshold = len(df) - min(100, len(df) // 2)
+        recent_highs = [h for h in highs if h.get('index', 0) >= recent_threshold]
+        recent_lows = [l for l in lows if l.get('index', 0) >= recent_threshold]
 
-                # Перевіряємо, чи знаходяться вони приблизно на одному рівні
+        # 1. Подвійне дно (Double Bottom)
+        if len(recent_lows) >= 2:
+            for i in range(len(recent_lows) - 1):
+                low1 = recent_lows[i]
+                low2 = recent_lows[i + 1]
+
+                # Перевіряємо схожість рівнів
                 price_diff = abs(low1['price'] - low2['price'])
                 avg_price = (low1['price'] + low2['price']) / 2
-                price_diff_pct = price_diff / avg_price
+                price_diff_pct = price_diff / avg_price if avg_price > 0 else 1
 
-                # Критерії для подвійного дна:
-                # - Два мінімуми приблизно на одному рівні (різниця менше 3%)
-                # - Між ними повинен бути максимум, що принаймні на 3% вище
-                # - Другий мінімум не повинен бути набагато нижче першого
-                if price_diff_pct < 0.03:
-                    # Шукаємо максимум між цими двома мінімумами
-                    between_highs = [h for h in highs if low1['index'] < h['index'] < low2['index']]
+                if price_diff_pct < 0.05:  # Збільшили толерантність до 5%
+                    # Шукаємо піки між мінімумами
+                    between_highs = [h for h in recent_highs
+                                     if low1['index'] < h['index'] < low2['index']]
 
                     if between_highs:
                         middle_high = max(between_highs, key=lambda x: x['price'])
-                        # Перевіряємо, чи достатньо великий підйом між мінімумами
-                        rise = (middle_high['price'] - min(low1['price'], low2['price'])) / min(low1['price'],
-                                                                                                low2['price'])
+                        min_low_price = min(low1['price'], low2['price'])
+                        rise = (middle_high['price'] - min_low_price) / min_low_price
 
-                        if rise > 0.03:
-                            # Знаходимо підтвердження паттерну - зростання після другого мінімуму
-                            confirmation_point = None
-                            potential_highs = [h for h in highs if h['index'] > low2['index']]
+                        if rise > 0.02:  # Знизили поріг до 2%
+                            pattern = {
+                                'type': 'double_bottom',
+                                'start_date': low1['date'],
+                                'end_date': low2['date'],
+                                'bottom1': {'date': low1['date'], 'price': low1['price']},
+                                'bottom2': {'date': low2['date'], 'price': low2['price']},
+                                'middle_peak': {'date': middle_high['date'], 'price': middle_high['price']},
+                                'strength': min(1.0, rise * 20),
+                                'recent': True
+                            }
+                            patterns.append(pattern)
 
-                            if potential_highs:
-                                confirmation_point = potential_highs[0]
+        # 2. Подвійна вершина (Double Top)
+        if len(recent_highs) >= 2:
+            for i in range(len(recent_highs) - 1):
+                high1 = recent_highs[i]
+                high2 = recent_highs[i + 1]
 
-                                # Додаємо патерн, якщо є підтвердження
-                                if confirmation_point and confirmation_point['price'] > middle_high['price']:
-                                    pattern = {
-                                        'type': 'double_bottom',
-                                        'start_date': low1['date'],
-                                        'end_date': confirmation_point['date'] if confirmation_point else low2['date'],
-                                        'bottom1': {'date': low1['date'], 'price': low1['price']},
-                                        'bottom2': {'date': low2['date'], 'price': low2['price']},
-                                        'middle_peak': {'date': middle_high['date'], 'price': middle_high['price']},
-                                        'confirmation': confirmation_point,
-                                        'strength': min(1.0, rise * 10)  # Оцінка сили паттерна
-                                    }
-                                    patterns.append(pattern)
-
-        # 2. Виявлення паттерну "Подвійна вершина" (Double Top)
-        if len(highs) >= 2:
-            for i in range(len(highs) - 1):
-                # Беремо два послідовних максимума
-                high1 = highs[i]
-                high2 = highs[i + 1]
-
-                # Перевіряємо, чи знаходяться вони приблизно на одному рівні
                 price_diff = abs(high1['price'] - high2['price'])
                 avg_price = (high1['price'] + high2['price']) / 2
-                price_diff_pct = price_diff / avg_price
+                price_diff_pct = price_diff / avg_price if avg_price > 0 else 1
 
-                # Критерії для подвійної вершини:
-                # - Два максимуми приблизно на одному рівні (різниця менше 3%)
-                # - Між ними повинен бути мінімум, що принаймні на 3% нижче
-                # - Другий максимум не повинен бути набагато вище першого
-                if price_diff_pct < 0.03:
-                    # Шукаємо мінімум між цими двома максимумами
-                    between_lows = [l for l in lows if high1['index'] < l['index'] < high2['index']]
+                if price_diff_pct < 0.05:
+                    between_lows = [l for l in recent_lows
+                                    if high1['index'] < l['index'] < high2['index']]
 
                     if between_lows:
                         middle_low = min(between_lows, key=lambda x: x['price'])
-                        # Перевіряємо, чи достатньо велике падіння між максимумами
-                        drop = (min(high1['price'], high2['price']) - middle_low['price']) / middle_low['price']
+                        max_high_price = max(high1['price'], high2['price'])
+                        drop = (max_high_price - middle_low['price']) / middle_low['price']
 
-                        if drop > 0.03:
-                            # Знаходимо підтвердження паттерну - падіння після другого максимуму
-                            confirmation_point = None
-                            potential_lows = [l for l in lows if l['index'] > high2['index']]
+                        if drop > 0.02:
+                            pattern = {
+                                'type': 'double_top',
+                                'start_date': high1['date'],
+                                'end_date': high2['date'],
+                                'top1': {'date': high1['date'], 'price': high1['price']},
+                                'top2': {'date': high2['date'], 'price': high2['price']},
+                                'middle_trough': {'date': middle_low['date'], 'price': middle_low['price']},
+                                'strength': min(1.0, drop * 20),
+                                'recent': True
+                            }
+                            patterns.append(pattern)
 
-                            if potential_lows:
-                                confirmation_point = potential_lows[0]
+        # 3. Трикутники - аналізуємо останні точки
+        if len(recent_highs) >= 2 and len(recent_lows) >= 2:
+            last_highs = recent_highs[-3:] if len(recent_highs) >= 3 else recent_highs
+            last_lows = recent_lows[-3:] if len(recent_lows) >= 3 else recent_lows
 
-                                # Додаємо патерн, якщо є підтвердження
-                                if confirmation_point and confirmation_point['price'] < middle_low['price']:
-                                    pattern = {
-                                        'type': 'double_top',
-                                        'start_date': high1['date'],
-                                        'end_date': confirmation_point['date'] if confirmation_point else high2['date'],
-                                        'top1': {'date': high1['date'], 'price': high1['price']},
-                                        'top2': {'date': high2['date'], 'price': high2['price']},
-                                        'middle_trough': {'date': middle_low['date'], 'price': middle_low['price']},
-                                        'confirmation': confirmation_point,
-                                        'strength': min(1.0, drop * 10)  # Оцінка сили паттерна
-                                    }
-                                    patterns.append(pattern)
+            # Висхідний трикутник
+            if len(last_highs) >= 2:
+                high_prices = [h['price'] for h in last_highs]
+                high_range = max(high_prices) - min(high_prices)
+                avg_high = sum(high_prices) / len(high_prices)
 
-        # 3. Виявлення паттерну "Голова і плечі" (Head and Shoulders)
-        if len(highs) >= 3 and len(lows) >= 4:
-            for i in range(len(highs) - 2):
-                # Беремо три послідовних максимума для можливого паттерну голова-плечі
-                left_shoulder = highs[i]
-                head = highs[i + 1]
-                right_shoulder = highs[i + 2]
+                if high_range / avg_high < 0.05:  # Горизонтальний опір
+                    # Перевіряємо зростання мінімумів
+                    if len(last_lows) >= 2:
+                        low_trend = all(last_lows[i]['price'] <= last_lows[i + 1]['price']
+                                        for i in range(len(last_lows) - 1))
+                        if low_trend:
+                            start_date = min(last_highs[0]['date'], last_lows[0]['date'])
+                            end_date = max(last_highs[-1]['date'], last_lows[-1]['date'])
 
-                # Шукаємо відповідні "шийні" рівні (neckline)
-                left_neck_candidates = [l for l in lows if
-                                        l['index'] > left_shoulder['index'] and l['index'] < head['index']]
-                right_neck_candidates = [l for l in lows if
-                                         l['index'] > head['index'] and l['index'] < right_shoulder['index']]
+                            pattern = {
+                                'type': 'ascending_triangle',
+                                'start_date': start_date,
+                                'end_date': end_date,
+                                'resistance_level': avg_high,
+                                'strength': 0.7,
+                                'recent': True
+                            }
+                            patterns.append(pattern)
 
-                if left_neck_candidates and right_neck_candidates:
-                    left_neck = min(left_neck_candidates, key=lambda x: abs(x['index'] - head['index']))
-                    right_neck = min(right_neck_candidates, key=lambda x: abs(x['index'] - head['index']))
+            # Низхідний трикутник
+            if len(last_lows) >= 2:
+                low_prices = [l['price'] for l in last_lows]
+                low_range = max(low_prices) - min(low_prices)
+                avg_low = sum(low_prices) / len(low_prices)
 
-                    # Критерії для паттерну голова-плечі:
-                    # - Середній максимум (голова) повинен бути вище крайніх (плечей)
-                    # - Плечі повинні бути приблизно на одному рівні (різниця менше 5%)
-                    # - Шийні рівні також повинні бути приблизно на одному рівні
-                    if (head['price'] > left_shoulder['price'] and
-                            head['price'] > right_shoulder['price']):
+                if low_range / avg_low < 0.05:  # Горизонтальна підтримка
+                    # Перевіряємо спадання максимумів
+                    if len(last_highs) >= 2:
+                        high_trend = all(last_highs[i]['price'] >= last_highs[i + 1]['price']
+                                         for i in range(len(last_highs) - 1))
+                        if high_trend:
+                            start_date = min(last_highs[0]['date'], last_lows[0]['date'])
+                            end_date = max(last_highs[-1]['date'], last_lows[-1]['date'])
 
-                        # Перевіряємо симетричність плечей
-                        shoulder_diff = abs(left_shoulder['price'] - right_shoulder['price'])
-                        avg_shoulder = (left_shoulder['price'] + right_shoulder['price']) / 2
-                        shoulder_diff_pct = shoulder_diff / avg_shoulder
-
-                        # Перевіряємо рівень "шиї"
-                        neck_diff = abs(left_neck['price'] - right_neck['price'])
-                        avg_neck = (left_neck['price'] + right_neck['price']) / 2
-                        neck_diff_pct = neck_diff / avg_neck
-
-                        if shoulder_diff_pct < 0.05 and neck_diff_pct < 0.05:
-                            # Шукаємо підтвердження - пробій рівня шиї після правого плеча
-                            neckline_level = (left_neck['price'] + right_neck['price']) / 2
-                            confirmation_candidates = [l for l in lows if l['index'] > right_shoulder['index']]
-
-                            if confirmation_candidates:
-                                confirmation = confirmation_candidates[0]
-
-                                # Перевіряємо, чи ціна пробила лінію шиї вниз
-                                if confirmation['price'] < neckline_level:
-                                    # Оцінка потенціалу падіння (відстань від голови до шиї)
-                                    potential_drop = head['price'] - neckline_level
-                                    # Оцінка поточного падіння
-                                    current_drop = neckline_level - confirmation['price']
-                                    # Сила паттерну - відношення поточного падіння до потенційного
-                                    pattern_strength = min(1.0,
-                                                           current_drop / potential_drop) if potential_drop > 0 else 0.5
-
-                                    pattern = {
-                                        'type': 'head_and_shoulders',
-                                        'start_date': left_shoulder['date'],
-                                        'end_date': confirmation['date'],
-                                        'left_shoulder': {'date': left_shoulder['date'],
-                                                          'price': left_shoulder['price']},
-                                        'head': {'date': head['date'], 'price': head['price']},
-                                        'right_shoulder': {'date': right_shoulder['date'],
-                                                           'price': right_shoulder['price']},
-                                        'neckline': neckline_level,
-                                        'confirmation': {'date': confirmation['date'], 'price': confirmation['price']},
-                                        'strength': pattern_strength
-                                    }
-                                    patterns.append(pattern)
-
-        # 4. Виявлення паттерну "Трикутник" (Triangle)
-        # Для цього потрібно проаналізувати послідовні максимуми і мінімуми
-        # та перевірити, чи утворюють вони сходинки, що звужуються
-        if len(highs) >= 3 and len(lows) >= 3:
-            # Беремо останні точки для аналізу тренду останнього періоду
-            last_highs = highs[-3:]
-            last_lows = lows[-3:]
-
-            # Перевіряємо на висхідний трикутник (ascending triangle):
-            # - Горизонтальний опір (плоска верхня лінія)
-            # - Висхідна лінія підтримки
-            if (max(h['price'] for h in last_highs) - min(h['price'] for h in last_highs)) / max(
-                    h['price'] for h in last_highs) < 0.03:
-                # Перевіряємо, чи мінімуми зростають
-                if all(last_lows[i]['price'] < last_lows[i + 1]['price'] for i in range(len(last_lows) - 1)):
-                    # Знаходимо початок і кінець паттерну
-                    start_date = min(last_highs[0]['date'], last_lows[0]['date'])
-                    end_date = max(last_highs[-1]['date'], last_lows[-1]['date'])
-
-                    # Визначаємо рівень опору
-                    resistance_level = sum(h['price'] for h in last_highs) / len(last_highs)
-
-                    pattern = {
-                        'type': 'ascending_triangle',
-                        'start_date': start_date,
-                        'end_date': end_date,
-                        'resistance_level': resistance_level,
-                        'last_point': {'date': end_date, 'price': data.loc[data['date'] == end_date, 'close'].iloc[0]},
-                        'strength': 0.7  # Фіксована оцінка сили для простоти
-                    }
-                    patterns.append(pattern)
-
-            # Перевіряємо на низхідний трикутник (descending triangle):
-            # - Горизонтальна підтримка (плоска нижня лінія)
-            # - Низхідна лінія опору
-            if (max(l['price'] for l in last_lows) - min(l['price'] for l in last_lows)) / max(
-                    l['price'] for l in last_lows) < 0.03:
-                # Перевіряємо, чи максимуми спадають
-                if all(last_highs[i]['price'] > last_highs[i + 1]['price'] for i in range(len(last_highs) - 1)):
-                    # Знаходимо початок і кінець паттерну
-                    start_date = min(last_highs[0]['date'], last_lows[0]['date'])
-                    end_date = max(last_highs[-1]['date'], last_lows[-1]['date'])
-
-                    # Визначаємо рівень підтримки
-                    support_level = sum(l['price'] for l in last_lows) / len(last_lows)
-
-                    pattern = {
-                        'type': 'descending_triangle',
-                        'start_date': start_date,
-                        'end_date': end_date,
-                        'support_level': support_level,
-                        'last_point': {'date': end_date, 'price': data.loc[data['date'] == end_date, 'close'].iloc[0]},
-                        'strength': 0.7  # Фіксована оцінка сили для простоти
-                    }
-                    patterns.append(pattern)
-
-            # Перевіряємо на симетричний трикутник (symmetric triangle):
-            # - Низхідна лінія опору
-            # - Висхідна лінія підтримки
-            if (all(last_highs[i]['price'] > last_highs[i + 1]['price'] for i in range(len(last_highs) - 1)) and
-                    all(last_lows[i]['price'] < last_lows[i + 1]['price'] for i in range(len(last_lows) - 1))):
-                # Знаходимо початок і кінець паттерну
-                start_date = min(last_highs[0]['date'], last_lows[0]['date'])
-                end_date = max(last_highs[-1]['date'], last_lows[-1]['date'])
-
-                pattern = {
-                    'type': 'symmetric_triangle',
-                    'start_date': start_date,
-                    'end_date': end_date,
-                    'upper_level': last_highs[-1]['price'],
-                    'lower_level': last_lows[-1]['price'],
-                    'last_point': {'date': end_date, 'price': data.loc[data['date'] == end_date, 'close'].iloc[0]},
-                    'strength': 0.6  # Фіксована оцінка сили для простоти
-                }
-                patterns.append(pattern)
-
+                            pattern = {
+                                'type': 'descending_triangle',
+                                'start_date': start_date,
+                                'end_date': end_date,
+                                'support_level': avg_low,
+                                'strength': 0.7,
+                                'recent': True
+                            }
+                            patterns.append(pattern)
 
         return patterns
 
@@ -807,42 +719,82 @@ class TrendDetection:
             }
 
     def get_trend_summary(self, symbol: str, timeframe: str) -> Dict:
-
+        """
+        Виправлений метод для отримання зведеного звіту тренду
+        """
         try:
             # Завантажуємо останній аналіз тренду з бази даних
-            latest_analysis = self.load_trend_analysis_from_db(symbol, timeframe)
+            analysis_result = self.load_trend_analysis_from_db(
+                symbol=symbol,
+                timeframe=timeframe,
+                latest_only=True
+            )
 
-            if not latest_analysis:
+            if analysis_result['status'] != 'success':
                 return {
                     'status': 'no_data',
-                    'message': 'No trend analysis available for this symbol and timeframe'
+                    'message': f'No trend analysis available for {symbol} {timeframe}',
+                    'symbol': symbol,
+                    'timeframe': timeframe
                 }
 
-            # Беремо останній запис
-            latest = latest_analysis[0]
+            # Отримуємо дані з результату
+            data = analysis_result.get('data', {})
+
+            if not data:
+                return {
+                    'status': 'no_data',
+                    'message': 'Empty data returned from database',
+                    'symbol': symbol,
+                    'timeframe': timeframe
+                }
+
+            # Якщо data - це список, беремо перший елемент
+            if isinstance(data, list) and len(data) > 0:
+                latest = data[0]
+            elif isinstance(data, dict):
+                latest = data
+            else:
+                return {
+                    'status': 'error',
+                    'message': 'Invalid data format from database',
+                    'symbol': symbol,
+                    'timeframe': timeframe
+                }
+
+            # Безпечно отримуємо значення з обробкою помилок
+            def safe_get(dictionary, key, default=None):
+                try:
+                    return dictionary.get(key, default)
+                except (AttributeError, TypeError):
+                    return default
 
             # Формуємо зведений звіт
             summary = {
+                'status': 'success',
                 'symbol': symbol,
                 'timeframe': timeframe,
-                'trend_type': latest.get('trend_type', 'unknown'),
-                'trend_strength': latest.get('trend_strength', 0),
-                'market_regime': latest.get('market_regime', 'unknown'),
-                'support_levels': latest.get('support_levels', []),
-                'resistance_levels': latest.get('resistance_levels', []),
-                'patterns_detected': len(latest.get('detected_patterns', [])),
-                'last_analysis_date': latest.get('analysis_date'),
-                'additional_metrics': latest.get('additional_metrics', {})
+                'trend_type': safe_get(latest, 'trend_type', 'unknown'),
+                'trend_strength': safe_get(latest, 'trend_strength', 0.0),
+                'market_regime': safe_get(latest, 'market_regime', 'unknown'),
+                'support_levels': safe_get(latest, 'support_levels', []),
+                'resistance_levels': safe_get(latest, 'resistance_levels', []),
+                'patterns_detected': len(safe_get(latest, 'detected_patterns', [])),
+                'last_analysis_date': safe_get(latest, 'analysis_date'),
+                'additional_metrics': safe_get(latest, 'additional_metrics', {})
             }
 
-            # Додаємо індикатори сили тренду, якщо вони є
-            if 'additional_metrics' in latest:
-                metrics = latest['additional_metrics']
+            # Додаємо метрики з additional_metrics, якщо вони є
+            additional_metrics = summary.get('additional_metrics', {})
+            if isinstance(additional_metrics, dict):
                 summary.update({
-                    'trend_speed': metrics.get('speed_20', 0),
-                    'trend_acceleration': metrics.get('acceleration_20', 0),
-                    'volatility': metrics.get('volatility_20', 0)
+                    'trend_speed': safe_get(additional_metrics, 'speed_20', 0.0),
+                    'trend_acceleration': safe_get(additional_metrics, 'acceleration_20', 0.0),
+                    'volatility': safe_get(additional_metrics, 'volatility_20', 0.0)
                 })
+
+            # Додаємо підсумкову інформацію
+            summary['summary_text'] = self._generate_trend_summary_text(summary)
 
             return summary
 
@@ -850,8 +802,50 @@ class TrendDetection:
             self.logger.error(f"Error generating trend summary: {str(e)}")
             return {
                 'status': 'error',
-                'message': str(e)
+                'message': f'Error generating trend summary: {str(e)}',
+                'symbol': symbol,
+                'timeframe': timeframe
             }
+
+    def _generate_trend_summary_text(self, summary: Dict) -> str:
+        """
+        Генерує текстовий опис тренду
+        """
+        try:
+            trend_type = summary.get('trend_type', 'unknown')
+            trend_strength = summary.get('trend_strength', 0)
+            market_regime = summary.get('market_regime', 'unknown')
+            patterns_count = summary.get('patterns_detected', 0)
+
+            # Визначаємо силу тренду
+            if trend_strength > 0.7:
+                strength_desc = "сильний"
+            elif trend_strength > 0.4:
+                strength_desc = "помірний"
+            else:
+                strength_desc = "слабкий"
+
+            # Основний опис тренду
+            if trend_type == 'uptrend':
+                trend_desc = f"Висхідний {strength_desc} тренд"
+            elif trend_type == 'downtrend':
+                trend_desc = f"Низхідний {strength_desc} тренд"
+            else:
+                trend_desc = f"Бічний рух, {strength_desc} тренд"
+
+            # Додаємо інформацію про ринковий режим
+            regime_desc = f"Ринковий режим: {market_regime}"
+
+            # Додаємо інформацію про паттерни
+            if patterns_count > 0:
+                pattern_desc = f"Виявлено {patterns_count} графічних паттернів"
+            else:
+                pattern_desc = "Графічні паттерни не виявлені"
+
+            return f"{trend_desc}. {regime_desc}. {pattern_desc}."
+
+        except Exception as e:
+            return f"Помилка генерації опису: {str(e)}"
 
     def prepare_ml_trend_features(self, data: pd.DataFrame, lookback_window: int = 30) -> Optional[
         Tuple[np.ndarray, np.ndarray, np.ndarray]]:
@@ -870,31 +864,90 @@ class TrendDetection:
             metrics = self.analyzer.calculate_trend_metrics(df)
             for k, v in metrics.items():
                 if v is not None:
-                    df[k] = v
+                    # Перевіряємо чи це скаляр чи масив
+                    if isinstance(v, (int, float)):
+                        # Якщо скаляр, створюємо серію з однаковим значенням
+                        df[k] = v
+                    elif hasattr(v, '__len__') and len(v) == len(df):
+                        # Якщо масив відповідної довжини
+                        df[k] = v
+                    else:
+                        # Пропускаємо невідповідні дані
+                        continue
 
             # 3. Додаємо інші важливі ознаки
-            df['trend_strength'] = self.analyzer.calculate_trend_strength(df)
+            trend_strength = self.analyzer.calculate_trend_strength(df)
+            if isinstance(trend_strength, (int, float)):
+                df['trend_strength'] = trend_strength
+            else:
+                df['trend_strength'] = trend_strength
+
+            # 4. Обробляємо market_regime
             market_regime = self.analyzer.identify_market_regime(df)
 
-            # Перетворюємо market_regime на числові значення, якщо це не числа
-            if isinstance(market_regime, (pd.Series, np.ndarray)):
-                if market_regime.dtype == 'object':
-                    # Якщо це категоріальні дані, кодуємо їх як числа
-                    from sklearn.preprocessing import LabelEncoder
-                    le = LabelEncoder()
-                    df['market_regime'] = le.fit_transform(market_regime.fillna('unknown'))
+            # Створюємо функцію для кодування market_regime
+            def encode_market_regime(regime_value):
+                """Кодує market_regime у числове значення"""
+                if isinstance(regime_value, str):
+                    # Словник для кодування різних режимів
+                    regime_mapping = {
+                        'trending': 0,
+                        'ranging': 1,
+                        'volatile': 2,
+                        'uptrend': 3,
+                        'downtrend': 4,
+                        'sideways': 5,
+                        'strong_uptrend': 6,
+                        'strong_downtrend': 7,
+                        'weak_uptrend': 8,
+                        'weak_downtrend': 9,
+                        'consolidation': 10,
+                        'breakout': 11,
+                        'normal_volatility': 12,
+                        'high_volatility': 13,
+                        'low_volatility': 14,
+                        'unknown': 15
+                    }
+
+                    # Розбиваємо складені назви на частини
+                    regime_parts = regime_value.lower().split('_')
+
+                    # Шукаємо відповідність в словнику
+                    for part in regime_parts:
+                        if part in regime_mapping:
+                            return regime_mapping[part]
+
+                    # Якщо не знайдено точної відповідності, повертаємо код для unknown
+                    return regime_mapping.get('unknown', 15)
+                elif isinstance(regime_value, (int, float)):
+                    return int(regime_value)
                 else:
-                    df['market_regime'] = market_regime
+                    return 15  # unknown
+
+            # Застосовуємо кодування
+            if isinstance(market_regime, (pd.Series, np.ndarray)):
+                df['market_regime'] = pd.Series(market_regime).apply(encode_market_regime)
             else:
                 # Якщо це одне значення, створюємо серію
-                df['market_regime'] = market_regime
+                df['market_regime'] = encode_market_regime(market_regime)
 
-            # 4. Визначаємо колонки для нормалізації
-            feature_cols = ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi',
-                            'MACD_12_26_9', 'MACDs_12_26_9', 'trend_strength']
+            # 5. Визначаємо колонки для нормалізації
+            feature_cols = ['close', 'volume']
+
+            # Додаємо технічні індикатори, якщо вони існують
+            technical_cols = ['adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength']
+            for col in technical_cols:
+                if col in df.columns:
+                    feature_cols.append(col)
+
+            # Додаємо MACD колонки, якщо вони існують
+            macd_cols = ['MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9']
+            for col in macd_cols:
+                if col in df.columns:
+                    feature_cols.append(col)
 
             # Додаємо колонки тренду, якщо вони існують
-            trend_cols = ['speed_20', 'volatility_20']
+            trend_cols = ['speed_20', 'volatility_20', 'acceleration_20']
             for col in trend_cols:
                 if col in df.columns:
                     feature_cols.append(col)
@@ -905,24 +958,37 @@ class TrendDetection:
                 self.logger.warning("No feature columns found in dataframe")
                 return None
 
-            # Залишаємо тільки потрібні колонки та видаляємо NaN
+            # Залишаємо тільки потрібні колонки
             required_cols = existing_feature_cols + ['market_regime']
-            df = df[required_cols].dropna()
+            df = df[required_cols].copy()
+
+            # Перевіряємо типи даних та конвертуємо у float
+            for col in existing_feature_cols:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            # Видаляємо рядки з NaN
+            df = df.dropna()
 
             if len(df) < lookback_window + 1:
                 self.logger.warning(
                     f"Not enough data after cleaning. Need at least {lookback_window + 1}, got {len(df)}")
                 return None
 
-            # 5. Нормалізація даних (важливо для LSTM/GRU)
+            # 6. Нормалізація даних (важливо для LSTM/GRU)
             from sklearn.preprocessing import MinMaxScaler
-            scaler = MinMaxScaler()
+
+            # Створюємо окремі скалери для різних типів ознак
+            feature_scaler = MinMaxScaler()
 
             # Нормалізуємо тільки числові ознаки (не market_regime)
             df_normalized = df.copy()
-            df_normalized[existing_feature_cols] = scaler.fit_transform(df[existing_feature_cols].astype(np.float32))
 
-            # 6. Створюємо часові вікна для LSTM/GRU
+            # Перевіряємо, чи є дані для нормалізації
+            if len(existing_feature_cols) > 0:
+                feature_data = df[existing_feature_cols].astype(np.float32)
+                df_normalized[existing_feature_cols] = feature_scaler.fit_transform(feature_data)
+
+            # 7. Створюємо часові вікна для LSTM/GRU
             X, y = [], []
             for i in range(lookback_window, len(df_normalized)):
                 # Беремо вікно ознак
@@ -932,18 +998,33 @@ class TrendDetection:
                 # Цільове значення (наступна ціна закриття)
                 y.append(df_normalized['close'].iloc[i])
 
-            # 7. Конвертуємо в numpy масиви з правильними типами
+            # 8. Конвертуємо в numpy масиви з правильними типами
+            if len(X) == 0:
+                self.logger.warning("No sequences created")
+                return None
+
             X = np.array(X, dtype=np.float32)
             y = np.array(y, dtype=np.float32)
             market_regime_array = df_normalized['market_regime'].iloc[lookback_window:].values.astype(np.int32)
 
+            # Перевіряємо розміри
+            if X.shape[0] != y.shape[0] or X.shape[0] != market_regime_array.shape[0]:
+                self.logger.error(f"Shape mismatch: X {X.shape}, y {y.shape}, regime {market_regime_array.shape}")
+                return None
+
             self.logger.info(
                 f"Prepared ML features: X shape {X.shape}, y shape {y.shape}, regime shape {market_regime_array.shape}")
+
+            # Додаткова інформація про ознаки
+            self.logger.info(f"Feature columns used: {existing_feature_cols}")
+            self.logger.info(f"Market regime encoding examples: {np.unique(market_regime_array)}")
 
             return X, y, market_regime_array
 
         except Exception as e:
             self.logger.error(f"Error preparing ML features: {str(e)}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
 def main():

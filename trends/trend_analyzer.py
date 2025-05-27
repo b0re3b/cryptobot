@@ -676,168 +676,294 @@ class TrendAnalyzer:
         }
 
         return result
+
     def identify_market_regime(self, data: pd.DataFrame) -> str:
+        """
+        Визначення режиму ринку на основі технічних індикаторів
+        """
+        try:
+            # Перевірка наявності необхідних даних
+            if 'close' not in data.columns:
+                raise ValueError("DataFrame повинен містити стовпець 'close'")
 
-        # Перевірка наявності необхідних даних
-        if 'close' not in data.columns:
-            raise ValueError("DataFrame повинен містити стовпець 'close'")
+            if 'high' not in data.columns or 'low' not in data.columns:
+                raise ValueError("DataFrame повинен містити стовпці 'high' та 'low'")
 
-        if 'high' not in data.columns or 'low' not in data.columns:
-            raise ValueError("DataFrame повинен містити стовпці 'high' та 'low'")
+            # Початкова перевірка кількості даних
+            if len(data) < 50:
+                self.logger.warning(f"Insufficient data for market regime analysis: {len(data)} rows")
+                return "insufficient_data"
 
-        # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
-        df = data.copy()
+            # Копіюємо дані, щоб уникнути проблем з попередженнями pandas
+            df = data.copy().sort_index()
 
-        # 1. Розрахунок індикаторів за допомогою pandas_ta
+            self.logger.debug(f"Starting market regime analysis with {len(df)} data points")
 
-        # Розрахунок волатильності (ATR - Average True Range)
-        df['atr14'] = df.ta.atr(length=14)
+            # 1. Розрахунок індикаторів за допомогою pandas_ta з обробкою помилок
 
-        # Нормалізована волатильність (ATR / Ціна)
-        df['norm_volatility'] = df['atr14'] / df['close'] * 100
-
-        # Смуги Боллінджера
-        bb = df.ta.bbands(length=20, std=2)
-        df['bb_upper'] = bb[f'BBU_{20}_2.0']
-        df['bb_lower'] = bb[f'BBL_{20}_2.0']
-        df['bb_middle'] = bb[f'BBM_{20}_2.0']
-
-        # Ширина смуг Боллінджера відносно ціни
-        df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'] * 100
-
-        # ADX - Індекс спрямованого руху
-        adx = df.ta.adx(length=14)
-        df['adx'] = adx[f'ADX_{14}']
-        df['+di'] = adx[f'DMP_{14}']
-        df['-di'] = adx[f'DMN_{14}']
-
-        # 2. Додаткові індикатори для визначення ринкового стану
-
-        # Додаємо RSI для визначення перекупленості/перепроданості
-        df['rsi'] = df.ta.rsi(length=14)
-
-        # Додаємо MACD для визначення моментуму
-        macd = df.ta.macd(fast=12, slow=26, signal=9)
-        df['macd'] = macd[f'MACD_{12}_{26}_{9}']
-        df['macd_signal'] = macd[f'MACDs_{12}_{26}_{9}']
-        df['macd_hist'] = macd[f'MACDh_{12}_{26}_{9}']
-
-        # Додаємо Stochastic oscillator для визначення моментуму
-        stoch = df.ta.stoch(k=14, d=3, smooth_k=3)
-        df['stoch_k'] = stoch[f'STOCHk_{14}_{3}_{3}']
-        df['stoch_d'] = stoch[f'STOCHd_{14}_{3}_{3}']
-
-        # 3. Аналіз поточного стану ринку
-
-        # Видаляємо рядки з NA значеннями для коректного аналізу
-        df_clean = df.dropna()
-
-        # Якщо після видалення NA залишилось мало даних, повертаємо 'insufficient_data'
-        if len(df_clean) < 20:
-            return "insufficient_data"
-
-        # Визначаємо сучасний стан індикаторів
-
-        # Отримуємо останні значення індикаторів
-        adx_value = df_clean['adx'].iloc[-1]
-        plus_di = df_clean['+di'].iloc[-1]
-        minus_di = df_clean['-di'].iloc[-1]
-
-        # Середнє значення нормалізованої волатильності за останні 20 періодів
-        recent_volatility = df_clean['norm_volatility'].tail(20).mean()
-        historical_volatility = df_clean['norm_volatility'].mean()
-
-        # Визначаємо квартилі волатильності
-        low_vol_threshold = df_clean['norm_volatility'].quantile(0.25)
-        high_vol_threshold = df_clean['norm_volatility'].quantile(0.75)
-
-        # Аналіз ширини смуг Боллінджера за останні 10 періодів
-        recent_bb_width = df_clean['bb_width'].tail(10).mean()
-        historical_bb_width = df_clean['bb_width'].mean()
-
-        # Додаткові метрики
-        rsi_value = df_clean['rsi'].iloc[-1]
-        macd_hist = df_clean['macd_hist'].tail(3).mean()  # Середнє значення гістограми MACD за останні 3 періоди
-
-        # 4. Визначення режиму ринку на основі комбінації показників
-
-        # Визначаємо напрямок тренду
-        if plus_di > minus_di:
-            trend_direction = "uptrend"
-        elif minus_di > plus_di:
-            trend_direction = "downtrend"
-        else:
-            trend_direction = "neutral"
-
-        # Визначаємо силу тренду на основі ADX
-        if adx_value > 30:
-            trend_strength = "strong"
-        elif adx_value > 20:
-            trend_strength = "moderate"
-        else:
-            trend_strength = "weak"
-
-        # Визначаємо стан волатильності
-        if recent_volatility > high_vol_threshold * 1.5:
-            volatility_state = "extremely_high"
-        elif recent_volatility > high_vol_threshold:
-            volatility_state = "high"
-        elif recent_volatility < low_vol_threshold:
-            volatility_state = "low"
-        else:
-            volatility_state = "normal"
-
-        # Визначаємо стан ширини смуг Боллінджера (консолідація чи розширення)
-        if recent_bb_width < historical_bb_width * 0.7:
-            bollinger_state = "tight"  # Значна консолідація
-        elif recent_bb_width < historical_bb_width * 0.9:
-            bollinger_state = "narrowing"  # Звуження
-        elif recent_bb_width > historical_bb_width * 1.3:
-            bollinger_state = "wide"  # Значне розширення
-        elif recent_bb_width > historical_bb_width * 1.1:
-            bollinger_state = "expanding"  # Розширення
-        else:
-            bollinger_state = "normal"  # Нормальний стан
-
-        # 5. Інтегрована оцінка режиму ринку
-
-        # Сильний тренд
-        if trend_strength == "strong":
-            if volatility_state in ["high", "extremely_high"]:
-                if trend_direction == "uptrend":
-                    return "strong_uptrend_high_volatility"
+            try:
+                # Розрахунок волатільності (ATR - Average True Range)
+                atr_result = df.ta.atr(length=14)
+                if atr_result is not None:
+                    df['atr14'] = atr_result
                 else:
-                    return "strong_downtrend_high_volatility"
+                    # Fallback розрахунок ATR
+                    df['tr'] = np.maximum(
+                        df['high'] - df['low'],
+                        np.maximum(
+                            abs(df['high'] - df['close'].shift(1)),
+                            abs(df['low'] - df['close'].shift(1))
+                        )
+                    )
+                    df['atr14'] = df['tr'].rolling(window=14).mean()
+            except Exception as e:
+                self.logger.warning(f"ATR calculation failed: {e}, using fallback")
+                df['tr'] = np.maximum(
+                    df['high'] - df['low'],
+                    np.maximum(
+                        abs(df['high'] - df['close'].shift(1)),
+                        abs(df['low'] - df['close'].shift(1))
+                    )
+                )
+                df['atr14'] = df['tr'].rolling(window=14).mean()
+
+            # Нормалізована волатільність (ATR / Ціна)
+            df['norm_volatility'] = (df['atr14'] / df['close']) * 100
+
+            try:
+                # Смуги Боллінджера
+                bb = df.ta.bbands(length=20, std=2)
+                if bb is not None and len(bb.columns) >= 3:
+                    df['bb_upper'] = bb.iloc[:, 0]  # Верхня смуга
+                    df['bb_middle'] = bb.iloc[:, 1]  # Середня лінія (SMA)
+                    df['bb_lower'] = bb.iloc[:, 2]  # Нижня смуга
+                else:
+                    # Fallback розрахунок Bollinger Bands
+                    sma20 = df['close'].rolling(window=20).mean()
+                    std20 = df['close'].rolling(window=20).std()
+                    df['bb_middle'] = sma20
+                    df['bb_upper'] = sma20 + (std20 * 2)
+                    df['bb_lower'] = sma20 - (std20 * 2)
+            except Exception as e:
+                self.logger.warning(f"Bollinger Bands calculation failed: {e}, using fallback")
+                sma20 = df['close'].rolling(window=20).mean()
+                std20 = df['close'].rolling(window=20).std()
+                df['bb_middle'] = sma20
+                df['bb_upper'] = sma20 + (std20 * 2)
+                df['bb_lower'] = sma20 - (std20 * 2)
+
+            # Ширина смуг Боллінджера відносно ціни
+            df['bb_width'] = ((df['bb_upper'] - df['bb_lower']) / df['bb_middle']) * 100
+
+            try:
+                # ADX - Індекс спрямованого руху
+                adx = df.ta.adx(length=14)
+                if adx is not None and len(adx.columns) >= 3:
+                    df['adx'] = adx[f'ADX_{14}']
+                    df['+di'] = adx[f'DMP_{14}']
+                    df['-di'] = adx[f'DMN_{14}']
+                else:
+                    # Fallback ADX calculation
+                    df = self._calculate_adx_manual(df, 14)
+            except Exception as e:
+                self.logger.warning(f"ADX calculation failed: {e}, using manual calculation")
+                df = self._calculate_adx_manual(df, 14)
+
+            # 2. Додаткові індикатори для визначення ринкового стану
+
+            try:
+                # RSI для визначення перекупленості/перепроданості
+                rsi_result = df.ta.rsi(length=14)
+                if rsi_result is not None:
+                    df['rsi'] = rsi_result
+                else:
+                    # Fallback RSI
+                    delta = df['close'].diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss
+                    df['rsi'] = 100 - (100 / (1 + rs))
+            except Exception as e:
+                self.logger.warning(f"RSI calculation failed: {e}, using fallback")
+                delta = df['close'].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                rs = gain / loss
+                df['rsi'] = 100 - (100 / (1 + rs))
+
+            try:
+                # MACD для визначення моментуму
+                macd = df.ta.macd(fast=12, slow=26, signal=9)
+                if macd is not None and len(macd.columns) >= 3:
+                    df['macd'] = macd[f'MACD_{12}_{26}_{9}']
+                    df['macd_signal'] = macd[f'MACDs_{12}_{26}_{9}']
+                    df['macd_hist'] = macd[f'MACDh_{12}_{26}_{9}']
+                else:
+                    # Fallback MACD
+                    ema_fast = df['close'].ewm(span=12).mean()
+                    ema_slow = df['close'].ewm(span=26).mean()
+                    df['macd'] = ema_fast - ema_slow
+                    df['macd_signal'] = df['macd'].ewm(span=9).mean()
+                    df['macd_hist'] = df['macd'] - df['macd_signal']
+            except Exception as e:
+                self.logger.warning(f"MACD calculation failed: {e}, using fallback")
+                ema_fast = df['close'].ewm(span=12).mean()
+                ema_slow = df['close'].ewm(span=26).mean()
+                df['macd'] = ema_fast - ema_slow
+                df['macd_signal'] = df['macd'].ewm(span=9).mean()
+                df['macd_hist'] = df['macd'] - df['macd_signal']
+
+            # 3. ВИПРАВЛЕНО: Розумна обробка NA значень
+
+            # Замість видалення всіх рядків з NA, заповнюємо їх розумними значеннями
+            numeric_columns = df.select_dtypes(include=[np.number]).columns
+
+            # Заповнюємо NA значення методом forward fill, потім backward fill
+            df[numeric_columns] = df[numeric_columns].fillna(method='ffill').fillna(method='bfill')
+
+            # Для індикаторів, які потребують мінімальну кількість періодів,
+            # беремо останні рядки з валідними даними
+            required_indicators = ['adx', '+di', '-di', 'norm_volatility', 'bb_width', 'rsi', 'macd_hist']
+
+            # Знаходимо останній рядок, де всі необхідні індикатори мають валідні значення
+            valid_mask = df[required_indicators].notna().all(axis=1)
+            valid_data = df[valid_mask]
+
+            if len(valid_data) < 10:
+                self.logger.warning(f"Only {len(valid_data)} rows with complete indicators")
+                return "insufficient_data"
+
+            # Використовуємо останні валідні дані для аналізу
+            df_analysis = valid_data.tail(100) if len(valid_data) >= 100 else valid_data
+
+            self.logger.debug(f"Using {len(df_analysis)} rows for market regime analysis")
+
+            # 4. Аналіз поточного стану ринку
+
+            # Визначаємо сучасний стан індикаторів
+            adx_value = df_analysis['adx'].iloc[-1]
+            plus_di = df_analysis['+di'].iloc[-1]
+            minus_di = df_analysis['-di'].iloc[-1]
+
+            # Середнє значення нормалізованої волатільності за останні 20 періодів
+            recent_periods = min(20, len(df_analysis))
+            recent_volatility = df_analysis['norm_volatility'].tail(recent_periods).mean()
+            historical_volatility = df_analysis['norm_volatility'].mean()
+
+            # Визначаємо квартилі волатільності з мінімальною кількістю даних
+            if len(df_analysis) >= 20:
+                low_vol_threshold = df_analysis['norm_volatility'].quantile(0.25)
+                high_vol_threshold = df_analysis['norm_volatility'].quantile(0.75)
             else:
-                if trend_direction == "uptrend":
-                    return "strong_uptrend_normal_volatility"
-                else:
-                    return "strong_downtrend_normal_volatility"
+                # Використовуємо стандартні відхилення як альтернативу
+                vol_mean = df_analysis['norm_volatility'].mean()
+                vol_std = df_analysis['norm_volatility'].std()
+                low_vol_threshold = vol_mean - vol_std
+                high_vol_threshold = vol_mean + vol_std
 
-        # Помірний тренд
-        elif trend_strength == "moderate":
-            if bollinger_state in ["expanding", "wide"]:
-                if trend_direction == "uptrend":
-                    return "emerging_uptrend"
-                else:
-                    return "emerging_downtrend"
+            # Аналіз ширини смуг Боллінджера за останні 10 періодів
+            bb_periods = min(10, len(df_analysis))
+            recent_bb_width = df_analysis['bb_width'].tail(bb_periods).mean()
+            historical_bb_width = df_analysis['bb_width'].mean()
+
+            # Додаткові метрики
+            rsi_value = df_analysis['rsi'].iloc[-1]
+            macd_periods = min(3, len(df_analysis))
+            macd_hist = df_analysis['macd_hist'].tail(macd_periods).mean()
+
+            # 5. Визначення режиму ринку на основі комбінації показників
+
+            # Визначаємо напрямок тренду
+            if plus_di > minus_di:
+                trend_direction = "uptrend"
+            elif minus_di > plus_di:
+                trend_direction = "downtrend"
             else:
-                return "moderate_trend"
+                trend_direction = "neutral"
 
-        # Слабкий тренд або відсутність тренду
-        else:
-            if bollinger_state in ["tight", "narrowing"]:
-                # Перевіряємо додаткові ознаки потенційного прориву
-                if rsi_value > 60 or rsi_value < 40:  # RSI наближається до екстремальних значень
-                    return "accumulation_before_breakout"
-                else:
-                    return "consolidation"
-
-            elif volatility_state == "low":
-                return "low_volatility_sideways"
-
-            elif bollinger_state in ["expanding", "wide"] and volatility_state in ["high", "extremely_high"]:
-                return "high_volatility_range"
-
+            # Визначаємо силу тренду на основі ADX
+            if adx_value > 30:
+                trend_strength = "strong"
+            elif adx_value > 20:
+                trend_strength = "moderate"
             else:
-                return "choppy_market"
+                trend_strength = "weak"
+
+            # Визначаємо стан волатільності
+            if recent_volatility > high_vol_threshold * 1.5:
+                volatility_state = "extremely_high"
+            elif recent_volatility > high_vol_threshold:
+                volatility_state = "high"
+            elif recent_volatility < low_vol_threshold:
+                volatility_state = "low"
+            else:
+                volatility_state = "normal"
+
+            # Визначаємо стан ширини смуг Боллінджера (консолідація чи розширення)
+            if historical_bb_width > 0:  # Перевіряємо, щоб уникнути ділення на нуль
+                bb_ratio = recent_bb_width / historical_bb_width
+                if bb_ratio < 0.7:
+                    bollinger_state = "tight"  # Значна консолідація
+                elif bb_ratio < 0.9:
+                    bollinger_state = "narrowing"  # Звуження
+                elif bb_ratio > 1.3:
+                    bollinger_state = "wide"  # Значне розширення
+                elif bb_ratio > 1.1:
+                    bollinger_state = "expanding"  # Розширення
+                else:
+                    bollinger_state = "normal"  # Нормальний стан
+            else:
+                bollinger_state = "normal"
+
+            # 6. Інтегрована оцінка режиму ринку з логуванням для діагностики
+
+            self.logger.debug(
+                f"Market regime indicators: ADX={adx_value:.1f}, +DI={plus_di:.1f}, -DI={minus_di:.1f}, "
+                f"RSI={rsi_value:.1f}, Volatility={recent_volatility:.2f}, "
+                f"Trend: {trend_direction}({trend_strength}), BB: {bollinger_state}, Vol: {volatility_state}"
+            )
+
+            # Сильний тренд
+            if trend_strength == "strong":
+                if volatility_state in ["high", "extremely_high"]:
+                    if trend_direction == "uptrend":
+                        return "strong_uptrend_high_volatility"
+                    else:
+                        return "strong_downtrend_high_volatility"
+                else:
+                    if trend_direction == "uptrend":
+                        return "strong_uptrend_normal_volatility"
+                    else:
+                        return "strong_downtrend_normal_volatility"
+
+            # Помірний тренд
+            elif trend_strength == "moderate":
+                if bollinger_state in ["expanding", "wide"]:
+                    if trend_direction == "uptrend":
+                        return "emerging_uptrend"
+                    else:
+                        return "emerging_downtrend"
+                else:
+                    return "moderate_trend"
+
+            # Слабкий тренд або відсутність тренду
+            else:
+                if bollinger_state in ["tight", "narrowing"]:
+                    # Перевіряємо додаткові ознаки потенційного прориву
+                    if rsi_value > 60 or rsi_value < 40:  # RSI наближається до екстремальних значень
+                        return "accumulation_before_breakout"
+                    else:
+                        return "consolidation"
+
+                elif volatility_state == "low":
+                    return "low_volatility_sideways"
+
+                elif bollinger_state in ["expanding", "wide"] and volatility_state in ["high", "extremely_high"]:
+                    return "high_volatility_range"
+
+                else:
+                    return "choppy_market"
+
+        except Exception as e:
+            self.logger.error(f"Error in market regime identification: {str(e)}")
+            return "analysis_error"

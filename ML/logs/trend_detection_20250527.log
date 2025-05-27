@@ -1,1 +1,4 @@
 2025-05-27 00:15:43 - trend_detection - ERROR - [logger.py:111] - Error preparing ML features: "['+di', '-di'] not in index"
+2025-05-27 12:40:22 - trend_detection - ERROR - [logger.py:111] - Error preparing ML features: invalid literal for int() with base 10: 'strong_downtrend_normal_volatility'
+2025-05-27 12:40:37 - trend_detection - ERROR - [logger.py:111] - Error preparing ML features: invalid literal for int() with base 10: 'strong_downtrend_normal_volatility'
+2025-05-27 12:40:51 - trend_detection - ERROR - [logger.py:111] - Error preparing ML features: invalid literal for int() with base 10: 'strong_downtrend_normal_volatility'

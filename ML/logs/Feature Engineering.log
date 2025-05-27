@@ -245,3 +245,58 @@
 2025-05-27 01:35:05 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
 2025-05-27 01:35:05 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.0008739301256479592
 2025-05-27 01:35:05 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23352 нових ознак. Загальна кількість ознак: 23382
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 12:40:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 12:40:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 12:40:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 12:40:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 12:40:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 12:40:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 12:40:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 12:40:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 12:40:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 12:40:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 12:40:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 12:40:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 12:40:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 12:40:36 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: Input X contains infinity or a value too large for dtype('float64').
+2025-05-27 12:40:36 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 12:40:36 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 12:40:37 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 12:40:37 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23352 нових ознак. Загальна кількість ознак: 23382
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 12:40:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 12:40:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 12:40:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 12:40:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 12:40:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 12:40:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 12:40:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 12:40:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 12:40:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 12:40:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 12:40:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 12:40:51 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: Input X contains infinity or a value too large for dtype('float64').
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 12:40:51 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 12:40:51 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23352 нових ознак. Загальна кількість ознак: 23382
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 12:40:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
