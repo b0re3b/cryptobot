@@ -1,12 +1,11 @@
 from typing import List
-
 import numpy as np
 import pandas as pd
 
 from utils.logger import CryptoLogger
 
 
-class StatisticalFeatures():
+class StatisticalFeatures:
     def __init__(self):
         self.logger = CryptoLogger('Statistical Features')
     def create_volatility_features(self, data: pd.DataFrame,

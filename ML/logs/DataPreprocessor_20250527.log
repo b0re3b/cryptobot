@@ -1040,3 +1040,237 @@
 2025-05-27 18:20:49 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
 2025-05-27 18:20:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
 2025-05-27 18:20:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:40:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:40:58 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:40:58 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:41:43 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:41:43 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:41:43 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:41:43 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:41:44 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 18:41:44 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:41:44 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:41:44 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:41:44 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:41:44 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:41:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:41:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:42:34 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:42:34 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:42:34 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:42:34 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:42:34 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю transformer
+2025-05-27 18:42:35 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:42:35 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:42:35 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:42:35 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:42:35 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:42:42 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:42:42 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:50:33 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:50:33 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:50:33 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 18:50:34 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:50:34 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:50:34 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:50:34 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:50:34 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:50:41 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:50:41 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:51:22 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:51:22 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:51:22 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:51:22 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:51:23 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 18:51:23 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:51:23 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:51:23 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:51:23 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:51:23 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:51:30 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:51:30 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:52:36 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:52:36 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:52:36 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 18:52:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:52:37 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:52:37 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:52:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:52:37 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:52:44 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:52:44 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:53:27 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:53:27 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:53:27 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:53:28 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:53:28 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 18:53:29 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:53:29 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:53:29 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:53:29 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:53:29 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:53:36 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:53:36 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:54:33 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:54:40 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:54:40 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:55:21 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:55:21 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:55:21 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:55:21 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:55:22 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 18:55:22 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:55:22 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:55:22 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:55:22 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:55:22 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:55:45 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:55:45 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 18:55:46 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 18:55:46 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:55:46 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:55:46 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:55:46 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:55:46 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:55:53 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:55:53 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:56:26 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:56:26 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:56:26 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:56:26 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:56:27 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 18:56:27 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:56:27 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:56:27 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:56:28 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:56:28 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:56:35 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:56:35 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:57:08 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:57:08 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:57:08 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:57:08 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:57:08 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю transformer
+2025-05-27 18:57:09 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 18:57:09 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 18:57:09 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 18:57:09 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 18:57:09 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 18:57:16 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:57:16 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:57:49 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:57:49 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:57:49 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 18:57:49 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 18:57:49 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю lstm
+2025-05-27 18:57:49 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-27 18:57:49 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-27 18:57:49 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для ETH
+2025-05-27 18:57:50 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для ETH
+2025-05-27 18:57:50 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для ETH
+2025-05-27 18:57:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:57:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:58:31 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для ETH: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:58:31 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для ETH: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:58:31 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для ETH
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для ETH: (16980, 5)
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю gru
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для ETH
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для ETH
+2025-05-27 18:58:31 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для ETH
+2025-05-27 18:58:38 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:58:38 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 18:59:12 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для ETH: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 18:59:12 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для ETH: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 18:59:12 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для ETH
+2025-05-27 18:59:12 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для ETH: (16980, 5)
+2025-05-27 18:59:12 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю transformer
+2025-05-27 18:59:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-27 18:59:13 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-27 18:59:13 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для ETH
+2025-05-27 18:59:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для ETH
+2025-05-27 18:59:13 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для ETH
+2025-05-27 18:59:20 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 18:59:20 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 19:05:58 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 19:05:58 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 19:05:58 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 19:05:59 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:05:59 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:05:59 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:05:59 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:05:59 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 19:06:06 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 19:06:06 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 19:06:27 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 19:06:27 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 19:06:27 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 19:06:27 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 19:06:28 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 19:06:28 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:06:28 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:06:28 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:06:28 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:06:28 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 19:06:35 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 19:06:35 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 19:06:56 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 19:06:56 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 19:06:56 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 19:06:56 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 19:06:56 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю transformer
+2025-05-27 19:06:57 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:06:57 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:06:57 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:06:57 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:06:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:14:32 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 19:14:39 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 19:14:39 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 19:15:12 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 19:15:12 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 19:15:12 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 19:15:12 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 19:15:13 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-27 19:15:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:15:13 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:15:13 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:15:13 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:15:13 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 19:15:20 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 19:15:20 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 19:15:53 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-27 19:15:53 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 19:15:53 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю transformer
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 19:16:00 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 19:16:00 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності

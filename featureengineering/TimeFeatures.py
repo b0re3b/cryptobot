@@ -5,7 +5,7 @@ import pandas as pd
 from utils.logger import CryptoLogger
 
 
-class TimeFeatures():
+class TimeFeatures:
     def __init__(self):
         self.logger = CryptoLogger('TimeFeatures')
 

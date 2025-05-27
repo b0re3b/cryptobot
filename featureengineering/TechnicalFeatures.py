@@ -190,7 +190,6 @@ class TechnicalFeatures:
                 elif indicator == 'ichimoku':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         try:
-                            # Ichimoku може повертати різні типи в залежності від версії pandas_ta
                             ichimoku_result = ta.ichimoku(result_df['high'], result_df['low'], result_df['close'])
 
                             if isinstance(ichimoku_result, pd.DataFrame):
@@ -199,21 +198,12 @@ class TechnicalFeatures:
                                 added_features_count += len(ichimoku_result.columns)
                             elif isinstance(ichimoku_result, tuple):
                                 # Якщо повертається tuple з DataFrame'ами або Series
-                                for i, component in enumerate(ichimoku_result):
-                                    if isinstance(component, pd.DataFrame):
+                                for component in ichimoku_result:
+                                    if isinstance(component, (pd.DataFrame, pd.Series)):
+                                        if isinstance(component, pd.Series):
+                                            component = component.to_frame()
                                         result_df = pd.concat([result_df, component], axis=1)
                                         added_features_count += len(component.columns)
-                                    elif isinstance(component, pd.Series):
-                                        # Даємо унікальну назву серії
-                                        component_name = f'ichimoku_component_{i}'
-                                        if component.name:
-                                            component_name = component.name
-                                        result_df[component_name] = component
-                                        added_features_count += 1
-                            elif isinstance(ichimoku_result, pd.Series):
-                                # Якщо повертається одна серія
-                                result_df['ichimoku'] = ichimoku_result
-                                added_features_count += 1
                             else:
                                 # Якщо тип невідомий, робимо ручний розрахунок
                                 self.logger.warning(f"Неочікуваний тип результату Ichimoku: {type(ichimoku_result)}")
@@ -223,7 +213,6 @@ class TechnicalFeatures:
                         except Exception as ichimoku_error:
                             self.logger.warning(
                                 f"Помилка при розрахунку Ichimoku через pandas_ta: {str(ichimoku_error)}")
-                            # Розраховуємо Ichimoku вручну
                             self._calculate_ichimoku_manually(result_df)
                             added_features_count += 5
 

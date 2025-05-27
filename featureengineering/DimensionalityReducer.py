@@ -1,5 +1,4 @@
 from typing import Tuple, Optional, List
-
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans, DBSCAN
@@ -13,7 +12,7 @@ from sklearn.metrics import silhouette_score
 from utils.logger import CryptoLogger
 
 
-class DimensionalityReducer():
+class DimensionalityReducer:
     def __init__(self):
         self.logger = CryptoLogger('Dimensionality Reducer')
 
@@ -417,40 +416,59 @@ class DimensionalityReducer():
             # Замінюємо нескінченні значення на NaN
             poly_df = poly_df.replace([np.inf, -np.inf], np.nan)
 
-            # Обробляємо NaN значення по стовпцях
+            # Обробляємо NaN значення по стовпцях - FIXED VERSION
             if poly_df.isna().any().any():
                 # Заповнюємо NaN медіаною або нулем
                 for col in poly_df.columns:
-                    if poly_df[col].isna().all():
+                    col_series = poly_df[col]
+
+                    if col_series.isna().all():
                         poly_df[col] = 0
                     else:
-                        median_val = poly_df[col].median()
-                        # FIXED: Proper handling of scalar median values
-                        if pd.isna(median_val):
-                            poly_df[col] = poly_df[col].fillna(0)
-                        else:
-                            # Ensure median_val is a scalar before comparison
-                            if hasattr(median_val, 'item'):
-                                median_scalar = median_val.item() if pd.api.types.is_scalar(median_val) else median_val
+                        # Безпечне обчислення медіани
+                        try:
+                            median_val = col_series.median()
+                            # Перевіряємо, чи є медіана скаляром та чи не є NaN
+                            if pd.isna(median_val):
+                                poly_df[col] = col_series.fillna(0)
                             else:
-                                median_scalar = median_val
-                            poly_df[col] = poly_df[col].fillna(median_scalar)
+                                # Використовуємо медіану для заповнення NaN
+                                poly_df[col] = col_series.fillna(median_val)
+                        except Exception as e:
+                            self.logger.warning(f"Помилка при обчисленні медіани для колонки {col}: {str(e)}")
+                            poly_df[col] = col_series.fillna(0)
 
             # Використовуємо IQR для виявлення викидів
             for col in poly_df.columns:
-                Q1 = poly_df[col].quantile(0.25)
-                Q3 = poly_df[col].quantile(0.75)
-                IQR = Q3 - Q1
+                try:
+                    col_series = poly_df[col]
+                    Q1 = col_series.quantile(0.25)
+                    Q3 = col_series.quantile(0.75)
+                    IQR = Q3 - Q1
 
-                if IQR > 0:  # Тільки якщо є варіативність
-                    lower_bound = Q1 - 1.5 * IQR
-                    upper_bound = Q3 + 1.5 * IQR
-                    poly_df[col] = poly_df[col].clip(lower_bound, upper_bound)
+                    # Перевіряємо, чи IQR є скаляром та чи більше нуля
+                    if pd.notna(IQR) and IQR > 0:
+                        lower_bound = Q1 - 1.5 * IQR
+                        upper_bound = Q3 + 1.5 * IQR
+                        poly_df[col] = col_series.clip(lower_bound, upper_bound)
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обробці викидів для колонки {col}: {str(e)}")
+                    continue
 
-            # Видаляємо константні стовпці
+            # ФІКС: Видаляємо константні стовпці - правильна перевірка
             constant_cols = []
             for col in poly_df.columns:
-                if poly_df[col].nunique() <= 1:
+                try:
+                    # ФІКС: Використовуємо правильний спосіб перевірки константності
+                    col_series = poly_df[col]
+                    if len(col_series.dropna()) == 0:  # Вся колонка NaN
+                        constant_cols.append(col)
+                    elif col_series.nunique(dropna=True) <= 1:  # Константна колонка
+                        constant_cols.append(col)
+                    elif col_series.std() == 0:  # Стандартне відхилення = 0
+                        constant_cols.append(col)
+                except Exception as e:
+                    self.logger.warning(f"Помилка при перевірці константності колонки {col}: {str(e)}")
                     constant_cols.append(col)
 
             if constant_cols:
@@ -463,9 +481,14 @@ class DimensionalityReducer():
                 self.logger.info(f"Обмежуємо кількість поліноміальних ознак до {max_final_features}")
 
                 # Вибираємо найбільш варіативні ознаки
-                cv_scores = (poly_df.std() / (poly_df.mean().abs() + 1e-8)).fillna(0)
-                top_features = cv_scores.nlargest(max_final_features).index.tolist()
-                poly_df = poly_df[top_features]
+                try:
+                    cv_scores = (poly_df.std() / (poly_df.mean().abs() + 1e-8)).fillna(0)
+                    top_features = cv_scores.nlargest(max_final_features).index.tolist()
+                    poly_df = poly_df[top_features]
+                except Exception as e:
+                    self.logger.warning(f"Помилка при відборі топ ознак: {str(e)}")
+                    # Просто беремо перші N колонок
+                    poly_df = poly_df.iloc[:, :max_final_features]
 
             # Об'єднуємо з вихідним DataFrame
             if len(poly_df.columns) > 0:
@@ -534,13 +557,16 @@ class DimensionalityReducer():
             # Використовуємо більш безпечний підхід для заміни нескінченних значень
             for col in X.columns:
                 col_data = X[col]
-                finite_data = col_data[np.isfinite(col_data)]
+                finite_mask = np.isfinite(col_data)
+                finite_data = col_data[finite_mask]
                 if len(finite_data) > 0:
                     max_val = finite_data.max()
                     min_val = finite_data.min()
-                    X[col] = X[col].replace([np.inf, -np.inf], [max_val * 10, min_val * 10])
+                    X.loc[col_data == np.inf, col] = max_val * 10
+                    X.loc[col_data == -np.inf, col] = min_val * 10
                 else:
-                    X[col] = X[col].replace([np.inf, -np.inf], [1e6, -1e6])
+                    X.loc[col_data == np.inf, col] = 1e6
+                    X.loc[col_data == -np.inf, col] = -1e6
 
             # Додаткова перевірка та обрізання
             if np.isinf(X.values).any():
@@ -655,9 +681,10 @@ class DimensionalityReducer():
                     outliers_mask = cluster_labels == -1
                     non_outliers_mask = ~outliers_mask
 
-                    if np.any(non_outliers_mask) and np.any(outliers_mask):
+                    # ФІКС: Використовуємо .any() для перевірки наявності True значень
+                    if non_outliers_mask.any() and outliers_mask.any():
                         # Знаходимо найближчий кластер для викидів
-                        n_neighbors = min(3, int(np.sum(non_outliers_mask)))
+                        n_neighbors = min(3, int(non_outliers_mask.sum()))
                         if n_neighbors > 0:
                             knn = KNeighborsClassifier(n_neighbors=n_neighbors)
                             knn.fit(X_scaled[non_outliers_mask], cluster_labels[non_outliers_mask])
@@ -681,7 +708,8 @@ class DimensionalityReducer():
                     for i in unique_labels:
                         if i != -1:  # Пропускаємо викиди
                             cluster_mask = cluster_labels == i
-                            if np.any(cluster_mask):
+                            # ФІКС: Використовуємо .any() для перевірки наявності True значень
+                            if cluster_mask.any():
                                 # Безпечне обчислення центроїда
                                 cluster_points = X_scaled[cluster_mask]
                                 centroid = np.mean(cluster_points, axis=0)
@@ -806,11 +834,17 @@ class DimensionalityReducer():
 
                     # Коефіцієнт силуетності для кожної точки (якщо можливо)
                     try:
-                        silhouette_samples = silhouette_score(X_scaled, cluster_labels, metric='euclidean')
-                        if np.isfinite(silhouette_samples):
-                            result_df['silhouette_score'] = silhouette_samples
-                    except:
-                        pass  # Ігноруємо помилки при обчисленні силуетності
+                        # ФІКС: silhouette_score повертає одне значення, не масив
+                        silhouette_avg = silhouette_score(X_scaled, cluster_labels, metric='euclidean')
+                        if np.isfinite(silhouette_avg):
+                            # Якщо потрібні індивідуальні значення силуетності, використовуємо silhouette_samples
+                            from sklearn.metrics import silhouette_samples
+                            silhouette_vals = silhouette_samples(X_scaled, cluster_labels, metric='euclidean')
+                            # Перевіряємо на валідність
+                            silhouette_vals = np.nan_to_num(silhouette_vals, nan=0.0)
+                            result_df['silhouette_score'] = silhouette_vals
+                    except Exception as silhouette_error:
+                        self.logger.debug(f"Не вдалося обчислити силуетність: {str(silhouette_error)}")
 
             except Exception as e:
                 self.logger.warning(f"Помилка при створенні додаткових ознак: {str(e)}")

@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
-import logging
 from data.db import DatabaseManager
 from featureengineering.DimensionalityReducer import DimensionalityReducer
 from featureengineering.CrossFeatures import CrossFeatures
@@ -146,11 +145,11 @@ class FeatureEngineering:
         """Створення поліноміальних ознак."""
         return self.dimensionality_reducer.create_polynomial_features(data, columns, degree, interaction_only)
 
-    def create_cluster_features(self, data: pd.DataFrame,
-                                n_clusters: int = 5,
-                                method: str = 'kmeans') -> pd.DataFrame:
-        """Створення ознак на основі кластеризації."""
-        return self.dimensionality_reducer.create_cluster_features(data, n_clusters, method)
+    # def create_cluster_features(self, data: pd.DataFrame,
+    #                             n_clusters: int = 5,
+    #                             method: str = 'kmeans') -> pd.DataFrame:
+    #     """Створення ознак на основі кластеризації."""
+    #     return self.dimensionality_reducer.create_cluster_features(data, n_clusters, method)
 
     def create_ratio_features(self, data: pd.DataFrame,
                               numerators: List[str],
@@ -353,10 +352,10 @@ class FeatureEngineering:
                         result_df = self.create_volume_features(result_df)
                     else:
                         self.logger.warning("Колонка 'volume' відсутня для створення об'ємних ознак")
-                elif group == 'polynomial':
-                    result_df = self.create_polynomial_features(result_df)
-                elif group == 'cluster':
-                    result_df = self.create_cluster_features(result_df)
+                # elif group == 'polynomial':
+                #     result_df = self.create_polynomial_features(result_df)
+                # elif group == 'cluster':
+                #     result_df = self.create_cluster_features(result_df)
 
                 # Логування змін
                 new_features = result_df.shape[1] - previous_shape[1]
