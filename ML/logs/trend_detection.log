@@ -269,3 +269,39 @@
 2025-05-27 22:48:38 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
 2025-05-27 22:48:38 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
 2025-05-27 22:48:38 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 23:30:35 - trend_detection - ERROR - [logger.py:111] - Error preparing ML features: Input X contains infinity or a value too large for dtype('float32').
+2025-05-27 23:30:35 - trend_detection - ERROR - [logger.py:111] - Traceback: Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/trends/trend_detection.py", line 1010, in prepare_ml_trend_features
+    df_normalized[existing_feature_cols] = feature_scaler.fit_transform(feature_data)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/utils/_set_output.py", line 319, in wrapped
+    data_to_wrap = f(self, X, *args, **kwargs)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/base.py", line 918, in fit_transform
+    return self.fit(X, **fit_params).transform(X)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/preprocessing/_data.py", line 447, in fit
+    return self.partial_fit(X, y)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/base.py", line 1389, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/preprocessing/_data.py", line 487, in partial_fit
+    X = validate_data(
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/utils/validation.py", line 2944, in validate_data
+    out = check_array(X, input_name="X", **check_params)
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/utils/validation.py", line 1107, in check_array
+    _assert_all_finite(
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/utils/validation.py", line 120, in _assert_all_finite
+    _assert_all_finite_element_wise(
+  File "/home/b0r3d/Desktop/kursova/.venv2/lib/python3.10/site-packages/sklearn/utils/validation.py", line 169, in _assert_all_finite_element_wise
+    raise ValueError(msg_err)
+ValueError: Input X contains infinity or a value too large for dtype('float32').
+
+2025-05-27 23:35:50 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 23:35:50 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 23:35:50 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 23:47:59 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 23:47:59 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 23:47:59 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 23:50:37 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 23:50:37 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 23:50:37 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]
+2025-05-27 23:53:18 - trend_detection - INFO - [logger.py:103] - Prepared ML features: X shape (16917, 30, 13), y shape (16917,), regime shape (16917,)
+2025-05-27 23:53:18 - trend_detection - INFO - [logger.py:103] - Feature columns used: ['close', 'volume', 'adx', 'plus_di', 'minus_di', 'rsi', 'trend_strength', 'MACD_12_26_9', 'MACDs_12_26_9', 'MACDh_12_26_9', 'speed_20', 'volatility_20', 'acceleration_20']
+2025-05-27 23:53:18 - trend_detection - INFO - [logger.py:103] - Market regime encoding examples: [5]

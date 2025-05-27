@@ -98,7 +98,6 @@ class DeepLearning:
         )
 
     # ==================== ПРОГНОЗУВАННЯ ====================
-
     def predict(self, symbol: str, timeframe: str, model_type: str,
                 input_data: Optional[pd.DataFrame] = None, steps_ahead: int = 1) -> Dict[str, Any]:
 
@@ -115,7 +114,8 @@ class DeepLearning:
             data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
             input_data = data_loader()
 
-        # Підготовка даних
+        # Підготовка та збереження оригінальних даних для inverse transform
+        original_data = input_data.copy()
         processed_data = self.data_preprocessor.prepare_features(input_data, symbol)
 
         # Перевірка наявності колонки target
@@ -127,7 +127,7 @@ class DeepLearning:
         model.eval()
 
         with torch.no_grad():
-            predictions = []
+            raw_predictions = []
 
             # Беремо останню послідовність для прогнозування
             sequence_length = self.model_configs[model_key].sequence_length
@@ -135,7 +135,7 @@ class DeepLearning:
 
             for step in range(steps_ahead):
                 pred = model(current_input)
-                predictions.append(pred.item())
+                raw_predictions.append(pred.item())
 
                 # Оновлюємо вхідні дані для багатокрокового прогнозу
                 if steps_ahead > 1 and step < steps_ahead - 1:
@@ -144,10 +144,24 @@ class DeepLearning:
                     new_input[0, 0, 0] = pred.item()  # Припускаємо, що перша ознака - це ціна
                     current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
 
-        # Збереження прогнозу в БД (ВИПРАВЛЕНИЙ КОД)
+        # Перетворення прогнозів у оригінальний масштаб
+        try:
+            # Використовуємо inverse_transform_predictions для повернення до оригінального масштабу
+            predictions = self.data_preprocessor.inverse_transform_predictions(
+                raw_predictions,
+                original_data,
+                symbol
+            )
+            self.logger.info(f"Прогнози перетворені у оригінальний масштаб: {raw_predictions} -> {predictions}")
+        except Exception as e:
+            self.logger.warning(f"Не вдалося перетворити прогнози у оригінальний масштаб: {str(e)}")
+            # Використовуємо сирі прогнози як fallback
+            predictions = raw_predictions
+
+        # Збереження прогнозу в БД
         prediction_timestamp = datetime.now()
 
-        # Отримуємо model_id (потрібно додати метод для отримання ID моделі)
+        # Отримуємо model_id
         model_id = self.db_manager._get_model_id(symbol, timeframe, model_type)
 
         # Розрахунок інтервалів довіри (базова реалізація)
@@ -158,8 +172,17 @@ class DeepLearning:
                 # Розрахунок target_timestamp на основі timeframe та кроків вперед
                 target_timestamp = self._calculate_target_timestamp(prediction_timestamp, timeframe, i + 1)
 
-                # Розрахунок інтервалів довіри
+                # Розрахунок інтервалів довіри (також потрібно перетворити у оригінальний масштаб)
                 confidence_low, confidence_high = self._calculate_confidence_intervals(pred, confidence)
+
+                # Перетворення інтервалів довіри у оригінальний масштаб, якщо потрібно
+                try:
+                    if hasattr(self.data_preprocessor, 'inverse_transform_confidence_intervals'):
+                        confidence_low, confidence_high = self.data_preprocessor.inverse_transform_confidence_intervals(
+                            confidence_low, confidence_high, original_data, symbol
+                        )
+                except Exception as e:
+                    self.logger.warning(f"Не вдалося перетворити інтервали довіри: {str(e)}")
 
                 prediction_data = {
                     'model_id': model_id,
@@ -180,6 +203,7 @@ class DeepLearning:
 
         return {
             'predictions': np.array(predictions),
+            'raw_predictions': np.array(raw_predictions),  # Додаємо сирі прогнози для аналізу
             'timestamp': prediction_timestamp,
             'model_key': model_key,
             'confidence': confidence

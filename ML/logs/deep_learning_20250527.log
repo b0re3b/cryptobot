@@ -188,3 +188,10 @@
 2025-05-27 19:35:02 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
 2025-05-27 22:47:01 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
 2025-05-27 22:48:31 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-27 23:30:34 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-27 23:35:42 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-27 23:47:51 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-27 23:50:30 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: "['target'] not found in axis"
+2025-05-27 23:50:30 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-27 23:53:09 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: "['target'] not found in axis"
+2025-05-27 23:53:09 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_transformer

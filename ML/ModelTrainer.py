@@ -152,7 +152,11 @@ class ModelTrainer:
                             data: pd.DataFrame, input_dim: int,
                             config: Optional[ModelConfig] = None,
                             validation_split: float = 0.2,
-                            patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
+                            patience: int = 10, model_data=None,
+                            use_custom_model: bool = False,
+                            custom_hidden_dim: int = None,
+                            custom_num_layers: int = None,
+                            **kwargs) -> Dict[str, Any]:
         """
         Навчання моделі на даних по чанках
         """
@@ -163,8 +167,14 @@ class ModelTrainer:
         if config is None:
             config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
 
-        # Створюємо модель
-        model = self._build_model_from_config(model_type, config).to(self.device)
+        # Створюємо модель - використовуємо кастомну або стандартну
+        if use_custom_model and custom_hidden_dim and custom_num_layers:
+            self.logger.info(
+                f"Використовується кастомна модель з hidden_dim={custom_hidden_dim}, num_layers={custom_num_layers}")
+            model = self._build_model(model_type, input_dim, custom_hidden_dim, custom_num_layers).to(self.device)
+        else:
+            model = self._build_model_from_config(model_type, config).to(self.device)
+
         model_key = self._create_model_key(symbol, timeframe, model_type)
 
         # Налаштування оптимізатора та функції втрат
@@ -374,7 +384,11 @@ class ModelTrainer:
                     config: Optional[ModelConfig] = None,
                     validation_split: float = 0.2,
                     patience: int = 10, model_data=None,
-                    use_chunked_training: bool = True, **kwargs) -> Dict[str, Any]:
+                    use_chunked_training: bool = True,
+                    use_custom_model: bool = False,
+                    custom_hidden_dim: int = None,
+                    custom_num_layers: int = None,
+                    **kwargs) -> Dict[str, Any]:
         """
         Навчання моделі з можливістю вибору чанкового або звичайного режиму
         """
@@ -383,20 +397,32 @@ class ModelTrainer:
             self.logger.info("Використовується чанкове навчання")
             return self.train_model_chunked(
                 symbol, timeframe, model_type, data, input_dim,
-                config, validation_split, patience, model_data, **kwargs
+                config, validation_split, patience, model_data,
+                use_custom_model=use_custom_model,
+                custom_hidden_dim=custom_hidden_dim,
+                custom_num_layers=custom_num_layers,
+                **kwargs
             )
         else:
             self.logger.info("Використовується звичайне навчання")
             return self.train_model_standard(
                 symbol, timeframe, model_type, data, input_dim,
-                config, validation_split, patience, model_data, **kwargs
+                config, validation_split, patience, model_data,
+                use_custom_model=use_custom_model,
+                custom_hidden_dim=custom_hidden_dim,
+                custom_num_layers=custom_num_layers,
+                **kwargs
             )
 
     def train_model_standard(self, symbol: str, timeframe: str, model_type: str,
                              data: pd.DataFrame, input_dim: int,
                              config: Optional[ModelConfig] = None,
                              validation_split: float = 0.2,
-                             patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
+                             patience: int = 10, model_data=None,
+                             use_custom_model: bool = False,
+                             custom_hidden_dim: int = None,
+                             custom_num_layers: int = None,
+                             **kwargs) -> Dict[str, Any]:
         """
         Стандартне навчання моделі (оригінальна логіка)
         """
@@ -415,6 +441,14 @@ class ModelTrainer:
 
         train_tensor = (torch.tensor(X_train).float(), torch.tensor(y_train).float())
         val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
+
+        # Створення моделі - використовуємо кастомну або стандартну
+        if use_custom_model and custom_hidden_dim and custom_num_layers:
+            self.logger.info(
+                f"Використовується кастомна модель з hidden_dim={custom_hidden_dim}, num_layers={custom_num_layers}")
+            model = self._build_model(model_type, input_dim, custom_hidden_dim, custom_num_layers).to(self.device)
+        else:
+            model = self._build_model_from_config(model_type, config).to(self.device)
 
         # Створення та навчання моделі
         model = self._build_model_from_config(model_type, config).to(self.device)
@@ -808,7 +842,10 @@ class ModelTrainer:
                         new_data: pd.DataFrame, input_dim: int = None,
                         config: Optional[ModelConfig] = None,
                         epochs: int = 10, learning_rate: float = 0.0005,
-                        model_data=None) -> Dict[str, Any]:
+                        model_data=None, use_validation: bool = True,
+                        validation_split: float = 0.2) -> Dict[str, Any]:
+        from datetime import datetime
+        from time import time
 
         model_key = self._create_model_key(symbol, timeframe, model_type)
 
@@ -821,34 +858,48 @@ class ModelTrainer:
         model_config = self.model_configs[model_key]
 
         self.logger.info(f"Початок онлайн навчання для {model_key}")
-
-        # Час початку онлайн навчання
         training_start_time = time()
 
-        # Підготовка нових даних з урахуванням sequence_length
+        # Підготовка нових даних
         X, y = self._prepare_sequence_data(new_data, model_config.sequence_length)
-        train_tensor = (torch.tensor(X).float(), torch.tensor(y).float())
 
-        # Дообучення з меншою кількістю епох та швидкістю навчання
-        history = self._train_loop(model, train_tensor, train_tensor, epochs, 32, learning_rate, patience=5)
+        # Валідаційне розділення (якщо вказано)
+        if use_validation and len(X) > 10:
+            split = int(len(X) * (1 - validation_split))
+            X_train, X_val = X[:split], X[split:]
+            y_train, y_val = y[:split], y[split:]
 
-        # Час завершення навчання
+            train_tensor = (torch.tensor(X_train).float(), torch.tensor(y_train).float())
+            val_tensor = (torch.tensor(X_val).float(), torch.tensor(y_val).float())
+
+            optimizer, criterion = self.setup_optimizer_and_loss(model, learning_rate)
+            initial_val_loss = self._validate_chunk(model, val_tensor, criterion)
+            self.logger.info(f"Початкова валідаційна втрата: {initial_val_loss:.6f}")
+        else:
+            train_tensor = (torch.tensor(X).float(), torch.tensor(y).float())
+            val_tensor = train_tensor
+
+        # Дообучення
+        history = self._train_loop(model, train_tensor, val_tensor, epochs, 32, learning_rate, patience=5)
         training_end_time = time()
         training_duration = training_end_time - training_start_time
 
         # Оцінка оновленої моделі
-        metrics = self.evaluate(model, train_tensor)
+        if len(val_tensor[0]) > 1000:
+            metrics = self.evaluate_batched(model, val_tensor, batch_size=500)
+            self.logger.info("Використано батчеву оцінку для великого набору даних")
+        else:
+            metrics = self.evaluate(model, val_tensor)
+
         self.model_metrics[model_key] = metrics
 
-        # Збереження оновленої моделі
+        # Збереження результатів
         model_id = None
         try:
-            # Спочатку зберігаємо/оновлюємо модель і отримуємо її ID
             if model_data is None:
                 model_data = self._create_model_data_dict(symbol, timeframe, model_type, model_config)
             model_id = self.db_manager.save_ml_model(model_data)
 
-            # Потім зберігаємо метрики онлайн навчання
             metrics_data = {
                 'model_id': model_id,
                 'mse': metrics.get('MSE', metrics.get('mse')),
@@ -862,8 +913,7 @@ class ModelTrainer:
 
             metrics_id = self.db_manager.save_ml_model_metrics(metrics_data)
             self.logger.info(
-                f"Онлайн навчання для {model_key} завершено. Model ID: {model_id}, Metrics ID: {metrics_id}")
-
+                f"Онлайн навчання завершено. Model ID: {model_id}, Metrics ID: {metrics_id}")
         except Exception as e:
             self.logger.error(f"Помилка при збереженні після онлайн навчання: {str(e)}")
 
@@ -873,6 +923,7 @@ class ModelTrainer:
             'model_id': model_id,
             'training_duration': training_duration
         }
+
     def _build_model(self, model_type: str, input_dim: int, hidden_dim: int, num_layers: int) -> BaseDeepModel:
 
         config = ModelConfig(
