@@ -1640,3 +1640,31 @@ LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
 2025-05-27 19:15:53 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
 2025-05-27 19:16:00 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
 2025-05-27 19:16:00 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 19:35:02 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 19:35:02 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 19:35:02 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 19:35:03 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 19:35:03 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 19:35:03 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 19:35:03 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 19:35:03 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 22:47:01 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 22:47:01 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 22:47:01 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 22:47:02 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 22:47:02 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 22:47:02 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 22:47:02 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 22:47:02 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 22:47:10 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 22:47:10 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-27 22:48:30 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 22:48:30 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 22:48:31 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-27 22:48:31 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-27 22:48:31 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 22:48:31 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 22:48:31 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-27 22:48:31 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 22:48:38 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-27 22:48:38 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
