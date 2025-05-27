@@ -11,6 +11,37 @@ class EthereumCycleFeatureExtractor:
         self.logger = CryptoLogger('EthereumCycleFeatureExtractor')
 
     def calculate_eth_event_cycle_features(self, processed_data: pd.DataFrame) -> pd.DataFrame:
+        """
+            Обчислює різноманітні ознаки (features) на основі циклів важливих подій Ethereum (Ethereum upgrade events)
+            для заданого DataFrame з часовою індексацією.
+
+            Метод додає до вхідного DataFrame кілька нових колонок, які характеризують:
+            - Кількість днів від останнього оновлення Ethereum (days_since_last_upgrade)
+            - Кількість днів до наступного відомого оновлення (days_to_next_known_upgrade)
+            - Поточну фазу циклу оновлень (upgrade_cycle_phase), значення від 0 до 1
+            - Індикатор фази ETH 2.0 (eth2_phase_indicator), цілочисельне значення від 0 до 4
+            - Індикатор прогресу переходу на Proof of Stake (pos_transition_indicator), значення від 0 до 1
+            - Логарифмічне перетворення днів від останнього оновлення (log_days_since_upgrade)
+            - Синус та косинус циклічного показника оновлення (upgrade_cycle_sin, upgrade_cycle_cos)
+            - Важливість оновлення (upgrade_importance) на основі історичного впливу на ціну
+
+            Args:
+                processed_data (pd.DataFrame): Вхідний DataFrame з часовою індексацією (DatetimeIndex),
+                    що містить дані для аналізу. Індекс має бути типу DatetimeIndex.
+
+            Returns:
+                pd.DataFrame: Копія вхідного DataFrame з додатковими колонками, що містять розраховані
+                    характеристики циклів оновлень Ethereum.
+
+            Викидає:
+                ValueError: Якщо індекс DataFrame не є DatetimeIndex.
+
+            Особливості:
+                - Підтримує фіксовані дати основних фаз ETH 2.0 та ключових оновлень.
+                - Логування виконання та помилок через self.logger.
+                - Обробляє наявність майбутніх оновлень (next_known_upgrade) – зараз в методі закладено
+                  заглушку, яку можна замінити на реальну логіку.
+            """
         self.logger.info("Starting calculation of Ethereum cycle features")
 
         # Create a copy of the input DataFrame to avoid modifying the original

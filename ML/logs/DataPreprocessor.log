@@ -1810,3 +1810,67 @@ LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
 2025-05-28 01:55:01 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
 2025-05-28 01:55:08 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
 2025-05-28 01:55:08 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-28 01:56:55 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-28 01:57:02 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-28 01:57:02 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-28 01:59:37 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-28 01:59:37 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-28 01:59:37 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-28 01:59:37 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-28 01:59:37 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-28 01:59:38 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 01:59:38 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-28 01:59:38 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-28 01:59:38 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-28 01:59:38 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-28 01:59:46 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-28 01:59:46 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-28 02:01:55 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-28 02:01:55 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-28 02:01:55 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-28 02:01:56 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 02:01:56 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-28 02:01:56 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-28 02:01:56 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-28 02:01:56 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-28 02:02:04 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-28 02:02:04 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-28 02:04:40 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'DataFrame' object has no attribute 'dtype'
+2025-05-28 02:04:40 - DataPreprocessor - ERROR - [logger.py:111] - Критична помилка при підготовці ознак для BTC: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-28 02:04:40 - DataPreprocessor - WARNING - [logger.py:107] - Спроба створити базові ознаки для BTC
+2025-05-28 02:04:40 - DataPreprocessor - INFO - [logger.py:103] - Повернуто базові ознаки для BTC: (16980, 5)
+2025-05-28 02:04:40 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-28 02:04:41 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 02:04:41 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-28 02:04:41 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-28 02:04:41 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 16980 записів в DataFrame для BTC
+2025-05-28 02:04:41 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-28 02:04:48 - DataPreprocessor - INFO - [logger.py:103] - Додано 14 трендових ознак
+2025-05-28 02:04:48 - DataPreprocessor - INFO - [logger.py:103] - Додано 57 ознак волатільності
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю lstm
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю gru
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 02:19:16 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 4h та моделлю transformer
+2025-05-28 02:19:17 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для BTC-4h
+2025-05-28 02:19:17 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю lstm
+2025-05-28 02:19:17 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-28 02:19:17 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю gru
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 4h та моделлю transformer
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 16980 записів для ETH-4h
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для SOL з таймфреймом 4h та моделлю lstm
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 10380 записів для SOL-4h
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для SOL з таймфреймом 4h та моделлю gru
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 10380 записів для SOL-4h
+2025-05-28 02:19:18 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для SOL з таймфреймом 4h та моделлю transformer
+2025-05-28 02:19:19 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 10380 записів для SOL-4h

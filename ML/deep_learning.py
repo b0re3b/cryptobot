@@ -103,50 +103,38 @@ class DeepLearning:
 
         self._validate_inputs(symbol, timeframe, model_type)
 
-        # Завантаження моделі, якщо вона ще не завантажена
         model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
         if model_key not in self.models:
             if not self.model_trainer.load_model(symbol, timeframe, model_type):
                 raise ValueError(f"Модель {model_key} не знайдена")
 
-        # Отримання даних, якщо вони не надані
         if input_data is None:
             data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
             input_data = data_loader()
 
-        # Підготовка та збереження оригінальних даних для inverse transform
         original_data = input_data.copy()
-        processed_data = self.data_preprocessor.prepare_features(input_data, symbol)
 
-        # Перевірка наявності колонки target
-        feature_columns = [col for col in processed_data.columns if col != 'target']
-        X = torch.tensor(processed_data[feature_columns].values, dtype=torch.float32).to(self.device)
+        # Очікуємо, що input_data вже підготовлене
+        X = torch.tensor(input_data.values, dtype=torch.float32).to(self.device)
 
-        # Прогнозування
         model = self.models[model_key]
         model.eval()
 
         with torch.no_grad():
             raw_predictions = []
-
-            # Беремо останню послідовність для прогнозування
             sequence_length = self.model_configs[model_key].sequence_length
-            current_input = X[-sequence_length:].unsqueeze(0)  # Додаємо batch dimension
+            current_input = X[-sequence_length:].unsqueeze(0)
 
             for step in range(steps_ahead):
                 pred = model(current_input)
                 raw_predictions.append(pred.item())
 
-                # Оновлюємо вхідні дані для багатокрокового прогнозу
                 if steps_ahead > 1 and step < steps_ahead - 1:
-                    # Зсуваємо послідовність та додаємо нове прогнозоване значення
                     new_input = torch.zeros_like(current_input[:, -1:, :])
-                    new_input[0, 0, 0] = pred.item()  # Припускаємо, що перша ознака - це ціна
+                    new_input[0, 0, 0] = pred.item()
                     current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
 
-        # Перетворення прогнозів у оригінальний масштаб
         try:
-            # Використовуємо inverse_transform_predictions для повернення до оригінального масштабу
             predictions = self.data_preprocessor.inverse_transform_predictions(
                 raw_predictions,
                 original_data,
@@ -155,27 +143,18 @@ class DeepLearning:
             self.logger.info(f"Прогнози перетворені у оригінальний масштаб: {raw_predictions} -> {predictions}")
         except Exception as e:
             self.logger.warning(f"Не вдалося перетворити прогнози у оригінальний масштаб: {str(e)}")
-            # Використовуємо сирі прогнози як fallback
             predictions = raw_predictions
 
-        # Збереження прогнозу в БД
         prediction_timestamp = datetime.now()
-
-        # Отримуємо model_id
         model_id = self.db_manager._get_model_id(symbol, timeframe, model_type)
 
-        # Розрахунок інтервалів довіри (базова реалізація)
-        confidence = self._calculate_prediction_confidence(model_key, processed_data)
+        confidence = self._calculate_prediction_confidence(model_key, input_data)
 
         for i, pred in enumerate(predictions):
             try:
-                # Розрахунок target_timestamp на основі timeframe та кроків вперед
                 target_timestamp = self._calculate_target_timestamp(prediction_timestamp, timeframe, i + 1)
-
-                # Розрахунок інтервалів довіри (також потрібно перетворити у оригінальний масштаб)
                 confidence_low, confidence_high = self._calculate_confidence_intervals(pred, confidence)
 
-                # Перетворення інтервалів довіри у оригінальний масштаб, якщо потрібно
                 try:
                     if hasattr(self.data_preprocessor, 'inverse_transform_confidence_intervals'):
                         confidence_low, confidence_high = self.data_preprocessor.inverse_transform_confidence_intervals(
@@ -203,13 +182,12 @@ class DeepLearning:
 
         return {
             'predictions': np.array(predictions),
-            'raw_predictions': np.array(raw_predictions),  # Додаємо сирі прогнози для аналізу
+            'raw_predictions': np.array(raw_predictions),
             'timestamp': prediction_timestamp,
             'model_key': model_key,
             'confidence': confidence
         }
 
-    # Допоміжні методи, які потрібно додати до класу:
 
     def _calculate_target_timestamp(self, prediction_timestamp: datetime, timeframe: str, steps_ahead: int) -> datetime:
         """Розраховує цільовий час для прогнозу"""

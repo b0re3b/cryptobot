@@ -24,12 +24,37 @@ class VolatilityAnalysis:
         self.max_workers = max_workers
 
     def _calc_log_returns(self, prices_tuple):
-        """Хелпер для обчислення логарифмічних прибутків з кешуванням"""
+        """
+            Обчислює логарифмічні прибутки для послідовності цін.
+
+            Використовується для аналізу фінансових часових рядів, де лог-прибутки дають змогу
+            стабілізувати дисперсію та використовуються у фінансових моделях.
+
+            Args:
+                prices_tuple (tuple або list): Послідовність цін (наприклад, закриття).
+
+            Returns:
+                np.ndarray: Масив логарифмічних прибутків між послідовними цінами.
+            """
         prices = np.array(prices_tuple)
         return np.log(prices[1:] / prices[:-1])
 
     def _parallel_process(self, func, items, *args, **kwargs):
-        """Виконує обчислення паралельно для списку елементів"""
+        """
+            Виконує обчислення над колекцією об'єктів у паралельному режимі.
+
+            Якщо ввімкнено `self.use_parallel` та кількість елементів перевищує поріг,
+            обробка відбувається багатопотоково з використанням ThreadPoolExecutor.
+
+            Args:
+                func (Callable): Функція, яка буде застосована до кожного елемента.
+                items (Iterable): Список елементів для обробки.
+                *args: Додаткові позиційні аргументи для функції.
+                **kwargs: Додаткові іменовані аргументи для функції.
+
+            Returns:
+                dict: Словник результатів обробки, де ключ — елемент, значення — результат або None при помилці.
+            """
         if not self.use_parallel or len(items) < 3:
             return {item: func(item, *args, **kwargs) for item in items}
 
@@ -46,7 +71,17 @@ class VolatilityAnalysis:
         return results
 
     def _safe_convert_to_float(self, series):
-        """Безпечне перетворення різних типів даних у float64 для обчислень"""
+        """
+            Безпечно перетворює вхідні дані до типу float64.
+
+            Призначено для уніфікації типів перед числовими обчисленнями.
+
+            Args:
+                series (pd.Series, np.ndarray або список): Вхідні дані.
+
+            Returns:
+                np.ndarray або pd.Series: Об'єкт того ж типу, але з типом float64.
+            """
         if isinstance(series, pd.Series):
             return series.astype(float)
         elif isinstance(series, np.ndarray):
@@ -55,6 +90,20 @@ class VolatilityAnalysis:
             return np.array(series, dtype=float)
 
     def get_market_phases(self, volatility_data, lookback_window=90, n_regimes=4):
+        """
+           Визначає фази ринку на основі кластеризації ознак волатильності.
+
+           Аналізує історичну волатильність по всіх активах та класифікує її
+           на кілька режимів (фаз) за допомогою KMeans.
+
+           Args:
+               volatility_data (pd.DataFrame): Таблиця волатильності з індексом часу та колонками по активах.
+               lookback_window (int): Кількість останніх днів для аналізу.
+               n_regimes (int): Кількість режимів (кластерів), на які розділяється ринок.
+
+           Returns:
+               pd.Series: Серія з фазами ринку (Low Vol, High Vol тощо), вирівнана по індексу вхідних даних.
+           """
         try:
             self.logger.info(f"Визначення фаз ринку за допомогою {n_regimes} режимів")
 
@@ -128,7 +177,20 @@ class VolatilityAnalysis:
             return pd.Series(index=volatility_data.index)
 
     def calculate_historical_volatility(self, price_data, window=14, trading_periods=365, annualize=True):
-        """Розраховує історичну волатильність на основі логарифмічних прибутків"""
+        """
+          Розраховує історичну (реалізовану) волатильність на основі логарифмічних прибутків.
+
+          Історична волатильність показує середнє відхилення відносних змін цін (лог-повернень) за певний період.
+
+          Args:
+              price_data (pd.Series або list або np.ndarray): Історичні ціни активу.
+              window (int, optional): Розмір ковзного вікна для розрахунку стандартного відхилення. За замовчуванням 14.
+              trading_periods (int, optional): Кількість торгових періодів на рік (для анулізації). За замовчуванням 365.
+              annualize (bool, optional): Якщо True, масштабувати волатильність до річного значення.
+
+          Returns:
+              pd.Series: Ряд, що містить значення історичної волатильності.
+          """
         try:
             # Валідація параметра вікна
             if not isinstance(window, int) or window <= 0:
@@ -170,7 +232,20 @@ class VolatilityAnalysis:
                              dtype=float)
 
     def calculate_parkinson_volatility(self, ohlc_data, window=14, trading_periods=365):
-        """Розраховує волатильність Паркінсона (оптимізовано)"""
+        """
+           Розраховує волатильність Паркінсона на основі діапазону "high-low".
+
+           Метод Паркінсона враховує лише максимальні та мінімальні ціни для більш точної оцінки волатильності
+           у разі відсутності значного "gap" між відкриттям і закриттям.
+
+           Args:
+               ohlc_data (pd.DataFrame): Дані OHLC (повинні містити колонки 'high' і 'low').
+               window (int, optional): Ковзне вікно для обчислення середнього. За замовчуванням 14.
+               trading_periods (int, optional): Кількість торгових днів у році (для анулізації).
+
+           Returns:
+               pd.Series: Ряд з волатильністю Паркінсона за кожну дату.
+           """
         # Перевірка, чи є ohlc_data DataFrame
         if not isinstance(ohlc_data, pd.DataFrame):
             self.logger.error("Дані OHLC повинні бути DataFrame")
@@ -201,7 +276,20 @@ class VolatilityAnalysis:
             return pd.Series()
 
     def calculate_garman_klass_volatility(self, ohlc_data, window=14, trading_periods=365):
-        """Розраховує волатильність Гарман-Класс (оптимізовано)"""
+        """
+            Розраховує волатильність за формулою Гарман-Класс.
+
+            Метод Гарман-Класс поєднує інформацію про діапазон (high/low) та співвідношення між цінами відкриття і закриття,
+            що робить його точнішим, ніж історична або Паркінсона волатильність.
+
+            Args:
+                ohlc_data (pd.DataFrame): Дані OHLC, які містять колонки 'high', 'low', 'open' та 'close'.
+                window (int, optional): Розмір ковзного вікна для обчислення волатильності. За замовчуванням 14.
+                trading_periods (int, optional): Кількість торгових днів у році (для анулізації результату).
+
+            Returns:
+                pd.Series: Ряд з волатильністю Гарман-Класс по кожному періоду.
+            """
         try:
             # Конвертація в float для безпечних обчислень
             high = self._safe_convert_to_float(ohlc_data['high'])
@@ -235,7 +323,24 @@ class VolatilityAnalysis:
             return pd.Series()
 
     def calculate_yang_zhang_volatility(self, ohlc_data, window=14, trading_periods=365):
-        """Розраховує волатильність Янг Чжанг (оптимізовано)"""
+        """
+            Розраховує волатильність Янг-Чжан (Yang-Zhang Volatility), яка об'єднує overnight,
+            intraday та Rogers-Satchell компоненти для точнішої оцінки волатильності.
+
+            Метод Yang-Zhang вважається більш надійним за інші (наприклад, Garman-Klass або історичну волатильність),
+            оскільки враховує:
+                - нічну волатильність (від закриття до відкриття),
+                - денну волатильність (відкриття до закриття),
+                - інформацію про внутрішньоденні коливання (high/low).
+
+            Args:
+                ohlc_data (pd.DataFrame): OHLC дані, які повинні містити стовпці 'open', 'high', 'low', 'close'.
+                window (int, optional): Розмір ковзного вікна для обчислення. За замовчуванням 14.
+                trading_periods (int, optional): Кількість торгових періодів у році для анулізації. За замовчуванням 365.
+
+            Returns:
+                pd.Series: Ряд з розрахованими значеннями волатильності за методом Yang-Zhang.
+            """
         try:
             # Конвертація в float для безпечних обчислень
             high = self._safe_convert_to_float(ohlc_data['high'])
@@ -369,7 +474,22 @@ class VolatilityAnalysis:
             return None, None
 
     def detect_volatility_regimes(self, volatility_series, n_regimes=3, method='kmeans'):
-        """Виявлення режимів волатильності (оптимізовано)"""
+        """
+           Виявляє режими волатильності (наприклад, низька, середня, висока) за допомогою кластеризації або порогів.
+
+           Доступні методи:
+               - 'kmeans': кластеризація KMeans на основі значень волатильності.
+               - 'threshold': використання процентильних порогів.
+               - 'quantile': розбиття за квантилями (за допомогою pd.qcut).
+
+           Args:
+               volatility_series (pd.Series): Серія з обчисленою волатильністю.
+               n_regimes (int): Кількість кластерів/режимів. За замовчуванням 3.
+               method (str): Метод класифікації режимів ('kmeans', 'threshold', 'quantile').
+
+           Returns:
+               pd.Series: Серія з мітками режимів для кожної точки часу (0 = низький, ..., n-1 = високий).
+           """
         try:
             self.logger.info(f"Виявлення {n_regimes} режимів волатильності за методом {method}")
 
@@ -426,7 +546,20 @@ class VolatilityAnalysis:
             return None
 
     def analyze_volatility_clustering(self, returns, max_lag=30):
-        """Аналіз кластеризації волатильності (оптимізовано)"""
+        """
+           Аналізує наявність автокореляції в квадраті прибутків для виявлення кластеризації волатильності.
+
+           Принцип:
+               Якщо автокореляція квадратів прибутків позитивна — це ознака того, що
+               волатильність схильна до кластера: після високої волатильності часто слідує висока, і навпаки.
+
+           Args:
+               returns (pd.Series): Ряд з прибутками (log або простими).
+               max_lag (int): Максимальна кількість лагів для обчислення автокореляції.
+
+           Returns:
+               pd.DataFrame: Таблиця з колонками ['lag', 'autocorrelation'], що відображає значення ACF.
+           """
         try:
             # Конвертація в float для безпечних обчислень
             returns = self._safe_convert_to_float(returns)
@@ -456,7 +589,23 @@ class VolatilityAnalysis:
             return pd.DataFrame({'lag': [0], 'autocorrelation': [0]})
 
     def calculate_volatility_risk_metrics(self, returns, volatility):
-        """Обчислення метрик ризику волатильності (оптимізовано для великих наборів даних)"""
+        """
+           Розраховує ключові метрики ризику, пов’язані з волатильністю активу.
+
+           Метрики:
+               - VaR (Value at Risk) на 95% і 99% рівнях
+               - CVaR (Conditional VaR) або очікувані збитки в зоні tail
+               - Volatility of Volatility: середнє стандартне відхилення волатильності
+               - Sharpe Ratio (анулізований)
+               - Максимальне просідання (max drawdown)
+
+           Args:
+               returns (pd.Series): Серія з log-прибутками активу.
+               volatility (pd.Series): Обчислена волатильність на тих самих індексах.
+
+           Returns:
+               Dict[str, float]: Словник з розрахованими метриками ризику.
+           """
         try:
             self.logger.info("Обчислення метрик ризику волатильності")
 
@@ -512,7 +661,18 @@ class VolatilityAnalysis:
             }
 
     def compare_volatility_metrics(self, ohlc_data, windows=[14, 30, 60]):
-        """Порівняння метрик волатильності (оптимізовано паралельними обчисленнями)"""
+        """
+            Порівнює декілька типів волатильності (історична, Паркінсона, Гарман-Класс, Янг-Чжанг) для заданих вікон.
+
+            Для прискорення обчислень за великої кількості вікон або обсягів даних використовує паралелізм, якщо `self.use_parallel` увімкнено.
+
+            Args:
+                ohlc_data (pd.DataFrame): OHLC-дані (мають містити стовпці: 'open', 'high', 'low', 'close').
+                windows (List[int]): Список довжин вікон для обчислення волатильності (у днях).
+
+            Returns:
+                pd.DataFrame: Таблиця з колонками різних метрик волатильності для кожного вікна.
+            """
         try:
             self.logger.info(f"Порівняння метрик волатильності для вікон {windows}")
 
@@ -589,7 +749,19 @@ class VolatilityAnalysis:
             return pd.DataFrame(index=ohlc_data.index)
 
     def identify_volatility_breakouts(self, volatility_series, window=20, std_dev=2):
-        """Виявлення проривів волатильності (оптимізовано)"""
+        """
+           Виявляє прориви волатильності, коли поточне значення значно перевищує історичне середнє.
+
+           Прорив вважається тоді, коли волатильність > середнє + N стандартних відхилень.
+
+           Args:
+               volatility_series (pd.Series): Часовий ряд волатильності.
+               window (int): Розмір вікна для ковзного середнього і стандартного відхилення.
+               std_dev (float): Множник стандартного відхилення для визначення порогу прориву.
+
+           Returns:
+               pd.Series: Булевий рядок із мітками True у точках прориву.
+           """
         try:
             # Обчислення ковзного середнього та стандартного відхилення
             rolling_mean = volatility_series.rolling(window=window).mean()
@@ -609,7 +781,18 @@ class VolatilityAnalysis:
             return pd.Series(False, index=volatility_series.index)
 
     def analyze_cross_asset_volatility(self, asset_dict, window=14):
-        """Аналіз волатильності між активами (оптимізовано для великої кількості активів)"""
+        """
+            Аналізує кросс-активну волатильність: обчислює історичну волатильність кожного активу і між ними — кореляцію.
+
+            Якщо активів багато, використовується паралельна обробка для прискорення.
+
+            Args:
+                asset_dict (Dict[str, pd.Series]): Словник, де ключ — назва активу, значення — часовий ряд цін.
+                window (int): Довжина вікна для обчислення історичної волатильності.
+
+            Returns:
+                pd.DataFrame: Матриця кореляції волатильностей між активами.
+            """
         try:
             self.logger.info(f"Аналіз кросс-активної волатильності для {len(asset_dict)} активів")
 
@@ -643,7 +826,22 @@ class VolatilityAnalysis:
             return pd.DataFrame()
 
     def extract_seasonality_in_volatility(self, volatility_series, period=7):
-        """Витяг сезонності з волатильності (оптимізовано)"""
+        """
+            Витягує сезонні патерни з часового ряду волатильності за заданим періодом.
+
+            Підтримувані періоди:
+                - 7: день тижня
+                - 24: година доби (для внутрішньоденних даних)
+                - 30: день місяця
+                - 12: місяць року
+
+            Args:
+                volatility_series (pd.Series): Часовий ряд волатильності з індексом типу datetime.
+                period (int): Період сезонності (7, 24, 30 або 12).
+
+            Returns:
+                pd.Series: Середні значення волатильності для кожної категорії в межах періоду (напр., кожен день тижня).
+            """
         try:
             # Перетворення індексу на datetime, якщо це ще не зроблено
             if not isinstance(volatility_series.index, pd.DatetimeIndex):
@@ -677,7 +875,20 @@ class VolatilityAnalysis:
             return pd.Series()
 
     def analyze_volatility_term_structure(self, symbol, timeframes=['1h', '4h', '1d', '1w']):
-        """Аналіз терміну структури волатильності (оптимізовано)"""
+        """
+            Аналізує структуру термінів волатильності — зміну волатильності в залежності від таймфрейму.
+
+            Здійснює збір даних за різні таймфрейми, обчислює статистики волатильності,
+            і додає нормалізовану волатильність відносно денного таймфрейму (1d).
+
+            Args:
+                symbol (str): Символ криптовалюти або активу (наприклад, 'BTC').
+                timeframes (List[str]): Список таймфреймів (наприклад, ['1h', '1d', '1w']).
+
+            Returns:
+                pd.DataFrame: Таблиця зі статистиками волатильності (mean, std, max, min, median) по кожному таймфрейму
+                              та колонкою `rel_to_daily` — відносна волатильність до денного.
+            """
         try:
             self.logger.info(f"Аналіз терміну структури волатильності для {symbol} на {timeframes}")
             results = {}
@@ -740,7 +951,25 @@ class VolatilityAnalysis:
             return pd.DataFrame()
 
     def volatility_impulse_response(self, returns, shock_size=3, days=30):
-        """Аналіз імпульсного відгуку волатильності (оптимізовано)"""
+        """
+           Оцінює, як змінюється прогнозована волатильність після введення ринкового шоку.
+
+           Створюється GARCH-модель на базових поверненнях, а потім прогноз повторюється після шоку.
+           Аналізується різниця прогнозів (імпульсний відгук), та оцінюється час напіврозпаду ефекту.
+
+           Args:
+               returns (Union[pd.Series, list]): Часовий ряд логарифмічних або відсоткових повернень.
+               shock_size (float): Розмір шоку (в кількостях std).
+               days (int): Кількість днів для прогнозу.
+
+           Returns:
+               dict: Результат з ключами:
+                   - 'impulse' (pd.Series): Різниця між прогнозами волатильності.
+                   - 'half_life' (int or None): Дні до падіння ефекту до 50%.
+                   - 'shock_size' (float): Розмір шоку.
+                   - 'max_effect' (float): Максимальна реакція волатильності.
+                   - 'decay_rate' (float): Середній темп зменшення реакції.
+           """
         try:
             self.logger.info(f"Обчислення імпульсного відгуку волатильності з розміром шоку {shock_size}")
 
@@ -804,7 +1033,17 @@ class VolatilityAnalysis:
             return None
 
     def prepare_volatility_features_for_ml(self, ohlc_data, window_sizes=[7, 14, 30], include_regimes=True):
-        """Підготовка функцій волатильності для машинного навчання (оптимізовано)"""
+        """
+        Підготовка ознак волатильності для задач машинного навчання.
+
+        Параметри:
+            ohlc_data (pd.DataFrame): OHLC дані з колонками 'open', 'high', 'low', 'close'
+            window_sizes (List[int]): Список вікон (у днях) для обчислення функцій волатильності
+            include_regimes (bool): Додавати класифікацію режимів волатильності чи ні
+
+        Повертає:
+            pd.DataFrame: Таблиця з ознаками, готовими для навчання моделі
+        """
         try:
             self.logger.info(f"Підготовка функцій волатільності для ML з вікнами {window_sizes}")
 
@@ -993,7 +1232,26 @@ class VolatilityAnalysis:
 
     def save_volatility_analysis_to_db(self, symbol, timeframe, volatility_data, model_data=None, regime_data=None,
                                        features_data=None, cross_asset_data=None):
-        """Збереження аналізу волатильності до бази даних (оптимізовано)"""
+        """
+            Зберігає результати аналізу волатильності до бази даних з підтримкою паралельного збереження.
+
+            Args:
+                symbol (str): Тікер фінансового інструменту (наприклад, "AAPL").
+                timeframe (str): Таймфрейм аналізу (наприклад, "1d", "1h").
+                volatility_data (pd.DataFrame): Дані основних метрик волатильності.
+                model_data (dict, optional): Дані моделі волатильності (назва моделі, параметри, статистики тощо).
+                regime_data (dict, optional): Дані режимів волатильності (мітки режимів, метод кластеризації, параметри).
+                features_data (pd.DataFrame, optional): Функції (features) для машинного навчання, пов’язані з волатильністю.
+                cross_asset_data (pd.DataFrame, optional): Дані кореляції крос-активної волатильності.
+
+            Returns:
+                dict: Результат операції зі збереження, що містить:
+                    - 'overall_success' (bool): Чи успішно було збережено всі дані.
+                    - 'detailed_results' (dict): Статуси збереження для кожного типу даних.
+                    - 'error' (str, optional): Опис помилки, якщо збереження не вдалося.
+
+
+            """
         try:
             self.logger.info(f"Збереження аналізу волатильності для {symbol} на таймфреймі {timeframe}")
             results = {}
@@ -1130,7 +1388,30 @@ class VolatilityAnalysis:
             return {'overall_success': False, 'error': str(e)}
 
     def load_volatility_analysis_from_db(self, symbol, timeframe, start_date=None, end_date=None):
-        """Завантаження аналізу волатильності з бази даних (оптимізовано)"""
+        """
+            Завантажує результати аналізу волатильності з бази даних з підтримкою паралельного завантаження.
+
+            Args:
+                symbol (str): Тікер фінансового інструменту.
+                timeframe (str): Таймфрейм аналізу.
+                start_date (str or datetime, optional): Початкова дата діапазону для завантаження даних.
+                end_date (str or datetime, optional): Кінцева дата діапазону для завантаження даних.
+
+            Returns:
+                dict: Об'єкт із завантаженими даними, що містить:
+                    - 'symbol' (str): Тікер інструменту.
+                    - 'timeframe' (str): Таймфрейм.
+                    - 'volatility_metrics' (pd.DataFrame or None): Дані метрик волатильності.
+                    - 'model_data' (dict or None): Дані моделі волатильності.
+                    - 'regime_data' (dict or None): Дані режимів волатильності.
+                    - 'features_data' (pd.DataFrame or None): ML-функції волатильності.
+                    - 'cross_asset_data' (pd.DataFrame or None): Дані крос-активної волатильності.
+                    - 'period' (dict): Інформація про діапазон дат ('start_date', 'end_date').
+                    - 'summary' (dict, optional): Статистичний підсумок по основній метриці волатильності.
+                    - 'error' (str, optional): Опис помилки, якщо завантаження не вдалося.
+
+
+            """
         try:
             self.logger.info(f"Завантаження аналізу волатильності для {symbol} на таймфреймі {timeframe}")
 
@@ -1254,7 +1535,28 @@ class VolatilityAnalysis:
             }
 
     def analyze_crypto_market_conditions(self, symbols=['BTC', 'ETH', 'SOL'], timeframe='1d', window=14):
+        """
+            Аналізує ринкові умови криптовалют на основі волатильності кількох символів.
 
+            Аргументи:
+                symbols (list[str], optional): Список символів криптовалют для аналізу (за замовчуванням ['BTC', 'ETH', 'SOL']).
+                timeframe (str, optional): Інтервал таймфрейму для даних (за замовчуванням '1d').
+                window (int, optional): Вікно для розрахунку історичної волатильності (за замовчуванням 14).
+
+            Повертає:
+                dict: Консолідований звіт про ринкові умови, який містить:
+                    - average_market_vol (float): Середня волатильність по ринку.
+                    - vol_trend_30d (float or None): Тренд волатильності за останні 30 днів.
+                    - vol_dispersion (float): Розкид волатильності між активами.
+                    - vol_correlation (float): Середня кореляція волатильностей.
+                    - market_phase: Поточна фаза ринку, визначена за волатильністю.
+                    - regime_shifts (dict): Інформація про зміни режимів волатильності для кожного символу.
+                    - high_vol_assets (list): Активи з високою поточною волатильністю.
+                    - low_vol_assets (list): Активи з низькою поточною волатильністю.
+
+            Виключення:
+                Логірує помилки та повертає None у випадку виключення.
+            """
         try:
             volatilities = {}
 
@@ -1301,7 +1603,37 @@ class VolatilityAnalysis:
             return None
 
     def run_full_volatility_analysis(self, symbol, timeframe='1d', save_to_db=True):
+        """
+            Запускає повний аналіз волатильності для одного криптосимволу, включаючи розрахунок різних метрик,
+            детекцію режимів, сезонності, GARCH-моделювання та збереження результатів.
 
+            Аргументи:
+                symbol (str): Символ криптовалюти для аналізу (наприклад, 'BTC').
+                timeframe (str, optional): Таймфрейм для даних (за замовчуванням '1d').
+                save_to_db (bool, optional): Чи зберігати результати в базу даних (за замовчуванням True).
+
+            Повертає:
+                dict: Результати повного аналізу, що містять:
+                    - symbol (str): Аналізований символ.
+                    - timeframe (str): Таймфрейм аналізу.
+                    - volatility_data (list[dict]): Дані волатильності для кожного часу.
+                    - latest_volatility (dict): Останні значення різних метрик волатильності.
+                    - current_regime (int or None): Поточний режим волатильності.
+                    - volatility_clustering (dict): Дані кластери волатильності (автокореляції).
+                    - risk_metrics (dict): Ризикові метрики.
+                    - seasonality (dict): Сезонні патерни волатильності.
+                    - recent_breakouts (int): Кількість останніх проривів волатильності.
+                    - garch_forecast: Прогноз волатильності за GARCH моделлю.
+                    - impulse_response (list or None): Імпульсна відповідь волатильності.
+                    - market_conditions (dict or None): Ринкові умови для контексту.
+                    - summary (dict): Ключові підсумкові статистики (тренд, зміни режимів, тощо).
+                    - saved_to_db (bool, optional): Підтвердження збереження у базу (якщо save_to_db=True).
+                    - error (str, optional): Текст помилки (якщо виникла).
+                    - partial_results (list, optional): Часткові результати у разі помилки.
+
+            Виключення:
+                Логірує помилки та повертає словник з інформацією про помилку та частковими результатами.
+            """
         try:
             self.logger.info(f"Running full volatility analysis for {symbol} on {timeframe} timeframe")
 

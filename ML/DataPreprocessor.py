@@ -872,299 +872,299 @@ class DataPreprocessor:
         return True
 
 
-    def prepare_features(self, data, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
-        """Підготовка ознак для моделі з використанням всіх доступних модулів та підтримкою chunked даних"""
-        try:
-            self.logger.info(f"Початок підготовки ознак для {symbol}")
-
-            # Перевірка типу вхідних даних та конвертація в DataFrame
-            if isinstance(data, list):
-                self.logger.info(f"Конвертація списку словників в DataFrame для {symbol}")
-                if not data:
-                    raise ValueError(f"Порожній список даних для {symbol}")
-
-                if not isinstance(data[0], dict):
-                    raise ValueError(f"Елементи списку повинні бути словниками для {symbol}")
-
-                df = pd.DataFrame(data)
-                self.logger.info(f"Успішно конвертовано {len(data)} записів в DataFrame для {symbol}")
-
-            elif isinstance(data, pd.DataFrame):
-                df = data.copy()
-                self.logger.debug(f"Використовується існуючий DataFrame для {symbol}")
-
-            elif isinstance(data, Generator):
-                # Обробка генератора чанків
-                self.logger.info(f"Обробка генератора чанків для {symbol}")
-                chunks = []
-                for chunk in data:
-                    if isinstance(chunk, pd.DataFrame) and not chunk.empty:
-                        chunks.append(chunk)
-
-                if not chunks:
-                    raise ValueError(f"Не отримано жодного валідного чанку для {symbol}")
-
-                df = pd.concat(chunks, ignore_index=False)
-                self.logger.info(f"Об'єднано {len(chunks)} чанків для {symbol}, загальна форма: {df.shape}")
-
-            else:
-                self.logger.error(f"Невідомий тип вхідних даних для {symbol}: {type(data)}")
-                raise ValueError(f"Очікується DataFrame, список словників або генератор, отримано {type(data)}")
-
-            # Перевірка що DataFrame не порожній
-            if df.empty:
-                raise ValueError(f"DataFrame порожній для {symbol}")
-
-            # Логування інформації про DataFrame
-            self.logger.debug(f"DataFrame для {symbol}: форма {df.shape}, колонки {list(df.columns)}")
-
-            # Список для зберігання DataFrames перед об'єднанням
-            feature_dataframes = []
-
-            # Базові OHLCV ознаки (з оригінального DataFrame)
-            self.logger.debug(f"Додавання базових OHLCV ознак для {symbol}")
-
-            # Перевірка наявності базових колонок (можуть бути з суфіксами _scaled)
-            potential_base_columns = ['open', 'high', 'low', 'close', 'volume',
-                                      'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
-            available_base_columns = [col for col in potential_base_columns if col in df.columns]
-
-            if not available_base_columns:
-                self.logger.error(f"Жодної базової колонки не знайдено для {symbol}")
-                self.logger.debug(f"Доступні колонки: {list(df.columns)}")
-                raise ValueError(f"Відсутні необхідні базові колонки для {symbol}")
-
-            # Використовуємо доступні базові колонки
-            base_features = df[available_base_columns].copy()
-            feature_dataframes.append(base_features)
-            self.logger.info(f"Додано {len(available_base_columns)} базових ознак для {symbol}")
-
-            # Для аналізу потрібні unscaled дані
-            analysis_df = df.copy()
-            scaled_columns = [col for col in available_base_columns if col.endswith('_scaled')]
-            unscaled_map = {
-                'open_scaled': 'open',
-                'high_scaled': 'high',
-                'low_scaled': 'low',
-                'close_scaled': 'close',
-                'volume_scaled': 'volume'
-            }
-
-            # Створимо unscaled версії якщо їх немає (для технічного аналізу)
-            for scaled_col in scaled_columns:
-                unscaled_col = unscaled_map.get(scaled_col)
-                if unscaled_col and unscaled_col not in analysis_df.columns:
-                    analysis_df[unscaled_col] = analysis_df[scaled_col]
-                    self.logger.debug(f"Створено {unscaled_col} з {scaled_col} для аналізу")
-
-            # Отримання трендових ознак
-            self.logger.debug(f"Підготовка трендових ознак для {symbol}")
-            try:
-                trend_result = self.trend.prepare_ml_trend_features(analysis_df)
-
-                if trend_result is not None and len(trend_result) == 3:
-                    X, y, regimes = trend_result
-                    if X is not None and len(X) > 0:
-                        trend_features_array = X[:, -1, :] if len(X.shape) == 3 else X
-                        trend_feature_names = [
-                            'close_norm', 'volume_norm', 'adx_norm', 'di_plus_norm', 'di_minus_norm',
-                            'rsi_norm', 'macd_norm', 'macd_signal_norm', 'trend_strength_norm',
-                            'speed_20_norm', 'volatility_20_norm'
-                        ]
-
-                        if trend_features_array.shape[1] > len(trend_feature_names):
-                            trend_feature_names.extend([f'trend_feature_{i}' for i in
-                                                        range(len(trend_feature_names), trend_features_array.shape[1])])
-                        elif trend_features_array.shape[1] < len(trend_feature_names):
-                            trend_feature_names = trend_feature_names[:trend_features_array.shape[1]]
-
-                        start_idx = len(analysis_df) - len(trend_features_array)
-                        trend_index = analysis_df.index[start_idx:]
-
-                        trend_features = pd.DataFrame(
-                            trend_features_array,
-                            index=trend_index,
-                            columns=trend_feature_names
-                        )
-
-                        if regimes is not None and len(regimes) == len(trend_features):
-                            trend_features['market_regime'] = regimes
-
-                        feature_dataframes.append(trend_features)
-                        self.logger.info(f"Додано {trend_features.shape[1]} трендових ознак")
-                    else:
-                        self.logger.warning(f"Трендові ознаки для {symbol} порожні")
-                else:
-                    self.logger.warning(f"Неправильний формат результату трендових ознак для {symbol}")
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні трендових ознак для {symbol}: {e}")
-
-            # Отримання ознак волатільності
-            self.logger.debug(f"Підготовка ознак волатільності для {symbol}")
-            try:
-                volatility_features = self.vol.prepare_volatility_features_for_ml(analysis_df, symbol)
-                if volatility_features is not None and not volatility_features.empty:
-                    if isinstance(volatility_features, pd.DataFrame):
-                        feature_dataframes.append(volatility_features)
-                        self.logger.info(f"Додано {volatility_features.shape[1]} ознак волатільності")
-                    else:
-                        self.logger.warning(
-                            f"Ознаки волатільності не є DataFrame для {symbol}: {type(volatility_features)}")
-                else:
-                    self.logger.warning(f"Ознаки волатільності для {symbol} порожні")
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні ознак волатільності для {symbol}: {e}")
-
-            # Отримання технічних індикаторів
-            self.logger.debug(f"Підготовка технічних індикаторів для {symbol}")
-            try:
-                indicator_features = self.indicators.prepare_features_pipeline(analysis_df)
-                if indicator_features is not None and not indicator_features.empty:
-                    if isinstance(indicator_features, pd.DataFrame):
-                        feature_dataframes.append(indicator_features)
-                        self.logger.info(f"Додано {indicator_features.shape[1]} технічних індикаторів")
-                    else:
-                        self.logger.warning(
-                            f"Технічні індикатори не є DataFrame для {symbol}: {type(indicator_features)}")
-                else:
-                    self.logger.warning(f"Технічні індикатори для {symbol} порожні")
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні технічних індикаторів для {symbol}: {e}")
-
-            # Перевірка наявності ознак для об'єднання
-            if not feature_dataframes:
-                raise ValueError(f"Не вдалося створити жодних ознак для {symbol}")
-
-            # Оптимізоване об'єднання з обробкою індексів
-            self.logger.debug(f"Об'єднання {len(feature_dataframes)} наборів ознак для {symbol}")
-
-            # Знаходимо спільний індекс для всіх DataFrames
-            common_index = feature_dataframes[0].index
-            for df_features in feature_dataframes[1:]:
-                common_index = common_index.intersection(df_features.index)
-
-            if len(common_index) == 0:
-                self.logger.warning(f"Немає спільного індексу між DataFrames для {symbol}, використовуємо outer join")
-                common_index = None
-
-            # Вирівнюємо всі DataFrame
-            aligned_dataframes = []
-            for i, features_df in enumerate(feature_dataframes):
-                try:
-                    if not isinstance(features_df, pd.DataFrame):
-                        self.logger.warning(f"DataFrame {i} не є DataFrame для {symbol}: {type(features_df)}")
-                        continue
-
-                    if common_index is not None:
-                        aligned_df = features_df.reindex(common_index, method='ffill')
-                    else:
-                        aligned_df = features_df.copy()
-
-                    aligned_dataframes.append(aligned_df)
-                except Exception as e:
-                    self.logger.warning(f"Помилка вирівнювання DataFrame {i} для {symbol}: {e}")
-                    if isinstance(features_df, pd.DataFrame):
-                        aligned_dataframes.append(features_df)
-
-            # Перевірка що є що об'єднувати
-            if not aligned_dataframes:
-                self.logger.error(f"Немає валідних DataFrame для об'єднання для {symbol}")
-                raise ValueError(f"Немає валідних DataFrame для об'єднання для {symbol}")
-
-            # Об'єднання з обробкою помилок
-            try:
-                final_features = pd.concat(
-                    aligned_dataframes,
-                    axis=1,
-                    join='outer',
-                    copy=False,
-                    sort=False
-                )
-            except Exception as e:
-                self.logger.error(f"Помилка при concat для {symbol}: {e}")
-                final_features = feature_dataframes[0].copy()
-
-            # Ефективне видалення дублікатів колонок
-            if final_features.columns.duplicated().any():
-                unique_columns = final_features.columns[~final_features.columns.duplicated()]
-                final_features = final_features[unique_columns]
-
-            # Обробка NaN значень
-            initial_nan_count = final_features.isnull().sum().sum()
-            if initial_nan_count > 0:
-                self.logger.warning(f"Знайдено {initial_nan_count} NaN значень для {symbol}")
-                final_features = final_features.fillna(method='ffill').fillna(method='bfill')
-                remaining_nan = final_features.isnull().sum().sum()
-                if remaining_nan > 0:
-                    self.logger.warning(f"Заповнення залишкових {remaining_nan} NaN нулями для {symbol}")
-                    final_features = final_features.fillna(0)
-
-            # Додаткова валідація результату
-            if final_features.empty:
-                raise ValueError(f"Результуючий DataFrame порожній для {symbol}")
-
-            # Видалення колонок з постійними значеннями
-            constant_columns = []
-            for col in final_features.columns:
-                if final_features[col].nunique() <= 1:
-                    constant_columns.append(col)
-
-            if constant_columns:
-                self.logger.warning(f"Видалення {len(constant_columns)} колонок з постійними значеннями для {symbol}")
-                final_features = final_features.drop(columns=constant_columns)
-
-            # Збереження інформації про ознаки
-            feature_info = {
-                'total_features': final_features.shape[1],
-                'feature_names': list(final_features.columns),
-                'nan_count': final_features.isnull().sum().sum(),
-                'constant_columns_removed': len(constant_columns)
-            }
-
-            key = f"{symbol}_features"
-            self.feature_configs[key] = feature_info
-
-            self.logger.info(f"Успішно підготовлено {final_features.shape[1]} ознак для {symbol}")
-            self.logger.debug(f"Форма фінального DataFrame: {final_features.shape}")
-
-            return final_features
-
-        except Exception as e:
-            self.logger.error(f"Критична помилка при підготовці ознак для {symbol}: {e}")
-            # Повертаємо базовий набір ознак як fallback
-            try:
-                self.logger.warning(f"Спроба створити базові ознаки для {symbol}")
-
-                if isinstance(data, list):
-                    if not data:
-                        raise ValueError(f"Порожній список даних для fallback {symbol}")
-                    df = pd.DataFrame(data)
-                elif isinstance(data, pd.DataFrame):
-                    df = data.copy()
-                elif isinstance(data, Generator):
-                    chunks = [chunk for chunk in data if isinstance(chunk, pd.DataFrame) and not chunk.empty]
-                    df = pd.concat(chunks, ignore_index=False) if chunks else pd.DataFrame()
-                else:
-                    raise ValueError(f"Невідомий тип даних для fallback {symbol}: {type(data)}")
-
-                if not df.empty:
-                    basic_columns = ['open', 'high', 'low', 'close', 'volume',
-                                     'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
-                    available_basic = [col for col in basic_columns if col in df.columns]
-
-                    if available_basic:
-                        basic_features = df[available_basic].copy()
-                        self.logger.info(f"Повернуто базові ознаки для {symbol}: {basic_features.shape}")
-                        return basic_features
-                    else:
-                        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
-                        if numeric_columns:
-                            return df[numeric_columns].copy()
-                        else:
-                            raise ValueError(f"Жодної числової колонки не знайдено для {symbol}")
-                else:
-                    raise ValueError(f"DataFrame невалідний для {symbol}")
-            except Exception as fallback_error:
-                self.logger.error(f"Помилка fallback для {symbol}: {fallback_error}")
-                raise e
+    # def prepare_features(self, data, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
+    #     """Підготовка ознак для моделі з використанням всіх доступних модулів та підтримкою chunked даних"""
+    #     try:
+    #         self.logger.info(f"Початок підготовки ознак для {symbol}")
+    #
+    #         # Перевірка типу вхідних даних та конвертація в DataFrame
+    #         if isinstance(data, list):
+    #             self.logger.info(f"Конвертація списку словників в DataFrame для {symbol}")
+    #             if not data:
+    #                 raise ValueError(f"Порожній список даних для {symbol}")
+    #
+    #             if not isinstance(data[0], dict):
+    #                 raise ValueError(f"Елементи списку повинні бути словниками для {symbol}")
+    #
+    #             df = pd.DataFrame(data)
+    #             self.logger.info(f"Успішно конвертовано {len(data)} записів в DataFrame для {symbol}")
+    #
+    #         elif isinstance(data, pd.DataFrame):
+    #             df = data.copy()
+    #             self.logger.debug(f"Використовується існуючий DataFrame для {symbol}")
+    #
+    #         elif isinstance(data, Generator):
+    #             # Обробка генератора чанків
+    #             self.logger.info(f"Обробка генератора чанків для {symbol}")
+    #             chunks = []
+    #             for chunk in data:
+    #                 if isinstance(chunk, pd.DataFrame) and not chunk.empty:
+    #                     chunks.append(chunk)
+    #
+    #             if not chunks:
+    #                 raise ValueError(f"Не отримано жодного валідного чанку для {symbol}")
+    #
+    #             df = pd.concat(chunks, ignore_index=False)
+    #             self.logger.info(f"Об'єднано {len(chunks)} чанків для {symbol}, загальна форма: {df.shape}")
+    #
+    #         else:
+    #             self.logger.error(f"Невідомий тип вхідних даних для {symbol}: {type(data)}")
+    #             raise ValueError(f"Очікується DataFrame, список словників або генератор, отримано {type(data)}")
+    #
+    #         # Перевірка що DataFrame не порожній
+    #         if df.empty:
+    #             raise ValueError(f"DataFrame порожній для {symbol}")
+    #
+    #         # Логування інформації про DataFrame
+    #         self.logger.debug(f"DataFrame для {symbol}: форма {df.shape}, колонки {list(df.columns)}")
+    #
+    #         # Список для зберігання DataFrames перед об'єднанням
+    #         feature_dataframes = []
+    #
+    #         # Базові OHLCV ознаки (з оригінального DataFrame)
+    #         self.logger.debug(f"Додавання базових OHLCV ознак для {symbol}")
+    #
+    #         # Перевірка наявності базових колонок (можуть бути з суфіксами _scaled)
+    #         potential_base_columns = ['open', 'high', 'low', 'close', 'volume',
+    #                                   'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
+    #         available_base_columns = [col for col in potential_base_columns if col in df.columns]
+    #
+    #         if not available_base_columns:
+    #             self.logger.error(f"Жодної базової колонки не знайдено для {symbol}")
+    #             self.logger.debug(f"Доступні колонки: {list(df.columns)}")
+    #             raise ValueError(f"Відсутні необхідні базові колонки для {symbol}")
+    #
+    #         # Використовуємо доступні базові колонки
+    #         base_features = df[available_base_columns].copy()
+    #         feature_dataframes.append(base_features)
+    #         self.logger.info(f"Додано {len(available_base_columns)} базових ознак для {symbol}")
+    #
+    #         # Для аналізу потрібні unscaled дані
+    #         analysis_df = df.copy()
+    #         scaled_columns = [col for col in available_base_columns if col.endswith('_scaled')]
+    #         unscaled_map = {
+    #             'open_scaled': 'open',
+    #             'high_scaled': 'high',
+    #             'low_scaled': 'low',
+    #             'close_scaled': 'close',
+    #             'volume_scaled': 'volume'
+    #         }
+    #
+    #         # Створимо unscaled версії якщо їх немає (для технічного аналізу)
+    #         for scaled_col in scaled_columns:
+    #             unscaled_col = unscaled_map.get(scaled_col)
+    #             if unscaled_col and unscaled_col not in analysis_df.columns:
+    #                 analysis_df[unscaled_col] = analysis_df[scaled_col]
+    #                 self.logger.debug(f"Створено {unscaled_col} з {scaled_col} для аналізу")
+    #
+    #         # Отримання трендових ознак
+    #         self.logger.debug(f"Підготовка трендових ознак для {symbol}")
+    #         try:
+    #             trend_result = self.trend.prepare_ml_trend_features(analysis_df)
+    #
+    #             if trend_result is not None and len(trend_result) == 3:
+    #                 X, y, regimes = trend_result
+    #                 if X is not None and len(X) > 0:
+    #                     trend_features_array = X[:, -1, :] if len(X.shape) == 3 else X
+    #                     trend_feature_names = [
+    #                         'close_norm', 'volume_norm', 'adx_norm', 'di_plus_norm', 'di_minus_norm',
+    #                         'rsi_norm', 'macd_norm', 'macd_signal_norm', 'trend_strength_norm',
+    #                         'speed_20_norm', 'volatility_20_norm'
+    #                     ]
+    #
+    #                     if trend_features_array.shape[1] > len(trend_feature_names):
+    #                         trend_feature_names.extend([f'trend_feature_{i}' for i in
+    #                                                     range(len(trend_feature_names), trend_features_array.shape[1])])
+    #                     elif trend_features_array.shape[1] < len(trend_feature_names):
+    #                         trend_feature_names = trend_feature_names[:trend_features_array.shape[1]]
+    #
+    #                     start_idx = len(analysis_df) - len(trend_features_array)
+    #                     trend_index = analysis_df.index[start_idx:]
+    #
+    #                     trend_features = pd.DataFrame(
+    #                         trend_features_array,
+    #                         index=trend_index,
+    #                         columns=trend_feature_names
+    #                     )
+    #
+    #                     if regimes is not None and len(regimes) == len(trend_features):
+    #                         trend_features['market_regime'] = regimes
+    #
+    #                     feature_dataframes.append(trend_features)
+    #                     self.logger.info(f"Додано {trend_features.shape[1]} трендових ознак")
+    #                 else:
+    #                     self.logger.warning(f"Трендові ознаки для {symbol} порожні")
+    #             else:
+    #                 self.logger.warning(f"Неправильний формат результату трендових ознак для {symbol}")
+    #         except Exception as e:
+    #             self.logger.error(f"Помилка при створенні трендових ознак для {symbol}: {e}")
+    #
+    #         # Отримання ознак волатільності
+    #         self.logger.debug(f"Підготовка ознак волатільності для {symbol}")
+    #         try:
+    #             volatility_features = self.vol.prepare_volatility_features_for_ml(analysis_df, symbol)
+    #             if volatility_features is not None and not volatility_features.empty:
+    #                 if isinstance(volatility_features, pd.DataFrame):
+    #                     feature_dataframes.append(volatility_features)
+    #                     self.logger.info(f"Додано {volatility_features.shape[1]} ознак волатільності")
+    #                 else:
+    #                     self.logger.warning(
+    #                         f"Ознаки волатільності не є DataFrame для {symbol}: {type(volatility_features)}")
+    #             else:
+    #                 self.logger.warning(f"Ознаки волатільності для {symbol} порожні")
+    #         except Exception as e:
+    #             self.logger.error(f"Помилка при створенні ознак волатільності для {symbol}: {e}")
+    #
+    #         # Отримання технічних індикаторів
+    #         self.logger.debug(f"Підготовка технічних індикаторів для {symbol}")
+    #         try:
+    #             indicator_features = self.indicators.prepare_features_pipeline(analysis_df)
+    #             if indicator_features is not None and not indicator_features.empty:
+    #                 if isinstance(indicator_features, pd.DataFrame):
+    #                     feature_dataframes.append(indicator_features)
+    #                     self.logger.info(f"Додано {indicator_features.shape[1]} технічних індикаторів")
+    #                 else:
+    #                     self.logger.warning(
+    #                         f"Технічні індикатори не є DataFrame для {symbol}: {type(indicator_features)}")
+    #             else:
+    #                 self.logger.warning(f"Технічні індикатори для {symbol} порожні")
+    #         except Exception as e:
+    #             self.logger.error(f"Помилка при створенні технічних індикаторів для {symbol}: {e}")
+    #
+    #         # Перевірка наявності ознак для об'єднання
+    #         if not feature_dataframes:
+    #             raise ValueError(f"Не вдалося створити жодних ознак для {symbol}")
+    #
+    #         # Оптимізоване об'єднання з обробкою індексів
+    #         self.logger.debug(f"Об'єднання {len(feature_dataframes)} наборів ознак для {symbol}")
+    #
+    #         # Знаходимо спільний індекс для всіх DataFrames
+    #         common_index = feature_dataframes[0].index
+    #         for df_features in feature_dataframes[1:]:
+    #             common_index = common_index.intersection(df_features.index)
+    #
+    #         if len(common_index) == 0:
+    #             self.logger.warning(f"Немає спільного індексу між DataFrames для {symbol}, використовуємо outer join")
+    #             common_index = None
+    #
+    #         # Вирівнюємо всі DataFrame
+    #         aligned_dataframes = []
+    #         for i, features_df in enumerate(feature_dataframes):
+    #             try:
+    #                 if not isinstance(features_df, pd.DataFrame):
+    #                     self.logger.warning(f"DataFrame {i} не є DataFrame для {symbol}: {type(features_df)}")
+    #                     continue
+    #
+    #                 if common_index is not None:
+    #                     aligned_df = features_df.reindex(common_index, method='ffill')
+    #                 else:
+    #                     aligned_df = features_df.copy()
+    #
+    #                 aligned_dataframes.append(aligned_df)
+    #             except Exception as e:
+    #                 self.logger.warning(f"Помилка вирівнювання DataFrame {i} для {symbol}: {e}")
+    #                 if isinstance(features_df, pd.DataFrame):
+    #                     aligned_dataframes.append(features_df)
+    #
+    #         # Перевірка що є що об'єднувати
+    #         if not aligned_dataframes:
+    #             self.logger.error(f"Немає валідних DataFrame для об'єднання для {symbol}")
+    #             raise ValueError(f"Немає валідних DataFrame для об'єднання для {symbol}")
+    #
+    #         # Об'єднання з обробкою помилок
+    #         try:
+    #             final_features = pd.concat(
+    #                 aligned_dataframes,
+    #                 axis=1,
+    #                 join='outer',
+    #                 copy=False,
+    #                 sort=False
+    #             )
+    #         except Exception as e:
+    #             self.logger.error(f"Помилка при concat для {symbol}: {e}")
+    #             final_features = feature_dataframes[0].copy()
+    #
+    #         # Ефективне видалення дублікатів колонок
+    #         if final_features.columns.duplicated().any():
+    #             unique_columns = final_features.columns[~final_features.columns.duplicated()]
+    #             final_features = final_features[unique_columns]
+    #
+    #         # Обробка NaN значень
+    #         initial_nan_count = final_features.isnull().sum().sum()
+    #         if initial_nan_count > 0:
+    #             self.logger.warning(f"Знайдено {initial_nan_count} NaN значень для {symbol}")
+    #             final_features = final_features.fillna(method='ffill').fillna(method='bfill')
+    #             remaining_nan = final_features.isnull().sum().sum()
+    #             if remaining_nan > 0:
+    #                 self.logger.warning(f"Заповнення залишкових {remaining_nan} NaN нулями для {symbol}")
+    #                 final_features = final_features.fillna(0)
+    #
+    #         # Додаткова валідація результату
+    #         if final_features.empty:
+    #             raise ValueError(f"Результуючий DataFrame порожній для {symbol}")
+    #
+    #         # Видалення колонок з постійними значеннями
+    #         constant_columns = []
+    #         for col in final_features.columns:
+    #             if final_features[col].nunique() <= 1:
+    #                 constant_columns.append(col)
+    #
+    #         if constant_columns:
+    #             self.logger.warning(f"Видалення {len(constant_columns)} колонок з постійними значеннями для {symbol}")
+    #             final_features = final_features.drop(columns=constant_columns)
+    #
+    #         # Збереження інформації про ознаки
+    #         feature_info = {
+    #             'total_features': final_features.shape[1],
+    #             'feature_names': list(final_features.columns),
+    #             'nan_count': final_features.isnull().sum().sum(),
+    #             'constant_columns_removed': len(constant_columns)
+    #         }
+    #
+    #         key = f"{symbol}_features"
+    #         self.feature_configs[key] = feature_info
+    #
+    #         self.logger.info(f"Успішно підготовлено {final_features.shape[1]} ознак для {symbol}")
+    #         self.logger.debug(f"Форма фінального DataFrame: {final_features.shape}")
+    #
+    #         return final_features
+    #
+    #     except Exception as e:
+    #         self.logger.error(f"Критична помилка при підготовці ознак для {symbol}: {e}")
+    #         # Повертаємо базовий набір ознак як fallback
+    #         try:
+    #             self.logger.warning(f"Спроба створити базові ознаки для {symbol}")
+    #
+    #             if isinstance(data, list):
+    #                 if not data:
+    #                     raise ValueError(f"Порожній список даних для fallback {symbol}")
+    #                 df = pd.DataFrame(data)
+    #             elif isinstance(data, pd.DataFrame):
+    #                 df = data.copy()
+    #             elif isinstance(data, Generator):
+    #                 chunks = [chunk for chunk in data if isinstance(chunk, pd.DataFrame) and not chunk.empty]
+    #                 df = pd.concat(chunks, ignore_index=False) if chunks else pd.DataFrame()
+    #             else:
+    #                 raise ValueError(f"Невідомий тип даних для fallback {symbol}: {type(data)}")
+    #
+    #             if not df.empty:
+    #                 basic_columns = ['open', 'high', 'low', 'close', 'volume',
+    #                                  'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled']
+    #                 available_basic = [col for col in basic_columns if col in df.columns]
+    #
+    #                 if available_basic:
+    #                     basic_features = df[available_basic].copy()
+    #                     self.logger.info(f"Повернуто базові ознаки для {symbol}: {basic_features.shape}")
+    #                     return basic_features
+    #                 else:
+    #                     numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    #                     if numeric_columns:
+    #                         return df[numeric_columns].copy()
+    #                     else:
+    #                         raise ValueError(f"Жодної числової колонки не знайдено для {symbol}")
+    #             else:
+    #                 raise ValueError(f"DataFrame невалідний для {symbol}")
+    #         except Exception as fallback_error:
+    #             self.logger.error(f"Помилка fallback для {symbol}: {fallback_error}")
+    #             raise e
 

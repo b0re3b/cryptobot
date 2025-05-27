@@ -11,6 +11,36 @@ class BitcoinCycleFeatureExtractor:
         self.logger = CryptoLogger('BitcoinCycleFeatureExtractor')
 
     def calculate_btc_halving_cycle_features(self, processed_data: pd.DataFrame) -> pd.DataFrame:
+        """
+            Обчислює додаткові ознаки, пов'язані з циклами халвінгу Bitcoin, на основі вхідних часових рядів.
+
+            Цей метод додає до DataFrame інформацію про:
+            - скільки днів минуло з останнього халвінгу,
+            - скільки днів залишилось до наступного халвінгу,
+            - фазу халвінгового циклу (нормалізовану від 0 до 1),
+            - номер циклу,
+            - логарифм часу з останнього халвінгу,
+            - синус і косинус фази циклу (для кращої роботи моделей машинного навчання),
+            - відносну зміну ціни від початку поточного халвінгу.
+
+            Args:
+                processed_data (pd.DataFrame): Вхідний DataFrame з часовими рядами цін Bitcoin.
+                    Повинен містити колонку з датою в індексі (або у стовпці 'date' чи 'timestamp'),
+                    а також колонку 'close' з цінами закриття.
+
+            Returns:
+                pd.DataFrame: Копія вхідного DataFrame з доданими ознаками халвінгових циклів:
+                    - 'days_since_last_halving' (float): Кількість днів від останнього халвінгу.
+                    - 'days_to_next_halving' (float): Кількість днів до наступного халвінгу.
+                    - 'halving_cycle_phase' (float): Нормалізована фаза халвінгового циклу (0–1).
+                    - 'cycle_number' (int): Номер халвінгового циклу (починаючи з 1).
+                    - 'log_days_since_halving' (float): Логарифм (1 + days_since_last_halving).
+                    - 'halving_cycle_sin' (float): Синус фази циклу (для моделювання циклічності).
+                    - 'halving_cycle_cos' (float): Косинус фази циклу.
+                    - 'price_change_since_halving' (float): Відносна зміна ціни від початку циклу.
+
+
+            """
         self.logger.info("Starting calculation of Bitcoin halving cycle features")
 
         # Create a copy of the input DataFrame to avoid modifying the original
@@ -203,23 +233,3 @@ class BitcoinCycleFeatureExtractor:
 
         return result_df
 
-    def validate_input_data(self, df: pd.DataFrame) -> tuple[bool, str]:
-        """
-        Validate input DataFrame before processing
-        Returns: (is_valid, error_message)
-        """
-        if df is None or df.empty:
-            return False, "DataFrame is None or empty"
-
-        if 'close' not in df.columns:
-            return False, "DataFrame must contain 'close' column"
-
-        # Check if we can create a datetime index
-        has_datetime_index = isinstance(df.index, pd.DatetimeIndex)
-        has_date_column = 'date' in df.columns
-        has_timestamp_column = 'timestamp' in df.columns
-
-        if not (has_datetime_index or has_date_column or has_timestamp_column):
-            return False, "DataFrame must have a DatetimeIndex or contain 'date'/'timestamp' column"
-
-        return True, "Valid input data"

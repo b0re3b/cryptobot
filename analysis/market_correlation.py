@@ -21,7 +21,20 @@ class MarketCorrelation:
 
 
     def _update_config_recursive(self, target_dict: Dict, source_dict: Dict) -> None:
+        """
+           Рекурсивно оновлює словник конфігурації новими значеннями з іншого словника.
 
+           Якщо ключ присутній у обох словниках і обидва значення є словниками,
+           відбувається рекурсивне оновлення. Інакше значення з source_dict переписує
+           значення в target_dict.
+
+           Parameters:
+               target_dict (Dict): Цільовий словник, який буде оновлено.
+               source_dict (Dict): Словник із новими значеннями.
+
+           Returns:
+               None
+           """
         for key, value in source_dict.items():
             if key in target_dict and isinstance(target_dict[key], dict) and isinstance(value, dict):
                 self._update_config_recursive(target_dict[key], value)
@@ -34,7 +47,22 @@ class MarketCorrelation:
                                     start_time: Optional[datetime] = None,
                                     end_time: Optional[datetime] = None,
                                     method: str = None) -> pd.DataFrame:
+        """
+           Обчислює кореляцію цін закриття для заданих криптовалютних символів.
 
+           Дані отримуються з бази даних за вказаним таймфреймом і періодом часу.
+           Кореляційна матриця зберігається в базі даних.
+
+           Parameters:
+               symbols (List[str]): Список символів криптовалют.
+               timeframe (str, optional): Таймфрейм даних. Якщо не вказано, використовується конфігурація.
+               start_time (datetime, optional): Початкова дата. Якщо не вказано, використовується lookback період.
+               end_time (datetime, optional): Кінцева дата. Якщо не вказано, використовується поточний час.
+               method (str, optional): Метод обчислення кореляції (наприклад, 'pearson', 'kendall', 'spearman').
+
+           Returns:
+               pd.DataFrame: Матриця кореляції цін.
+           """
         # Використання значень за замовчуванням з конфігурації, якщо не вказані
         timeframe = self.config['default_timeframe']
         method = self.config['default_correlation_method']
@@ -102,7 +130,22 @@ class MarketCorrelation:
                                      start_time: Optional[datetime] = None,
                                      end_time: Optional[datetime] = None,
                                      method: str = None) -> pd.DataFrame:
+        """
+            Обчислює кореляцію об'ємів торгівлі для заданих криптовалютних символів.
 
+            Дані про об'єми отримуються з бази даних. При необхідності очищаються від викидів.
+            Результати кореляції зберігаються в базі даних.
+
+            Parameters:
+                symbols (List[str]): Список символів криптовалют.
+                timeframe (str, optional): Таймфрейм даних. Якщо не вказано, використовується конфігурація.
+                start_time (datetime, optional): Початкова дата. Якщо не вказано, використовується lookback період.
+                end_time (datetime, optional): Кінцева дата. Якщо не вказано, використовується поточний час.
+                method (str, optional): Метод обчислення кореляції (наприклад, 'pearson', 'kendall', 'spearman').
+
+            Returns:
+                pd.DataFrame: Матриця кореляції об'ємів.
+            """
         # Використання значень за замовчуванням з конфігурації, якщо не вказані
         timeframe = timeframe or self.config['default_timeframe']
         method = method or self.config['default_correlation_method']
@@ -183,7 +226,23 @@ class MarketCorrelation:
                                       end_time: Optional[datetime] = None,
                                       period: int = 1,
                                       method: str = None) -> pd.DataFrame:
+        """
+           Обчислює матрицю кореляції доходності (відсоткових змін) для заданих криптовалютних символів.
 
+           Дані беруться з бази даних, перетворюються на доходності з вказаним періодом і використовуються
+           для побудови матриці кореляції.
+
+           Args:
+               symbols (List[str]): Список криптовалютних символів (наприклад, ["BTC", "ETH"]).
+               timeframe (str, optional): Таймфрейм даних (наприклад, "1d"). Якщо не вказано, використовується значення з конфігурації.
+               start_time (datetime, optional): Початкова дата періоду. Якщо не вказано, використовується значення lookback з конфігурації.
+               end_time (datetime, optional): Кінцева дата періоду. Якщо не вказано, береться поточна дата.
+               period (int, optional): Період для обчислення відсоткових змін (доходності). За замовчуванням 1.
+               method (str, optional): Метод розрахунку кореляції ('pearson', 'kendall', 'spearman').
+
+           Returns:
+               pd.DataFrame: Матриця кореляції доходності між криптовалютами.
+           """
         # Використання значень за замовчуванням з конфігурації, якщо не вказані
         timeframe = timeframe or self.config['default_timeframe']
         method = method or self.config['default_correlation_method']
@@ -259,7 +318,23 @@ class MarketCorrelation:
                                          end_time: Optional[datetime] = None,
                                          window: int = None,
                                          method: str = None) -> pd.DataFrame:
+        """
+            Обчислює матрицю кореляції волатильності для заданих криптовалютних символів.
 
+            Волатильність оцінюється як ковзне стандартне відхилення доходності. Дані беруться з бази даних,
+            обробляються з урахуванням ковзного вікна і використовуються для обчислення кореляції.
+
+            Args:
+                symbols (List[str]): Список криптовалютних символів (наприклад, ["BTC", "ETH"]).
+                timeframe (str, optional): Таймфрейм даних (наприклад, "1h"). Якщо не вказано, використовується значення з конфігурації.
+                start_time (datetime, optional): Початкова дата періоду. Якщо не вказано, використовується значення lookback з конфігурації.
+                end_time (datetime, optional): Кінцева дата періоду. Якщо не вказано, береться поточна дата.
+                window (int, optional): Розмір ковзного вікна для розрахунку волатильності. Якщо не вказано, береться з конфігурації.
+                method (str, optional): Метод розрахунку кореляції ('pearson', 'kendall', 'spearman').
+
+            Returns:
+                pd.DataFrame: Матриця кореляції волатильності між криптовалютами.
+            """
         # Використання значень за замовчуванням з конфігурації, якщо не вказані
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
@@ -338,7 +413,19 @@ class MarketCorrelation:
 
     def get_correlated_pairs(self, correlation_matrix: pd.DataFrame,
                              threshold: float = None) -> List[Tuple[str, str, float]]:
+        """
+           Визначає пари активів із сильною позитивною кореляцією, що перевищує заданий поріг.
 
+           Перебирає лише верхній трикутник матриці, щоб уникнути дублювання та самокореляцій.
+
+           Args:
+               correlation_matrix (pd.DataFrame): Квадратна матриця кореляцій між активами.
+               threshold (float, optional): Поріг для сильної кореляції. Якщо не задано — береться з конфігурації.
+
+           Returns:
+               List[Tuple[str, str, float]]: Список кортежів у форматі (symbol1, symbol2, correlation),
+               відсортованих за спаданням коефіцієнта кореляції.
+           """
         # Use default threshold from config if not specified
         threshold = threshold or self.config['correlation_threshold']
 
@@ -366,7 +453,19 @@ class MarketCorrelation:
 
     def get_anticorrelated_pairs(self, correlation_matrix: pd.DataFrame,
                                  threshold: float = None) -> List[Tuple[str, str, float]]:
+        """
+           Визначає пари активів з сильною негативною кореляцією, що менше або дорівнює порогу.
 
+           Перебирає лише верхній трикутник матриці, щоб уникнути дублювання та самокореляцій.
+
+           Args:
+               correlation_matrix (pd.DataFrame): Квадратна матриця кореляцій між активами.
+               threshold (float, optional): Поріг для сильної антикореляції (наприклад, -0.8). Якщо не задано — береться з конфігурації.
+
+           Returns:
+               List[Tuple[str, str, float]]: Список кортежів у форматі (symbol1, symbol2, correlation),
+               відсортованих за зростанням (найбільш негативна кореляція — перша).
+           """
         # Use default threshold from config if not specified
         threshold = threshold or self.config['anticorrelation_threshold']
 
@@ -398,6 +497,24 @@ class MarketCorrelation:
                                       end_time: Optional[datetime] = None,
                                       window: int = None,
                                       method: str = None) -> pd.Series:
+        """
+            Обчислює ковзну (rolling) кореляцію між двома активами за вказаний період часу.
+
+            Дані беруться з бази, вирівнюються у часі та перетворюються у доходності, після чого
+            обчислюється ковзна кореляція.
+
+            Args:
+                symbol1 (str): Перший символ (наприклад, "BTC").
+                symbol2 (str): Другий символ (наприклад, "ETH").
+                timeframe (str, optional): Таймфрейм (наприклад, "1h"). Якщо не вказано — береться з конфігурації.
+                start_time (datetime, optional): Початок періоду. Якщо не вказано — визначається з урахуванням `window` і буфера.
+                end_time (datetime, optional): Кінець періоду. Якщо не вказано — береться поточний час.
+                window (int, optional): Розмір ковзного вікна. Якщо не вказано — береться з конфігурації.
+                method (str, optional): Метод кореляції (тільки 'pearson' наразі використовується).
+
+            Returns:
+                pd.Series: Серія ковзних коефіцієнтів кореляції по часовій шкалі.
+            """
         # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
@@ -457,7 +574,24 @@ class MarketCorrelation:
                                       end_time: Optional[datetime] = None,
                                       window: int = None,
                                       threshold: float = None) -> List[datetime]:
+        """
+           Виявляє моменти значного розриву кореляції між двома активами.
 
+           Метод обчислює ковзну кореляцію, виявляє різкі зміни, що перевищують поріг,
+           і зберігає інформацію про ці розриви у базу даних.
+
+           Args:
+               symbol1 (str): Перший символ (наприклад, "ETH").
+               symbol2 (str): Другий символ (наприклад, "BTC").
+               timeframe (str, optional): Таймфрейм, наприклад "1d". Якщо не задано — використовується за замовчуванням.
+               start_time (datetime, optional): Початкова дата для аналізу.
+               end_time (datetime, optional): Кінцева дата для аналізу.
+               window (int, optional): Розмір ковзного вікна.
+               threshold (float, optional): Поріг для зміни кореляції, яка вважається розривом.
+
+           Returns:
+               List[datetime]: Список міток часу, де виявлено розрив кореляції.
+           """
         # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
@@ -528,7 +662,23 @@ class MarketCorrelation:
                               start_time: Optional[datetime] = None,
                               end_time: Optional[datetime] = None,
                               window: int = None) -> Union[float, pd.Series]:
+        """
+           Обчислює бета-коефіцієнт активу відносно ринку (наприклад, BTC).
 
+           Якщо задано `window`, обчислюється ковзне бета; інакше — загальне бета за весь період.
+           Результати зберігаються в базу даних.
+
+           Args:
+               symbol (str): Символ активу (наприклад, "ETH").
+               market_symbol (str, optional): Символ ринку для порівняння. За замовчуванням — "BTC".
+               timeframe (str, optional): Таймфрейм для аналізу (наприклад, "1d").
+               start_time (datetime, optional): Початок періоду аналізу.
+               end_time (datetime, optional): Кінець періоду аналізу.
+               window (int, optional): Розмір ковзного вікна для обчислення rolling beta.
+
+           Returns:
+               Union[float, pd.Series]: Загальний бета-коефіцієнт або серія ковзних значень бета.
+           """
         # Use default values from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
         window = window or self.config['default_correlation_window']
@@ -642,7 +792,23 @@ class MarketCorrelation:
                                start_time: datetime,
                                end_time: datetime,
                                method: str) -> bool:
+        """
+            Зберігає матрицю кореляції та пари з високою кореляцією до бази даних.
 
+            Створює унікальний ідентифікатор матриці, серіалізує дані, обчислює пари з абсолютною кореляцією вище порогу
+            та зберігає ці дані в базу.
+
+            Args:
+                correlation_matrix (pd.DataFrame): Матриця кореляції.
+                correlation_type (str): Тип кореляції (наприклад, "pearson").
+                timeframe (str): Таймфрейм (наприклад, "1d").
+                start_time (datetime): Початок аналізованого періоду.
+                end_time (datetime): Кінець аналізованого періоду.
+                method (str): Метод обчислення кореляції (наприклад, "pearson").
+
+            Returns:
+                bool: Повертає True, якщо збереження успішне; інакше False.
+            """
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
 
@@ -715,7 +881,21 @@ class MarketCorrelation:
                                  start_time: datetime,
                                  end_time: datetime,
                                  method: str = None) -> Optional[pd.DataFrame]:
+        """
+           Завантажує збережену матрицю кореляції з бази даних за заданим періодом та параметрами.
 
+           Формує унікальний `matrix_id` для доступу до запису, зчитує JSON-рядок з бази даних і десеріалізує його в DataFrame.
+
+           Args:
+               correlation_type (str): Тип кореляції (наприклад, "pearson", "spearman").
+               timeframe (str): Таймфрейм, за яким була побудована матриця (наприклад, "1d").
+               start_time (datetime): Початок періоду аналізу.
+               end_time (datetime): Кінець періоду аналізу.
+               method (str, optional): Метод обчислення кореляції. Якщо не вказано — використовується значення з конфігурації.
+
+           Returns:
+               Optional[pd.DataFrame]: Відновлена матриця кореляції або `None`, якщо дані не знайдено чи виникла помилка.
+           """
         # Use default method from config if not specified
         method = method or self.config['default_correlation_method']
 
@@ -747,7 +927,20 @@ class MarketCorrelation:
                                 correlation_window: int = None,
                                 lookback_days: int = None,
                                 timeframe: str = None) -> pd.Series:
+        """
+           Обчислює або завантажує з бази даних часовий ряд ковзної кореляції між двома символами.
 
+           Якщо дані вже є в базі — використовуються вони. Інакше кореляція обчислюється та зберігається.
+
+           Args:
+               symbols_pair (Tuple[str, str]): Пара символів для аналізу кореляції (symbol1, symbol2).
+               correlation_window (int, optional): Розмір вікна для ковзної кореляції. Якщо не задано, береться з конфігурації.
+               lookback_days (int, optional): Період зворотного перегляду в днях для аналізу.
+               timeframe (str, optional): Таймфрейм (наприклад, "1d", "1h").
+
+           Returns:
+               pd.Series: Часовий ряд ковзної кореляції між активами.
+           """
         # Use default values from config if not specified
         correlation_window = correlation_window or self.config['default_correlation_window']
         lookback_days = lookback_days or self.config['default_lookback_days']
@@ -818,7 +1011,23 @@ class MarketCorrelation:
                                 timeframe: str = None,
                                 start_time: Optional[datetime] = None,
                                 end_time: Optional[datetime] = None) -> Dict[str, Dict[int, float]]:
+        """
+            Аналізує список кандидатів на роль лідерів для заданого цільового символу за лагами у дохідності.
 
+            Для кожного кандидата обчислюється кореляція між лагованими доходностями та доходністю цільового активу.
+            Результати зберігаються в базу даних, якщо є достатня кількість валідних даних.
+
+            Args:
+                target_symbol (str): Символ, для якого шукаються лідери.
+                candidate_symbols (List[str]): Список символів-кандидатів.
+                lag_periods (List[int], optional): Перелік лагів для перевірки (в кількості кроків таймфрейму).
+                timeframe (str, optional): Таймфрейм для аналізу (наприклад, "1d").
+                start_time (datetime, optional): Початковий час аналізу.
+                end_time (datetime, optional): Кінцевий час аналізу.
+
+            Returns:
+                Dict[str, Dict[int, float]]: Словник, де ключ — символ-кандидат, а значення — словник з лагами та відповідними коефіцієнтами кореляції.
+            """
         # Use default values from config if not specified
         lag_periods = lag_periods or self.config['default_lag_periods']
         timeframe = timeframe or self.config['default_timeframe']
@@ -923,7 +1132,38 @@ class MarketCorrelation:
                                        correlated_symbols: List[str],
                                        prediction_horizon: int = None,
                                        timeframe: str = None) -> Dict[str, float]:
+        """
+            Прогнозує майбутній напрямок руху ціни заданого активу (symbol) на основі історичних прибутків
+            скорельованих активів, використовуючи лінійну регресію.
 
+            Parameters
+            ----------
+            symbol : str
+                Основний символ (криптовалюта), для якого виконується прогноз.
+            correlated_symbols : List[str]
+                Список скорельованих символів, що використовуються як ознаки.
+            prediction_horizon : int, optional
+                Горизонт прогнозу у кількості періодів (наприклад, днів). Якщо не вказано — береться з конфігурації.
+            timeframe : str, optional
+                Таймфрейм (наприклад, '1d', '4h'). Якщо не вказано — використовується значення за замовчуванням.
+
+            Returns
+            -------
+            Dict[str, Union[float, str, Dict[str, float], datetime]]
+                Словник з результатами прогнозу, що включає:
+                - symbol : символ активу
+                - current_price : поточна ціна
+                - predicted_return : передбачене відсоткове змінення ціни
+                - predicted_price : передбачена ціна
+                - prediction_horizon : горизонт прогнозу
+                - prediction_direction : напрямок ("up" або "down")
+                - confidence : довіра до прогнозу (0–1)
+                - model_r2 : коефіцієнт детермінації R²
+                - top_indicators : топ-5 ознак за вагомістю
+                - prediction_timestamp : дата та час прогнозу
+
+                У разі помилки повертає: {"error": "текст помилки"}
+            """
         # Use default values from config if not specified
         prediction_horizon = prediction_horizon or self.config['default_prediction_horizon']
         timeframe = timeframe or self.config['default_timeframe']
@@ -1081,7 +1321,37 @@ class MarketCorrelation:
     def analyze_market_regime_correlations(self, symbols: List[str],
                                            market_regimes: Dict[Tuple[datetime, datetime], str],
                                            timeframe: str = None) -> Dict[str, Dict[str, pd.DataFrame]]:
+        """
+           Аналізує кореляції між символами у межах заданих ринкових режимів.
+           Проводиться розрахунок кореляцій цін, прибутків, волатильності та об'ємів
+           для кожного ринкового режиму окремо.
 
+           Parameters
+           ----------
+           symbols : List[str]
+               Список символів (наприклад, криптовалют), для яких виконується аналіз.
+           market_regimes : Dict[Tuple[datetime, datetime], str]
+               Словник, де ключ — це пара (start_time, end_time), а значення — назва режиму.
+           timeframe : str, optional
+               Таймфрейм для аналізу (наприклад, '1d', '1h'). Якщо не вказано — використовується з конфігурації.
+
+           Returns
+           -------
+           Dict[str, Dict[str, pd.DataFrame]]
+               Словник, який повертає для кожного режиму вкладені словники з типами кореляцій:
+               regime_name → {
+                   "price": pd.DataFrame,
+                   "returns": pd.DataFrame,
+                   "volatility": pd.DataFrame,
+                   "volume": pd.DataFrame
+               }
+
+           Raises
+           ------
+           Exception
+               У разі фатальної помилки під час обробки повертає виключення з логуванням.
+
+           """
         # Use default timeframe from config if not specified
         timeframe = timeframe or self.config['default_timeframe']
 
