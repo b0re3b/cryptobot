@@ -255,15 +255,17 @@ class DimensionalityReducer():
     def create_polynomial_features(self, data: pd.DataFrame,
                                    columns: Optional[List[str]] = None,
                                    degree: int = 2,
-                                   interaction_only: bool = False) -> pd.DataFrame:
+                                   interaction_only: bool = False,
+                                   max_features: int = 50) -> pd.DataFrame:
         """
-        Створення поліноміальних ознак на основі вибраних стовпців.
+        Створення поліноміальних ознак на основі вибраних стовпців з контролем пам'яті.
 
         Args:
             data: DataFrame з вхідними даними
             columns: Список стовпців для створення поліноміальних ознак
             degree: Степінь поліному
             interaction_only: Якщо True, включає тільки взаємодії без степенів
+            max_features: Максимальна кількість вхідних ознак для обробки
 
         Returns:
             DataFrame з доданими поліноміальними ознаками
@@ -286,6 +288,71 @@ class DimensionalityReducer():
             self.logger.error("Немає доступних стовпців для створення поліноміальних ознак")
             return data
 
+        if len(columns) > max_features:
+            self.logger.warning(f"Занадто багато ознак ({len(columns)}). Обмежуємо до {max_features} найважливіших.")
+
+            # Вибираємо найбільш варіативні ознаки
+            X_temp = data[columns].copy()
+            if X_temp.isna().any().any():
+                X_temp = X_temp.fillna(X_temp.median())
+
+            # Обчислюємо коефіцієнт варіації для кожної ознаки
+            cv_scores = (X_temp.std() / (X_temp.mean().abs() + 1e-8)).fillna(0)
+            top_features = cv_scores.nlargest(max_features).index.tolist()
+            columns = top_features
+            self.logger.info(f"Вибрано {len(columns)} найбільш варіативних ознак")
+
+        from math import comb
+        if not interaction_only:
+            # Для повних поліноміальних ознак
+            estimated_features = sum(comb(len(columns) + degree - k - 1, degree - k) for k in range(degree + 1))
+        else:
+            # Для взаємодій
+            estimated_features = sum(comb(len(columns), k) for k in range(1, degree + 1))
+
+        estimated_memory_gb = (data.shape[0] * estimated_features * 8) / (1024 ** 3)  # 8 bytes per float64
+
+        self.logger.info(f"Очікувана кількість нових ознак: {estimated_features}")
+        self.logger.info(f"Очікуване використання пам'яті: {estimated_memory_gb:.2f} GB")
+
+        max_memory_gb = 4.0
+        if estimated_memory_gb > max_memory_gb:
+            self.logger.warning(
+                f"Очікуване використання пам'яті ({estimated_memory_gb:.2f} GB) перевищує ліміт ({max_memory_gb} GB)")
+
+            if degree > 2:
+                self.logger.info("Зменшуємо степінь поліному до 2")
+                degree = 2
+            elif not interaction_only:
+                self.logger.info("Переключаємось на режим тільки взаємодій")
+                interaction_only = True
+            else:
+                # Зменшуємо кількість ознак ще більше
+                new_max_features = max(5, max_features // 2)
+                self.logger.info(f"Зменшуємо кількість ознак до {new_max_features}")
+
+                X_temp = data[columns].copy()
+                if X_temp.isna().any().any():
+                    X_temp = X_temp.fillna(X_temp.median())
+
+                cv_scores = (X_temp.std() / (X_temp.mean().abs() + 1e-8)).fillna(0)
+                top_features = cv_scores.nlargest(new_max_features).index.tolist()
+                columns = top_features
+
+            # Перераховуємо після змін
+            if not interaction_only:
+                estimated_features = sum(comb(len(columns) + degree - k - 1, degree - k) for k in range(degree + 1))
+            else:
+                estimated_features = sum(comb(len(columns), k) for k in range(1, degree + 1))
+
+            estimated_memory_gb = (data.shape[0] * estimated_features * 8) / (1024 ** 3)
+            self.logger.info(f"Після оптимізації: {estimated_features} ознак, {estimated_memory_gb:.2f} GB")
+
+            # Якщо все ще занадто багато, відмовляємось
+            if estimated_memory_gb > max_memory_gb:
+                self.logger.error(f"Неможливо створити поліноміальні ознаки без перевищення ліміту пам'яті")
+                return data
+
         # Створюємо копію DataFrame з вибраними стовпцями
         result_df = data.copy()
         X = result_df[columns].copy()
@@ -295,13 +362,12 @@ class DimensionalityReducer():
             self.logger.warning(f"Виявлено NaN значення у вхідних даних. Заповнюємо їх медіаною.")
             X = X.fillna(X.median())
 
-        # ДОДАНО: Перевірка на нескінченні значення перед створенням поліноміальних ознак
+        # Перевірка на нескінченні значення
         if np.isinf(X.values).any():
             self.logger.warning("Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.")
             X = X.replace([np.inf, -np.inf], [1e10, -1e10])
 
-        # ДОДАНО: Стандартизація даних перед створенням поліноміальних ознак
-        # Це допоможе уникнути створення надто великих значень
+        # Стандартизація даних
         scaler = StandardScaler()
         X_scaled = pd.DataFrame(
             scaler.fit_transform(X),
@@ -309,29 +375,24 @@ class DimensionalityReducer():
             index=X.index
         )
 
-        # ДОДАНО: Обмеження діапазону значень для запобігання переповненню
         # Обрізаємо значення до розумного діапазону
-        X_scaled = X_scaled.clip(-10, 10)
-
-        self.logger.info(f"Дані стандартизовано та обрізано до діапазону [-10, 10]")
+        X_scaled = X_scaled.clip(-5, 5)  # Більш консервативне обрізання
+        self.logger.info(f"Дані стандартизовано та обрізано до діапазону [-5, 5]")
 
         # Створюємо об'єкт для поліноміальних ознак
         poly = PolynomialFeatures(degree=degree,
                                   interaction_only=interaction_only,
                                   include_bias=False)
 
-        # Застосовуємо трансформацію
+        # Застосовуємо трансформацію з обробкою помилок
         try:
             poly_features = poly.fit_transform(X_scaled)
 
-            # ДОДАНО: Перевірка на переповнення після створення поліноміальних ознак
+            # Перевірка на переповнення
             if np.isinf(poly_features).any() or np.isnan(poly_features).any():
                 self.logger.warning("Виявлено нескінченні або NaN значення після створення поліноміальних ознак")
-
-                # Замінюємо нескінченні значення на NaN для подальшої обробки
                 poly_features = np.where(np.isinf(poly_features), np.nan, poly_features)
 
-                # Перевіряємо чи всі значення не стали NaN
                 if np.isnan(poly_features).all():
                     self.logger.error("Всі поліноміальні ознаки стали NaN. Повертаємо оригінальні дані.")
                     return data
@@ -344,68 +405,39 @@ class DimensionalityReducer():
                                    columns=feature_names,
                                    index=X_scaled.index)
 
-            # Видаляємо оригінальні ознаки, оскільки вони будуть дублюватись у вихідному DataFrame
+            # Видаляємо оригінальні ознаки, якщо degree > 1
             if degree > 1:
-                # ВИПРАВЛЕНО: Правильно визначаємо кількість оригінальних ознак для видалення
                 n_original_features = len(X_scaled.columns)
                 poly_df = poly_df.iloc[:, n_original_features:]
 
-            # Додаємо префікс до назв ознак для уникнення конфліктів
+            # Додаємо префікс до назв ознак
             poly_df.columns = [f'poly_{col}' for col in poly_df.columns]
 
-            # ПОКРАЩЕНО: Більш надійна обробка нескінченних значень і великих чисел
             # Замінюємо нескінченні значення на NaN
             poly_df = poly_df.replace([np.inf, -np.inf], np.nan)
 
-            # Обробка стовпців з NaN значеннями
-            cols_with_na = poly_df.columns[poly_df.isna().any()]
-
-            if len(cols_with_na) > 0:
-                self.logger.warning(
-                    f"Знайдено {len(cols_with_na)} стовпців з NaN значеннями після створення поліноміальних ознак")
-
-                for col in cols_with_na:
-                    if poly_df[col].isna().all():
-                        # Якщо всі значення NaN, заповнюємо нулями
-                        poly_df[col] = 0
-                        self.logger.debug(f"Стовпець {col} заповнено нулями (всі значення були NaN)")
-                    else:
-                        # Інакше використовуємо медіану для заповнення
-                        median_val = poly_df[col].median()
-                        if pd.isna(median_val):
-                            # Якщо медіана також NaN, використовуємо 0
-                            poly_df[col] = poly_df[col].fillna(0)
-                            self.logger.debug(f"Стовпець {col} заповнено нулями (медіана була NaN)")
-                        else:
-                            poly_df[col] = poly_df[col].fillna(median_val)
-                            self.logger.debug(f"Стовпець {col} заповнено медіаною: {median_val}")
-
-            # ПОКРАЩЕНО: Більш консервативна вінсоризація
-            # Обчислюємо квантилі для всіх стовпців одночасно
-            try:
-                quantiles = poly_df.quantile([0.05, 0.95])  # Більш консервативні квантилі
-                q_low, q_high = quantiles.loc[0.05], quantiles.loc[0.95]
-
-                # Застосовуємо обрізання тільки якщо квантилі валідні
+            # Обробляємо NaN значення по стовпцях
+            if poly_df.isna().any().any():
+                # Заповнюємо NaN медіаною або нулем
                 for col in poly_df.columns:
-                    if not pd.isna(q_low[col]) and not pd.isna(q_high[col]):
-                        poly_df[col] = poly_df[col].clip(q_low[col], q_high[col])
+                    if poly_df[col].isna().all():
+                        poly_df[col] = 0
+                    else:
+                        median_val = poly_df[col].median()
+                        poly_df[col] = poly_df[col].fillna(median_val if not pd.isna(median_val) else 0)
 
-            except Exception as e:
-                self.logger.warning(f"Не вдалося застосувати вінсоризацію: {str(e)}")
+            # Використовуємо IQR для виявлення викидів
+            for col in poly_df.columns:
+                Q1 = poly_df[col].quantile(0.25)
+                Q3 = poly_df[col].quantile(0.75)
+                IQR = Q3 - Q1
 
-            # ДОДАНО: Фінальна перевірка на валідність даних
-            # Перевіряємо чи немає екстремальних значень
-            max_values = poly_df.abs().max()
-            extreme_cols = max_values[max_values > 1e15].index.tolist()
+                if IQR > 0:  # Тільки якщо є варіативність
+                    lower_bound = Q1 - 1.5 * IQR
+                    upper_bound = Q3 + 1.5 * IQR
+                    poly_df[col] = poly_df[col].clip(lower_bound, upper_bound)
 
-            if extreme_cols:
-                self.logger.warning(f"Виявлено стовпці з екстремальними значеннями: {extreme_cols[:5]}...")
-                # Обрізаємо екстремальні значення
-                for col in extreme_cols:
-                    poly_df[col] = poly_df[col].clip(-1e15, 1e15)
-
-            # Видаляємо стовпці з константними значеннями (дисперсія = 0)
+            # Видаляємо константні стовпці
             constant_cols = []
             for col in poly_df.columns:
                 if poly_df[col].nunique() <= 1:
@@ -415,7 +447,17 @@ class DimensionalityReducer():
                 self.logger.info(f"Видалено {len(constant_cols)} константних стовпців")
                 poly_df = poly_df.drop(columns=constant_cols)
 
-            # Об'єднуємо з вихідним DataFrame тільки якщо є валідні стовпці
+            # НОВИЙ КОД: Обмежуємо кількість фінальних ознак
+            max_final_features = 100  # Максимум 100 нових ознак
+            if len(poly_df.columns) > max_final_features:
+                self.logger.info(f"Обмежуємо кількість поліноміальних ознак до {max_final_features}")
+
+                # Вибираємо найбільш варіативні ознаки
+                cv_scores = (poly_df.std() / (poly_df.mean().abs() + 1e-8)).fillna(0)
+                top_features = cv_scores.nlargest(max_final_features).index.tolist()
+                poly_df = poly_df[top_features]
+
+            # Об'єднуємо з вихідним DataFrame
             if len(poly_df.columns) > 0:
                 result_df = pd.concat([result_df, poly_df], axis=1)
                 self.logger.info(f"Додано {len(poly_df.columns)} поліноміальних ознак степені {degree}")
@@ -423,15 +465,21 @@ class DimensionalityReducer():
                 self.logger.warning("Не створено жодної валідної поліноміальної ознаки")
                 return data
 
+        except MemoryError as e:
+            self.logger.error(f"Помилка пам'яті при створенні поліноміальних ознак: {str(e)}")
+            return data
         except Exception as e:
             self.logger.error(f"Помилка при створенні поліноміальних ознак: {str(e)}")
 
-            # ДОДАНО: Спроба створити поліноміальні ознаки з меншим степенем
+            # Спроба з меншими параметрами
             if degree > 2:
                 self.logger.info(f"Спроба створити поліноміальні ознаки зі степенем {degree - 1}")
-                return self.create_polynomial_features(data, columns, degree - 1, interaction_only)
+                return self.create_polynomial_features(data, columns, degree - 1, interaction_only, max_features)
+            elif not interaction_only:
+                self.logger.info("Спроба створити тільки взаємодії")
+                return self.create_polynomial_features(data, columns, degree, True, max_features)
             else:
-                self.logger.error("Не вдалося створити поліноміальні ознаки навіть зі степенем 2")
+                self.logger.error("Не вдалося створити поліноміальні ознаки")
                 return data
 
         return result_df
@@ -440,12 +488,12 @@ class DimensionalityReducer():
                                 n_clusters: int = 5,
                                 method: str = 'kmeans') -> pd.DataFrame:
         """
-        Створення ознак на основі кластеризації даних.
+        Створення ознак на основі кластеризації даних з покращеною обробкою численних помилок.
 
         Args:
             data: DataFrame з вхідними даними
             n_clusters: Кількість кластерів
-            method: Метод кластеризації ('kmeans', 'dbscan', 'hierarchical')
+            method: Метод кластеризації ('kmeans', 'dbscan')
 
         Returns:
             DataFrame з доданими ознаками кластеризації
@@ -465,19 +513,64 @@ class DimensionalityReducer():
         # Підготовка даних для кластеризації
         X = result_df[numeric_cols].copy()
 
-        # Замінюємо NaN значення векторизованим способом
+        # Замінюємо NaN та нескінченні значення
         if X.isna().any().any():
             self.logger.warning("Виявлено NaN значення у вхідних даних. Заповнюємо їх медіаною.")
             X = X.fillna(X.median())
 
-        # Стандартизуємо дані
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+        # Замінюємо нескінченні значення
+        if np.isinf(X.values).any():
+            self.logger.warning("Виявлено нескінченні значення у вхідних даних. Замінюємо їх граничними значеннями.")
+            X = X.replace([np.inf, -np.inf], [X.max().max() * 10, X.min().min() * 10])
+
+            # Якщо все ще є проблеми, використовуємо більш консервативний підхід
+            if np.isinf(X.values).any():
+                X = X.clip(-1e10, 1e10)
+
+        # Видаляємо константні стовпці (нульова варіативність)
+        constant_cols = []
+        for col in X.columns:
+            if X[col].nunique() <= 1 or X[col].std() == 0:
+                constant_cols.append(col)
+
+        if constant_cols:
+            self.logger.info(f"Видалено {len(constant_cols)} константних стовпців: {constant_cols}")
+            X = X.drop(columns=constant_cols)
+
+        if X.empty:
+            self.logger.error("Після видалення константних стовпців не залишилось даних для кластеризації")
+            return result_df
+
+        # Стандартизуємо дані з додатковими перевірками
+        try:
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+
+            # Перевіряємо результат стандартизації
+            if np.isnan(X_scaled).any() or np.isinf(X_scaled).any():
+                self.logger.warning(
+                    "Стандартизація призвела до NaN або нескінченних значень. Використовуємо робастну стандартизацію.")
+
+                # Робастна стандартизація
+                from sklearn.preprocessing import RobustScaler
+                robust_scaler = RobustScaler()
+                X_scaled = robust_scaler.fit_transform(X)
+
+                # Якщо все ще є проблеми, обрізаємо значення
+                if np.isnan(X_scaled).any() or np.isinf(X_scaled).any():
+                    X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=5.0, neginf=-5.0)
+
+            # Обрізаємо екстремальні значення для стабільності
+            X_scaled = np.clip(X_scaled, -10, 10)
+
+        except Exception as e:
+            self.logger.error(f"Помилка при стандартизації даних: {str(e)}")
+            return result_df
 
         # Словник методів кластеризації
         clustering_methods = {
-            'kmeans': self._apply_kmeans_clustering,
-            'dbscan': self._apply_dbscan_clustering,
+            'kmeans': self._apply_kmeans_clustering_safe,
+            'dbscan': self._apply_dbscan_clustering_safe,
         }
 
         # Перевіряємо наявність методу
@@ -489,7 +582,224 @@ class DimensionalityReducer():
             return result_df
 
         # Застосовуємо вибраний метод кластеризації
-        return clustering_methods[method](result_df, X, X_scaled, n_clusters)
+        try:
+            return clustering_methods[method](result_df, X, X_scaled, n_clusters)
+        except Exception as e:
+            self.logger.error(f"Помилка при кластеризації: {str(e)}")
+            return result_df
+
+    def _apply_kmeans_clustering_safe(self, result_df: pd.DataFrame, X: pd.DataFrame,
+                                      X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
+        """Безпечний допоміжний метод для кластеризації KMeans з обробкою численних помилок"""
+        try:
+            # Обмежуємо кількість кластерів розміром даних
+            max_clusters = min(n_clusters, len(X) // 5, 20)  # Максимум 20 кластерів
+            n_clusters = max(2, max_clusters)
+
+            # Визначаємо оптимальну кількість кластерів, якщо потрібно
+            if n_clusters > 10:
+                scores = []
+                range_clusters = range(2, min(11, len(X) // 10))
+
+                for i in range_clusters:
+                    try:
+                        kmeans = KMeans(n_clusters=i, random_state=42, n_init=10, max_iter=100)
+                        cluster_labels = kmeans.fit_predict(X_scaled)
+
+                        # Перевіряємо кількість унікальних міток
+                        if len(np.unique(cluster_labels)) < i:
+                            continue
+
+                        silhouette_avg = silhouette_score(X_scaled, cluster_labels)
+                        if not np.isnan(silhouette_avg) and not np.isinf(silhouette_avg):
+                            scores.append(silhouette_avg)
+                        else:
+                            scores.append(-1)  # Поганий score для недійсних значень
+
+                    except Exception as e:
+                        self.logger.debug(f"Помилка для n_clusters = {i}: {str(e)}")
+                        scores.append(-1)
+
+                if scores and max(scores) > -1:
+                    best_n_clusters = range_clusters[np.argmax(scores)]
+                    self.logger.info(f"Оптимальна кількість кластерів за silhouette score: {best_n_clusters}")
+                    n_clusters = best_n_clusters
+
+            # Застосовуємо KMeans з визначеною кількістю кластерів
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10, max_iter=300)
+            cluster_labels = kmeans.fit_predict(X_scaled)
+            centers = kmeans.cluster_centers_
+
+            # Додаємо мітки кластерів як нову ознаку
+            result_df['cluster_label'] = cluster_labels
+
+            # Безпечне обчислення відстаней до центроїдів
+            for i in range(n_clusters):
+                try:
+                    # Обчислюємо відстань з обробкою переповнення
+                    distances = np.zeros(X_scaled.shape[0])
+
+                    for j in range(X_scaled.shape[0]):
+                        try:
+                            # Обчислюємо евклідову відстань
+                            diff = X_scaled[j] - centers[i]
+                            dist_squared = np.sum(diff ** 2)
+
+                            # Перевіряємо на переповнення
+                            if np.isfinite(dist_squared) and dist_squared >= 0:
+                                distances[j] = np.sqrt(dist_squared)
+                            else:
+                                # Використовуємо манхеттенську відстань як резерв
+                                distances[j] = np.sum(np.abs(diff))
+
+                        except (OverflowError, FloatingPointError):
+                            # У випадку переповнення використовуємо максимальну відстань
+                            distances[j] = np.finfo(np.float64).max / 1e6
+
+                    # Обрізаємо екстремальні значення та заповнюємо NaN
+                    distances = np.nan_to_num(distances, nan=0.0, posinf=1e6, neginf=0.0)
+                    distances = np.clip(distances, 0, 1e6)
+
+                    result_df[f'distance_to_cluster_{i}'] = distances
+
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обчисленні відстані до кластера {i}: {str(e)}")
+                    # Додаємо нульові відстані у випадку помилки
+                    result_df[f'distance_to_cluster_{i}'] = 0.0
+
+            # Додаємо додаткові корисні ознаки
+            try:
+                # Відстань до найближчого центроїда
+                distance_columns = [col for col in result_df.columns if col.startswith('distance_to_cluster_')]
+                if distance_columns:
+                    result_df['min_cluster_distance'] = result_df[distance_columns].min(axis=1)
+                    result_df['max_cluster_distance'] = result_df[distance_columns].max(axis=1)
+
+                    # Коефіцієнт силуетності для кожної точки (якщо можливо)
+                    try:
+                        silhouette_samples = silhouette_score(X_scaled, cluster_labels, metric='euclidean')
+                        if np.isfinite(silhouette_samples):
+                            result_df['silhouette_score'] = silhouette_samples
+                    except:
+                        pass  # Ігноруємо помилки при обчисленні силуетності
+
+            except Exception as e:
+                self.logger.warning(f"Помилка при створенні додаткових ознак: {str(e)}")
+
+            self.logger.info(f"Успішно створено ознаки кластеризації KMeans з {n_clusters} кластерами")
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при кластеризації KMeans: {str(e)}")
+
+        return result_df
+
+    def _apply_dbscan_clustering_safe(self, result_df: pd.DataFrame, X: pd.DataFrame,
+                                      X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:
+        """Безпечний допоміжний метод для кластеризації DBSCAN"""
+        try:
+            # Визначаємо параметри DBSCAN більш консервативно
+            try:
+                nbrs = NearestNeighbors(n_neighbors=min(len(X), 5)).fit(X_scaled)
+                distances, _ = nbrs.kneighbors(X_scaled)
+
+                # Безпечне обчислення eps
+                knee_distances = distances[:, -1]
+                knee_distances = knee_distances[np.isfinite(knee_distances)]
+
+                if len(knee_distances) > 0:
+                    eps = np.median(knee_distances)  # Використовуємо медіану замість середнього
+                    eps = np.clip(eps, 0.1, 10.0)  # Обмежуємо eps розумними межами
+                else:
+                    eps = 0.5  # Значення за замовчуванням
+
+            except Exception as e:
+                self.logger.warning(f"Помилка при визначенні eps: {str(e)}. Використовуємо значення за замовчуванням.")
+                eps = 0.5
+
+            min_samples = max(3, min(len(X) // 50, 10))  # Більш консервативний min_samples
+
+            self.logger.debug(f"DBSCAN параметри: eps={eps}, min_samples={min_samples}")
+
+            # Застосовуємо DBSCAN
+            dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='euclidean')
+            cluster_labels = dbscan.fit_predict(X_scaled)
+
+            # Додаємо мітки кластерів як нову ознаку
+            result_df['dbscan_cluster'] = cluster_labels
+
+            # Аналізуємо результати кластеризації
+            unique_labels = np.unique(cluster_labels)
+            n_clusters_found = len(unique_labels) - (1 if -1 in unique_labels else 0)
+            n_outliers = np.sum(cluster_labels == -1)
+
+            self.logger.info(f"DBSCAN знайдено {n_clusters_found} кластерів")
+            self.logger.info(f"Кількість точок-викидів: {n_outliers}")
+
+            # Обробляємо викиди, якщо вони є
+            if -1 in cluster_labels and n_clusters_found > 0:
+                try:
+                    outliers_mask = cluster_labels == -1
+                    non_outliers_mask = ~outliers_mask
+
+                    if np.any(non_outliers_mask) and np.any(outliers_mask):
+                        # Знаходимо найближчий кластер для викидів
+                        knn = KNeighborsClassifier(n_neighbors=min(3, np.sum(non_outliers_mask)))
+                        knn.fit(X_scaled[non_outliers_mask], cluster_labels[non_outliers_mask])
+
+                        closest_clusters = knn.predict(X_scaled[outliers_mask])
+
+                        # Створюємо нову колонку з виправленими мітками
+                        fixed_labels = cluster_labels.copy()
+                        fixed_labels[outliers_mask] = closest_clusters
+                        result_df['dbscan_nearest_cluster'] = fixed_labels
+
+                    # Додаємо бінарну ознаку "чи є точка викидом"
+                    result_df['dbscan_is_outlier'] = outliers_mask.astype(int)
+
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обробці викидів: {str(e)}")
+
+            # Обчислюємо відстані до центроїдів кластерів (якщо є кластери)
+            if n_clusters_found > 0:
+                try:
+                    for i in unique_labels:
+                        if i != -1:  # Пропускаємо викиди
+                            cluster_mask = cluster_labels == i
+                            if np.any(cluster_mask):
+                                # Безпечне обчислення центроїда
+                                cluster_points = X_scaled[cluster_mask]
+                                centroid = np.mean(cluster_points, axis=0)
+
+                                # Безпечне обчислення відстаней
+                                distances = np.zeros(X_scaled.shape[0])
+                                for j in range(X_scaled.shape[0]):
+                                    try:
+                                        diff = X_scaled[j] - centroid
+                                        dist_squared = np.sum(diff ** 2)
+
+                                        if np.isfinite(dist_squared) and dist_squared >= 0:
+                                            distances[j] = np.sqrt(dist_squared)
+                                        else:
+                                            distances[j] = np.sum(np.abs(diff))
+
+                                    except (OverflowError, FloatingPointError):
+                                        distances[j] = 1e6
+
+                                # Обрізаємо та очищуємо відстані
+                                distances = np.nan_to_num(distances, nan=0.0, posinf=1e6, neginf=0.0)
+                                distances = np.clip(distances, 0, 1e6)
+
+                                result_df[f'distance_to_dbscan_cluster_{i}'] = distances
+
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обчисленні відстаней до центроїдів DBSCAN: {str(e)}")
+
+            self.logger.info(f"Успішно створено ознаки кластеризації DBSCAN")
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при кластеризації DBSCAN: {str(e)}")
+
+        return result_df
 
     def _apply_kmeans_clustering(self, result_df: pd.DataFrame, X: pd.DataFrame,
                                  X_scaled: np.ndarray, n_clusters: int) -> pd.DataFrame:

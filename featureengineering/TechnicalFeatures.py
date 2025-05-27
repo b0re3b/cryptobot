@@ -8,6 +8,7 @@ import pandas_ta as ta
 class TechnicalFeatures:
     def __init__(self):
         self.logger = CryptoLogger('Technical Features')
+
     def create_technical_features(self, data: pd.DataFrame,
                                   indicators: Optional[List[str]] = None) -> pd.DataFrame:
 
@@ -64,27 +65,40 @@ class TechnicalFeatures:
                 elif indicator == 'macd':
                     if 'close' in result_df.columns:
                         macd_df = ta.macd(result_df['close'], fast=12, slow=26, signal=9)
-                        result_df = pd.concat([result_df, macd_df], axis=1)
-                        added_features_count += 3
+                        if isinstance(macd_df, pd.DataFrame):
+                            result_df = pd.concat([result_df, macd_df], axis=1)
+                            added_features_count += len(macd_df.columns)
+                        else:
+                            self.logger.warning("MACD повернув неочікуваний тип даних")
 
                 # Bollinger Bands
                 elif indicator == 'bollinger_bands':
                     for window in [20]:
                         if 'close' in result_df.columns:
                             bbands = ta.bbands(result_df['close'], length=window)
-                            result_df = pd.concat([result_df, bbands], axis=1)
-                            # Додаємо розрахунок ширини полос
-                            result_df[f'bb_width_{window}'] = (result_df[f'BBU_{window}_2.0'] -
-                                                               result_df[f'BBL_{window}_2.0']) / result_df[
-                                                                  f'BBM_{window}_2.0']
-                            added_features_count += 4
+                            if isinstance(bbands, pd.DataFrame):
+                                result_df = pd.concat([result_df, bbands], axis=1)
+                                # Додаємо розрахунок ширини полос
+                                upper_col = f'BBU_{window}_2.0'
+                                lower_col = f'BBL_{window}_2.0'
+                                middle_col = f'BBM_{window}_2.0'
+                                if all(col in result_df.columns for col in [upper_col, lower_col, middle_col]):
+                                    result_df[f'bb_width_{window}'] = (result_df[upper_col] - result_df[lower_col]) / result_df[middle_col]
+                                    added_features_count += len(bbands.columns) + 1
+                                else:
+                                    added_features_count += len(bbands.columns)
+                            else:
+                                self.logger.warning("Bollinger Bands повернув неочікуваний тип даних")
 
                 # Stochastic Oscillator
                 elif indicator == 'stochastic':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         stoch = ta.stoch(result_df['high'], result_df['low'], result_df['close'], k=14, d=3, smooth_k=3)
-                        result_df = pd.concat([result_df, stoch], axis=1)
-                        added_features_count += 2
+                        if isinstance(stoch, pd.DataFrame):
+                            result_df = pd.concat([result_df, stoch], axis=1)
+                            added_features_count += len(stoch.columns)
+                        else:
+                            self.logger.warning("Stochastic повернув неочікуваний тип даних")
 
                 # Average True Range
                 elif indicator == 'atr':
@@ -99,8 +113,11 @@ class TechnicalFeatures:
                     for window in [14]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
                             adx_df = ta.adx(result_df['high'], result_df['low'], result_df['close'], length=window)
-                            result_df = pd.concat([result_df, adx_df], axis=1)
-                            added_features_count += 3
+                            if isinstance(adx_df, pd.DataFrame):
+                                result_df = pd.concat([result_df, adx_df], axis=1)
+                                added_features_count += len(adx_df.columns)
+                            else:
+                                self.logger.warning("ADX повернув неочікуваний тип даних")
 
                 # On Balance Volume
                 elif indicator == 'obv':
@@ -140,29 +157,71 @@ class TechnicalFeatures:
                         for period in [10, 20]:
                             st_df = ta.supertrend(result_df['high'], result_df['low'], result_df['close'],
                                                   length=period, multiplier=3.0)
-                            result_df = pd.concat([result_df, st_df], axis=1)
-                            added_features_count += 2  # Додає індикатор і сигнальні лінії
+                            if isinstance(st_df, pd.DataFrame):
+                                result_df = pd.concat([result_df, st_df], axis=1)
+                                added_features_count += len(st_df.columns)
+                            else:
+                                self.logger.warning("SuperTrend повернув неочікуваний тип даних")
 
                 # Полоси Кельтнера
                 elif indicator == 'keltner':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         kc_df = ta.kc(result_df['high'], result_df['low'], result_df['close'], length=20)
-                        result_df = pd.concat([result_df, kc_df], axis=1)
-                        added_features_count += 3  # Верхня, середня і нижня лінії
+                        if isinstance(kc_df, pd.DataFrame):
+                            result_df = pd.concat([result_df, kc_df], axis=1)
+                            added_features_count += len(kc_df.columns)
+                        else:
+                            self.logger.warning("Keltner Channels повернув неочікуваний тип даних")
 
                 # Parabolic SAR
                 elif indicator == 'psar':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         psar_df = ta.psar(result_df['high'], result_df['low'])
-                        result_df = pd.concat([result_df, psar_df], axis=1)
-                        added_features_count += 2  # PSARl_0.02_0.2 і PSARs_0.02_0.2
+                        if isinstance(psar_df, pd.DataFrame):
+                            result_df = pd.concat([result_df, psar_df], axis=1)
+                            added_features_count += len(psar_df.columns)
+                        else:
+                            self.logger.warning("Parabolic SAR повернув неочікуваний тип даних")
 
-                # Ichimoku Cloud
+                # Ichimoku Cloud - FIXED
                 elif indicator == 'ichimoku':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                        ichimoku_df = ta.ichimoku(result_df['high'], result_df['low'], result_df['close'])
-                        result_df = pd.concat([result_df, ichimoku_df], axis=1)
-                        added_features_count += 5  # Tenkan, Kijun, Senkou A, Senkou B, Chikou
+                        try:
+                            # Ichimoku може повертати різні типи в залежності від версії pandas_ta
+                            ichimoku_result = ta.ichimoku(result_df['high'], result_df['low'], result_df['close'])
+
+                            if isinstance(ichimoku_result, pd.DataFrame):
+                                # Якщо повертається DataFrame
+                                result_df = pd.concat([result_df, ichimoku_result], axis=1)
+                                added_features_count += len(ichimoku_result.columns)
+                            elif isinstance(ichimoku_result, tuple):
+                                # Якщо повертається tuple з DataFrame'ами або Series
+                                for i, component in enumerate(ichimoku_result):
+                                    if isinstance(component, pd.DataFrame):
+                                        result_df = pd.concat([result_df, component], axis=1)
+                                        added_features_count += len(component.columns)
+                                    elif isinstance(component, pd.Series):
+                                        # Даємо унікальну назву серії
+                                        component_name = f'ichimoku_component_{i}'
+                                        if component.name:
+                                            component_name = component.name
+                                        result_df[component_name] = component
+                                        added_features_count += 1
+                            elif isinstance(ichimoku_result, pd.Series):
+                                # Якщо повертається одна серія
+                                result_df['ichimoku'] = ichimoku_result
+                                added_features_count += 1
+                            else:
+                                # Якщо тип невідомий, робимо ручний розрахунок
+                                self.logger.warning(f"Неочікуваний тип результату Ichimoku: {type(ichimoku_result)}")
+                                self._calculate_ichimoku_manually(result_df)
+                                added_features_count += 5
+
+                        except Exception as ichimoku_error:
+                            self.logger.warning(f"Помилка при розрахунку Ichimoku через pandas_ta: {str(ichimoku_error)}")
+                            # Розраховуємо Ichimoku вручну
+                            self._calculate_ichimoku_manually(result_df)
+                            added_features_count += 5
 
                 # Додаткові індикатори можна додати тут
                 else:
@@ -186,6 +245,39 @@ class TechnicalFeatures:
         self.logger.info(f"Додано {added_features_count} технічних індикаторів")
 
         return result_df
+
+    def _calculate_ichimoku_manually(self, result_df: pd.DataFrame) -> None:
+        """
+        Ручний розрахунок індикатора Ichimoku
+        """
+        try:
+            high = result_df['high']
+            low = result_df['low']
+            close = result_df['close']
+
+            # Tenkan-sen (Conversion Line): (9-period high + 9-period low)/2
+            period9_high = high.rolling(window=9).max()
+            period9_low = low.rolling(window=9).min()
+            result_df['ISA_9'] = (period9_high + period9_low) / 2
+
+            # Kijun-sen (Base Line): (26-period high + 26-period low)/2
+            period26_high = high.rolling(window=26).max()
+            period26_low = low.rolling(window=26).min()
+            result_df['ISB_26'] = (period26_high + period26_low) / 2
+
+            # Senkou Span A (Leading Span A): (Conversion Line + Base Line)/2
+            result_df['ITS_9'] = (result_df['ISA_9'] + result_df['ISB_26']) / 2
+
+            # Senkou Span B (Leading Span B): (52-period high + 52-period low)/2
+            period52_high = high.rolling(window=52).max()
+            period52_low = low.rolling(window=52).min()
+            result_df['IKS_26'] = (period52_high + period52_low) / 2
+
+            # Chikou Span (Lagging Span): Close shifted back 26 periods
+            result_df['ICS_26'] = close.shift(-26)
+
+        except Exception as e:
+            self.logger.error(f"Помилка при ручному розрахунку Ichimoku: {str(e)}")
 
     def create_candle_pattern_features(self, data: pd.DataFrame) -> pd.DataFrame:
         """
