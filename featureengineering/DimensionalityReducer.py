@@ -16,6 +16,7 @@ from utils.logger import CryptoLogger
 class DimensionalityReducer():
     def __init__(self):
         self.logger = CryptoLogger('Dimensionality Reducer')
+
     def select_features(self, X: pd.DataFrame, y: pd.Series,
                         n_features: Optional[int] = None,
                         method: str = 'f_regression') -> Tuple[pd.DataFrame, List[str]]:
@@ -424,7 +425,11 @@ class DimensionalityReducer():
                         poly_df[col] = 0
                     else:
                         median_val = poly_df[col].median()
-                        poly_df[col] = poly_df[col].fillna(median_val if not pd.isna(median_val) else 0)
+                        # FIXED: Use .item() to extract scalar value for comparison
+                        if pd.isna(median_val):
+                            poly_df[col] = poly_df[col].fillna(0)
+                        else:
+                            poly_df[col] = poly_df[col].fillna(median_val)
 
             # Використовуємо IQR для виявлення викидів
             for col in poly_df.columns:

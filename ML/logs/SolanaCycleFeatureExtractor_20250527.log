@@ -1,0 +1,21 @@
+2025-05-27 15:45:39 - SolanaCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Solana cycle features
+2025-05-27 15:45:39 - SolanaCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index must be a DatetimeIndex
+2025-05-27 15:45:39 - SolanaCycleFeatureExtractor - ERROR - [logger.py:111] - Error in calculate_sol_event_cycle_features: DataFrame index must be a DatetimeIndex
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/cyclefeatures/SolanaCycleFeatureExtractor.py", line 27, in calculate_sol_event_cycle_features
+    raise ValueError(error_msg)
+ValueError: DataFrame index must be a DatetimeIndex
+2025-05-27 15:45:53 - SolanaCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Solana cycle features
+2025-05-27 15:45:53 - SolanaCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index must be a DatetimeIndex
+2025-05-27 15:45:53 - SolanaCycleFeatureExtractor - ERROR - [logger.py:111] - Error in calculate_sol_event_cycle_features: DataFrame index must be a DatetimeIndex
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/cyclefeatures/SolanaCycleFeatureExtractor.py", line 27, in calculate_sol_event_cycle_features
+    raise ValueError(error_msg)
+ValueError: DataFrame index must be a DatetimeIndex
+2025-05-27 15:46:07 - SolanaCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Solana cycle features
+2025-05-27 15:46:07 - SolanaCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index must be a DatetimeIndex
+2025-05-27 15:46:07 - SolanaCycleFeatureExtractor - ERROR - [logger.py:111] - Error in calculate_sol_event_cycle_features: DataFrame index must be a DatetimeIndex
+Traceback (most recent call last):
+  File "/home/b0r3d/Desktop/kursova2/cyclefeatures/SolanaCycleFeatureExtractor.py", line 27, in calculate_sol_event_cycle_features
+    raise ValueError(error_msg)
+ValueError: DataFrame index must be a DatetimeIndex

@@ -1131,13 +1131,13 @@ class ModelTrainer:
             for epoch in range(config.epochs):
                 # Навчання по батчах
                 model.train()
-                train_loss = self._train_epoch_batched(
+                train_loss = self.train_epoch(
                     model, train_tensor, optimizer, criterion, batch_size
                 )
 
                 # Валідація по батчах
                 model.eval()
-                val_loss = self._validate_epoch_batched(
+                val_loss = self.validate_epoch(
                     model, val_tensor, criterion, batch_size
                 )
 

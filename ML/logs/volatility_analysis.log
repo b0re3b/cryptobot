@@ -256,3 +256,522 @@
 2025-05-27 13:00:36 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
 2025-05-27 13:00:36 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
 2025-05-27 13:00:36 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:40:09 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:40:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:40:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:40:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:40:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:40:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:40:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:40:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:40:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:40:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:40:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:40:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:40:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:40:09 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:40:57 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:40:57 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:40:57 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:40:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:40:57 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:40:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:40:57 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:40:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:40:57 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:40:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:40:57 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:40:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:40:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:40:57 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:42:16 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:42:16 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:16 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:16 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:16 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:16 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:16 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:16 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:16 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:42:16 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:16 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:16 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:42:16 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:42:16 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 38 функцій волатільності для ML
+2025-05-27 15:42:21 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:42:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:42:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:42:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:42:21 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 38 функцій волатільності для ML
+2025-05-27 15:42:27 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:42:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:42:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:42:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:42:27 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 38 функцій волатільності для ML
+2025-05-27 15:42:32 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:42:32 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:32 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:32 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:32 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:32 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:32 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:32 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:32 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:32 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:32 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:42:32 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:42:32 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:42:32 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 38 функцій волатільності для ML
+2025-05-27 15:42:38 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:42:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:42:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:42:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:42:38 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 38 функцій волатільності для ML
+2025-05-27 15:42:43 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:42:43 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:43 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:43 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:42:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:42:43 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:43 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:43 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:42:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:42:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:42:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:42:43 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 38 функцій волатільності для ML
+2025-05-27 15:44:11 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:44:11 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:11 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:11 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:11 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:11 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:11 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:11 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:12 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:44:12 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:12 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:12 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:44:12 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:44:12 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:44:26 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:44:26 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:26 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:26 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:26 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:26 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:26 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:26 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:26 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:26 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:26 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:44:26 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:44:26 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:44:26 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:44:41 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:44:41 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:41 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:41 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:41 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:41 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:41 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:41 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:41 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:41 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:41 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:44:41 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:44:41 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:44:41 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:44:56 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:44:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:44:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:44:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:44:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:44:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:44:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:44:56 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:45:10 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:45:10 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:10 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:10 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:10 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:10 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:10 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:10 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:10 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:10 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:10 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:45:10 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:45:10 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:45:10 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:45:25 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:45:25 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:25 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:25 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:25 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:25 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:25 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:45:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:45:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:45:25 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:45:39 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами SOL
+2025-05-27 15:45:39 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:39 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:39 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:39 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:39 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:39 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:39 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:39 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:39 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:39 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна S: window must be an integer 0 or greater
+2025-05-27 15:45:39 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна O: window must be an integer 0 or greater
+2025-05-27 15:45:39 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна L: window must be an integer 0 or greater
+2025-05-27 15:45:39 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:45:53 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами SOL
+2025-05-27 15:45:53 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:53 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:53 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:45:53 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:53 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:53 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:45:53 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:53 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:53 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:45:53 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна S: window must be an integer 0 or greater
+2025-05-27 15:45:53 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна O: window must be an integer 0 or greater
+2025-05-27 15:45:53 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна L: window must be an integer 0 or greater
+2025-05-27 15:45:53 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:46:07 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами SOL
+2025-05-27 15:46:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:46:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:46:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:46:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:46:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:46:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:46:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:46:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:46:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:46:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна S: window must be an integer 0 or greater
+2025-05-27 15:46:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна O: window must be an integer 0 or greater
+2025-05-27 15:46:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна L: window must be an integer 0 or greater
+2025-05-27 15:46:07 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:51:00 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:51:00 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:51:00 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:51:00 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:51:00 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:51:00 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:51:00 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:51:00 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:51:00 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:51:00 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:51:00 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:51:00 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:51:00 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:51:00 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:51:14 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:51:14 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:51:14 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:51:14 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні ціни - замінюються на попередні значення
+2025-05-27 15:51:14 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:51:14 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:51:14 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: window must be an integer 0 or greater
+2025-05-27 15:51:14 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:51:14 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:51:14 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:51:14 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:51:14 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:51:14 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:51:14 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:59:09 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:59:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:59:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:09 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:59:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:59:09 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:59:24 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:59:24 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:24 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:24 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:24 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:24 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:24 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:24 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:59:24 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:59:24 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:59:24 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:59:38 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 15:59:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 15:59:38 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:59:38 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 15:59:38 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 15:59:52 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 15:59:52 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:52 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:52 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 15:59:52 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:52 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:52 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 15:59:52 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 15:59:52 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 15:59:52 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 15:59:52 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:00:07 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 16:00:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:07 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 16:00:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:00:07 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 16:00:07 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:00:21 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 16:00:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:21 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 16:00:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:00:21 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 16:00:21 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:00:35 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами SOL
+2025-05-27 16:00:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:35 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:35 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:35 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна S: window must be an integer 0 or greater
+2025-05-27 16:00:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна O: window must be an integer 0 or greater
+2025-05-27 16:00:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна L: window must be an integer 0 or greater
+2025-05-27 16:00:35 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:00:49 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами SOL
+2025-05-27 16:00:49 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:49 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:49 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:00:49 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:49 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:49 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:00:49 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна S: window must be an integer 0 or greater
+2025-05-27 16:00:49 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна O: window must be an integer 0 or greater
+2025-05-27 16:00:49 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна L: window must be an integer 0 or greater
+2025-05-27 16:00:49 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:01:03 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами SOL
+2025-05-27 16:01:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:01:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:01:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:01:03 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:01:03 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:01:03 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:01:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна S: window must be an integer 0 or greater
+2025-05-27 16:01:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна O: window must be an integer 0 or greater
+2025-05-27 16:01:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна L: window must be an integer 0 or greater
+2025-05-27 16:01:03 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:10:05 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:10:05 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:05 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:05 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:05 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:05 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:10:05 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:05 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:05 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:10:05 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:10:05 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:10:19 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:10:19 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:19 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:19 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:19 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:19 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:19 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:19 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:10:19 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:10:19 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:10:19 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:10:34 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:10:34 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:34 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:34 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:34 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:34 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:34 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:34 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:10:34 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:10:34 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:10:34 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:10:48 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 16:10:48 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:48 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:48 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:10:48 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:48 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:48 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:10:48 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 16:10:48 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:10:48 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 16:10:48 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:11:03 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 16:11:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:03 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:03 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:03 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 16:11:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:11:03 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 16:11:03 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:11:18 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 16:11:18 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:18 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:18 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:18 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:18 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:18 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:18 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 16:11:18 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:11:18 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 16:11:18 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:11:27 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:11:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:11:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:27 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:11:27 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:11:27 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:11:42 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:11:42 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:42 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:42 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:42 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:42 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:42 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:42 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:11:42 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:11:42 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:11:42 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:11:56 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:11:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:11:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:56 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:11:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:11:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:11:56 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:11:56 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:16:02 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:16:02 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:02 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:02 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:02 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:02 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:16:02 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:02 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:02 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:16:02 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:16:02 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:16:17 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:16:17 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:17 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:17 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:17 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:17 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:17 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:17 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:16:17 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:16:17 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:16:17 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:16:31 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:16:31 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:31 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:31 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:16:31 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:31 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:31 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:31 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:31 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:16:31 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:16:31 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:16:47 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами ETH
+2025-05-27 16:16:47 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:47 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:47 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:16:47 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:47 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:47 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:16:47 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна E: window must be an integer 0 or greater
+2025-05-27 16:16:47 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:16:47 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна H: window must be an integer 0 or greater
+2025-05-27 16:16:47 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML
+2025-05-27 16:24:35 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатільності для ML з вікнами BTC
+2025-05-27 16:24:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:24:35 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:24:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:24:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні історичної волатильності: Параметр 'window' має бути додатним цілим числом
+2025-05-27 16:24:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна B: window must be an integer 0 or greater
+2025-05-27 16:24:35 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:24:35 - volatility_analysis - WARNING - [logger.py:107] - Знайдено нульові або від'ємні значення в 'high' або 'low' - ці точки будуть пропущені
+2025-05-27 16:24:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна T: window must be an integer 0 or greater
+2025-05-27 16:24:35 - volatility_analysis - ERROR - [logger.py:111] - Помилка при обчисленні функцій для вікна C: window must be an integer 0 or greater
+2025-05-27 16:24:35 - volatility_analysis - INFO - [logger.py:103] - Успішно підготовлено 57 функцій волатільності для ML

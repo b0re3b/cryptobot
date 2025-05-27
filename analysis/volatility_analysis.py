@@ -128,40 +128,46 @@ class VolatilityAnalysis:
             return pd.Series(index=volatility_data.index)
 
     def calculate_historical_volatility(self, price_data, window=14, trading_periods=365, annualize=True):
-        """Розраховує історичну волатильність (оптимізовано векторизацією)"""
+        """Розраховує історичну волатильність на основі логарифмічних прибутків"""
         try:
-            # Обробка вхідних даних
+            # Валідація параметра вікна
+            if not isinstance(window, int) or window <= 0:
+                raise ValueError("Параметр 'window' має бути додатним цілим числом")
+
+            # Конвертація у Series, якщо потрібно
             price_data = pd.Series(price_data) if not isinstance(price_data, pd.Series) else price_data
 
-            # Конвертація в float для уникнення проблем з decimal.Decimal
+            # Конвертація значень у float (у разі decimal або object dtype)
             price_data = self._safe_convert_to_float(price_data)
 
-            # Перевірка на нульові або від'ємні значення
+            # Обробка нульових або від'ємних значень
             if (price_data <= 0).any():
-                self.logger.warning("Знайдено нульові або від'ємні ціни - замінюються на попередні значення")
+                self.logger.warning("Виявлено нульові або від’ємні ціни — буде виконано заповнення")
                 price_data = price_data.replace(0, np.nan).replace([np.inf, -np.inf], np.nan)
                 price_data = price_data.ffill().bfill()
 
-                # Якщо все ще є нульові значення, повертаємо серію з NaN
-                if (price_data <= 0).any():
-                    self.logger.error("Не вдалося виправити нульові/від'ємні ціни")
-                    return pd.Series(index=price_data.index, dtype=float)
+            # Повторна перевірка: якщо залишилися некоректні значення
+            if (price_data <= 0).any():
+                self.logger.error("Не вдалося усунути всі нульові або від’ємні значення в price_data")
+                return pd.Series(index=price_data.index, dtype=float)
 
-            # Векторизовані обчислення з захистом від 0 та від'ємних значень
+            # Розрахунок логарифмічних прибутків
             log_returns = np.log(price_data / price_data.shift(1)).dropna()
 
-            # Оптимізоване обчислення волатильності
+            # Розрахунок ковзної стандартної девіації (волатильність)
             rolling_vol = log_returns.rolling(window=window).std()
 
-            # Анулізація за потреби
+            # Анулізація (переведення до річного значення)
             if annualize:
-                rolling_vol = rolling_vol * np.sqrt(trading_periods)
+                rolling_vol *= np.sqrt(trading_periods)
 
+            self.logger.debug(f"Історична волатильність розрахована для {len(rolling_vol)} точок")
             return rolling_vol
 
         except Exception as e:
             self.logger.error(f"Помилка при обчисленні історичної волатильності: {e}")
-            return pd.Series(index=price_data.index if isinstance(price_data, pd.Series) else range(len(price_data)))
+            return pd.Series(index=price_data.index if isinstance(price_data, pd.Series) else range(len(price_data)),
+                             dtype=float)
 
     def calculate_parkinson_volatility(self, ohlc_data, window=14, trading_periods=365):
         """Розраховує волатильність Паркінсона (оптимізовано)"""

@@ -12,7 +12,8 @@ class SolanaCycleFeatureExtractor:
         self.sol_significant_events = sol_significant_events
         self.logger = CryptoLogger('SolanaCycleFeatureExtractor')
 
-    def calculate_sol_event_cycle_features(self, processed_data: pd.DataFrame) -> pd.DataFrame:
+    def calculate_sol_event_cycle_features(self, processed_data: pd.DataFrame,
+                                           date_column: Optional[str] = None) -> pd.DataFrame:
         self.logger.info("Starting calculation of Solana cycle features")
 
         try:
@@ -20,11 +21,54 @@ class SolanaCycleFeatureExtractor:
             result_df = processed_data.copy()
             self.logger.debug(f"Input DataFrame shape: {result_df.shape}")
 
-            # Ensure the DataFrame has a datetime index
+            # Handle different index scenarios
             if not isinstance(result_df.index, pd.DatetimeIndex):
-                error_msg = "DataFrame index must be a DatetimeIndex"
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
+                if date_column is not None:
+                    # Use specified date column
+                    if date_column not in result_df.columns:
+                        error_msg = f"Specified date column '{date_column}' not found in DataFrame"
+                        self.logger.error(error_msg)
+                        raise ValueError(error_msg)
+
+                    self.logger.info(f"Converting column '{date_column}' to datetime index")
+                    result_df[date_column] = pd.to_datetime(result_df[date_column])
+                    result_df = result_df.set_index(date_column)
+
+                elif 'date' in result_df.columns:
+                    # Auto-detect 'date' column
+                    self.logger.info("Auto-detected 'date' column, converting to datetime index")
+                    result_df['date'] = pd.to_datetime(result_df['date'])
+                    result_df = result_df.set_index('date')
+
+                elif any(col.lower() in ['timestamp', 'datetime', 'time'] for col in result_df.columns):
+                    # Auto-detect common datetime column names
+                    datetime_cols = [col for col in result_df.columns if
+                                     col.lower() in ['timestamp', 'datetime', 'time']]
+                    date_column = datetime_cols[0]
+                    self.logger.info(f"Auto-detected datetime column '{date_column}', converting to datetime index")
+                    result_df[date_column] = pd.to_datetime(result_df[date_column])
+                    result_df = result_df.set_index(date_column)
+
+                else:
+                    # Try to convert existing index to datetime
+                    try:
+                        self.logger.info("Attempting to convert existing index to DatetimeIndex")
+                        result_df.index = pd.to_datetime(result_df.index)
+                    except Exception as idx_error:
+                        error_msg = ("DataFrame index must be a DatetimeIndex or DataFrame must contain a date column. "
+                                     "Available columns: " + str(list(result_df.columns)) +
+                                     ". You can specify a date column using the 'date_column' parameter.")
+                        self.logger.error(error_msg)
+                        self.logger.error(f"Index conversion error: {str(idx_error)}")
+                        raise ValueError(error_msg)
+
+            # Ensure index is sorted
+            if not result_df.index.is_monotonic_increasing:
+                self.logger.info("Sorting DataFrame by datetime index")
+                result_df = result_df.sort_index()
+
+            self.logger.info(
+                f"DataFrame successfully prepared with DatetimeIndex from {result_df.index.min()} to {result_df.index.max()}")
 
             # Convert Solana events to datetime objects and sort them
             sol_events = sorted(self.sol_significant_events, key=lambda x: pd.Timestamp(x["date"]))
@@ -203,3 +247,32 @@ class SolanaCycleFeatureExtractor:
         except Exception as e:
             self.logger.error(f"Error in calculate_sol_event_cycle_features: {str(e)}", exc_info=True)
             raise
+
+    def prepare_dataframe_for_processing(self, df: pd.DataFrame, date_column: str = None) -> pd.DataFrame:
+
+        self.logger.info("Preparing DataFrame for processing")
+
+        result_df = df.copy()
+
+        if not isinstance(result_df.index, pd.DatetimeIndex):
+            if date_column and date_column in result_df.columns:
+                result_df[date_column] = pd.to_datetime(result_df[date_column])
+                result_df = result_df.set_index(date_column)
+            else:
+                # Try to find a suitable date column
+                date_cols = [col for col in result_df.columns
+                             if any(keyword in col.lower() for keyword in ['date', 'time', 'timestamp'])]
+
+                if date_cols:
+                    date_column = date_cols[0]
+                    self.logger.info(f"Using column '{date_column}' as date index")
+                    result_df[date_column] = pd.to_datetime(result_df[date_column])
+                    result_df = result_df.set_index(date_column)
+                else:
+                    raise ValueError("No suitable date column found. Please specify date_column parameter.")
+
+        # Sort by index
+        if not result_df.index.is_monotonic_increasing:
+            result_df = result_df.sort_index()
+
+        return result_df

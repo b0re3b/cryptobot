@@ -83,7 +83,8 @@ class TechnicalFeatures:
                                 lower_col = f'BBL_{window}_2.0'
                                 middle_col = f'BBM_{window}_2.0'
                                 if all(col in result_df.columns for col in [upper_col, lower_col, middle_col]):
-                                    result_df[f'bb_width_{window}'] = (result_df[upper_col] - result_df[lower_col]) / result_df[middle_col]
+                                    result_df[f'bb_width_{window}'] = (result_df[upper_col] - result_df[lower_col]) / \
+                                                                      result_df[middle_col]
                                     added_features_count += len(bbands.columns) + 1
                                 else:
                                     added_features_count += len(bbands.columns)
@@ -147,8 +148,10 @@ class TechnicalFeatures:
                         for period in [14, 30]:
                             typical_price = (result_df['high'] + result_df['low'] + result_df['close']) / 3
                             vol_tp = result_df['volume'] * typical_price
-                            result_df[f'vwap_{period}'] = vol_tp.rolling(window=period).sum() / result_df[
-                                'volume'].rolling(window=period).sum()
+                            # Додаємо захист від ділення на нуль
+                            volume_sum = result_df['volume'].rolling(window=period).sum()
+                            volume_sum = volume_sum.replace(0, np.nan)
+                            result_df[f'vwap_{period}'] = vol_tp.rolling(window=period).sum() / volume_sum
                             added_features_count += 1
 
                 # SuperTrend індикатор
@@ -218,7 +221,8 @@ class TechnicalFeatures:
                                 added_features_count += 5
 
                         except Exception as ichimoku_error:
-                            self.logger.warning(f"Помилка при розрахунку Ichimoku через pandas_ta: {str(ichimoku_error)}")
+                            self.logger.warning(
+                                f"Помилка при розрахунку Ichimoku через pandas_ta: {str(ichimoku_error)}")
                             # Розраховуємо Ichimoku вручну
                             self._calculate_ichimoku_manually(result_df)
                             added_features_count += 5
@@ -230,17 +234,30 @@ class TechnicalFeatures:
             except Exception as e:
                 self.logger.error(f"Помилка при розрахунку індикатора {indicator}: {str(e)}")
 
-        # Заповнюємо NaN значення
+        # Заповнюємо NaN значення - FIXED
+        original_columns = set(data.columns)
         for col in result_df.columns:
-            if col not in data.columns:  # перевіряємо, що це нова ознака
-                if result_df[col].isna().any():
-                    self.logger.debug(f"Заповнення NaN значень у стовпці {col}")
-                    # Заповнюємо NaN методом forward fill, потім backward fill
-                    result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
+            if col not in original_columns:  # перевіряємо, що це нова ознака
+                try:
+                    # Перевіряємо наявність NaN значень більш надійним способом
+                    if result_df[col].isnull().sum() > 0:
+                        self.logger.debug(f"Заповнення NaN значень у стовпці {col}")
 
-                    # Якщо все ще є NaN, заповнюємо медіаною
-                    if result_df[col].isna().any():
-                        result_df[col] = result_df[col].fillna(result_df[col].median())
+                        # Використовуємо нову синтаксис для forward fill та backward fill
+                        result_df[col] = result_df[col].ffill().bfill()
+
+                        # Якщо все ще є NaN, заповнюємо медіаною
+                        if result_df[col].isnull().sum() > 0:
+                            median_val = result_df[col].median()
+                            if pd.isna(median_val):
+                                result_df[col] = result_df[col].fillna(0)
+                            else:
+                                result_df[col] = result_df[col].fillna(median_val)
+
+                except Exception as fill_error:
+                    self.logger.warning(f"Помилка при заповненні NaN у стовпці {col}: {str(fill_error)}")
+                    # Якщо все інше не працює, просто заповнюємо нулями
+                    result_df[col] = result_df[col].fillna(0)
 
         self.logger.info(f"Додано {added_features_count} технічних індикаторів")
 

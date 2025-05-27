@@ -293,7 +293,6 @@ class DataPreprocessor:
                 self.logger.error("db_manager не ініціалізований у класі")
                 raise ValueError("db_manager не встановлений")
 
-            # Мапування символів на методи завантаження
             symbol_methods = {
                 'BTC': self.db_manager.get_btc_lstm_sequence,
                 'ETH': self.db_manager.get_eth_lstm_sequence,
@@ -308,7 +307,6 @@ class DataPreprocessor:
                 try:
                     self.logger.debug(f"Завантаження даних для {symbol} з таймфреймом {timeframe}")
 
-                    # Викликаємо метод з таймфреймом
                     if symbol == 'BTC':
                         data = self.db_manager.get_btc_lstm_sequence(timeframe)
                     elif symbol == 'ETH':
@@ -322,6 +320,12 @@ class DataPreprocessor:
                         self.logger.info(f"Успішно завантажено {len(data)} записів для {symbol}-{timeframe}")
                         if isinstance(data, list) and len(data) > 0:
                             self.logger.debug(f"Ключі у завантажених даних: {list(data[0].keys())}")
+
+                            preview_data = [
+                                {k: row[k] for i, k in enumerate(row) if i < 5}
+                                for row in data[:5]
+                            ]
+                            self.logger.debug(f"Перші 5 рядків (до 5 колонок): {preview_data}")
                     else:
                         self.logger.warning(f"Завантажені дані для {symbol}-{timeframe} порожні")
 
@@ -494,22 +498,6 @@ class DataPreprocessor:
 
         return train_loader, val_loader, config
 
-    def clear_chunk_cache(self):
-        """Очищення кешу чанків"""
-        cleared_count = len(self._chunk_cache)
-        self._chunk_cache.clear()
-        self._cache_usage_order.clear()
-        self.logger.info(f"Очищено кеш чанків: {cleared_count} елементів")
-
-    def get_chunk_cache_info(self) -> Dict[str, Any]:
-        """Інформація про кеш чанків"""
-        return {
-            'cached_chunks': len(self._chunk_cache),
-            'max_chunks': self.chunk_config.max_chunks_in_memory,
-            'chunk_size': self.chunk_config.chunk_size,
-            'cache_keys': list(self._chunk_cache.keys()),
-            'usage_order': self._cache_usage_order.copy()
-        }
 
     def _fallback_data_loader(self, symbol: str, timeframe: str) -> pd.DataFrame:
         """
@@ -883,79 +871,6 @@ class DataPreprocessor:
         self.logger.debug(f"Валідація пройшла успішно для {symbol}-{timeframe}: {X.shape}")
         return True
 
-    def get_data_summary(self, symbol: str, timeframe: str) -> Dict[str, Any]:
-        """Отримання зведеної інформації про дані"""
-        try:
-            data = self.get_data_with_fallback(symbol, timeframe)
-
-            summary = {
-                'symbol': symbol,
-                'timeframe': timeframe,
-                'total_records': len(data),
-                'date_range': {
-                    'start': data.index.min() if hasattr(data.index, 'min') else 'Unknown',
-                    'end': data.index.max() if hasattr(data.index, 'max') else 'Unknown'
-                },
-                'features': {
-                    'total_columns': len(data.columns),
-                    'numeric_columns': len(data.select_dtypes(include=[np.number]).columns),
-                    'has_target': any('target' in col for col in data.columns)
-                },
-                'data_quality': {
-                    'null_values': data.isnull().sum().sum(),
-                    'null_percentage': (data.isnull().sum().sum() / (len(data) * len(data.columns))) * 100
-                },
-                'preprocessing_status': {
-                    'scaled': self.data_is_scaled,
-                    'sequences_prepared': self.sequences_prepared,
-                    'time_features_prepared': self.time_features_prepared
-                }
-            }
-
-            self.logger.info(f"Створено зведення даних для {symbol}-{timeframe}")
-            return summary
-
-        except Exception as e:
-            self.logger.error(f"Помилка створення зведення для {symbol}-{timeframe}: {e}")
-            return {'error': str(e)}
-
-    def cleanup_scalers(self, symbols: List[str] = None, timeframes: List[str] = None):
-        """Очищення скейлерів для вивільнення пам'яті"""
-        if symbols is None and timeframes is None:
-            # Очищення всіх скейлерів
-            cleared_count = len(self.scalers)
-            self.scalers.clear()
-            self.logger.info(f"Очищено {cleared_count} скейлерів")
-        else:
-            # Вибіркове очищення
-            keys_to_remove = []
-            for key in self.scalers.keys():
-                parts = key.split('_')
-                if len(parts) >= 2:
-                    symbol, timeframe = parts[0], parts[1]
-                    if (symbols is None or symbol in symbols) and \
-                            (timeframes is None or timeframe in timeframes):
-                        keys_to_remove.append(key)
-
-            for key in keys_to_remove:
-                del self.scalers[key]
-
-            self.logger.info(f"Очищено {len(keys_to_remove)} скейлерів")
-
-    def get_memory_usage_info(self) -> Dict[str, Any]:
-        """Отримання інформації про використання пам'яті"""
-        import sys
-
-        scalers_memory = sys.getsizeof(self.scalers)
-        configs_memory = sys.getsizeof(self.model_configs) + sys.getsizeof(self.feature_configs)
-
-        return {
-            'scalers_count': len(self.scalers),
-            'model_configs_count': len(self.model_configs),
-            'feature_configs_count': len(self.feature_configs),
-            'approximate_memory_mb': (scalers_memory + configs_memory) / (1024 * 1024),
-            'scalers_keys': list(self.scalers.keys())[:10]  # Перші 10 ключів
-        }
 
     def prepare_features(self, data, symbol: str) -> DataFrame | tuple[DataFrame, Series] | Any:
         """Підготовка ознак для моделі з використанням всіх доступних модулів та підтримкою chunked даних"""
@@ -1099,22 +1014,6 @@ class DataPreprocessor:
                     self.logger.warning(f"Ознаки волатільності для {symbol} порожні")
             except Exception as e:
                 self.logger.error(f"Помилка при створенні ознак волатільності для {symbol}: {e}")
-
-            # Отримання циклічних ознак
-            self.logger.debug(f"Підготовка циклічних ознак для {symbol}")
-            try:
-                # Викликаємо метод з правильним порядком параметрів
-                cycle_features = self.cycle.prepare_cycle_ml_features(analysis_df, symbol)
-                if cycle_features is not None and not cycle_features.empty:
-                    if isinstance(cycle_features, pd.DataFrame):
-                        feature_dataframes.append(cycle_features)
-                        self.logger.info(f"Додано {cycle_features.shape[1]} циклічних ознак")
-                    else:
-                        self.logger.warning(f"Циклічні ознаки не є DataFrame для {symbol}: {type(cycle_features)}")
-                else:
-                    self.logger.warning(f"Циклічні ознаки для {symbol} порожні")
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні циклічних ознак для {symbol}: {e}")
 
             # Отримання технічних індикаторів
             self.logger.debug(f"Підготовка технічних індикаторів для {symbol}")
@@ -1269,51 +1168,3 @@ class DataPreprocessor:
                 self.logger.error(f"Помилка fallback для {symbol}: {fallback_error}")
                 raise e
 
-    def create_enhanced_sequences_with_features(self, df: pd.DataFrame, symbol: str,
-                                                sequence_length: int = 60) -> Tuple[np.ndarray, np.ndarray]:
-
-        self.logger.info(f"Створення розширених послідовностей для {symbol}")
-
-        try:
-            # Підготовка розширених ознак
-            enhanced_features = self.prepare_features(df, symbol)
-
-            # Створення цільової змінної (прогноз ціни закриття на наступний період)
-            target = enhanced_features['close'].shift(-1).dropna()
-
-            # Видалення останнього рядка з ознак (для якого немає цілі)
-            features_aligned = enhanced_features.iloc[:-1]
-
-            # Перевірка вирівнювання
-            if len(features_aligned) != len(target):
-                min_len = min(len(features_aligned), len(target))
-                features_aligned = features_aligned.iloc[:min_len]
-                target = target.iloc[:min_len]
-                self.logger.warning(f"Вирівняно дані до {min_len} записів для {symbol}")
-
-            # Створення послідовностей
-            sequences = []
-            targets = []
-
-            for i in range(sequence_length, len(features_aligned)):
-                # Послідовність ознак
-                sequence = features_aligned.iloc[i - sequence_length:i].values
-                sequences.append(sequence)
-
-                # Цільове значення
-                targets.append(target.iloc[i])
-
-            if not sequences:
-                raise ValueError(f"Не вдалося створити послідовності для {symbol}")
-
-            X = np.array(sequences)
-            y = np.array(targets)
-
-            self.logger.info(f"Створено {len(sequences)} послідовностей для {symbol}: "
-                             f"X shape: {X.shape}, y shape: {y.shape}")
-
-            return X, y
-
-        except Exception as e:
-            self.logger.error(f"Помилка створення розширених послідовностей для {symbol}: {e}")
-            raise

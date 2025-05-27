@@ -4,3 +4,99 @@
 2025-05-27 13:00:22 - BitcoinCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index is not a DatetimeIndex
 2025-05-27 13:00:36 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
 2025-05-27 13:00:36 - BitcoinCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index is not a DatetimeIndex
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 38)
+2025-05-27 15:40:09 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 38)
+2025-05-27 15:40:57 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 19)
+2025-05-27 15:42:16 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 19)
+2025-05-27 15:42:21 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 19)
+2025-05-27 15:42:27 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 38)
+2025-05-27 15:44:12 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 38)
+2025-05-27 15:44:26 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - WARNING - [logger.py:107] - DataFrame index is not a DatetimeIndex, attempting to convert
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Attempting to convert current index to DatetimeIndex
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Successfully converted to DatetimeIndex: datetime64[ns]
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Using halving dates: [Timestamp('2012-11-28 00:00:00'), Timestamp('2016-07-09 00:00:00'), Timestamp('2020-05-11 00:00:00'), Timestamp('2024-04-20 00:00:00')]
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Last known halving: 2024-04-20 00:00:00, estimated next halving: 2028-04-20 00:00:00
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Processing 396 data points for halving cycle features
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating additional derived features
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Calculating price change since halving for each cycle
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Bitcoin halving cycle features calculation completed
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Output dataframe shape: (396, 38)
+2025-05-27 15:44:41 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Added features: ['days_since_last_halving', 'days_to_next_halving', 'halving_cycle_phase', 'cycle_number', 'log_days_since_halving', 'halving_cycle_sin', 'halving_cycle_cos', 'price_change_since_halving']

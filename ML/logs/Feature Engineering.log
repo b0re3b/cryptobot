@@ -602,3 +602,1060 @@
 2025-05-27 13:00:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
 2025-05-27 13:00:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
 2025-05-27 13:00:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:40:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:40:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:40:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:40:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:41:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:41:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:42:15 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:42:15 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:42:15 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:42:15 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:42:15 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:42:16 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:42:16 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:42:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:42:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:42:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:42:18 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:42:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:42:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:42:21 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:42:21 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 10398 нових ознак. Загальна кількість ознак: 10409
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:42:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:42:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:42:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:42:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:42:24 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:42:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:42:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:42:26 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:42:26 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:42:26 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:42:26 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:42:26 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:42:26 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 10398 нових ознак. Загальна кількість ознак: 10409
+2025-05-27 15:42:27 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:42:27 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:42:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:42:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:42:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:42:29 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:42:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:42:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:42:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:42:32 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:42:32 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 10398 нових ознак. Загальна кількість ознак: 10409
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:42:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:42:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:42:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:42:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:42:35 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:42:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:42:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:42:37 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:42:37 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:42:37 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:42:37 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:42:37 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 15:42:37 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 10398 нових ознак. Загальна кількість ознак: 10409
+2025-05-27 15:42:38 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:42:38 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:42:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:42:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:42:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:42:40 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:42:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:42:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:42:43 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:42:43 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 10398 нових ознак. Загальна кількість ознак: 10409
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:42:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:44:11 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:44:11 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:44:11 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:44:11 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:44:11 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:44:12 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:44:12 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:44:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:44:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:44:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:44:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:44:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:44:18 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:44:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:44:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:44:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:44:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:44:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:44:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:44:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:44:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:44:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:44:26 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:44:26 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:44:26 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:44:26 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:44:26 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:44:26 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:44:26 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:44:27 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:44:27 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:44:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:44:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:44:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:44:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:44:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:44:33 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:44:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:44:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:44:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:44:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:44:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:44:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:44:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:44:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:44:41 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:44:41 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:44:41 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:44:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:44:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:44:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:44:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:44:47 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:44:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:44:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:44:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:44:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:44:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:44:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:44:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:44:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:44:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:44:56 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:44:56 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:44:56 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:44:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:45:01 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:45:01 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:45:02 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:45:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:45:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:45:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:45:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:45:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:45:10 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:45:10 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:45:10 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:45:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:45:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:45:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:45:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:45:16 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:45:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:45:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:45:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:45:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:45:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:45:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:45:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:45:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:45:24 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:24 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:45:24 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:45:24 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:45:24 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:45:24 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 15:45:25 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:45:25 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:45:25 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:45:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:45:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:45:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:45:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:45:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:45:30 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:45:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:45:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:45:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:45:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:45:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:45:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:45:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:45:39 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:45:39 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:45:39 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:45:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:45:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:45:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:45:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:45:45 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:45:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:45:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:45:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:45:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:45:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:45:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:45:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:45:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:45:53 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:45:53 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:45:53 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.000874222649418277
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:45:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:45:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:45:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:45:59 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:45:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:45:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:45:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:45:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:45:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:46:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:46:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:46:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:46:07 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:46:07 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:46:07 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.000874222649418277
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:46:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:46:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:46:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:46:13 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:46:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:46:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:46:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:46:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:46:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:46:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:46:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:46:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:46:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:46:21 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:46:21 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:46:21 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:46:21 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:46:21 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:46:21 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.000874222649418277
+2025-05-27 15:46:21 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:51:00 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:51:01 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:51:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:51:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:51:06 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:51:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:51:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:51:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:51:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:51:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:51:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:51:14 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:51:14 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:51:14 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:51:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:51:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:51:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:51:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:51:20 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:51:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:51:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:51:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:51:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:51:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:51:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:59:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:59:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:59:14 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:59:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:59:15 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:59:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:59:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:59:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:59:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:59:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:59:23 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:59:23 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:59:23 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:59:23 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:59:24 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:59:24 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:59:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:59:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:59:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:59:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:59:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:59:29 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:59:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:59:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:59:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:59:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:59:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:59:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:59:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:59:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:59:38 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:59:38 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:59:38 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:59:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:59:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:59:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:59:44 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:59:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:59:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:59:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:59:44 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 15:59:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 15:59:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 15:59:51 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 15:59:52 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 15:59:52 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 15:59:52 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 15:59:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 15:59:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 15:59:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 15:59:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 15:59:58 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 15:59:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 15:59:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 15:59:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 15:59:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 15:59:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:00:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:00:06 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:00:06 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:00:06 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 16:00:06 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:00:07 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:00:07 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:00:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:00:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:00:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:00:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:00:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:00:12 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:00:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:00:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:00:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:00:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:00:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:00:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:00:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:00:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:00:21 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:00:21 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:00:21 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:00:21 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:00:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:00:26 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:00:27 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:00:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:00:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:00:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:00:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:00:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:00:35 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:00:35 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:00:35 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:00:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:00:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:00:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:00:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:00:41 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:00:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:00:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:00:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:00:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:00:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:00:49 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:00:49 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:00:49 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.000874222649418277
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:00:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:00:50 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:00:54 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:00:54 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:00:55 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:00:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:00:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:00:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:00:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:00:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:00:59 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:01:03 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:01:03 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:01:03 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.000874222649418277
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:01:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:01:04 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:01:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:01:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:01:09 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:01:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:01:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:01:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:01:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:01:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:01:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:01:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:01:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:01:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:01:17 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:01:17 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:01:17 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:01:17 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:01:17 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:01:17 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.000874222649418277
+2025-05-27 16:01:17 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:10:05 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:10:10 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:10:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:10:10 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:10:10 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:10:11 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:11 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:10:11 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:10:11 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:10:11 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:10:15 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:10:15 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:10:18 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:10:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:10:19 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:10:19 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:10:19 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:10:19 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:10:19 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:10:20 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:10:20 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:10:24 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:10:24 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:10:25 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:25 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:10:25 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:10:25 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:10:25 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:10:29 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:10:29 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:10:33 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:10:33 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:10:33 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:10:34 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:10:34 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:10:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:10:39 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:10:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:10:39 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:10:39 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:10:40 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:40 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:10:40 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:10:40 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:10:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:10:43 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:10:43 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:10:48 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:10:48 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:10:48 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:10:48 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:10:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:10:49 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:10:49 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:10:53 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:10:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:10:54 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:10:54 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:10:54 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:10:54 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:10:54 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:10:54 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:10:54 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:10:55 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:10:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:10:55 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:10:55 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:10:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:10:55 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:10:55 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:10:58 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:10:58 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:11:02 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:11:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:11:02 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:11:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:11:03 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:11:03 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:11:03 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:11:03 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:11:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:11:04 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:11:04 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:11:08 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:11:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:11:08 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:11:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:11:09 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:09 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:11:09 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:11:09 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:11:09 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:11:13 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:11:13 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:11:17 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:11:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:11:17 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:11:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:11:17 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:11:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:11:18 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:11:18 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:11:18 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.009976852773222133
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:11:18 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:11:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:11:28 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:11:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:11:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:11:33 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:11:33 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:11:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:11:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:11:34 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:11:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:11:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:11:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:11:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:11:42 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:11:42 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:11:42 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:11:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:11:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:11:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:11:48 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак technical: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:11:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:11:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:11:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:11:48 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:11:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:11:56 - Feature Engineering - ERROR - [logger.py:111] - Помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:11:56 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:11:56 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Пайплайн завершено. Додано 23127 нових ознак. Загальна кількість ознак: 23157
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:11:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:11:57 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:16:02 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:16:03 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:16:03 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:16:07 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:16:07 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:16:08 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:08 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:16:08 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:16:08 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:16:08 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:16:12 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:16:12 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:16:16 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:16:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:16:16 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:16:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:16:16 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:16:16 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:16:17 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:16:17 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:16:17 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:16:17 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:16:22 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:16:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:16:22 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:16:22 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:16:23 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:23 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:16:23 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:16:23 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:16:23 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:16:27 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:16:27 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:16:30 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:16:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:16:30 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:16:30 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:16:31 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:16:31 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:16:31 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:16:31 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:16:31 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:16:32 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:16:32 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:16:37 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:16:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:16:37 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:16:37 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:16:38 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:38 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:16:38 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:16:38 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:16:38 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:16:42 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:16:42 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Група custom_indicators: додано 52 нових ознак
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volume
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Група volume: додано 26 нових ознак
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: polynomial
+2025-05-27 16:16:46 - Feature Engineering - WARNING - [logger.py:107] - Група polynomial: нові ознаки не додані
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: cluster
+2025-05-27 16:16:46 - Feature Engineering - ERROR - [logger.py:111] - Критична помилка при створенні групи ознак cluster: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної для close з горизонтом 1
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Створення цільової змінної типу 'return' з горизонтом 1
+2025-05-27 16:16:46 - Feature Engineering - INFO - [logger.py:103] - Створено цільову змінну 'target_return_1p' як процентну зміну ціни
+2025-05-27 16:16:46 - Feature Engineering - WARNING - [logger.py:107] - Цільова змінна target_return_1p містить 1 NaN значень
+2025-05-27 16:16:46 - Feature Engineering - WARNING - [logger.py:107] - NaN значення в цільовій змінній заповнені медіаною: -0.01235919647955297
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:16:47 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:16:52 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:16:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:16:52 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:16:52 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:16:52 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_technical_features: The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+2025-05-27 16:16:53 - Feature Engineering - WARNING - [logger.py:107] - Група technical: нові ознаки не додані
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:16:53 - Feature Engineering - WARNING - [logger.py:107] - Недостатньо SMA/EMA колонок для перетинів: SMA=0, EMA=0
+2025-05-27 16:16:53 - Feature Engineering - WARNING - [logger.py:107] - Група crossover: нові ознаки не додані
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:16:53 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:16:56 - Feature Engineering - INFO - [logger.py:103] - Група candle_patterns: додано 29 нових ознак
+2025-05-27 16:16:56 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Ініціалізація Feature Engineering Pipeline...
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Запуск уніфікованого пайплайну підготовки даних...
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Використовуються всі стандартні групи ознак: ['lagged', 'rolling', 'ewm', 'returns', 'technical', 'volatility', 'ratio', 'crossover', 'datetime', 'candle_patterns', 'custom_indicators', 'volume', 'polynomial', 'cluster']
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: lagged
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Група lagged: додано 125 нових ознак
+2025-05-27 16:24:35 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: rolling
+2025-05-27 16:24:36 - Feature Engineering - INFO - [logger.py:103] - Група rolling: додано 2400 нових ознак
+2025-05-27 16:24:36 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ewm
+2025-05-27 16:24:40 - Feature Engineering - INFO - [logger.py:103] - Група ewm: додано 20400 нових ознак
+2025-05-27 16:24:40 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: returns
+2025-05-27 16:24:41 - Feature Engineering - INFO - [logger.py:103] - Група returns: додано 25 нових ознак
+2025-05-27 16:24:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: technical
+2025-05-27 16:24:41 - Feature Engineering - INFO - [logger.py:103] - Група technical: додано 57 нових ознак
+2025-05-27 16:24:41 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: volatility
+2025-05-27 16:24:45 - Feature Engineering - INFO - [logger.py:103] - Група volatility: додано 26 нових ознак
+2025-05-27 16:24:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: ratio
+2025-05-27 16:24:45 - Feature Engineering - INFO - [logger.py:103] - Група ratio: додано 20 нових ознак
+2025-05-27 16:24:45 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: crossover
+2025-05-27 16:24:46 - Feature Engineering - INFO - [logger.py:103] - Група crossover: додано 175 нових ознак
+2025-05-27 16:24:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: datetime
+2025-05-27 16:24:46 - Feature Engineering - INFO - [logger.py:103] - Група datetime: додано 24 нових ознак
+2025-05-27 16:24:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: candle_patterns
+2025-05-27 16:24:46 - Feature Engineering - ERROR - [logger.py:111] - Помилка в create_candle_pattern_features: Cannot convert non-finite values (NA or inf) to integer
+2025-05-27 16:24:46 - Feature Engineering - WARNING - [logger.py:107] - Група candle_patterns: нові ознаки не додані
+2025-05-27 16:24:46 - Feature Engineering - INFO - [logger.py:103] - Обробка групи ознак: custom_indicators
