@@ -1244,6 +1244,7 @@ class CryptoCycles:
             self.logger.debug(f"Exception traceback: {traceback.format_exc()}")
             return False
 
+    @staticmethod
     def prepare_cycle_ml_features(processed_data: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
         logger = CryptoLogger('FeaturePreparation')

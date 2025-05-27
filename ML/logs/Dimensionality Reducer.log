@@ -48,3 +48,80 @@
 2025-05-27 12:40:51 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
 2025-05-27 12:40:51 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
 2025-05-27 12:40:51 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:45:59 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:45:59 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:45:59 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:46:00 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:46:00 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 12:46:00 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:46:00 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:46:14 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:46:14 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:46:14 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:46:14 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:46:14 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 12:46:14 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:46:14 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:46:29 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:46:29 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:46:29 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:46:29 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:46:29 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 12:46:29 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:46:29 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:46:44 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:46:44 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:46:44 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:46:45 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:46:45 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 12:46:45 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:46:45 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:46:59 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:46:59 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:46:59 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:46:59 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:46:59 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 12:46:59 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:46:59 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:47:14 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:47:14 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:47:14 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:47:14 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:47:14 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 12:47:14 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:47:14 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:47:28 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:47:28 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:47:28 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:47:29 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:47:29 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 465. GiB for an array with shape (228, 273604527) and data type float64
+2025-05-27 12:47:29 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:47:29 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:47:43 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:47:43 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:47:43 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:47:43 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:47:43 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 465. GiB for an array with shape (228, 273604527) and data type float64
+2025-05-27 12:47:43 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:47:43 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 12:47:57 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 12:47:57 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 12:47:57 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 12:47:58 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 12:47:58 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 465. GiB for an array with shape (228, 273604527) and data type float64
+2025-05-27 12:47:58 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 12:47:58 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 13:00:21 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 13:00:21 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 13:00:21 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 13:00:21 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 13:00:21 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 13:00:21 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 13:00:21 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...
+2025-05-27 13:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Створення поліноміальних ознак...
+2025-05-27 13:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Автоматично вибрано 23375 числових стовпців
+2025-05-27 13:00:36 - Dimensionality Reducer - WARNING - [logger.py:107] - Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.
+2025-05-27 13:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Дані стандартизовано та обрізано до діапазону [-10, 10]
+2025-05-27 13:00:36 - Dimensionality Reducer - ERROR - [logger.py:111] - Помилка при створенні поліноміальних ознак: Unable to allocate 807. GiB for an array with shape (396, 273604527) and data type float64
+2025-05-27 13:00:36 - Dimensionality Reducer - ERROR - [logger.py:111] - Не вдалося створити поліноміальні ознаки навіть зі степенем 2
+2025-05-27 13:00:36 - Dimensionality Reducer - INFO - [logger.py:103] - Створення ознак на основі кластеризації методом 'kmeans'...

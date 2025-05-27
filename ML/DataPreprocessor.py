@@ -1084,7 +1084,7 @@ class DataPreprocessor:
             except Exception as e:
                 self.logger.error(f"Помилка при створенні трендових ознак для {symbol}: {e}")
 
-            # Отримання ознак волатильності
+            # Отримання ознак волатільності
             self.logger.debug(f"Підготовка ознак волатільності для {symbol}")
             try:
                 volatility_features = self.vol.prepare_volatility_features_for_ml(analysis_df, symbol)
@@ -1103,6 +1103,7 @@ class DataPreprocessor:
             # Отримання циклічних ознак
             self.logger.debug(f"Підготовка циклічних ознак для {symbol}")
             try:
+                # Викликаємо метод з правильним порядком параметрів
                 cycle_features = self.cycle.prepare_cycle_ml_features(analysis_df, symbol)
                 if cycle_features is not None and not cycle_features.empty:
                     if isinstance(cycle_features, pd.DataFrame):

@@ -1,0 +1,6 @@
+2025-05-27 13:00:07 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 13:00:07 - BitcoinCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index is not a DatetimeIndex
+2025-05-27 13:00:22 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 13:00:22 - BitcoinCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index is not a DatetimeIndex
+2025-05-27 13:00:36 - BitcoinCycleFeatureExtractor - INFO - [logger.py:103] - Starting calculation of Bitcoin halving cycle features
+2025-05-27 13:00:36 - BitcoinCycleFeatureExtractor - ERROR - [logger.py:111] - DataFrame index is not a DatetimeIndex

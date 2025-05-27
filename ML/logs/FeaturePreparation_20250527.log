@@ -1,0 +1,6 @@
+2025-05-27 13:00:07 - FeaturePreparation - INFO - [logger.py:103] - Preparing ML features for BTC
+2025-05-27 13:00:07 - FeaturePreparation - ERROR - [logger.py:111] - Error preparing ML features: DataFrame index must be a DatetimeIndex
+2025-05-27 13:00:22 - FeaturePreparation - INFO - [logger.py:103] - Preparing ML features for BTC
+2025-05-27 13:00:22 - FeaturePreparation - ERROR - [logger.py:111] - Error preparing ML features: DataFrame index must be a DatetimeIndex
+2025-05-27 13:00:36 - FeaturePreparation - INFO - [logger.py:103] - Preparing ML features for BTC
+2025-05-27 13:00:36 - FeaturePreparation - ERROR - [logger.py:111] - Error preparing ML features: DataFrame index must be a DatetimeIndex
