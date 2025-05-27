@@ -42,48 +42,143 @@ class TimeFeatures:
             self.logger.warning(f"Не вдалося перетворити індекс в DatetimeIndex: {str(e)}")
             return data
 
+    def _validate_input_data(self, data: pd.DataFrame, method_name: str) -> bool:
+        """
+        Валідація вхідних даних.
+        """
+        try:
+            # Перевірка на порожній DataFrame
+            if data.empty:
+                self.logger.error(f"{method_name}: Отримано порожній DataFrame")
+                return False
+
+            # Перевірка на наявність NaN в індексі
+            if data.index.isna().any():
+                self.logger.error(f"{method_name}: Індекс містить NaN значення")
+                return False
+
+            # Перевірка на дублікати в індексі
+            if data.index.duplicated().any():
+                self.logger.warning(f"{method_name}: Індекс містить дублікати")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"{method_name}: Помилка валідації даних: {str(e)}")
+            return False
+
+    def _safe_column_selection(self, data: pd.DataFrame, columns: Optional[List[str]] = None) -> List[str]:
+        """
+        Безпечний вибір числових стовпців з додатковими перевірками.
+        """
+        try:
+            if columns is None:
+                # Вибираємо числові стовпці, виключаючи datetime стовпці
+                numeric_columns = []
+                for col in data.columns:
+                    try:
+                        # Перевіряємо, чи стовпець числовий і не містить тільки NaN
+                        if pd.api.types.is_numeric_dtype(data[col]) and not data[col].isna().all():
+                            numeric_columns.append(col)
+                    except Exception as e:
+                        self.logger.debug(f"Пропускаємо стовпець {col}: {str(e)}")
+                        continue
+
+                if not numeric_columns:
+                    self.logger.warning("Не знайдено валідних числових стовпців")
+                    return []
+
+                self.logger.info(f"Автоматично вибрано {len(numeric_columns)} числових стовпців: {numeric_columns}")
+                return numeric_columns
+            else:
+                # Фільтруємо стовпці, які є в даних та є числовими
+                valid_columns = []
+                for col in columns:
+                    if col not in data.columns:
+                        self.logger.warning(f"Стовпець '{col}' не знайдено в даних")
+                        continue
+
+                    try:
+                        if not pd.api.types.is_numeric_dtype(data[col]):
+                            self.logger.warning(f"Стовпець '{col}' не є числовим")
+                            continue
+
+                        if data[col].isna().all():
+                            self.logger.warning(f"Стовпець '{col}' містить тільки NaN значення")
+                            continue
+
+                        valid_columns.append(col)
+                    except Exception as e:
+                        self.logger.warning(f"Помилка при перевірці стовпця '{col}': {str(e)}")
+                        continue
+
+                if len(valid_columns) < len(columns):
+                    missing_cols = set(columns) - set(valid_columns)
+                    self.logger.warning(f"Стовпці {missing_cols} не будуть використані")
+
+                return valid_columns
+
+        except Exception as e:
+            self.logger.error(f"Помилка при виборі стовпців: {str(e)}")
+            return []
+
     def create_lagged_features(self, data: pd.DataFrame,
                                columns: Optional[List[str]] = None,
                                lag_periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
         """
         Векторизоване створення лагових ознак для часових рядів.
         """
-        self.logger.info("Створення лагових ознак...")
+        try:
+            self.logger.info("Створення лагових ознак...")
 
-        # Створюємо копію даних та намагаємося перетворити індекс
-        result_df = self._ensure_datetime_index(data.copy())
+            # Валідація вхідних даних
+            if not self._validate_input_data(data, "create_lagged_features"):
+                return data.copy()
 
-        # Перевіряємо, що індекс часовий для правильного зсуву
-        if not isinstance(result_df.index, pd.DatetimeIndex):
-            self.logger.warning("Індекс даних не є часовим (DatetimeIndex). Лагові ознаки можуть бути неточними.")
+            # Створюємо копію даних та намагаємося перетворити індекс
+            result_df = self._ensure_datetime_index(data.copy())
 
-        # Вибираємо числові стовпці, якщо columns не вказано
-        if columns is None:
-            columns = result_df.select_dtypes(include=[np.number]).columns.tolist()
-            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
-        else:
-            # Фільтруємо стовпці, які є в даних
-            valid_columns = [col for col in columns if col in result_df.columns]
-            if len(valid_columns) < len(columns):
-                missing_cols = set(columns) - set(valid_columns)
-                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
-            columns = valid_columns
+            # Безпечний вибір стовпців
+            columns = self._safe_column_selection(result_df, columns)
+            if not columns:
+                self.logger.warning("Немає валідних стовпців для створення лагових ознак")
+                return result_df
 
-        # Векторизоване створення лагових ознак
-        for lag in lag_periods:
-            # Створюємо лаги для всіх потрібних стовпців одночасно
-            lag_columns = {f"{col}_lag_{lag}": result_df[col].shift(lag) for col in columns}
+            # Перевіряємо, що індекс часовий для правильного зсуву
+            if not isinstance(result_df.index, pd.DatetimeIndex):
+                self.logger.warning("Індекс даних не є часовим (DatetimeIndex). Лагові ознаки можуть бути неточними.")
 
-            # Оптимізоване додавання стовпців
-            result_df = pd.concat([result_df, pd.DataFrame(lag_columns)], axis=1)
+            # Створення лагових ознак з обробкою помилок
+            new_features_list = []
 
-            self.logger.debug(f"Створено лаг {lag} для {len(columns)} стовпців")
+            for lag in lag_periods:
+                try:
+                    # Створюємо лаги для всіх потрібних стовпців одночасно
+                    lag_data = result_df[columns].shift(lag)
+                    lag_data.columns = [f"{col}_lag_{lag}" for col in columns]
+                    new_features_list.append(lag_data)
 
-        # Інформуємо про кількість доданих ознак
-        num_added_features = len(columns) * len(lag_periods)
-        self.logger.info(f"Додано {num_added_features} лагових ознак")
+                    self.logger.debug(f"Створено лаг {lag} для {len(columns)} стовпців")
 
-        return result_df
+                except Exception as e:
+                    self.logger.error(f"Помилка при створенні лагу {lag}: {str(e)}")
+                    continue
+
+            # Об'єднуємо всі нові ознаки
+            if new_features_list:
+                all_new_features = pd.concat(new_features_list, axis=1)
+                result_df = pd.concat([result_df, all_new_features], axis=1)
+
+                num_added_features = len(all_new_features.columns)
+                self.logger.info(f"Додано {num_added_features} лагових ознак")
+            else:
+                self.logger.warning("Не вдалося створити жодної лагової ознаки")
+
+            return result_df
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при створенні лагових ознак: {str(e)}")
+            return data.copy()
 
     def create_rolling_features(self, data: pd.DataFrame,
                                 columns: Optional[List[str]] = None,
@@ -92,84 +187,107 @@ class TimeFeatures:
         """
         Векторизоване створення ознак на основі ковзного вікна.
         """
-        self.logger.info("Створення ознак на основі ковзного вікна...")
+        try:
+            self.logger.info("Створення ознак на основі ковзного вікна...")
 
-        # Створюємо копію даних та намагаємося перетворити індекс
-        result_df = self._ensure_datetime_index(data.copy())
+            # Валідація вхідних даних
+            if not self._validate_input_data(data, "create_rolling_features"):
+                return data.copy()
 
-        # Перевіряємо, що індекс часовий для правильного розрахунку
-        if not isinstance(result_df.index, pd.DatetimeIndex):
-            self.logger.warning(
-                "Індекс даних не є часовим (DatetimeIndex). Ознаки ковзного вікна можуть бути неточними.")
+            # Створюємо копію даних та намагаємося перетворити індекс
+            result_df = self._ensure_datetime_index(data.copy())
 
-        # Вибираємо числові стовпці, якщо columns не вказано
-        if columns is None:
-            columns = result_df.select_dtypes(include=[np.number]).columns.tolist()
-            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
-        else:
-            # Фільтруємо стовпці, які є в даних
-            valid_columns = [col for col in columns if col in result_df.columns]
-            if len(valid_columns) < len(columns):
-                missing_cols = set(columns) - set(valid_columns)
-                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
-            columns = valid_columns
+            # Безпечний вибір стовпців
+            columns = self._safe_column_selection(result_df, columns)
+            if not columns:
+                self.logger.warning("Немає валідних стовпців для створення ознак ковзного вікна")
+                return result_df
 
-        # Словник функцій pandas для ковзного вікна
-        func_map = {
-            'mean': 'mean',
-            'std': 'std',
-            'min': 'min',
-            'max': 'max',
-            'median': 'median',
-            'sum': 'sum',
-            'var': 'var',
-            'kurt': 'kurt',
-            'skew': 'skew',
-            'quantile_25': lambda x: x.quantile(0.25),
-            'quantile_75': lambda x: x.quantile(0.75)
-        }
+            # Перевіряємо, що індекс часовий для правильного розрахунку
+            if not isinstance(result_df.index, pd.DatetimeIndex):
+                self.logger.warning(
+                    "Індекс даних не є часовим (DatetimeIndex). Ознаки ковзного вікна можуть бути неточними.")
 
-        # Перевіряємо, чи всі функції підтримуються
-        valid_functions = [f for f in functions if f in func_map]
-        if len(valid_functions) < len(functions):
-            unsupported_funcs = set(functions) - set(valid_functions)
-            self.logger.warning(f"Функції {unsupported_funcs} не підтримуються і будуть пропущені")
-            functions = valid_functions
+            # Словник функцій pandas для ковзного вікна
+            func_map = {
+                'mean': 'mean',
+                'std': 'std',
+                'min': 'min',
+                'max': 'max',
+                'median': 'median',
+                'sum': 'sum',
+                'var': 'var',
+                'kurt': 'kurt',
+                'skew': 'skew',
+                'quantile_25': lambda x: x.quantile(0.25),
+                'quantile_75': lambda x: x.quantile(0.75)
+            }
 
-        # Підготовка даних для векторизованої обробки
-        new_features_dict = {}
+            # Перевіряємо, чи всі функції підтримуються
+            valid_functions = [f for f in functions if f in func_map]
+            if len(valid_functions) < len(functions):
+                unsupported_funcs = set(functions) - set(valid_functions)
+                self.logger.warning(f"Функції {unsupported_funcs} не підтримуються і будуть пропущені")
+                functions = valid_functions
 
-        # Використовуємо векторизований підхід для кожного розміру вікна
-        for window in window_sizes:
-            # Отримуємо DataFrame з усіма потрібними числовими стовпцями
-            numeric_data = result_df[columns]
+            if not functions:
+                self.logger.warning("Немає валідних функцій для ковзного вікна")
+                return result_df
 
-            # Створюємо об'єкт ковзного вікна для всіх стовпців одночасно
-            rolling_data = numeric_data.rolling(window=window, min_periods=1)
+            # Підготовка даних для векторизованої обробки
+            new_features_list = []
 
-            for func_name in functions:
-                # Отримуємо функцію з мапінгу
-                func = func_map[func_name]
+            # Використовуємо векторизований підхід для кожного розміру вікна
+            for window in window_sizes:
+                try:
+                    # Перевіряємо розмір вікна
+                    if window <= 0 or window > len(result_df):
+                        self.logger.warning(f"Пропускаємо некоректний розмір вікна: {window}")
+                        continue
 
-                # Застосовуємо функцію до всіх стовпців одночасно
-                if callable(func):
-                    result = rolling_data.apply(func)
-                else:
-                    result = getattr(rolling_data, func)()
+                    # Отримуємо DataFrame з усіма потрібними числовими стовпцями
+                    numeric_data = result_df[columns]
 
-                # Перейменовуємо стовпці
-                result.columns = [f"{col}_rolling_{window}_{func_name}" for col in columns]
+                    # Створюємо об'єкт ковзного вікна для всіх стовпців одночасно
+                    rolling_data = numeric_data.rolling(window=window, min_periods=1)
 
-                # Додаємо результати до словника нових ознак
-                for col in result.columns:
-                    new_features_dict[col] = result[col]
+                    for func_name in functions:
+                        try:
+                            # Отримуємо функцію з мапінгу
+                            func = func_map[func_name]
 
-        # Додаємо всі нові ознаки до результату
-        result_df = pd.concat([result_df, pd.DataFrame(new_features_dict)], axis=1)
+                            # Застосовуємо функцію до всіх стовпців одночасно
+                            if callable(func):
+                                rolling_result = rolling_data.apply(func, raw=False)
+                            else:
+                                rolling_result = getattr(rolling_data, func)()
 
-        self.logger.info(f"Додано {len(new_features_dict)} ознак ковзного вікна")
+                            # Перейменовуємо стовпці
+                            rolling_result.columns = [f"{col}_rolling_{window}_{func_name}" for col in columns]
+                            new_features_list.append(rolling_result)
 
-        return result_df
+                        except Exception as e:
+                            self.logger.error(f"Помилка при обчисленні {func_name} для вікна {window}: {str(e)}")
+                            continue
+
+                except Exception as e:
+                    self.logger.error(f"Помилка при обробці вікна {window}: {str(e)}")
+                    continue
+
+            # Об'єднуємо всі нові ознаки
+            if new_features_list:
+                all_new_features = pd.concat(new_features_list, axis=1)
+                result_df = pd.concat([result_df, all_new_features], axis=1)
+
+                self.logger.info(f"Додано {len(all_new_features.columns)} ознак ковзного вікна")
+            else:
+                self.logger.warning("Не вдалося створити жодної ознаки ковзного вікна")
+
+            return result_df
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при створенні ознак ковзного вікна: {str(e)}")
+            return data.copy()
 
     def create_ewm_features(self, data: pd.DataFrame,
                             columns: Optional[List[str]] = None,
@@ -178,141 +296,194 @@ class TimeFeatures:
         """
         Векторизоване створення ознак на основі експоненційно зваженого вікна.
         """
-        self.logger.info("Створення ознак на основі експоненціально зваженого вікна...")
+        try:
+            self.logger.info("Створення ознак на основі експоненційно зваженого вікна...")
 
-        # Створюємо копію даних та намагаємося перетворити індекс
-        result_df = self._ensure_datetime_index(data.copy())
+            # Валідація вхідних даних
+            if not self._validate_input_data(data, "create_ewm_features"):
+                return data.copy()
 
-        # Вибираємо числові стовпці, якщо columns не вказано
-        if columns is None:
-            columns = result_df.select_dtypes(include=[np.number]).columns.tolist()
-            self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
-        else:
-            # Фільтруємо стовпці, які є в даних
-            valid_columns = [col for col in columns if col in result_df.columns]
-            if len(valid_columns) < len(columns):
-                missing_cols = set(columns) - set(valid_columns)
-                self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
-            columns = valid_columns
+            # Створюємо копію даних та намагаємося перетворити індекс
+            result_df = self._ensure_datetime_index(data.copy())
 
-        # Словник підтримуваних функцій для EWM
-        func_map = {
-            'mean': 'mean',
-            'std': 'std',
-            'var': 'var',
-        }
+            # Безпечний вибір стовпців
+            columns = self._safe_column_selection(result_df, columns)
+            if not columns:
+                self.logger.warning("Немає валідних стовпців для створення EWM ознак")
+                return result_df
 
-        # Перевіряємо, чи всі функції підтримуються
-        valid_functions = [f for f in functions if f in func_map]
-        if len(valid_functions) < len(functions):
-            unsupported_funcs = set(functions) - set(valid_functions)
-            self.logger.warning(f"Функції {unsupported_funcs} не підтримуються для EWM і будуть пропущені")
-            functions = valid_functions
+            # Словник підтримуваних функцій для EWM
+            func_map = {
+                'mean': 'mean',
+                'std': 'std',
+                'var': 'var',
+            }
 
-        # Підготовка даних для векторизованої обробки
-        new_features_dict = {}
+            # Перевіряємо, чи всі функції підтримуються
+            valid_functions = [f for f in functions if f in func_map]
+            if len(valid_functions) < len(functions):
+                unsupported_funcs = set(functions) - set(valid_functions)
+                self.logger.warning(f"Функції {unsupported_funcs} не підтримуються для EWM і будуть пропущені")
+                functions = valid_functions
 
-        # Векторизована обробка для кожного span
-        for span in spans:
-            # Створюємо об'єкт експоненціально зваженого вікна для всіх стовпців одночасно
-            ewm_data = result_df[columns].ewm(span=span, min_periods=1)
+            if not functions:
+                self.logger.warning("Немає валідних функцій для EWM")
+                return result_df
 
-            for func_name in functions:
-                # Отримуємо функцію з мапінгу і застосовуємо до всіх стовпців
-                func = func_map[func_name]
-                result = getattr(ewm_data, func)()
+            # Підготовка даних для векторизованої обробки
+            new_features_list = []
 
-                # Перейменовуємо стовпці
-                result.columns = [f"{col}_ewm_{span}_{func_name}" for col in columns]
+            # Векторизована обробка для кожного span
+            for span in spans:
+                try:
+                    # Перевіряємо span
+                    if span <= 0:
+                        self.logger.warning(f"Пропускаємо некоректний span: {span}")
+                        continue
 
-                # Додаємо результати до словника нових ознак
-                for col in result.columns:
-                    new_features_dict[col] = result[col]
+                    # Створюємо об'єкт експоненційно зваженого вікна для всіх стовпців одночасно
+                    ewm_data = result_df[columns].ewm(span=span, min_periods=1)
 
-        # Додаємо всі нові ознаки до результату
-        result_df = pd.concat([result_df, pd.DataFrame(new_features_dict)], axis=1)
+                    for func_name in functions:
+                        try:
+                            # Отримуємо функцію з мапінгу і застосовуємо до всіх стовпців
+                            func = func_map[func_name]
+                            ewm_result = getattr(ewm_data, func)()
 
-        self.logger.info(f"Додано {len(new_features_dict)} ознак експоненціально зваженого вікна")
+                            # Перейменовуємо стовпці
+                            ewm_result.columns = [f"{col}_ewm_{span}_{func_name}" for col in columns]
+                            new_features_list.append(ewm_result)
 
-        return result_df
+                        except Exception as e:
+                            self.logger.error(f"Помилка при обчисленні EWM {func_name} для span {span}: {str(e)}")
+                            continue
+
+                except Exception as e:
+                    self.logger.error(f"Помилка при обробці EWM span {span}: {str(e)}")
+                    continue
+
+            # Об'єднуємо всі нові ознаки
+            if new_features_list:
+                all_new_features = pd.concat(new_features_list, axis=1)
+                result_df = pd.concat([result_df, all_new_features], axis=1)
+
+                self.logger.info(f"Додано {len(all_new_features.columns)} ознак експоненційно зваженого вікна")
+            else:
+                self.logger.warning("Не вдалося створити жодної EWM ознаки")
+
+            return result_df
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при створенні EWM ознак: {str(e)}")
+            return data.copy()
 
     def create_datetime_features(self, data: pd.DataFrame, cyclical: bool = True) -> pd.DataFrame:
         """
         Векторизоване створення ознак на основі дати й часу.
         """
-        self.logger.info("Створення ознак на основі дати і часу...")
+        try:
+            self.logger.info("Створення ознак на основі дати і часу...")
 
-        # Створюємо копію даних та намагаємося перетворити індекс
-        result_df = self._ensure_datetime_index(data.copy())
+            # Валідація вхідних даних
+            if not self._validate_input_data(data, "create_datetime_features"):
+                return data.copy()
 
-        # Перевірити, що індекс є DatetimeIndex
-        if not isinstance(result_df.index, pd.DatetimeIndex):
-            self.logger.warning("Індекс даних не є DatetimeIndex. Часові ознаки не будуть створені.")
+            # Створюємо копію даних та намагаємося перетворити індекс
+            result_df = self._ensure_datetime_index(data.copy())
+
+            # Перевірити, що індекс є DatetimeIndex
+            if not isinstance(result_df.index, pd.DatetimeIndex):
+                self.logger.warning("Індекс даних не є DatetimeIndex. Часові ознаки не будуть створені.")
+                return result_df
+
+            # DataFrame для зберігання всіх нових ознак
+            datetime_features = pd.DataFrame(index=result_df.index)
+
+            try:
+                # Базові ознаки (векторизовані)
+                datetime_features['hour'] = result_df.index.hour
+                datetime_features['day_of_week'] = result_df.index.dayofweek
+                datetime_features['day_of_month'] = result_df.index.day
+                datetime_features['month'] = result_df.index.month
+                datetime_features['quarter'] = result_df.index.quarter
+                datetime_features['year'] = result_df.index.year
+                datetime_features['day_of_year'] = result_df.index.dayofyear
+
+                # Час доби (ранок, день, вечір, ніч) - векторизована версія
+                try:
+                    bins = [-1, 5, 11, 17, 23]
+                    labels = ['night', 'morning', 'day', 'evening']
+                    datetime_features['time_of_day'] = pd.cut(
+                        result_df.index.hour,
+                        bins=bins,
+                        labels=labels
+                    ).astype(str)
+                except Exception as e:
+                    self.logger.warning(f"Помилка при створенні time_of_day: {str(e)}")
+
+                # Бінарні ознаки (векторизовані)
+                datetime_features['is_weekend'] = (result_df.index.dayofweek >= 5).astype(int)
+                datetime_features['is_month_end'] = result_df.index.is_month_end.astype(int)
+                datetime_features['is_quarter_end'] = result_df.index.is_quarter_end.astype(int)
+                datetime_features['is_year_end'] = result_df.index.is_year_end.astype(int)
+
+                # Якщо потрібні циклічні ознаки - створюємо векторизовано
+                if cyclical:
+                    try:
+                        # Циклічні ознаки для години (0-23)
+                        datetime_features['hour_sin'] = np.sin(2 * np.pi * datetime_features['hour'] / 24)
+                        datetime_features['hour_cos'] = np.cos(2 * np.pi * datetime_features['hour'] / 24)
+
+                        # Циклічні ознаки для дня тижня (0-6)
+                        datetime_features['day_of_week_sin'] = np.sin(2 * np.pi * datetime_features['day_of_week'] / 7)
+                        datetime_features['day_of_week_cos'] = np.cos(2 * np.pi * datetime_features['day_of_week'] / 7)
+
+                        # Циклічні ознаки для дня місяця (1-31)
+                        datetime_features['day_of_month_sin'] = np.sin(
+                            2 * np.pi * datetime_features['day_of_month'] / 31)
+                        datetime_features['day_of_month_cos'] = np.cos(
+                            2 * np.pi * datetime_features['day_of_month'] / 31)
+
+                        # Циклічні ознаки для місяця (1-12)
+                        datetime_features['month_sin'] = np.sin(2 * np.pi * datetime_features['month'] / 12)
+                        datetime_features['month_cos'] = np.cos(2 * np.pi * datetime_features['month'] / 12)
+
+                        # Циклічні ознаки для дня року (1-366)
+                        datetime_features['day_of_year_sin'] = np.sin(
+                            2 * np.pi * datetime_features['day_of_year'] / 366)
+                        datetime_features['day_of_year_cos'] = np.cos(
+                            2 * np.pi * datetime_features['day_of_year'] / 366)
+                    except Exception as e:
+                        self.logger.warning(f"Помилка при створенні циклічних ознак: {str(e)}")
+
+                # Час доби за UTC (векторизована версія)
+                try:
+                    bins_utc = [-1, 2, 8, 14, 20, 23]
+                    labels_utc = ['asia_late', 'asia_main', 'europe_main', 'america_main', 'asia_early']
+                    datetime_features['utc_segment'] = pd.cut(
+                        datetime_features['hour'],
+                        bins=bins_utc,
+                        labels=labels_utc
+                    ).astype(str)
+                except Exception as e:
+                    self.logger.warning(f"Помилка при створенні utc_segment: {str(e)}")
+
+                # Відмітка часу в Unix форматі (векторизована)
+                try:
+                    datetime_features['timestamp'] = result_df.index.astype(np.int64) // 10 ** 9
+                except Exception as e:
+                    self.logger.warning(f"Помилка при створенні timestamp: {str(e)}")
+
+                # Додаємо всі ознаки одночасно
+                result_df = pd.concat([result_df, datetime_features], axis=1)
+
+                self.logger.info(f"Створено {len(datetime_features.columns)} часових ознак.")
+
+            except Exception as e:
+                self.logger.error(f"Помилка при створенні часових ознак: {str(e)}")
+
             return result_df
 
-        # DataFrame для зберігання всіх нових ознак
-        datetime_features = pd.DataFrame(index=result_df.index)
-
-        # Базові ознаки (векторизовані)
-        datetime_features['hour'] = result_df.index.hour
-        datetime_features['day_of_week'] = result_df.index.dayofweek
-        datetime_features['day_of_month'] = result_df.index.day
-        datetime_features['month'] = result_df.index.month
-        datetime_features['quarter'] = result_df.index.quarter
-        datetime_features['year'] = result_df.index.year
-        datetime_features['day_of_year'] = result_df.index.dayofyear
-
-        # Час доби (ранок, день, вечір, ніч) - векторизована версія
-        bins = [-1, 5, 11, 17, 23]
-        labels = ['night', 'morning', 'day', 'evening']
-        datetime_features['time_of_day'] = pd.cut(
-            result_df.index.hour,
-            bins=bins,
-            labels=labels
-        ).astype(str)
-
-        # Бінарні ознаки (векторизовані)
-        datetime_features['is_weekend'] = (result_df.index.dayofweek >= 5).astype(int)
-        datetime_features['is_month_end'] = result_df.index.is_month_end.astype(int)
-        datetime_features['is_quarter_end'] = result_df.index.is_quarter_end.astype(int)
-        datetime_features['is_year_end'] = result_df.index.is_year_end.astype(int)
-
-        # Якщо потрібні циклічні ознаки - створюємо векторизовано
-        if cyclical:
-            # Циклічні ознаки для години (0-23)
-            datetime_features['hour_sin'] = np.sin(2 * np.pi * datetime_features['hour'] / 24)
-            datetime_features['hour_cos'] = np.cos(2 * np.pi * datetime_features['hour'] / 24)
-
-            # Циклічні ознаки для дня тижня (0-6)
-            datetime_features['day_of_week_sin'] = np.sin(2 * np.pi * datetime_features['day_of_week'] / 7)
-            datetime_features['day_of_week_cos'] = np.cos(2 * np.pi * datetime_features['day_of_week'] / 7)
-
-            # Циклічні ознаки для дня місяця (1-31)
-            datetime_features['day_of_month_sin'] = np.sin(2 * np.pi * datetime_features['day_of_month'] / 31)
-            datetime_features['day_of_month_cos'] = np.cos(2 * np.pi * datetime_features['day_of_month'] / 31)
-
-            # Циклічні ознаки для місяця (1-12)
-            datetime_features['month_sin'] = np.sin(2 * np.pi * datetime_features['month'] / 12)
-            datetime_features['month_cos'] = np.cos(2 * np.pi * datetime_features['month'] / 12)
-
-            # Циклічні ознаки для дня року (1-366)
-            datetime_features['day_of_year_sin'] = np.sin(2 * np.pi * datetime_features['day_of_year'] / 366)
-            datetime_features['day_of_year_cos'] = np.cos(2 * np.pi * datetime_features['day_of_year'] / 366)
-
-        # Час доби за UTC (векторизована версія)
-        bins_utc = [-1, 2, 8, 14, 20, 23]
-        labels_utc = ['asia_late', 'asia_main', 'europe_main', 'america_main', 'asia_early']
-        datetime_features['utc_segment'] = pd.cut(
-            datetime_features['hour'],
-            bins=bins_utc,
-            labels=labels_utc
-        ).astype(str)
-
-        # Відмітка часу в Unix форматі (векторизована)
-        datetime_features['timestamp'] = result_df.index.astype(np.int64) // 10 ** 9
-
-        # Додаємо всі ознаки одночасно
-        result_df = pd.concat([result_df, datetime_features], axis=1)
-
-        self.logger.info(f"Створено {len(datetime_features.columns)} часових ознак.")
-        return result_df
+        except Exception as e:
+            self.logger.error(f"Критична помилка при створенні часових ознак: {str(e)}")
+            return data.copy()

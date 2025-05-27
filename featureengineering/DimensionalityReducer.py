@@ -38,16 +38,23 @@ class DimensionalityReducer:
             self.logger.error(f"Розмірності X ({len(X)}) і y ({len(y)}) не співпадають")
             raise ValueError(f"Розмірності X ({len(X)}) і y ({len(y)}) не співпадають")
 
-        # Векторизоване видалення рядків з NaN
-        if X.isna().any().any() or y.isna().any():
+        # ФІКС: Безпечна перевірка на NaN
+        x_has_nan = X.isna().any().any() if not X.empty else False
+        y_has_nan = y.isna().any() if not y.empty else False
+
+        if x_has_nan or y_has_nan:
             self.logger.warning("Виявлено пропущені значення. Видаляємо рядки з NaN")
-            valid_indices = X.notna().all(axis=1) & y.notna()
+            # ФІКС: Використовуємо векторизований підхід без неоднозначних булевих операцій
+            x_valid_mask = X.notna().all(axis=1)
+            y_valid_mask = y.notna()
+            valid_indices = x_valid_mask & y_valid_mask
+
             X = X.loc[valid_indices]
             y = y.loc[valid_indices]
             self.logger.info(f"Залишилось {len(X)} рядків після видалення NaN")
 
         # Перевіряємо, що залишились дані для аналізу
-        if len(X) == 0 or len(y) == 0:
+        if X.empty or y.empty:
             self.logger.error("Після обробки NaN не залишилось даних для аналізу")
             raise ValueError("Після обробки пропущених значень не залишилось даних для аналізу")
 
@@ -140,8 +147,8 @@ class DimensionalityReducer:
         # Створюємо копію, щоб не модифікувати оригінальні дані
         X = data.copy()
 
-        # Векторизоване заповнення NaN
-        if X.isna().any().any():
+        # ФІКС: Безпечна перевірка на NaN
+        if not X.empty and X.isna().any().any():
             self.logger.warning("Виявлено пропущені значення. Заповнюємо їх медіаною.")
             X = X.fillna(X.median())
 
@@ -272,9 +279,15 @@ class DimensionalityReducer:
         """
         self.logger.info("Створення поліноміальних ознак...")
 
+        # ФІКС: Безпечний вибір числових стовпців
+        if data.empty:
+            self.logger.warning("Переданий порожній DataFrame")
+            return data
+
         # Вибираємо числові стовпці, якщо columns не вказано
         if columns is None:
-            columns = data.select_dtypes(include=[np.number]).columns.tolist()
+            numeric_columns = data.select_dtypes(include=[np.number]).columns
+            columns = numeric_columns.tolist() if not numeric_columns.empty else []
             self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
         else:
             # Перевіряємо наявність вказаних стовпців у даних
@@ -293,7 +306,8 @@ class DimensionalityReducer:
 
             # Вибираємо найбільш варіативні ознаки
             X_temp = data[columns].copy()
-            if X_temp.isna().any().any():
+            # ФІКС: Безпечна перевірка на NaN
+            if not X_temp.empty and X_temp.isna().any().any():
                 X_temp = X_temp.fillna(X_temp.median())
 
             # Обчислюємо коефіцієнт варіації для кожної ознаки
@@ -332,7 +346,8 @@ class DimensionalityReducer:
                 self.logger.info(f"Зменшуємо кількість ознак до {new_max_features}")
 
                 X_temp = data[columns].copy()
-                if X_temp.isna().any().any():
+                # ФІКС: Безпечна перевірка на NaN
+                if not X_temp.empty and X_temp.isna().any().any():
                     X_temp = X_temp.fillna(X_temp.median())
 
                 cv_scores = (X_temp.std() / (X_temp.mean().abs() + 1e-8)).fillna(0)
@@ -357,13 +372,13 @@ class DimensionalityReducer:
         result_df = data.copy()
         X = result_df[columns].copy()
 
-        # Перевіряємо на наявність NaN і замінюємо їх
-        if X.isna().any().any():
+        # ФІКС: Безпечна перевірка на NaN
+        if not X.empty and X.isna().any().any():
             self.logger.warning(f"Виявлено NaN значення у вхідних даних. Заповнюємо їх медіаною.")
             X = X.fillna(X.median())
 
         # Перевірка на нескінченні значення
-        if np.isinf(X.values).any():
+        if not X.empty and np.isinf(X.values).any():
             self.logger.warning("Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.")
             X = X.replace([np.inf, -np.inf], [1e10, -1e10])
 
@@ -416,12 +431,13 @@ class DimensionalityReducer:
             # Замінюємо нескінченні значення на NaN
             poly_df = poly_df.replace([np.inf, -np.inf], np.nan)
 
-            # Обробляємо NaN значення по стовпцях - FIXED VERSION
-            if poly_df.isna().any().any():
+            # ФІКС: Безпечна обробка NaN значень по стовпцях
+            if not poly_df.empty and poly_df.isna().any().any():
                 # Заповнюємо NaN медіаною або нулем
                 for col in poly_df.columns:
                     col_series = poly_df[col]
 
+                    # ФІКС: Використовуємо .all() замість ambiguous boolean evaluation
                     if col_series.isna().all():
                         poly_df[col] = 0
                     else:
@@ -455,18 +471,24 @@ class DimensionalityReducer:
                     self.logger.warning(f"Помилка при обробці викидів для колонки {col}: {str(e)}")
                     continue
 
-            # ФІКС: Видаляємо константні стовпці - правильна перевірка
+            # ФІКС: Правильне видалення константних стовпців
             constant_cols = []
             for col in poly_df.columns:
                 try:
-                    # ФІКС: Використовуємо правильний спосіб перевірки константності
                     col_series = poly_df[col]
-                    if len(col_series.dropna()) == 0:  # Вся колонка NaN
+                    # ФІКС: Використовуємо правільний спосіб перевірки константності
+                    if col_series.dropna().empty:  # Вся колонка NaN
                         constant_cols.append(col)
                     elif col_series.nunique(dropna=True) <= 1:  # Константна колонка
                         constant_cols.append(col)
-                    elif col_series.std() == 0:  # Стандартне відхилення = 0
-                        constant_cols.append(col)
+                    else:
+                        # ФІКС: Безпечна перевірка стандартного відхилення
+                        try:
+                            std_val = col_series.std()
+                            if pd.isna(std_val) or std_val == 0:
+                                constant_cols.append(col)
+                        except Exception:
+                            constant_cols.append(col)
                 except Exception as e:
                     self.logger.warning(f"Помилка при перевірці константності колонки {col}: {str(e)}")
                     constant_cols.append(col)

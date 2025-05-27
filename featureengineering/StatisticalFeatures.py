@@ -8,6 +8,7 @@ from utils.logger import CryptoLogger
 class StatisticalFeatures:
     def __init__(self):
         self.logger = CryptoLogger('Statistical Features')
+
     def create_volatility_features(self, data: pd.DataFrame,
                                    price_column: str = 'close',
                                    window_sizes: List[int] = [5, 10, 20, 50]) -> pd.DataFrame:
@@ -31,91 +32,146 @@ class StatisticalFeatures:
         # Лічильник доданих ознак
         added_features_count = 0
 
-        # Розрахунок волатильності на основі логарифмічної прибутковості
-        log_returns = np.log(result_df[price_column] / result_df[price_column].shift(1))
+        # Розрахунок волатільності на основі логарифмічної прибутковості
+        # ВИПРАВЛЕННЯ: Додаємо перевірку на нульові/від'ємні значення
+        price_series = result_df[price_column].copy()
+
+        # Замінюємо нульові або від'ємні значення на попередні валідні значення
+        price_series = price_series.mask(price_series <= 0).fillna(method='ffill')
+        if price_series.iloc[0] <= 0:
+            price_series = price_series.fillna(method='bfill')
+
+        # Перевіряємо, чи залишились валідні значення
+        if (price_series <= 0).any():
+            self.logger.warning(
+                "Виявлено нульові або від'ємні ціни після заповнення. Замінюємо на мінімальне додатне значення.")
+            min_positive = price_series[price_series > 0].min()
+            if pd.isna(min_positive):
+                min_positive = 1.0  # fallback значення
+            price_series = price_series.mask(price_series <= 0, min_positive)
+
+        log_returns = np.log(price_series / price_series.shift(1))
+
+        # Видаляємо inf та -inf значення з log_returns
+        log_returns = log_returns.replace([np.inf, -np.inf], np.nan)
 
         # Стандартне відхилення прибутковості для різних вікон
         for window in window_sizes:
             # Класична волатильність як стандартне відхилення прибутковості
             vol_name = f"volatility_{window}d"
-            result_df[vol_name] = log_returns.rolling(window=window, min_periods=window // 2).std() * np.sqrt(
-                252)  # Ануалізована волатильність
+            vol_values = log_returns.rolling(window=window, min_periods=max(1, window // 2)).std() * np.sqrt(252)
+            result_df[vol_name] = vol_values.fillna(0)
             added_features_count += 1
 
-            # Експоненційно зважена волатильність
+            # Експоненційно зважена волатільність
             ewm_vol_name = f"ewm_volatility_{window}d"
-            result_df[ewm_vol_name] = log_returns.ewm(span=window, min_periods=window // 2).std() * np.sqrt(252)
+            ewm_vol_values = log_returns.ewm(span=window, min_periods=max(1, window // 2)).std() * np.sqrt(252)
+            result_df[ewm_vol_name] = ewm_vol_values.fillna(0)
             added_features_count += 1
 
-            # Ковзна сума квадратів прибутковостей (для реалізованої волатильності)
+            # Ковзна сума квадратів прибутковостей (для реалізованої волатільності)
             realized_vol_name = f"realized_volatility_{window}d"
-            result_df[realized_vol_name] = np.sqrt(
-                np.square(log_returns).rolling(window=window, min_periods=window // 2).sum() * (252 / window))
+            squared_returns = np.square(log_returns).fillna(0)
+            realized_vol_values = np.sqrt(
+                squared_returns.rolling(window=window, min_periods=max(1, window // 2)).sum() * (252 / window)
+            )
+            result_df[realized_vol_name] = realized_vol_values.fillna(0)
             added_features_count += 1
 
-            # Відносна волатильність (порівняння з історичною)
+            # Відносна волатільність (порівняння з історичною)
             if window > 10:  # Тільки для більших вікон
                 long_window = window * 2
                 if len(log_returns) > long_window:  # Перевіряємо, що маємо достатньо даних
                     rel_vol_name = f"relative_volatility_{window}d_to_{long_window}d"
-                    short_vol = log_returns.rolling(window=window, min_periods=window // 2).std()
-                    long_vol = log_returns.rolling(window=long_window, min_periods=long_window // 2).std()
-                    result_df[rel_vol_name] = short_vol / long_vol
+                    short_vol = log_returns.rolling(window=window, min_periods=max(1, window // 2)).std()
+                    long_vol = log_returns.rolling(window=long_window, min_periods=max(1, long_window // 2)).std()
+
+                    # ВИПРАВЛЕННЯ: Безпечне ділення
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        rel_vol_values = short_vol / long_vol
+                        rel_vol_values = rel_vol_values.replace([np.inf, -np.inf], np.nan).fillna(1.0)
+
+                    result_df[rel_vol_name] = rel_vol_values
                     added_features_count += 1
 
-        # Додаткові метрики волатильності, якщо є OHLC дані
+        # Додаткові метрики волатільності, якщо є OHLC дані
         if has_ohlc:
+            # Перевіряємо на валідність OHLC даних
+            ohlc_columns = ['open', 'high', 'low', 'close']
+            for col in ohlc_columns:
+                col_data = result_df[col].copy()
+                col_data = col_data.mask(col_data <= 0).fillna(method='ffill').fillna(method='bfill')
+                if (col_data <= 0).any():
+                    min_positive = col_data[col_data > 0].min()
+                    if pd.isna(min_positive):
+                        min_positive = 1.0
+                    col_data = col_data.mask(col_data <= 0, min_positive)
+                result_df[col] = col_data
+
             for window in window_sizes:
-                # Garman-Klass волатильність
+                # Garman-Klass волатільність
                 gk_vol_name = f"garman_klass_volatility_{window}d"
-                result_df['log_hl'] = np.log(result_df['high'] / result_df['low']) ** 2
-                result_df['log_co'] = np.log(result_df['close'] / result_df['open']) ** 2
+
+                # ВИПРАВЛЕННЯ: Безпечний розрахунок логарифмів
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    log_hl = np.log(result_df['high'] / result_df['low']) ** 2
+                    log_co = np.log(result_df['close'] / result_df['open']) ** 2
+
+                # Замінюємо inf значення
+                log_hl = pd.Series(log_hl).replace([np.inf, -np.inf], np.nan).fillna(0)
+                log_co = pd.Series(log_co).replace([np.inf, -np.inf], np.nan).fillna(0)
 
                 # Формула Garman-Klass: σ² = 0.5 * log(high/low)² - (2*log(2)-1) * log(close/open)²
-                gk_daily = 0.5 * result_df['log_hl'] - (2 * np.log(2) - 1) * result_df['log_co']
-                result_df[gk_vol_name] = np.sqrt(gk_daily.rolling(window=window, min_periods=window // 2).mean() * 252)
+                gk_daily = 0.5 * log_hl - (2 * np.log(2) - 1) * log_co
+                gk_vol_values = np.sqrt(gk_daily.rolling(window=window, min_periods=max(1, window // 2)).mean() * 252)
+                result_df[gk_vol_name] = gk_vol_values.fillna(0)
                 added_features_count += 1
 
-                # Yang-Zhang волатильність
+                # Yang-Zhang волатільність
                 if 'open' in result_df.columns:
                     yz_vol_name = f"yang_zhang_volatility_{window}d"
+
                     # Overnight volatility
-                    result_df['log_oc'] = np.log(result_df['open'] / result_df['close'].shift(1)) ** 2
-                    overnight_vol = result_df['log_oc'].rolling(window=window, min_periods=window // 2).mean()
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        log_oc = np.log(result_df['open'] / result_df['close'].shift(1)) ** 2
+                    log_oc = pd.Series(log_oc).replace([np.inf, -np.inf], np.nan).fillna(0)
 
-                    # Open-to-Close volatility
-                    oc_vol = result_df['log_co'].rolling(window=window, min_periods=window // 2).mean()
+                    overnight_vol = log_oc.rolling(window=window, min_periods=max(1, window // 2)).mean()
+                    oc_vol = log_co.rolling(window=window, min_periods=max(1, window // 2)).mean()
 
-                    # Yang-Zhang: використовує overnight та open-to-close волатильність
+                    # Yang-Zhang: використовує overnight та open-to-close волатільність
                     k = 0.34 / (1.34 + (window + 1) / (window - 1))
-                    result_df[yz_vol_name] = np.sqrt((overnight_vol + k * oc_vol + (1 - k) * gk_daily.rolling(
-                        window=window, min_periods=window // 2).mean()) * 252)
+                    yz_values = overnight_vol + k * oc_vol + (1 - k) * gk_daily.rolling(
+                        window=window, min_periods=max(1, window // 2)).mean()
+
+                    result_df[yz_vol_name] = np.sqrt(yz_values * 252).fillna(0)
                     added_features_count += 1
 
-            # Видаляємо тимчасові колонки
-            result_df.drop(['log_hl', 'log_co'], axis=1, inplace=True, errors='ignore')
-            if 'log_oc' in result_df.columns:
-                result_df.drop('log_oc', axis=1, inplace=True)
-
-        # Парксінсон волатильність (використовує тільки high і low)
+        # Parkinson волатільність (використовує тільки high і low)
         if all(col in result_df.columns for col in ['high', 'low']):
             for window in window_sizes:
                 parkinson_name = f"parkinson_volatility_{window}d"
-                # Формула Parkinson: σ² = 1/(4*ln(2)) * log(high/low)²
-                parkinson_daily = 1 / (4 * np.log(2)) * np.log(result_df['high'] / result_df['low']) ** 2
-                result_df[parkinson_name] = np.sqrt(
-                    parkinson_daily.rolling(window=window, min_periods=window // 2).mean() * 252)
+
+                # ВИПРАВЛЕННЯ: Безпечний розрахунок
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    parkinson_daily = 1 / (4 * np.log(2)) * np.log(result_df['high'] / result_df['low']) ** 2
+
+                parkinson_daily = pd.Series(parkinson_daily).replace([np.inf, -np.inf], np.nan).fillna(0)
+                parkinson_values = np.sqrt(
+                    parkinson_daily.rolling(window=window, min_periods=max(1, window // 2)).mean() * 252
+                )
+                result_df[parkinson_name] = parkinson_values.fillna(0)
                 added_features_count += 1
 
         # Заповнюємо NaN значення
         for col in result_df.columns:
             if col not in data.columns:  # перевіряємо, що це нова ознака
                 if result_df[col].isna().any():
-                    self.logger.debug(f"Заповнення NaN значень у стовпці {col}")
+                    self.logger.debug(f"Заповнення NaN значень у стovпці {col}")
                     # Заповнюємо NaN методом forward fill, потім backward fill
                     result_df[col] = result_df[col].fillna(method='ffill').fillna(method='bfill')
 
-                    # Якщо все ще є NaN, заповнюємо медіаною
+                    # Якщо все ще є NaN, заповнюємо нулем або медіаною
                     if result_df[col].isna().any():
                         median_val = result_df[col].median()
                         if pd.isna(median_val):  # Якщо медіана теж NaN
@@ -123,9 +179,9 @@ class StatisticalFeatures:
                         else:
                             result_df[col] = result_df[col].fillna(median_val)
 
-        self.logger.info(f"Додано {added_features_count} ознак волатильності")
-
+        self.logger.info(f"Додано {added_features_count} ознак волатільності")
         return result_df
+
     def create_return_features(self, data: pd.DataFrame,
                                price_column: str = 'close',
                                periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
@@ -145,6 +201,20 @@ class StatisticalFeatures:
             self.logger.warning(f"Стовпець {price_column} містить NaN значення, вони будуть заповнені")
             result_df[price_column] = result_df[price_column].fillna(method='ffill').fillna(method='bfill')
 
+        # ВИПРАВЛЕННЯ: Перевіряємо на нульові/від'ємні значення
+        price_series = result_df[price_column].copy()
+        if (price_series <= 0).any():
+            self.logger.warning("Виявлено нульові або від'ємні ціни. Заміна на валідні значення.")
+            price_series = price_series.mask(price_series <= 0).fillna(method='ffill').fillna(method='bfill')
+
+            if (price_series <= 0).any():
+                min_positive = price_series[price_series > 0].min()
+                if pd.isna(min_positive):
+                    min_positive = 1.0
+                price_series = price_series.mask(price_series <= 0, min_positive)
+
+            result_df[price_column] = price_series
+
         # Лічильник доданих ознак
         added_features_count = 0
 
@@ -152,32 +222,47 @@ class StatisticalFeatures:
         for period in periods:
             # Процентна зміна
             pct_change_name = f"return_{period}p"
-            result_df[pct_change_name] = result_df[price_column].pct_change(periods=period)
+            pct_change_values = result_df[price_column].pct_change(periods=period)
+            # ВИПРАВЛЕННЯ: Замінюємо inf значення
+            pct_change_values = pct_change_values.replace([np.inf, -np.inf], np.nan).fillna(0)
+            result_df[pct_change_name] = pct_change_values
             added_features_count += 1
 
             # Логарифмічна прибутковість
             log_return_name = f"log_return_{period}p"
-            result_df[log_return_name] = np.log(result_df[price_column] / result_df[price_column].shift(period))
+            with np.errstate(divide='ignore', invalid='ignore'):
+                log_return_values = np.log(result_df[price_column] / result_df[price_column].shift(period))
+            log_return_values = pd.Series(log_return_values).replace([np.inf, -np.inf], np.nan).fillna(0)
+            result_df[log_return_name] = log_return_values
             added_features_count += 1
 
             # Абсолютна зміна
             abs_change_name = f"abs_change_{period}p"
-            result_df[abs_change_name] = result_df[price_column].diff(periods=period)
+            result_df[abs_change_name] = result_df[price_column].diff(periods=period).fillna(0)
             added_features_count += 1
 
             # Нормалізована зміна (Z-score над N періодами)
             z_score_period = min(period * 5, len(result_df))  # беремо більший період для розрахунку статистики
             if z_score_period > period * 2:  # перевіряємо, що маємо достатньо даних для нормалізації
                 z_score_name = f"z_score_return_{period}p"
-                rolling_mean = result_df[pct_change_name].rolling(window=z_score_period).mean()
-                rolling_std = result_df[pct_change_name].rolling(window=z_score_period).std()
-                result_df[z_score_name] = (result_df[pct_change_name] - rolling_mean) / rolling_std
+                rolling_mean = pct_change_values.rolling(window=z_score_period,
+                                                         min_periods=max(1, z_score_period // 2)).mean()
+                rolling_std = pct_change_values.rolling(window=z_score_period,
+                                                        min_periods=max(1, z_score_period // 2)).std()
+
+                # ВИПРАВЛЕННЯ: Безпечне ділення для Z-score
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    z_score_values = (pct_change_values - rolling_mean) / rolling_std
+                z_score_values = z_score_values.replace([np.inf, -np.inf], np.nan).fillna(0)
+                result_df[z_score_name] = z_score_values
                 added_features_count += 1
 
         # Додаємо ознаку напрямку зміни ціни (бінарна класифікація)
         for period in periods:
             direction_name = f"direction_{period}p"
-            result_df[direction_name] = np.where(result_df[f"return_{period}p"] > 0, 1, 0)
+            # ВИПРАВЛЕННЯ: Використовуємо .iloc або .values для уникнення ambiguous truth value
+            return_col = result_df[f"return_{period}p"]
+            result_df[direction_name] = (return_col > 0).astype(int)
             added_features_count += 1
 
         # Заповнюємо NaN значення (особливо на початку часового ряду)
@@ -188,12 +273,12 @@ class StatisticalFeatures:
                     if col.startswith("direction_"):
                         result_df[col] = result_df[col].fillna(0)
                     else:
-                        # Для інших ознак використовуємо 0 або медіану
+                        # Для інших ознак використовуємо 0
                         result_df[col] = result_df[col].fillna(0)
 
         self.logger.info(f"Додано {added_features_count} ознак прибутковості")
-
         return result_df
+
     def create_volume_features(self, data: pd.DataFrame,
                                window_sizes: List[int] = [5, 10, 20, 50]) -> pd.DataFrame:
         self.logger.info("Створення ознак на основі об'єму...")
@@ -205,6 +290,17 @@ class StatisticalFeatures:
 
         # Створюємо копію, щоб не модифікувати оригінальні дані
         result_df = data.copy()
+
+        # ВИПРАВЛЕННЯ: Перевіряємо та очищуємо дані volume
+        volume_series = result_df['volume'].copy()
+
+        # Замінюємо від'ємні значення та NaN
+        if (volume_series < 0).any():
+            self.logger.warning("Виявлено від'ємні значення об'єму. Заміна на нульові значення.")
+            volume_series = volume_series.mask(volume_series < 0, 0)
+
+        volume_series = volume_series.fillna(0)
+        result_df['volume'] = volume_series
 
         # Лічильник доданих ознак
         added_features_count = 0
@@ -218,37 +314,50 @@ class StatisticalFeatures:
 
             # Відносний об'єм (поточний об'єм / середній об'єм)
             rel_vol_col = f'rel_volume_{window}'
-            result_df[rel_vol_col] = result_df['volume'] / result_df[vol_ma_col]
+            # ВИПРАВЛЕННЯ: Безпечне ділення
+            with np.errstate(divide='ignore', invalid='ignore'):
+                rel_vol_values = result_df['volume'] / result_df[vol_ma_col]
+            rel_vol_values = rel_vol_values.replace([np.inf, -np.inf], np.nan).fillna(1.0)
+            result_df[rel_vol_col] = rel_vol_values
             added_features_count += 1
 
             # Стандартне відхилення об'єму
             vol_std_col = f'volume_std_{window}'
-            result_df[vol_std_col] = result_df['volume'].rolling(window=window, min_periods=1).std()
+            result_df[vol_std_col] = result_df['volume'].rolling(window=window, min_periods=1).std().fillna(0)
             added_features_count += 1
 
-            # Z-score об'єму (наскільки поточний об'єм відхиляється від середнього в одиницях стандартного відхилення)
+            # Z-score об'єму
             vol_zscore_col = f'volume_zscore_{window}'
-            result_df[vol_zscore_col] = (result_df['volume'] - result_df[vol_ma_col]) / result_df[vol_std_col]
-            # Замінюємо inf значення (які можуть виникнути, якщо std=0)
-            result_df[vol_zscore_col].replace([np.inf, -np.inf], 0, inplace=True)
+            # ВИПРАВЛЕННЯ: Безпечне ділення для Z-score
+            vol_mean = result_df[vol_ma_col]
+            vol_std = result_df[vol_std_col]
+
+            with np.errstate(divide='ignore', invalid='ignore'):
+                vol_zscore_values = (result_df['volume'] - vol_mean) / vol_std
+            vol_zscore_values = vol_zscore_values.replace([np.inf, -np.inf], np.nan).fillna(0)
+            result_df[vol_zscore_col] = vol_zscore_values
             added_features_count += 1
 
-            # Експоненціальне ковзне середнє об'єму (реагує швидше на зміни)
+            # Експоненціальне ковзне середнє об'єму
             vol_ema_col = f'volume_ema_{window}'
             result_df[vol_ema_col] = result_df['volume'].ewm(span=window, min_periods=1).mean()
             added_features_count += 1
 
             # Зміна об'єму (процентна зміна ковзного середнього)
             vol_change_col = f'volume_change_{window}'
-            result_df[vol_change_col] = result_df[vol_ma_col].pct_change(periods=1) * 100
+            vol_change_values = result_df[vol_ma_col].pct_change(periods=1) * 100
+            vol_change_values = vol_change_values.replace([np.inf, -np.inf], np.nan).fillna(0)
+            result_df[vol_change_col] = vol_change_values
             added_features_count += 1
 
         # Абсолютна зміна об'єму за 1 період
-        result_df['volume_diff_1'] = result_df['volume'].diff(periods=1)
+        result_df['volume_diff_1'] = result_df['volume'].diff(periods=1).fillna(0)
         added_features_count += 1
 
         # Процентна зміна об'єму за 1 період
-        result_df['volume_pct_change_1'] = result_df['volume'].pct_change(periods=1) * 100
+        vol_pct_change = result_df['volume'].pct_change(periods=1) * 100
+        vol_pct_change = vol_pct_change.replace([np.inf, -np.inf], np.nan).fillna(0)
+        result_df['volume_pct_change_1'] = vol_pct_change
         added_features_count += 1
 
         # Обчислення кумулятивного об'єму за день (якщо дані містять внутрішньоденну інформацію)
@@ -257,11 +366,19 @@ class StatisticalFeatures:
             added_features_count += 1
 
         # Індикатор аномального об'єму (об'єм, що перевищує середній у 2+ рази)
-        result_df['volume_anomaly'] = (result_df['rel_volume_20'] > 2.0).astype(int)
+        # ВИПРАВЛЕННЯ: Використовуємо безпечне порівняння
+        if 'rel_volume_20' in result_df.columns:
+            anomaly_condition = result_df['rel_volume_20'] > 2.0
+            result_df['volume_anomaly'] = anomaly_condition.astype(int)
+        else:
+            result_df['volume_anomaly'] = 0
         added_features_count += 1
 
-        # Замінюємо NaN значення нулями
-        result_df.fillna(0, inplace=True)
+        # Заповнюємо залишкові NaN значення нулями
+        for col in result_df.columns:
+            if col not in data.columns:  # тільки нові ознаки
+                if result_df[col].isna().any():
+                    result_df[col] = result_df[col].fillna(0)
 
         self.logger.info(f"Створено {added_features_count} ознак на основі об'єму.")
         return result_df

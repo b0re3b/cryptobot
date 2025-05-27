@@ -44,147 +44,193 @@ class TechnicalFeatures:
                 if indicator == 'sma':
                     for window in [5, 10, 20, 50, 200]:
                         if 'close' in result_df.columns:
-                            result_df[f'sma_{window}'] = ta.sma(result_df['close'], length=window)
-                            added_features_count += 1
+                            sma_result = ta.sma(result_df['close'], length=window)
+                            if sma_result is not None and not sma_result.empty:
+                                result_df[f'sma_{window}'] = sma_result
+                                added_features_count += 1
 
                 # Експоненціальні ковзні середні
                 elif indicator == 'ema':
                     for window in [5, 10, 20, 50, 200]:
                         if 'close' in result_df.columns:
-                            result_df[f'ema_{window}'] = ta.ema(result_df['close'], length=window)
-                            added_features_count += 1
+                            ema_result = ta.ema(result_df['close'], length=window)
+                            if ema_result is not None and not ema_result.empty:
+                                result_df[f'ema_{window}'] = ema_result
+                                added_features_count += 1
 
                 # Relative Strength Index
                 elif indicator == 'rsi':
                     for window in [7, 14, 21]:
                         if 'close' in result_df.columns:
-                            result_df[f'rsi_{window}'] = ta.rsi(result_df['close'], length=window)
-                            added_features_count += 1
+                            rsi_result = ta.rsi(result_df['close'], length=window)
+                            if rsi_result is not None and not rsi_result.empty:
+                                result_df[f'rsi_{window}'] = rsi_result
+                                added_features_count += 1
 
                 # Moving Average Convergence Divergence
                 elif indicator == 'macd':
                     if 'close' in result_df.columns:
                         macd_df = ta.macd(result_df['close'], fast=12, slow=26, signal=9)
-                        if isinstance(macd_df, pd.DataFrame):
-                            result_df = pd.concat([result_df, macd_df], axis=1)
-                            added_features_count += len(macd_df.columns)
+                        if macd_df is not None and isinstance(macd_df, pd.DataFrame) and not macd_df.empty:
+                            # Перевіряємо наявність колонок перед додаванням
+                            for col in macd_df.columns:
+                                if col not in result_df.columns:
+                                    result_df[col] = macd_df[col]
+                                    added_features_count += 1
                         else:
-                            self.logger.warning("MACD повернув неочікуваний тип даних")
+                            self.logger.warning("MACD повернув неочікуваний тип даних або порожній результат")
 
                 # Bollinger Bands
                 elif indicator == 'bollinger_bands':
                     for window in [20]:
                         if 'close' in result_df.columns:
                             bbands = ta.bbands(result_df['close'], length=window)
-                            if isinstance(bbands, pd.DataFrame):
-                                result_df = pd.concat([result_df, bbands], axis=1)
+                            if bbands is not None and isinstance(bbands, pd.DataFrame) and not bbands.empty:
+                                # Перевіряємо наявність колонок перед додаванням
+                                for col in bbands.columns:
+                                    if col not in result_df.columns:
+                                        result_df[col] = bbands[col]
+                                        added_features_count += 1
+
                                 # Додаємо розрахунок ширини полос
                                 upper_col = f'BBU_{window}_2.0'
                                 lower_col = f'BBL_{window}_2.0'
                                 middle_col = f'BBM_{window}_2.0'
                                 if all(col in result_df.columns for col in [upper_col, lower_col, middle_col]):
-                                    result_df[f'bb_width_{window}'] = (result_df[upper_col] - result_df[lower_col]) / \
-                                                                      result_df[middle_col]
-                                    added_features_count += len(bbands.columns) + 1
-                                else:
-                                    added_features_count += len(bbands.columns)
+                                    # Захист від ділення на нуль
+                                    middle_values = result_df[middle_col].replace(0, np.nan)
+                                    result_df[f'bb_width_{window}'] = (result_df[upper_col] - result_df[
+                                        lower_col]) / middle_values
+                                    added_features_count += 1
                             else:
-                                self.logger.warning("Bollinger Bands повернув неочікуваний тип даних")
+                                self.logger.warning(
+                                    "Bollinger Bands повернув неочікуваний тип даних або порожній результат")
 
                 # Stochastic Oscillator
                 elif indicator == 'stochastic':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         stoch = ta.stoch(result_df['high'], result_df['low'], result_df['close'], k=14, d=3, smooth_k=3)
-                        if isinstance(stoch, pd.DataFrame):
-                            result_df = pd.concat([result_df, stoch], axis=1)
-                            added_features_count += len(stoch.columns)
+                        if stoch is not None and isinstance(stoch, pd.DataFrame) and not stoch.empty:
+                            for col in stoch.columns:
+                                if col not in result_df.columns:
+                                    result_df[col] = stoch[col]
+                                    added_features_count += 1
                         else:
-                            self.logger.warning("Stochastic повернув неочікуваний тип даних")
+                            self.logger.warning("Stochastic повернув неочікуваний тип даних або порожній результат")
 
                 # Average True Range
                 elif indicator == 'atr':
                     for window in [14]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                            result_df[f'atr_{window}'] = ta.atr(result_df['high'], result_df['low'],
-                                                                result_df['close'], length=window)
-                            added_features_count += 1
+                            atr_result = ta.atr(result_df['high'], result_df['low'], result_df['close'], length=window)
+                            if atr_result is not None and not atr_result.empty:
+                                result_df[f'atr_{window}'] = atr_result
+                                added_features_count += 1
 
                 # Average Directional Index
                 elif indicator == 'adx':
                     for window in [14]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
                             adx_df = ta.adx(result_df['high'], result_df['low'], result_df['close'], length=window)
-                            if isinstance(adx_df, pd.DataFrame):
-                                result_df = pd.concat([result_df, adx_df], axis=1)
-                                added_features_count += len(adx_df.columns)
+                            if adx_df is not None and isinstance(adx_df, pd.DataFrame) and not adx_df.empty:
+                                for col in adx_df.columns:
+                                    if col not in result_df.columns:
+                                        result_df[col] = adx_df[col]
+                                        added_features_count += 1
                             else:
-                                self.logger.warning("ADX повернув неочікуваний тип даних")
+                                self.logger.warning("ADX повернув неочікуваний тип даних або порожній результат")
 
                 # On Balance Volume
                 elif indicator == 'obv':
                     if all(col in result_df.columns for col in ['close', 'volume']):
-                        result_df['obv'] = ta.obv(result_df['close'], result_df['volume'])
-                        added_features_count += 1
+                        obv_result = ta.obv(result_df['close'], result_df['volume'])
+                        if obv_result is not None and not obv_result.empty:
+                            result_df['obv'] = obv_result
+                            added_features_count += 1
 
                 # Rate of Change
                 elif indicator == 'roc':
                     for window in [5, 10, 20]:
                         if 'close' in result_df.columns:
-                            result_df[f'roc_{window}'] = ta.roc(result_df['close'], length=window)
-                            added_features_count += 1
+                            roc_result = ta.roc(result_df['close'], length=window)
+                            if roc_result is not None and not roc_result.empty:
+                                result_df[f'roc_{window}'] = roc_result
+                                added_features_count += 1
 
                 # Commodity Channel Index
                 elif indicator == 'cci':
                     for window in [20]:
                         if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                            result_df[f'cci_{window}'] = ta.cci(result_df['high'], result_df['low'],
-                                                                result_df['close'], length=window)
-                            added_features_count += 1
+                            cci_result = ta.cci(result_df['high'], result_df['low'], result_df['close'], length=window)
+                            if cci_result is not None and not cci_result.empty:
+                                result_df[f'cci_{window}'] = cci_result
+                                added_features_count += 1
 
                 # Volume Weighted Average Price (VWAP)
                 elif indicator == 'vwap':
                     if all(col in result_df.columns for col in ['high', 'low', 'close', 'volume']):
-                        # pandas_ta не має вбудованого VWAP з параметром довжини, тому робимо власний розрахунок
                         for period in [14, 30]:
-                            typical_price = (result_df['high'] + result_df['low'] + result_df['close']) / 3
-                            vol_tp = result_df['volume'] * typical_price
-                            # Додаємо захист від ділення на нуль
-                            volume_sum = result_df['volume'].rolling(window=period).sum()
-                            volume_sum = volume_sum.replace(0, np.nan)
-                            result_df[f'vwap_{period}'] = vol_tp.rolling(window=period).sum() / volume_sum
-                            added_features_count += 1
+                            try:
+                                typical_price = (result_df['high'] + result_df['low'] + result_df['close']) / 3
+                                vol_tp = result_df['volume'] * typical_price
+                                # Додаємо захист від ділення на нуль
+                                volume_sum = result_df['volume'].rolling(window=period).sum()
+                                volume_sum = volume_sum.replace(0, np.nan)
+                                vwap_result = vol_tp.rolling(window=period).sum() / volume_sum
+                                result_df[f'vwap_{period}'] = vwap_result
+                                added_features_count += 1
+                            except Exception as vwap_error:
+                                self.logger.warning(f"Помилка при розрахунку VWAP_{period}: {str(vwap_error)}")
 
                 # SuperTrend індикатор
                 elif indicator == 'supertrend':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
                         for period in [10, 20]:
-                            st_df = ta.supertrend(result_df['high'], result_df['low'], result_df['close'],
-                                                  length=period, multiplier=3.0)
-                            if isinstance(st_df, pd.DataFrame):
-                                result_df = pd.concat([result_df, st_df], axis=1)
-                                added_features_count += len(st_df.columns)
-                            else:
-                                self.logger.warning("SuperTrend повернув неочікуваний тип даних")
+                            try:
+                                st_df = ta.supertrend(result_df['high'], result_df['low'], result_df['close'],
+                                                      length=period, multiplier=3.0)
+                                if st_df is not None and isinstance(st_df, pd.DataFrame) and not st_df.empty:
+                                    for col in st_df.columns:
+                                        if col not in result_df.columns:
+                                            result_df[col] = st_df[col]
+                                            added_features_count += 1
+                                else:
+                                    self.logger.warning(
+                                        f"SuperTrend_{period} повернув неочікуваний тип даних або порожній результат")
+                            except Exception as st_error:
+                                self.logger.warning(f"Помилка при розрахунку SuperTrend_{period}: {str(st_error)}")
 
                 # Полоси Кельтнера
                 elif indicator == 'keltner':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                        kc_df = ta.kc(result_df['high'], result_df['low'], result_df['close'], length=20)
-                        if isinstance(kc_df, pd.DataFrame):
-                            result_df = pd.concat([result_df, kc_df], axis=1)
-                            added_features_count += len(kc_df.columns)
-                        else:
-                            self.logger.warning("Keltner Channels повернув неочікуваний тип даних")
+                        try:
+                            kc_df = ta.kc(result_df['high'], result_df['low'], result_df['close'], length=20)
+                            if kc_df is not None and isinstance(kc_df, pd.DataFrame) and not kc_df.empty:
+                                for col in kc_df.columns:
+                                    if col not in result_df.columns:
+                                        result_df[col] = kc_df[col]
+                                        added_features_count += 1
+                            else:
+                                self.logger.warning(
+                                    "Keltner Channels повернув неочікуваний тип даних або порожній результат")
+                        except Exception as kc_error:
+                            self.logger.warning(f"Помилка при розрахунку Keltner Channels: {str(kc_error)}")
 
                 # Parabolic SAR
                 elif indicator == 'psar':
                     if all(col in result_df.columns for col in ['high', 'low', 'close']):
-                        psar_df = ta.psar(result_df['high'], result_df['low'])
-                        if isinstance(psar_df, pd.DataFrame):
-                            result_df = pd.concat([result_df, psar_df], axis=1)
-                            added_features_count += len(psar_df.columns)
-                        else:
-                            self.logger.warning("Parabolic SAR повернув неочікуваний тип даних")
+                        try:
+                            psar_df = ta.psar(result_df['high'], result_df['low'])
+                            if psar_df is not None and isinstance(psar_df, pd.DataFrame) and not psar_df.empty:
+                                for col in psar_df.columns:
+                                    if col not in result_df.columns:
+                                        result_df[col] = psar_df[col]
+                                        added_features_count += 1
+                            else:
+                                self.logger.warning(
+                                    "Parabolic SAR повернув неочікуваний тип даних або порожній результат")
+                        except Exception as psar_error:
+                            self.logger.warning(f"Помилка при розрахунку Parabolic SAR: {str(psar_error)}")
 
                 # Ichimoku Cloud
                 elif indicator == 'ichimoku':
@@ -192,21 +238,33 @@ class TechnicalFeatures:
                         try:
                             ichimoku_result = ta.ichimoku(result_df['high'], result_df['low'], result_df['close'])
 
-                            if isinstance(ichimoku_result, pd.DataFrame):
-                                # Якщо повертається DataFrame
-                                result_df = pd.concat([result_df, ichimoku_result], axis=1)
-                                added_features_count += len(ichimoku_result.columns)
-                            elif isinstance(ichimoku_result, tuple):
-                                # Якщо повертається tuple з DataFrame'ами або Series
-                                for component in ichimoku_result:
-                                    if isinstance(component, (pd.DataFrame, pd.Series)):
-                                        if isinstance(component, pd.Series):
-                                            component = component.to_frame()
-                                        result_df = pd.concat([result_df, component], axis=1)
-                                        added_features_count += len(component.columns)
+                            if ichimoku_result is not None:
+                                if isinstance(ichimoku_result, pd.DataFrame) and not ichimoku_result.empty:
+                                    # Якщо повертається DataFrame
+                                    for col in ichimoku_result.columns:
+                                        if col not in result_df.columns:
+                                            result_df[col] = ichimoku_result[col]
+                                            added_features_count += 1
+                                elif isinstance(ichimoku_result, tuple):
+                                    # Якщо повертається tuple з DataFrame'ами або Series
+                                    for component in ichimoku_result:
+                                        if isinstance(component, (pd.DataFrame, pd.Series)):
+                                            if isinstance(component, pd.Series):
+                                                component = component.to_frame()
+                                            if not component.empty:
+                                                for col in component.columns:
+                                                    if col not in result_df.columns:
+                                                        result_df[col] = component[col]
+                                                        added_features_count += 1
+                                else:
+                                    # Якщо тип невідомий, робимо ручний розрахунок
+                                    self.logger.warning(
+                                        f"Неочікуваний тип результату Ichimoku: {type(ichimoku_result)}")
+                                    self._calculate_ichimoku_manually(result_df)
+                                    added_features_count += 5
                             else:
-                                # Якщо тип невідомий, робимо ручний розрахунок
-                                self.logger.warning(f"Неочікуваний тип результату Ichimoku: {type(ichimoku_result)}")
+                                # Якщо результат None, робимо ручний розрахунок
+                                self.logger.warning("Ichimoku повернув None, використовуємо ручний розрахунок")
                                 self._calculate_ichimoku_manually(result_df)
                                 added_features_count += 5
 
@@ -328,22 +386,52 @@ class TechnicalFeatures:
 
         # --- Використання pandas_ta для патернів свічок ---
         try:
-            patterns = ta.cdl_pattern(open_=result_df['open'], high=result_df['high'],
-                                      low=result_df['low'], close=result_df['close'])
-            result_df = pd.concat([result_df, patterns], axis=1)
-            added_features_count += len(patterns.columns)
+            # Викликаємо окремі функції патернів замість cdl_pattern
+            patterns_to_add = []
+
+            # Список основних патернів
+            pattern_functions = [
+                'cdl_doji', 'cdl_hammer', 'cdl_hangingman', 'cdl_shootingstar',
+                'cdl_engulfing', 'cdl_harami', 'cdl_piercing', 'cdl_darkcloud',
+                'cdl_morningstar', 'cdl_eveningstar', 'cdl_3whitesoldiers', 'cdl_3blackcrows'
+            ]
+
+            for pattern_name in pattern_functions:
+                try:
+                    if hasattr(ta, pattern_name):
+                        pattern_func = getattr(ta, pattern_name)
+                        pattern_result = pattern_func(
+                            open_=result_df['open'],
+                            high=result_df['high'],
+                            low=result_df['low'],
+                            close=result_df['close']
+                        )
+
+                        if pattern_result is not None and not pattern_result.empty:
+                            # Перетворюємо результат в бінарний формат (0 або 1)
+                            pattern_binary = (pattern_result != 0).astype(int)
+                            result_df[pattern_name] = pattern_binary
+                            added_features_count += 1
+                except Exception as e:
+                    self.logger.warning(f"Помилка при обчисленні патерну {pattern_name}: {e}")
+                    continue
+
         except Exception as e:
             self.logger.warning(f"Помилка при використанні pandas_ta patterns: {e}")
 
         # --- Функція для безпечного перетворення boolean в int ---
         def safe_bool_to_int(series):
             """Безпечно перетворює boolean серію в int, обробляючи NaN значення"""
-            return series.fillna(False).astype(bool).astype(int)
+            try:
+                return series.fillna(False).astype(bool).astype(int)
+            except Exception:
+                return pd.Series(0, index=series.index, dtype=int)
 
         # --- Патерни з однієї свічки (додаткові) ---
         # 1. Дожі (тіло менше X% від розмаху) - векторизовано
         doji_threshold = 0.1  # 10% від повного розмаху
-        result_df['doji'] = safe_bool_to_int(result_df['rel_body_size'] < doji_threshold)
+        doji_condition = result_df['rel_body_size'] < doji_threshold
+        result_df['doji'] = safe_bool_to_int(doji_condition)
         added_features_count += 1
 
         # 2. Молот (векторизовано)
@@ -464,7 +552,8 @@ class TechnicalFeatures:
         added_features_count += 1
 
         # 6. Зірка доджі
-        result_df['doji_star'] = safe_bool_to_int(result_df['doji'] & (result_df['doji'].shift(1) == 0))
+        doji_star_condition = result_df['doji'] & (result_df['doji'].shift(1) == 0)
+        result_df['doji_star'] = safe_bool_to_int(doji_star_condition)
         added_features_count += 1
 
         # 7. Пінцет (зверху/знизу)
@@ -544,7 +633,15 @@ class TechnicalFeatures:
         return result_df
 
     def create_custom_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Створює специфічні індикатори для криптовалют.
 
+        Args:
+            data: DataFrame з OHLCV даними
+
+        Returns:
+            DataFrame з доданими специфічними індикаторами
+        """
         self.logger.info("Створення специфічних індикаторів для криптовалют...")
 
         # Створюємо копію, щоб не модифікувати оригінальні дані
@@ -581,25 +678,48 @@ class TechnicalFeatures:
                 # 1. Хвилі Еліота (спрощений підхід) - виявлення паттернів
                 for window in [21, 34]:
                     # Знаходимо локальні максимуми і мінімуми
+                    def find_local_max(x):
+                        if len(x) < 3:
+                            return 0
+                        mid_idx = len(x) // 2
+                        return 1 if x.iloc[mid_idx] == x.max() else 0
+
+                    def find_local_min(x):
+                        if len(x) < 3:
+                            return 0
+                        mid_idx = len(x) // 2
+                        return 1 if x.iloc[mid_idx] == x.min() else 0
+
                     result_df[f'local_max_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
-                        lambda x: 1 if x.argmax() == len(x) // 2 else 0, raw=True)
+                        find_local_max, raw=False).fillna(0)
                     result_df[f'local_min_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
-                        lambda x: 1 if x.argmin() == len(x) // 2 else 0, raw=True)
+                        find_local_min, raw=False).fillna(0)
                     added_features_count += 2
 
                 # 2. Фрактальний індикатор (аналог індикатора Білла Вільямса)
                 for window in [5]:  # класично використовується 5
-                    half_window = window // 2
-                    # Верхні фрактали
+                    def find_fractal_high(x):
+                        if len(x) != window:
+                            return 0
+                        half_window = window // 2
+                        center_val = x.iloc[half_window]
+                        return 1 if (center_val == x.max() and
+                                     center_val != x.iloc[0] and
+                                     center_val != x.iloc[-1]) else 0
+
+                    def find_fractal_low(x):
+                        if len(x) != window:
+                            return 0
+                        half_window = window // 2
+                        center_val = x.iloc[half_window]
+                        return 1 if (center_val == x.min() and
+                                     center_val != x.iloc[0] and
+                                     center_val != x.iloc[-1]) else 0
+
                     result_df[f'fractal_high_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
-                        lambda x: 1 if (x[half_window] == max(x)) and (x[half_window] != x[0]) and (
-                                    x[half_window] != x[-1]) else 0,
-                        raw=True)
-                    # Нижні фрактали
+                        find_fractal_high, raw=False).fillna(0)
                     result_df[f'fractal_low_{window}'] = result_df['close'].rolling(window=window, center=True).apply(
-                        lambda x: 1 if (x[half_window] == min(x)) and (x[half_window] != x[0]) and (
-                                    x[half_window] != x[-1]) else 0,
-                        raw=True)
+                        find_fractal_low, raw=False).fillna(0)
                     added_features_count += 2
 
                 # 3. Цикли Фібоначчі (відносні рівні)
@@ -613,7 +733,9 @@ class TechnicalFeatures:
                         fib_level_price = roll_min + (roll_max - roll_min) * fib_level
                         # Створюємо індикатор близькості до рівня Фібоначчі
                         tolerance = 0.005  # допустиме відхилення у відсотках
-                        near_fib = np.abs(result_df['close'] - fib_level_price) < (result_df['close'] * tolerance)
+                        price_diff = np.abs(result_df['close'] - fib_level_price)
+                        price_tolerance = result_df['close'] * tolerance
+                        near_fib = (price_diff < price_tolerance) & fib_level_price.notna()
                         result_df[f'near_fib_{fib_level:.3f}_{window}'] = near_fib.astype(int)
                         added_features_count += 1
 
@@ -627,8 +749,14 @@ class TechnicalFeatures:
                     # Цей індикатор оцінює послідовність руху ціни у вікні
                     # Рахуємо кількість напрямків руху, що збігаються
                     direction = np.sign(result_df['close'].diff()).fillna(0)
+
+                    def calc_trend_strength(x):
+                        if len(x) == 0:
+                            return 0
+                        return abs(x.sum()) / len(x)
+
                     result_df[f'trend_strength_{window}'] = direction.rolling(window=window).apply(
-                        lambda x: abs(x.sum()) / window, raw=True)
+                        calc_trend_strength, raw=False).fillna(0)
                     added_features_count += 1
 
             except Exception as e:
@@ -638,7 +766,8 @@ class TechnicalFeatures:
         if 'volume' in available_groups:
             try:
                 # 1. Відношення об'єму до цінової зміни (особливо важливо для криптовалют)
-                result_df['volume_price_ratio'] = result_df['volume'] / (np.abs(result_df['close'].diff()) + 1e-10)
+                price_change = np.abs(result_df['close'].diff())
+                result_df['volume_price_ratio'] = result_df['volume'] / (price_change + 1e-10)
                 added_features_count += 1
 
                 # 2. Кумулятивний індекс об'єму (delta)
@@ -655,90 +784,21 @@ class TechnicalFeatures:
                     added_features_count += 1
 
                 # 4. Накопичення/розподіл (Accumulation/Distribution) індикатор
-                clv = ((result_df['close'] - result_df['low']) - (result_df['high'] - result_df['close'])) / (
-                            result_df['high'] - result_df['low'] + 1e-10)
-                result_df['acc_dist'] = clv * result_df['volume']
-                result_df['acc_dist_cumulative'] = result_df['acc_dist'].cumsum()
-                added_features_count += 2
+                if 'ohlcv' in available_groups:
+                    price_range = result_df['high'] - result_df['low']
+                    price_range = np.where(price_range == 0, 1e-10, price_range)  # уникаємо ділення на нуль
+
+                    clv = ((result_df['close'] - result_df['low']) - (
+                                result_df['high'] - result_df['close'])) / price_range
+                    result_df['acc_dist'] = clv * result_df['volume']
+                    result_df['acc_dist_cumulative'] = result_df['acc_dist'].cumsum()
+                    added_features_count += 2
 
                 # 5. Об'єм відносно середнього (Volume Relative to Average)
                 for window in [7, 14, 30]:
-                    result_df[f'volume_rel_avg_{window}'] = result_df['volume'] / result_df['volume'].rolling(
-                        window=window).mean()
+                    avg_volume = result_df['volume'].rolling(window=window).mean()
+                    result_df[f'volume_rel_avg_{window}'] = result_df['volume'] / (avg_volume + 1e-10)
                     added_features_count += 1
-
-                # 6. Об'ємний профіль (розподіл об'єму за цінами) - спрощений підхід
-                for window in [20]:
-                    # Зважена ціна по об'єму
-                    result_df[f'volume_weighted_price_{window}'] = (result_df['close'] * result_df['volume']).rolling(
-                        window=window).sum() / result_df['volume'].rolling(window=window).sum()
-                    added_features_count += 1
-
-                # 7. Силові Індекси (ElderRay)
-                for period in [13]:
-                    ema = result_df['close'].ewm(span=period, adjust=False).mean()
-                    result_df[f'elder_bull_power_{period}'] = result_df['high'] - ema
-                    result_df[f'elder_bear_power_{period}'] = result_df['low'] - ema
-                    added_features_count += 2
-
-            except Exception as e:
-                self.logger.error(f"Помилка при створенні індикаторів на основі об'єму: {str(e)}")
-
-        # --- Специфічні для криптовалют індикатори (потребують усіх OHLCV даних) ---
-        if 'ohlcv' in available_groups:
-            try:
-                # 1. Волатільність за годину/добу/тиждень (специфічно для крипторинку, що працює 24/7)
-                for periods in [24, 24 * 7]:  # година, доба, тиждень у годинних даних
-                    high_period = result_df['high'].rolling(window=periods).max()
-                    low_period = result_df['low'].rolling(window=periods).min()
-                    result_df[f'volatility_{periods}h'] = (high_period - low_period) / low_period
-                    added_features_count += 1
-
-                # 2. Індикатор криптовалютної паніки (аналог "індексу страху і жадібності")
-                # Використовує комбінацію волатільності і об'єму
-                for window in [24]:
-                    volatility = result_df['close'].rolling(window=window).std() / result_df['close'].rolling(
-                        window=window).mean()
-                    volume_change = result_df['volume'].pct_change(periods=window)
-                    # Індекс страху: висока волатільність + різкий зріст об'єму + зниження ціни
-                    fear_index = volatility * np.where(
-                        (volume_change > 0) & (result_df['close'].pct_change(periods=window) < 0),
-                        volume_change + 1, 1)
-                    result_df[f'crypto_fear_index_{window}'] = fear_index
-                    added_features_count += 1
-
-                # 3. Індикатор різкого руху (для виявлення pump & dump)
-                for window in [6, 12, 24]:  # 6 годин, 12 годин, 24 години
-                    # Оцінює відносну зміну ціни за короткий період
-                    price_change = result_df['close'].pct_change(periods=window).abs()
-                    volume_change = result_df['volume'].pct_change(periods=window)
-                    # Індикатор = зміна ціни * зміна об'єму
-                    result_df[f'pump_dump_indicator_{window}'] = np.where(volume_change > 0,
-                                                                          price_change * volume_change, 0)
-                    added_features_count += 1
-
-                # 4. Індикатор ф'ючерсного ажіотажу (для криптовалют)
-                for window in [24, 48]:
-                    close_mean = result_df['close'].rolling(window=window).mean()
-                    close_std = result_df['close'].rolling(window=window).std()
-                    # Індикатор ажіотажу: наскільки поточна ціна відхиляється від середньої в термінах стандартних відхилень
-                    result_df[f'futures_heat_{window}'] = (result_df['close'] - close_mean) / (close_std + 1e-10)
-                    added_features_count += 1
-
-                # 5. Індикатор відновлення піків/мінімумів
-                for percent in [0.05, 0.1]:  # 5% і 10% від попереднього піку/мінімуму
-                    for window in [30, 60]:  # час для пошуку піків/мінімумів
-                        # Знаходимо піки і мінімуми
-                        roll_max = result_df['high'].rolling(window=window).max()
-                        roll_min = result_df['low'].rolling(window=window).min()
-
-                        # Перевіряємо, чи наближаємося до піку/мінімуму
-                        near_peak = result_df['close'] >= roll_max * (1 - percent)
-                        near_bottom = result_df['close'] <= roll_min * (1 + percent)
-
-                        result_df[f'near_peak_{int(percent * 100)}p_{window}'] = near_peak.astype(int)
-                        result_df[f'near_bottom_{int(percent * 100)}p_{window}'] = near_bottom.astype(int)
-                        added_features_count += 2
 
                 # 6. Індикатор тривалості циклу (специфічний для крипторинку)
                 for window in [90]:  # ~3 місяці
