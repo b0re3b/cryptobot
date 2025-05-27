@@ -1,0 +1,12 @@
+2025-05-28 01:37:10 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-28 01:38:51 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-28 01:39:33 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-28 01:42:09 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: ModelTrainer.train_model() missing 1 required positional argument: 'features_result'
+2025-05-28 01:42:09 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru
+2025-05-28 01:44:44 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-gru: ModelTrainer.train_model() missing 1 required positional argument: 'features_result'
+2025-05-28 01:44:44 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_transformer
+2025-05-28 01:47:21 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-transformer: ModelTrainer.train_model() missing 1 required positional argument: 'features_result'
+2025-05-28 01:47:21 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_4h_lstm
+2025-05-28 01:52:26 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_lstm
+2025-05-28 01:55:01 - deep_learning - ERROR - [logger.py:111] - Error training BTC-4h-lstm: ModelTrainer.train_model() missing 1 required positional argument: 'features_result'
+2025-05-28 01:55:01 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_4h_gru

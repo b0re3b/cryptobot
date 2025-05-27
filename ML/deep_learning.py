@@ -1676,7 +1676,7 @@ def main():
 
     # 5. Multiple Steps Prediction
     print("\n=== Multi-step Prediction ===")
-    btc_multi = pipeline.predict_multiple_steps('BTC', '1d', 'lstm', steps=5)
+    btc_multi = pipeline.predict_multiple_steps('BTC', '4h', 'lstm', steps=5)
     print(btc_multi)
 
     # 6. Ensemble Prediction
@@ -1726,7 +1726,7 @@ def main():
 
         online_result = pipeline.online_learning(
             symbol='BTC',
-            timeframe='1w',
+            timeframe='1h',
             model_type=['lstm','gru','transformer'],
             new_data=new_data,
             epochs=5
