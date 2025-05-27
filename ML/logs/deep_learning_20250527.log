@@ -2,3 +2,23 @@
 2025-05-27 00:07:16 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
 2025-05-27 00:15:39 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
 2025-05-27 00:28:31 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-27 01:21:48 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1h_lstm
+2025-05-27 01:28:48 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1d_lstm
+2025-05-27 01:32:57 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1w_lstm
+2025-05-27 01:33:11 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1w-lstm: "['target'] not found in axis"
+2025-05-27 01:33:11 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1w_gru
+2025-05-27 01:33:25 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1w-gru: "['target'] not found in axis"
+2025-05-27 01:33:25 - deep_learning - INFO - [logger.py:103] - Starting training for BTC_1w_transformer
+2025-05-27 01:33:40 - deep_learning - ERROR - [logger.py:111] - Error training BTC-1w-transformer: "['target'] not found in axis"
+2025-05-27 01:33:40 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1w_lstm
+2025-05-27 01:33:54 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1w-lstm: "['target'] not found in axis"
+2025-05-27 01:33:54 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1w_gru
+2025-05-27 01:34:09 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1w-gru: "['target'] not found in axis"
+2025-05-27 01:34:09 - deep_learning - INFO - [logger.py:103] - Starting training for ETH_1w_transformer
+2025-05-27 01:34:23 - deep_learning - ERROR - [logger.py:111] - Error training ETH-1w-transformer: "['target'] not found in axis"
+2025-05-27 01:34:23 - deep_learning - INFO - [logger.py:103] - Starting training for SOL_1w_lstm
+2025-05-27 01:34:37 - deep_learning - ERROR - [logger.py:111] - Error training SOL-1w-lstm: "['target'] not found in axis"
+2025-05-27 01:34:37 - deep_learning - INFO - [logger.py:103] - Starting training for SOL_1w_gru
+2025-05-27 01:34:51 - deep_learning - ERROR - [logger.py:111] - Error training SOL-1w-gru: "['target'] not found in axis"
+2025-05-27 01:34:51 - deep_learning - INFO - [logger.py:103] - Starting training for SOL_1w_transformer
+2025-05-27 01:35:05 - deep_learning - ERROR - [logger.py:111] - Error training SOL-1w-transformer: "['target'] not found in axis"

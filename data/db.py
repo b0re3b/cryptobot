@@ -4585,7 +4585,6 @@ class DatabaseManager:
             print(f"Загальна помилка при збереженні аналізу тренду: {e}")
             return False
 
-
     def get_trend_analysis(
             self,
             symbol: str,
@@ -4597,7 +4596,6 @@ class DatabaseManager:
         """Отримує аналіз тренду з бази даних"""
         try:
             if latest_only:
-                # Отримання тільки останнього аналізу
                 query = """
                         SELECT *
                         FROM trend_analysis
@@ -4607,7 +4605,6 @@ class DatabaseManager:
                         """
                 params = (symbol, timeframe)
             else:
-                # Формування запиту з можливою фільтрацією за датами
                 query = """
                         SELECT *
                         FROM trend_analysis
@@ -4632,28 +4629,48 @@ class DatabaseManager:
             if not results:
                 return None
 
-            # Перетворення результатів в словники з правильними типами даних
             trend_analyses = []
             for row in results:
                 row_dict = dict(row)
 
-                # Перетворення JSON рядків у словники/списки Python
-                for json_field in ['support_levels', 'resistance_levels', 'fibonacci_levels',
-                                   'swing_points', 'detected_patterns', 'additional_metrics']:
-                    if row_dict[json_field]:
-                        row_dict[json_field] = json.loads(row_dict[json_field])
-                    else:
-                        # Встановлення значень за замовчуванням для порожніх полів
+                for json_field in [
+                    'support_levels', 'resistance_levels', 'fibonacci_levels',
+                    'swing_points', 'detected_patterns', 'additional_metrics'
+                ]:
+                    value = row_dict.get(json_field)
+
+                    if value is None:
+                        # Значення за замовчуванням
                         if json_field in ['support_levels', 'resistance_levels', 'detected_patterns']:
                             row_dict[json_field] = []
                         elif json_field == 'swing_points':
                             row_dict[json_field] = {'highs': [], 'lows': []}
                         else:
                             row_dict[json_field] = {}
+                        continue
+
+                    # Якщо вже Python-структура — не парсимо
+                    if isinstance(value, (list, dict)):
+                        row_dict[json_field] = value
+                    elif isinstance(value, (str, bytes)):
+                        try:
+                            row_dict[json_field] = json.loads(value)
+                        except Exception as e:
+                            print(f"[WARNING] Неможливо розпарсити {json_field}: {e}")
+                            # fallback до дефолтних значень
+                            if json_field in ['support_levels', 'resistance_levels', 'detected_patterns']:
+                                row_dict[json_field] = []
+                            elif json_field == 'swing_points':
+                                row_dict[json_field] = {'highs': [], 'lows': []}
+                            else:
+                                row_dict[json_field] = {}
+                    else:
+                        # Невідомий формат — fallback
+                        print(f"[WARNING] Непідтримуваний тип поля {json_field}: {type(value)}")
+                        row_dict[json_field] = {}
 
                 trend_analyses.append(row_dict)
 
-            # Повертаємо один елемент або список в залежності від параметра latest_only
             if latest_only and trend_analyses:
                 return trend_analyses[0]
 

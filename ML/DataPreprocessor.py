@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from pandas import DataFrame, Series
 from analysis import VolatilityAnalysis
-from analysis.trend_detection import TrendDetection
+from trends.trend_detection import TrendDetection
 from cyclefeatures import CryptoCycles
 from data.db import DatabaseManager
 from featureengineering.feature_engineering import FeatureEngineering

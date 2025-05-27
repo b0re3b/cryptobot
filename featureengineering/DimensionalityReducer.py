@@ -270,12 +270,12 @@ class DimensionalityReducer():
         """
         self.logger.info("Створення поліноміальних ознак...")
 
-        # Вибираємо числові стовпці, якщо columns не вказано (векторизований підхід)
+        # Вибираємо числові стовпці, якщо columns не вказано
         if columns is None:
             columns = data.select_dtypes(include=[np.number]).columns.tolist()
             self.logger.info(f"Автоматично вибрано {len(columns)} числових стовпців")
         else:
-            # Перевіряємо наявність вказаних стовпців у даних (векторизований підхід)
+            # Перевіряємо наявність вказаних стовпців у даних
             missing_cols = list(set(columns) - set(data.columns))
             if missing_cols:
                 self.logger.warning(f"Стовпці {missing_cols} не знайдено в даних і будуть пропущені")
@@ -288,12 +288,32 @@ class DimensionalityReducer():
 
         # Створюємо копію DataFrame з вибраними стовпцями
         result_df = data.copy()
-        X = result_df[columns]
+        X = result_df[columns].copy()
 
-        # Перевіряємо на наявність NaN і замінюємо їх (векторизований підхід)
+        # Перевіряємо на наявність NaN і замінюємо їх
         if X.isna().any().any():
             self.logger.warning(f"Виявлено NaN значення у вхідних даних. Заповнюємо їх медіаною.")
             X = X.fillna(X.median())
+
+        # ДОДАНО: Перевірка на нескінченні значення перед створенням поліноміальних ознак
+        if np.isinf(X.values).any():
+            self.logger.warning("Виявлено нескінченні значення у вхідних даних. Замінюємо їх великими числами.")
+            X = X.replace([np.inf, -np.inf], [1e10, -1e10])
+
+        # ДОДАНО: Стандартизація даних перед створенням поліноміальних ознак
+        # Це допоможе уникнути створення надто великих значень
+        scaler = StandardScaler()
+        X_scaled = pd.DataFrame(
+            scaler.fit_transform(X),
+            columns=X.columns,
+            index=X.index
+        )
+
+        # ДОДАНО: Обмеження діапазону значень для запобігання переповненню
+        # Обрізаємо значення до розумного діапазону
+        X_scaled = X_scaled.clip(-10, 10)
+
+        self.logger.info(f"Дані стандартизовано та обрізано до діапазону [-10, 10]")
 
         # Створюємо об'єкт для поліноміальних ознак
         poly = PolynomialFeatures(degree=degree,
@@ -302,54 +322,117 @@ class DimensionalityReducer():
 
         # Застосовуємо трансформацію
         try:
-            poly_features = poly.fit_transform(X)
+            poly_features = poly.fit_transform(X_scaled)
+
+            # ДОДАНО: Перевірка на переповнення після створення поліноміальних ознак
+            if np.isinf(poly_features).any() or np.isnan(poly_features).any():
+                self.logger.warning("Виявлено нескінченні або NaN значення після створення поліноміальних ознак")
+
+                # Замінюємо нескінченні значення на NaN для подальшої обробки
+                poly_features = np.where(np.isinf(poly_features), np.nan, poly_features)
+
+                # Перевіряємо чи всі значення не стали NaN
+                if np.isnan(poly_features).all():
+                    self.logger.error("Всі поліноміальні ознаки стали NaN. Повертаємо оригінальні дані.")
+                    return data
 
             # Отримуємо назви нових ознак
-            feature_names = poly.get_feature_names_out(X.columns)
+            feature_names = poly.get_feature_names_out(X_scaled.columns)
 
             # Створюємо DataFrame з новими ознаками
             poly_df = pd.DataFrame(poly_features,
                                    columns=feature_names,
-                                   index=X.index)
+                                   index=X_scaled.index)
 
             # Видаляємо оригінальні ознаки, оскільки вони будуть дублюватись у вихідному DataFrame
             if degree > 1:
-                poly_df = poly_df.iloc[:, len(columns):]
+                # ВИПРАВЛЕНО: Правильно визначаємо кількість оригінальних ознак для видалення
+                n_original_features = len(X_scaled.columns)
+                poly_df = poly_df.iloc[:, n_original_features:]
 
             # Додаємо префікс до назв ознак для уникнення конфліктів
-            poly_df = poly_df.add_prefix('poly_')
+            poly_df.columns = [f'poly_{col}' for col in poly_df.columns]
 
-            # Обробка нескінченних значень і великих чисел (векторизований підхід)
-            # Замінюємо нескінченні значення на NaN одним викликом
+            # ПОКРАЩЕНО: Більш надійна обробка нескінченних значень і великих чисел
+            # Замінюємо нескінченні значення на NaN
             poly_df = poly_df.replace([np.inf, -np.inf], np.nan)
 
-            # Знаходимо стовпці з NaN
+            # Обробка стовпців з NaN значеннями
             cols_with_na = poly_df.columns[poly_df.isna().any()]
 
-            for col in cols_with_na:
-                if poly_df[col].isna().all():
-                    # Якщо всі значення NaN, заповнюємо нулями
-                    poly_df[col] = 0
-                else:
-                    # Інакше використовуємо медіану для заповнення
-                    poly_df[col] = poly_df[col].fillna(poly_df[col].median())
+            if len(cols_with_na) > 0:
+                self.logger.warning(
+                    f"Знайдено {len(cols_with_na)} стовпців з NaN значеннями після створення поліноміальних ознак")
 
-            # Вінсоризація (обрізання екстремальних значень) - векторизований підхід
+                for col in cols_with_na:
+                    if poly_df[col].isna().all():
+                        # Якщо всі значення NaN, заповнюємо нулями
+                        poly_df[col] = 0
+                        self.logger.debug(f"Стовпець {col} заповнено нулями (всі значення були NaN)")
+                    else:
+                        # Інакше використовуємо медіану для заповнення
+                        median_val = poly_df[col].median()
+                        if pd.isna(median_val):
+                            # Якщо медіана також NaN, використовуємо 0
+                            poly_df[col] = poly_df[col].fillna(0)
+                            self.logger.debug(f"Стовпець {col} заповнено нулями (медіана була NaN)")
+                        else:
+                            poly_df[col] = poly_df[col].fillna(median_val)
+                            self.logger.debug(f"Стовпець {col} заповнено медіаною: {median_val}")
+
+            # ПОКРАЩЕНО: Більш консервативна вінсоризація
             # Обчислюємо квантилі для всіх стовпців одночасно
-            quantiles = poly_df.quantile([0.01, 0.99])
-            q_low, q_high = quantiles.loc[0.01], quantiles.loc[0.99]
+            try:
+                quantiles = poly_df.quantile([0.05, 0.95])  # Більш консервативні квантилі
+                q_low, q_high = quantiles.loc[0.05], quantiles.loc[0.95]
 
-            # Застосовуємо .clip для всього DataFrame
-            poly_df = poly_df.clip(q_low, q_high, axis=1)
+                # Застосовуємо обрізання тільки якщо квантилі валідні
+                for col in poly_df.columns:
+                    if not pd.isna(q_low[col]) and not pd.isna(q_high[col]):
+                        poly_df[col] = poly_df[col].clip(q_low[col], q_high[col])
 
-            # Об'єднуємо з вихідним DataFrame
-            result_df = pd.concat([result_df, poly_df], axis=1)
+            except Exception as e:
+                self.logger.warning(f"Не вдалося застосувати вінсоризацію: {str(e)}")
 
-            self.logger.info(f"Додано {len(poly_df.columns)} поліноміальних ознак степені {degree}")
+            # ДОДАНО: Фінальна перевірка на валідність даних
+            # Перевіряємо чи немає екстремальних значень
+            max_values = poly_df.abs().max()
+            extreme_cols = max_values[max_values > 1e15].index.tolist()
+
+            if extreme_cols:
+                self.logger.warning(f"Виявлено стовпці з екстремальними значеннями: {extreme_cols[:5]}...")
+                # Обрізаємо екстремальні значення
+                for col in extreme_cols:
+                    poly_df[col] = poly_df[col].clip(-1e15, 1e15)
+
+            # Видаляємо стовпці з константними значеннями (дисперсія = 0)
+            constant_cols = []
+            for col in poly_df.columns:
+                if poly_df[col].nunique() <= 1:
+                    constant_cols.append(col)
+
+            if constant_cols:
+                self.logger.info(f"Видалено {len(constant_cols)} константних стовпців")
+                poly_df = poly_df.drop(columns=constant_cols)
+
+            # Об'єднуємо з вихідним DataFrame тільки якщо є валідні стовпці
+            if len(poly_df.columns) > 0:
+                result_df = pd.concat([result_df, poly_df], axis=1)
+                self.logger.info(f"Додано {len(poly_df.columns)} поліноміальних ознак степені {degree}")
+            else:
+                self.logger.warning("Не створено жодної валідної поліноміальної ознаки")
+                return data
 
         except Exception as e:
             self.logger.error(f"Помилка при створенні поліноміальних ознак: {str(e)}")
-            return data
+
+            # ДОДАНО: Спроба створити поліноміальні ознаки з меншим степенем
+            if degree > 2:
+                self.logger.info(f"Спроба створити поліноміальні ознаки зі степенем {degree - 1}")
+                return self.create_polynomial_features(data, columns, degree - 1, interaction_only)
+            else:
+                self.logger.error("Не вдалося створити поліноміальні ознаки навіть зі степенем 2")
+                return data
 
         return result_df
 

@@ -405,3 +405,138 @@ LINE 4: ... timeframe = '1'                       AND sequence_id = 'h'
 2025-05-27 00:28:33 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
 2025-05-27 00:28:33 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 67848 записів в DataFrame для BTC
 2025-05-27 00:28:33 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 01:21:48 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 01:21:48 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 01:21:48 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1h та моделлю lstm
+2025-05-27 01:21:50 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 67848 записів для BTC-1h
+2025-05-27 01:21:50 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 01:21:50 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 01:21:50 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 67848 записів в DataFrame для BTC
+2025-05-27 01:21:50 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 01:28:48 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 01:28:48 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 01:28:48 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1d та моделлю lstm
+2025-05-27 01:28:50 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 83820 записів для BTC-1d
+2025-05-27 01:28:50 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 01:28:50 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 01:28:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 83820 записів в DataFrame для BTC
+2025-05-27 01:28:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - DataPreprocessor ініціалізовано для роботи з підготовленими даними (chunk_size=10000)
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1w та моделлю lstm
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для BTC-1w
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для BTC
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 01:32:57 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:32:57 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для BTC порожні
+2025-05-27 01:32:57 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:33:11 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'tuple' object has no attribute 'empty'
+2025-05-27 01:33:11 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для BTC
+2025-05-27 01:33:11 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для BTC
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для BTC
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1w та моделлю gru
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для BTC-1w
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для BTC
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 01:33:11 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:33:11 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для BTC порожні
+2025-05-27 01:33:11 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:33:25 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'tuple' object has no attribute 'empty'
+2025-05-27 01:33:25 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для BTC
+2025-05-27 01:33:25 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для BTC
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для BTC
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для BTC з таймфреймом 1w та моделлю transformer
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для BTC-1w
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для BTC
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для BTC
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для BTC
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для BTC
+2025-05-27 01:33:25 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:33:25 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для BTC порожні
+2025-05-27 01:33:25 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для BTC: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:33:40 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для BTC: 'tuple' object has no attribute 'empty'
+2025-05-27 01:33:40 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для BTC
+2025-05-27 01:33:40 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для BTC
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для BTC
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1w та моделлю lstm
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для ETH-1w
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для ETH
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для ETH
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для ETH
+2025-05-27 01:33:40 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:33:40 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для ETH порожні
+2025-05-27 01:33:40 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для ETH: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:33:54 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для ETH: 'tuple' object has no attribute 'empty'
+2025-05-27 01:33:54 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для ETH
+2025-05-27 01:33:54 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для ETH
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для ETH
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1w та моделлю gru
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для ETH-1w
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для ETH
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для ETH
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для ETH
+2025-05-27 01:33:54 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:33:54 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для ETH порожні
+2025-05-27 01:33:54 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для ETH: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:34:09 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для ETH: 'tuple' object has no attribute 'empty'
+2025-05-27 01:34:09 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для ETH
+2025-05-27 01:34:09 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для ETH
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для ETH
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для ETH з таймфреймом 1w та моделлю transformer
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 396 записів для ETH-1w
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для ETH
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для ETH
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 396 записів в DataFrame для ETH
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для ETH
+2025-05-27 01:34:09 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:34:09 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для ETH порожні
+2025-05-27 01:34:09 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для ETH: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:34:23 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для ETH: 'tuple' object has no attribute 'empty'
+2025-05-27 01:34:23 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для ETH
+2025-05-27 01:34:23 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для ETH
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для ETH
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для SOL з таймфреймом 1w та моделлю lstm
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 228 записів для SOL-1w
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для SOL
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для SOL
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 228 записів в DataFrame для SOL
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для SOL
+2025-05-27 01:34:23 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:34:23 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для SOL порожні
+2025-05-27 01:34:23 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для SOL: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:34:37 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для SOL: 'tuple' object has no attribute 'empty'
+2025-05-27 01:34:37 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для SOL
+2025-05-27 01:34:37 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для SOL
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для SOL
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для SOL з таймфреймом 1w та моделлю gru
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 228 записів для SOL-1w
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для SOL
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для SOL
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 228 записів в DataFrame для SOL
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для SOL
+2025-05-27 01:34:37 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:34:37 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для SOL порожні
+2025-05-27 01:34:37 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для SOL: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:34:51 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для SOL: 'tuple' object has no attribute 'empty'
+2025-05-27 01:34:51 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для SOL
+2025-05-27 01:34:51 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для SOL
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для SOL
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Підготовка завантажувача даних для SOL з таймфреймом 1w та моделлю transformer
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно завантажено 228 записів для SOL-1w
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Початок підготовки ознак для SOL
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Конвертація списку словників в DataFrame для SOL
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Успішно конвертовано 228 записів в DataFrame для SOL
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 5 базових ознак для SOL
+2025-05-27 01:34:51 - DataPreprocessor - INFO - [logger.py:103] - Додано 12 трендових ознак
+2025-05-27 01:34:51 - DataPreprocessor - WARNING - [logger.py:107] - Ознаки волатільності для SOL порожні
+2025-05-27 01:34:51 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні циклічних ознак для SOL: CryptoCycles.prepare_cycle_ml_features() takes 2 positional arguments but 3 were given
+2025-05-27 01:35:05 - DataPreprocessor - ERROR - [logger.py:111] - Помилка при створенні технічних індикаторів для SOL: 'tuple' object has no attribute 'empty'
+2025-05-27 01:35:05 - DataPreprocessor - WARNING - [logger.py:107] - Знайдено 4 NaN значень для SOL
+2025-05-27 01:35:05 - DataPreprocessor - WARNING - [logger.py:107] - Видалення 4 колонок з постійними значеннями для SOL
+2025-05-27 01:35:05 - DataPreprocessor - INFO - [logger.py:103] - Успішно підготовлено 13 ознак для SOL

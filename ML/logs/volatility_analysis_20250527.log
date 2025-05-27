@@ -1,2 +1,20 @@
 2025-05-27 00:15:43 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами BTC
 2025-05-27 00:15:43 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:32:57 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами BTC
+2025-05-27 01:32:57 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:33:11 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами BTC
+2025-05-27 01:33:11 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:33:25 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами BTC
+2025-05-27 01:33:25 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:33:40 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами ETH
+2025-05-27 01:33:40 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:33:54 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами ETH
+2025-05-27 01:33:54 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:34:09 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами ETH
+2025-05-27 01:34:09 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:34:23 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами SOL
+2025-05-27 01:34:23 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:34:37 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами SOL
+2025-05-27 01:34:37 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'
+2025-05-27 01:34:51 - volatility_analysis - INFO - [logger.py:103] - Підготовка функцій волатильності для ML з вікнами SOL
+2025-05-27 01:34:51 - volatility_analysis - ERROR - [logger.py:111] - Помилка при підготовці функцій волатильності для ML: unhashable type: 'dict'

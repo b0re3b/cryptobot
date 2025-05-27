@@ -1,0 +1,1 @@
+2025-05-27 11:57:12 - trend_analyzer - ERROR - [logger.py:111] - Error in trend strength calculation: 'Series' object has no attribute 'ta'

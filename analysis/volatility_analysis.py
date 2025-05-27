@@ -1,36 +1,28 @@
+import concurrent.futures
+
 import numpy as np
 import pandas as pd
-from scipy.stats import percentileofscore
-from statsmodels.tsa.stattools import acf
-from sklearn.cluster import KMeans
 from arch import arch_model
-import concurrent.futures
-from functools import lru_cache
+from scipy.stats import percentileofscore
+from sklearn.cluster import KMeans
+from statsmodels.tsa.stattools import acf
+
 from data.db import DatabaseManager
-from DMP.DataCleaner import DataCleaner
-from DMP.AnomalyDetector import AnomalyDetector
 from featureengineering.feature_engineering import FeatureEngineering
 from utils.logger import CryptoLogger
-import decimal
-
 
 
 class VolatilityAnalysis:
 
-    def __init__(self, use_parallel=True, max_workers=4, cache_size=128):
+    def __init__(self, use_parallel=True, max_workers=4):
         self.db_manager = DatabaseManager()
         self.volatility_models = {}
         self.regime_models = {}
-        self.data_cleaner = DataCleaner()
-        self.anomaly_detector = AnomalyDetector()
         self.feature_engineer = FeatureEngineering()
         self.logger = CryptoLogger('volatility_analysis')
-        # Оптимізація: налаштування паралельних обчислень
         self.use_parallel = use_parallel
         self.max_workers = max_workers
-        self.cache_size = cache_size
 
-    @lru_cache(maxsize=128)
     def _calc_log_returns(self, prices_tuple):
         """Хелпер для обчислення логарифмічних прибутків з кешуванням"""
         prices = np.array(prices_tuple)
@@ -287,42 +279,87 @@ class VolatilityAnalysis:
             self.logger.error("Дані OHLC повинні містити стовпці 'high', 'low', 'close' і 'open'")
             return pd.Series()
 
-    # Оптимізація: кешування результатів GARCH моделей
-    def fit_garch_model(self, returns_key, p=1, q=1, model_type='GARCH'):
+    def fit_garch_model(self, returns, p=1, q=1, model_type='GARCH', dist='normal', mean='Zero',
+                        horizon=30, options=None):
         """
-        Підгонка GARCH моделі з кешуванням для покращення продуктивності
-        returns_key: кортеж для кешування (хеш-значення серії повернення)
+        Підгонка моделі GARCH та отримання прогнозу волатильності.
+
+        Параметри:
+            returns (pd.Series/array-like): Серія прибутків
+            p (int): Кількість лагів для GARCH компоненти
+            q (int): Кількість лагів для ARCH компоненти
+            model_type (str): Тип моделі ('GARCH', 'EGARCH', 'GJR-GARCH')
+            dist (str): Розподіл інновацій ('normal', 't', 'skewt')
+            mean (str): Тип середнього ('Zero', 'Constant', 'AR', 'LS')
+            horizon (int): Горизонт прогнозування
+            options (dict): Додаткові параметри для оптимізації моделі
+
+        Повертає:
+            tuple: (fitted_model, forecast) або (None, None) у разі помилки
         """
         try:
-            # Перетворюємо ключ назад на серію і конвертуємо в float
-            returns = self._safe_convert_to_float(pd.Series(returns_key))
+            # Конвертація вхідних даних у безпечний формат
+            returns = self._safe_convert_to_float(pd.Series(returns))
 
-            self.logger.info(f"Підгонка {model_type}({p},{q}) моделі")
+            if len(returns) < max(p, q) * 10:  # Мінімальна кількість спостережень
+                self.logger.warning(f"Недостатньо даних для підгонки {model_type}({p},{q}) моделі")
+                return None, None
 
-            # Очистка та підготовка даних
-            clean_returns = self.data_cleaner.clean_data(returns.to_frame())
-            # Налаштування моделі
+            self.logger.info(f"Підгонка {model_type}({p},{q}) моделі з розподілом {dist} та середнім {mean}")
+
+            # Налаштування моделі згідно з параметрами
+            model_kwargs = {
+                'vol': model_type,
+                'p': p,
+                'q': q,
+                'dist': dist,
+                'mean': mean
+            }
+
+            # Специфічні параметри для різних типів моделей
             if model_type == 'EGARCH':
-                model = arch_model(clean_returns, vol='EGARCH', p=p, q=q)
+                model_kwargs['o'] = 1  # Асиметричний ефект для EGARCH
             elif model_type == 'GJR-GARCH':
-                model = arch_model(clean_returns, vol='GARCH', p=p, o=1, q=q)
-            else:  # Default to GARCH
-                model = arch_model(clean_returns, vol='GARCH', p=p, q=q)
+                model_kwargs['o'] = 1  # Асиметричний ефект для GJR-GARCH
 
-            # Підгонка моделі з оптимізацією
-            fitted_model = model.fit(disp='off', options={'maxiter': 500})
+            model = arch_model(returns, **model_kwargs)
 
-            # Отримання прогнозу
-            forecast = fitted_model.forecast(horizon=30)
+            # Параметри оптимізації
+            fit_options = {
+                'disp': 'off',
+                'maxiter': 500,
+                'tol': 1e-8,
+                'starting_values': None
+            }
+            if options:
+                fit_options.update(options)
 
-            # Зберігання моделі для подальшого використання
-            self.volatility_models[f"{model_type}_{p}_{q}"] = fitted_model
+            # Підгонка моделі
+            fitted_model = model.fit(**fit_options)
 
-            self.logger.info(f"Модель {model_type}({p},{q}) успішно підігнана")
+            # Прогнозування волатильності
+            forecast = fitted_model.forecast(horizon=horizon)
+
+            # Збереження моделі для подальшого використання
+            model_key = f"{model_type}_{p}_{q}_{dist}_{mean}"
+            self.volatility_models[model_key] = {
+                'model': fitted_model,
+                'last_fit_date': pd.Timestamp.now(),
+                'params': model_kwargs
+            }
+
+            self.logger.info(
+                f"Модель {model_type}({p},{q}) успішно підігнана. "
+                f"AIC: {fitted_model.aic:.2f}, BIC: {fitted_model.bic:.2f}"
+            )
+
             return fitted_model, forecast
 
         except Exception as e:
-            self.logger.error(f"Помилка підгонки GARCH моделі: {e}")
+            self.logger.error(
+                f"Помилка підгонки {model_type}({p},{q}) моделі: {str(e)}",
+                exc_info=True
+            )
             return None, None
 
     def detect_volatility_regimes(self, volatility_series, n_regimes=3, method='kmeans'):
@@ -763,7 +800,7 @@ class VolatilityAnalysis:
     def prepare_volatility_features_for_ml(self, ohlc_data, window_sizes=[7, 14, 30], include_regimes=True):
         """Підготовка функцій волатильності для машинного навчання (оптимізовано)"""
         try:
-            self.logger.info(f"Підготовка функцій волатильності для ML з вікнами {window_sizes}")
+            self.logger.info(f"Підготовка функцій волатільності для ML з вікнами {window_sizes}")
 
             # Ініціалізація результуючого DataFrame
             features = pd.DataFrame(index=ohlc_data.index)
@@ -772,9 +809,27 @@ class VolatilityAnalysis:
             returns = ohlc_data['close'].pct_change()
             features['returns'] = returns
 
-            # Використання модуля feature engineering для створення стандартних функцій волатильності
-            # Оптимізація: кешування результатів feature_engineer для повторного використання
-            cache_key = hash(tuple(ohlc_data.values.flatten()[:100]))  # Використовуємо перші 100 значень як ключ кешу
+            # Безпечне створення ключа кешу
+            try:
+                # Спробуємо створити хеш з індексу та основних значень
+                index_str = str(ohlc_data.index.min()) + str(ohlc_data.index.max()) + str(len(ohlc_data))
+
+                # Використовуємо тільки числові значення для створення хешу
+                numeric_sample = []
+                for col in ['open', 'high', 'low', 'close']:
+                    if col in ohlc_data.columns:
+                        col_values = pd.to_numeric(ohlc_data[col], errors='coerce').dropna()
+                        if len(col_values) > 0:
+                            numeric_sample.extend([float(col_values.iloc[0]), float(col_values.iloc[-1])])
+
+                cache_key = hash(index_str + str(tuple(numeric_sample)))
+
+            except Exception as hash_error:
+                # Якщо не вдається створити хеш, використовуємо простий ключ
+                self.logger.warning(f"Не вдалося створити хеш для кешу: {hash_error}. Використовуємо простий ключ.")
+                cache_key = f"cache_{len(ohlc_data)}_{str(ohlc_data.index.min())}"
+
+            # Перевірка кешу
             if hasattr(self, '_feature_cache') and cache_key in self._feature_cache:
                 vol_features = self._feature_cache[cache_key]
             else:
@@ -785,40 +840,40 @@ class VolatilityAnalysis:
 
             features = pd.concat([features, vol_features], axis=1)
 
-            # Оптимізація: паралельне обчислення різних вікон волатильності
+            # Оптимізація: паралельне обчислення різних вікон волатільності
             if self.use_parallel and len(window_sizes) > 2:
                 def compute_window_features(window):
                     try:
                         window_features = {}
-                        # Додавання історичної волатильності
+                        # Додавання історичної волатільності
                         hist_vol = self.calculate_historical_volatility(ohlc_data['close'], window=window)
                         window_features[f'hist_vol_{window}d'] = hist_vol
 
-                        # Додавання волатильності Паркінсона
+                        # Додавання волатільності Паркінсона
                         park_vol = self.calculate_parkinson_volatility(ohlc_data, window=window)
                         window_features[f'park_vol_{window}d'] = park_vol
 
-                        # Додавання відносної волатильності
+                        # Додавання відносної волатільності
                         moving_avg_vol = hist_vol.rolling(window=window * 2).mean()
                         # Перевірка на нульові значення перед діленням
                         rel_vol = pd.Series(np.nan, index=hist_vol.index)
-                        mask = (moving_avg_vol > 0)
+                        mask = (moving_avg_vol > 0) & ~moving_avg_vol.isna()
                         rel_vol.loc[mask] = hist_vol.loc[mask] / moving_avg_vol.loc[mask]
                         window_features[f'rel_vol_{window}d'] = rel_vol
 
-                        # Додавання волатильності волатильності
+                        # Додавання волатільності волатільності
                         vol_of_vol = hist_vol.rolling(window=window).std()
                         window_features[f'vol_of_vol_{window}d'] = vol_of_vol
 
-                        # Тренд волатильності
+                        # Тренд волатільності
                         vol_trend = hist_vol.diff(window)
                         window_features[f'vol_trend_{window}d'] = vol_trend
 
-                        # Відношення діапазону High-Low до волатильності
+                        # Відношення діапазону High-Low до волатільності
                         hl_range = (ohlc_data['high'] - ohlc_data['low']) / ohlc_data['close']
                         # Перевірка на нульові значення перед діленням
                         hl_range_to_vol = pd.Series(np.nan, index=hist_vol.index)
-                        valid_mask = (hist_vol > 0)
+                        valid_mask = (hist_vol > 0) & ~hist_vol.isna()
                         hl_range_to_vol.loc[valid_mask] = hl_range.loc[valid_mask] / hist_vol.loc[valid_mask]
                         window_features[f'hl_range_to_vol_{window}d'] = hl_range_to_vol
 
@@ -843,40 +898,40 @@ class VolatilityAnalysis:
             else:
                 # Послідовне обчислення для меншої кількості вікон
                 for window in window_sizes:
-                    # Додавання історичної волатильності
+                    # Додавання історичної волатільності
                     features[f'hist_vol_{window}d'] = self.calculate_historical_volatility(
                         ohlc_data['close'], window=window)
 
-                    # Додавання волатильності Паркінсона
+                    # Додавання волатільності Паркінсона
                     features[f'park_vol_{window}d'] = self.calculate_parkinson_volatility(
                         ohlc_data, window=window)
 
-                    # Додавання відносної волатильності
+                    # Додавання відносної волатільності
                     moving_avg_vol = features[f'hist_vol_{window}d'].rolling(window=window * 2).mean()
                     # Перевірка на нульові значення перед діленням
                     rel_vol = pd.Series(np.nan, index=features.index)
-                    mask = (moving_avg_vol > 0)
+                    mask = (moving_avg_vol > 0) & ~moving_avg_vol.isna()
                     rel_vol.loc[mask] = features[f'hist_vol_{window}d'].loc[mask] / moving_avg_vol.loc[mask]
                     features[f'rel_vol_{window}d'] = rel_vol
 
-                    # Додавання волатильності волатильності
+                    # Додавання волатільності волатільності
                     features[f'vol_of_vol_{window}d'] = features[f'hist_vol_{window}d'].rolling(window=window).std()
 
-                    # Тренд волатильності
+                    # Тренд волатільності
                     features[f'vol_trend_{window}d'] = features[f'hist_vol_{window}d'].diff(window)
 
-                    # Відношення діапазону High-Low до волатильності
+                    # Відношення діапазону High-Low до волатільності
                     hl_range = (ohlc_data['high'] - ohlc_data['low']) / ohlc_data['close']
                     # Перевірка на нульові значення перед діленням
                     hl_range_to_vol = pd.Series(np.nan, index=features.index)
-                    valid_mask = (features[f'hist_vol_{window}d'] > 0)
+                    valid_mask = (features[f'hist_vol_{window}d'] > 0) & ~features[f'hist_vol_{window}d'].isna()
                     hl_range_to_vol.loc[valid_mask] = hl_range.loc[valid_mask] / features[f'hist_vol_{window}d'].loc[
                         valid_mask]
                     features[f'hl_range_to_vol_{window}d'] = hl_range_to_vol
 
             # Додавання ідентифікації режимів, якщо вказано
             if include_regimes:
-                # Використання основної волатильності для виявлення режимів
+                # Використання основної волатільності для виявлення режимів
                 main_vol_col = next((col for col in features.columns if 'hist_vol_14d' in col), None)
                 if main_vol_col and not features[main_vol_col].isna().all():
                     # Виявлення режимів та додавання як функцій
@@ -894,33 +949,40 @@ class VolatilityAnalysis:
 
             # Додавання додаткових функцій із перетвореннями
             if 'hist_vol_14d' in features.columns:
-                # Конвертуємо decimal.Decimal в float перед застосуванням log1p
-                hist_vol_float = features['hist_vol_14d'].astype(float)
+                # Конвертуємо в float перед застосуванням log1p
+                hist_vol_float = pd.to_numeric(features['hist_vol_14d'], errors='coerce')
 
                 # Обробка нульових або від'ємних значень перед логарифмуванням
-                positive_mask = (hist_vol_float > 0)
+                positive_mask = (hist_vol_float > 0) & ~hist_vol_float.isna()
                 log_vol = pd.Series(np.nan, index=features.index)
-                log_vol.loc[positive_mask] = np.log1p(hist_vol_float.loc[positive_mask])
+                if positive_mask.any():
+                    log_vol.loc[positive_mask] = np.log1p(hist_vol_float.loc[positive_mask])
                 features['log_vol'] = log_vol
 
-                # Нормалізована волатильність (z-score) з обробкою нульового стандартного відхилення
+                # Нормалізована волатільність (z-score) з обробкою нульового стандартного відхилення
                 roll_mean = hist_vol_float.rolling(window=30).mean()
                 roll_std = hist_vol_float.rolling(window=30).std()
 
                 vol_zscore = pd.Series(np.nan, index=features.index)
-                valid_std_mask = (roll_std > 0)
-                vol_zscore.loc[valid_std_mask] = (hist_vol_float.loc[valid_std_mask] - roll_mean.loc[valid_std_mask]) / \
-                                                 roll_std.loc[valid_std_mask]
+                valid_std_mask = (roll_std > 0) & ~roll_std.isna() & ~roll_mean.isna()
+                if valid_std_mask.any():
+                    vol_zscore.loc[valid_std_mask] = (hist_vol_float.loc[valid_std_mask] - roll_mean.loc[
+                        valid_std_mask]) / \
+                                                     roll_std.loc[valid_std_mask]
                 features['vol_zscore'] = vol_zscore
 
-                # Індикатор аномальної волатильності (>2 стандартних відхилень)
+                # Індикатор аномальної волатільності (>2 стандартних відхилень)
                 features['vol_outlier'] = (np.abs(features['vol_zscore']) > 2).astype(int)
 
-            self.logger.info(f"Успішно підготовлено {len(features.columns)} функцій волатильності для ML")
+            self.logger.info(f"Успішно підготовлено {len(features.columns)} функцій волатільності для ML")
             return features
 
         except Exception as e:
-            self.logger.error(f"Помилка при підготовці функцій волатильності для ML: {e}")
+            self.logger.error(f"Помилка при підготовці функцій волатільності для ML: {e}")
+            # Додаємо додаткову інформацію для діагностики
+            self.logger.error(f"Тип ohlc_data: {type(ohlc_data)}")
+            if hasattr(ohlc_data, 'dtypes'):
+                self.logger.error(f"Типи колонок ohlc_data: {ohlc_data.dtypes}")
             return pd.DataFrame(index=ohlc_data.index)
 
     def save_volatility_analysis_to_db(self, symbol, timeframe, volatility_data, model_data=None, regime_data=None,
@@ -950,7 +1012,6 @@ class VolatilityAnalysis:
                         timeframe=timeframe,
                         model_type=model_data.get('name', 'garch'),
                         parameters=model_data.get('params', {}),
-                        forecast_data=model_data.get('forecast'),
                     )))
 
                 # 3. Збереження даних режиму
