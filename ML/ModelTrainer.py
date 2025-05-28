@@ -380,7 +380,27 @@ class ModelTrainer:
 
         if np.isinf(y).any():
             self.logger.warning("Виявлено inf значення в y, замінюємо на 0")
+
             y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+        if model_type.lower() == 'transformer':
+            try:
+                # Get prepared data - ensure it returns 3 values
+                prepared_data = self.processor.prepare_data_with_config(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type,
+                    validation_split=validation_split,
+                    target_column=target_column
+                )
+
+                if len(prepared_data) == 5:  # X_train, y_train, X_val, y_val, config
+                    X_train_tensor, y_train_tensor, X_val_tensor, y_val_tensor, config = prepared_data
+                else:
+                    raise ValueError("Data preparation returned unexpected number of values")
+
+            except Exception as e:
+                self.logger.error(f"Transformer data preparation failed: {str(e)}")
+                raise
 
         # === ПІДГОТОВКА ПОСЛІДОВНОСТЕЙ ДЛЯ RNN МОДЕЛЕЙ ===
         if model_type.lower() in ['lstm', 'gru']:
