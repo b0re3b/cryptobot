@@ -2740,3 +2740,51 @@ IndexError: boolean index did not match indexed array along dimension 0; dimensi
 2025-05-26 23:54:36 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1728 records for SOL from 2020-08-27 00:00:00 to 2025-05-20 00:00:00
 2025-05-26 23:54:36 - TimeSeriesModels - INFO - [logger.py:103] - Using column 'id' for analysis of SOL
 2025-05-26 23:54:36 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3
+2025-05-28 17:55:41 - TimeSeriesModels - INFO - [logger.py:103] - TimeSeriesModels initialized
+2025-05-28 17:55:41 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-28 17:55:41 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-28 17:55:41 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2840 records for BTC from 2017-08-17 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2840 records for ETH from 2017-08-17 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1734 records for SOL from 2020-08-27 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-28 17:55:42 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2840 records for BTC from 2017-08-17 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:43 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 0, 0)
+2025-05-28 17:55:45 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined SARIMA order: (1, 0, 0)
+2025-05-28 17:55:48 - TimeSeriesModels - ERROR - [logger.py:111] - Error in full pipeline: 'NoneType' object is not subscriptable
+2025-05-28 17:55:48 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-28 17:55:48 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2840 records for ETH from 2017-08-17 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:49 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (1, 0, 0)
+2025-05-28 17:55:49 - TimeSeriesModels - INFO - [logger.py:103] - Best model ETH_arima_20250528175549 saved to models/best_ETH_1d.pkl
+2025-05-28 17:55:49 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-28 17:55:49 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1734 records for SOL from 2020-08-27 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Auto-determined ARIMA order: (0, 0, 0)
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Best model SOL_arima_20250528175550 saved to models/best_SOL_1d.pkl
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Starting batch processing for 3 symbols
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: BTC
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for BTC with interval 1d
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Last update time for BTC (1d): 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Loading BTC data with interval 1d from database
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2840 records for BTC from 2017-08-17 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Using column 'id' for analysis of BTC
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: ETH
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for ETH with interval 1d
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Last update time for ETH (1d): 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Loading ETH data with interval 1d from database
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 2840 records for ETH from 2017-08-17 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Using column 'id' for analysis of ETH
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Processing symbol: SOL
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting available cryptocurrency symbols (fixed implementation)
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Found 3 available cryptocurrency symbols
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Getting last update time for SOL with interval 1d
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Last update time for SOL (1d): 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Loading SOL data with interval 1d from database
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Loaded 1734 records for SOL from 2020-08-27 00:00:00 to 2025-05-26 00:00:00
+2025-05-28 17:55:50 - TimeSeriesModels - INFO - [logger.py:103] - Using column 'id' for analysis of SOL
+2025-05-28 17:55:51 - TimeSeriesModels - INFO - [logger.py:103] - Batch processing completed. Success: 0, Errors: 3

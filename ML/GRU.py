@@ -38,7 +38,45 @@ class ModelConfig:
 
 # ==================== GRU МОДЕЛЬ ====================
 class GRUModel(BaseDeepModel):
-    """GRU модель для прогнозування часових рядів криптовалют"""
+    """
+    GRU модель для прогнозування часових рядів криптовалют.
+
+    Параметри
+    ---------
+    config : ModelConfig | None
+        Об'єкт конфігурації моделі. Якщо передано, ігнорує інші параметри конструктора.
+    input_dim : int | None
+        Розмір вхідного шару.
+    hidden_dim : int | None
+        Розмір прихованого шару GRU.
+    num_layers : int | None
+        Кількість шарів GRU.
+    output_dim : int | None
+        Розмір вихідного шару.
+    dropout : float | None
+        Вірогідність дроп-ауту.
+    bidirectional : bool
+        Чи є GRU двонапрямленою мережею.
+
+    Методи
+    -------
+    from_config(config, bidirectional=False)
+        Створює екземпляр моделі на основі конфігурації.
+    _init_weights()
+        Ініціалізує ваги моделі.
+    forward(x)
+        Прямий прохід через GRU модель.
+    init_hidden(batch_size)
+        Ініціалізує прихований стан GRU.
+    get_model_type()
+        Повертає тип моделі.
+    get_config()
+        Повертає конфігурацію моделі.
+    get_training_params()
+        Повертає параметри навчання з конфігурації.
+    get_gru_specific_info()
+        Повертає специфічну інформацію по GRU моделі.
+    """
 
     def __init__(self, config: Union[ModelConfig, None] = None,
                  input_dim: int = None, hidden_dim: int = None, num_layers: int = None,

@@ -64,13 +64,41 @@ class DataPreprocessor:
         self.logger.info("DataPreprocessor ініціалізовано для роботи з підготовленими даними")
 
     def get_sequence_length_for_timeframe(self, timeframe: str) -> int:
-        """Отримання довжини послідовності для конкретного таймфрейму"""
+        """
+            Отримання рекомендованої довжини послідовності для заданого таймфрейму.
+
+            Параметри
+            ---------
+            timeframe : str
+                Таймфрейм, наприклад '1m', '1h', '4h', '1d', '1w'.
+
+            Повертає
+            -------
+            int
+                Рекомендована довжина послідовності (sequence_length).
+            """
         seq_length = self.TIMEFRAME_SEQUENCES.get(timeframe, 60)
         self.logger.debug(f"Довжина послідовності для {timeframe}: {seq_length}")
         return seq_length
 
     def create_model_config(self, input_dim: int, timeframe: str, **kwargs) -> ModelConfig:
-        """Створення конфігурації моделі"""
+        """
+    Створення конфігурації моделі з урахуванням вхідної розмірності і таймфрейму.
+
+    Параметри
+    ---------
+    input_dim : int
+        Розмірність вхідних даних.
+    timeframe : str
+        Таймфрейм, для якого формується конфігурація.
+    **kwargs
+        Додаткові параметри, які можуть перевизначити дефолтні значення ModelConfig.
+
+    Повертає
+    -------
+    ModelConfig
+        Об'єкт конфігурації моделі з налаштованими параметрами.
+    """
         self.logger.debug(f"Створення конфігурації моделі для таймфрейму {timeframe} з input_dim={input_dim}")
 
         sequence_length = self.get_sequence_length_for_timeframe(timeframe)
@@ -87,13 +115,47 @@ class DataPreprocessor:
         return config
 
     def set_model_config(self, symbol: str, timeframe: str, model_type: str, config: ModelConfig):
-        """Збереження конфігурації моделі"""
+        """
+           Збереження конфігурації моделі у внутрішньому словнику.
+
+           Параметри
+           ---------
+           symbol : str
+               Тікер активу, наприклад 'BTC', 'ETH'.
+           timeframe : str
+               Таймфрейм, наприклад '1h', '1d'.
+           model_type : str
+               Тип моделі, наприклад 'Transformer'.
+           config : ModelConfig
+               Об'єкт конфігурації для збереження.
+           """
         key = f"{symbol}_{timeframe}_{model_type}"
         self.model_configs[key] = config
         self.logger.info(f"Збережено конфігурацію моделі для {key}")
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
-        """Create data loader that returns a DataFrame with target column"""
+        """
+    Створення функції-даталоадера, яка повертає DataFrame з даними і цільовою колонкою.
+
+    Параметри
+    ---------
+    symbol : str
+        Тікер активу ('BTC', 'ETH', 'SOL').
+    timeframe : str
+        Таймфрейм для вибірки даних.
+    model_type : str
+        Тип моделі, для якої готуємо дані.
+
+    Повертає
+    -------
+    Callable
+        Функція без параметрів, що при виклику повертає pandas.DataFrame з очищеними і готовими даними.
+
+    Викидає
+    -------
+    ValueError
+        Якщо db_manager не ініціалізований або підтримка symbol відсутня.
+    """
         try:
             self.logger.info(f"Preparing data loader for {symbol} with timeframe {timeframe} "
                              f"and model {model_type}")
@@ -219,7 +281,30 @@ class DataPreprocessor:
 
 
     def validate_prepared_data(self, df: pd.DataFrame, symbol: str) -> bool:
-        """Валідація підготовлених даних"""
+        """
+            Виконує комплексну валідацію підготовлених даних для конкретного символу.
+
+            Перевіряє тип вхідних даних, наявність очікуваних колонок, цільових змінних,
+            часових ознак, scaled ознак, унікальних послідовностей та таймфреймів.
+            Окремо контролює наявність NaN значень, ігноруючи lag-колонки.
+
+            Параметри
+            ---------
+            df : pd.DataFrame
+                Підготовлений DataFrame з даними для валідації.
+            symbol : str
+                Символ/актив (наприклад, 'BTC'), для якого виконується валідація.
+
+            Повертає
+            -------
+            bool
+                True, якщо валідація пройшла успішно.
+
+            Викидає
+            -------
+            ValueError
+                Якщо вхідні дані не є DataFrame, порожні, або відсутні критичні колонки.
+            """
         self.logger.info(f"Валідація підготовлених даних для {symbol}")
 
         # Перевірка що це DataFrame
@@ -287,7 +372,18 @@ class DataPreprocessor:
         return True
 
     def _validate_nan_values(self, df: pd.DataFrame, symbol: str):
-        """Валідація NaN значень з урахуванням lag-колонок"""
+        """
+            Перевіряє наявність NaN значень у колонках DataFrame з виключенням lag-колонок.
+
+            Lag-колонки (з '_lag_' у назві) можуть містити NaN, що вважається нормальним.
+
+            Параметри
+            ---------
+            df : pd.DataFrame
+                DataFrame для перевірки.
+            symbol : str
+                Символ/актив для логування.
+            """
         # Виключаємо lag-колонки з перевірки NaN, оскільки для них це нормально
         lag_columns = [col for col in df.columns if '_lag_' in col]
         non_lag_columns = [col for col in df.columns if '_lag_' not in col]
@@ -311,7 +407,27 @@ class DataPreprocessor:
 
     def extract_sequences_from_prepared_data(self, df: pd.DataFrame, target_column: str = 'target_close_1') -> Tuple[
         np.ndarray, np.ndarray]:
-        """Витягування послідовностей з підготовлених даних"""
+        """
+           Витягує послідовності ознак та відповідні цільові значення з підготовлених даних.
+
+           Параметри
+           ---------
+           df : pd.DataFrame
+               Підготовлений DataFrame із колонками sequence_id, sequence_position та цільовою колонкою.
+           target_column : str
+               Назва цільової колонки (за замовчуванням 'target_close_1').
+
+           Повертає
+           -------
+           Tuple[np.ndarray, np.ndarray]
+               Масив ознак форми (num_sequences, sequence_length, num_features) та
+               масив цільових значень (num_sequences,).
+
+           Викидає
+           -------
+           ValueError
+               Якщо вхідні дані некоректні або не вдалося витягти валідні послідовності.
+           """
         self.logger.info(f"Витягування послідовностей з підготовлених даних")
 
         # Перевірка що це DataFrame
@@ -469,7 +585,40 @@ class DataPreprocessor:
                                            target_column: str = 'target_close_1',
                                            config: Optional[ModelConfig] = None) -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ModelConfig]:
-        """Обробка підготовлених даних для моделі"""
+        """
+            Обробка підготовлених даних для подальшого навчання моделі.
+
+            Кроки:
+            - Валідація вхідних даних (перевірка структури, наявності колонок, NaN тощо)
+            - Витягування послідовностей ознак та цільових значень
+            - Створення або оновлення конфігурації моделі (ModelConfig)
+            - Перевірка на NaN та Inf у вхідних даних та цілях
+            - Розділення даних на тренувальний та валідаційний набори
+            - Конвертація numpy-масивів у PyTorch тензори
+
+            Args:
+                data (pd.DataFrame): Підготовлені дані у вигляді DataFrame.
+                symbol (str): Тікер/символ активу (наприклад, "BTCUSD").
+                timeframe (str): Таймфрейм даних (наприклад, "1h", "1d").
+                model_type (str): Тип моделі, для якої готуємо дані (наприклад, "LSTM").
+                validation_split (float, optional): Частка валідаційного набору (0 < validation_split < 1).
+                                                    За замовчуванням 0.2.
+                target_column (str, optional): Назва цільової колонки у DataFrame. За замовчуванням 'target_close_1'.
+                config (Optional[ModelConfig], optional): Конфігурація моделі. Якщо None — створюється нова.
+
+            Returns:
+                Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ModelConfig]:
+                Кортеж із п’яти елементів:
+                    - X_train (torch.Tensor): Тензор тренувальних ознак, розмірність (num_samples, seq_length, num_features).
+                    - y_train (torch.Tensor): Тензор тренувальних цілей, розмірність (num_samples,).
+                    - X_val (torch.Tensor): Тензор валідаційних ознак.
+                    - y_val (torch.Tensor): Тензор валідаційних цілей.
+                    - config (ModelConfig): Конфігурація моделі з актуальними параметрами.
+
+            Raises:
+                ValueError: Якщо вхідні дані не є DataFrame, відсутні потрібні колонки,
+                            знайдено NaN або Inf у даних, або не вдалося витягти послідовності.
+            """
         self.logger.info(f"Початок обробки підготовлених даних для {symbol}-{timeframe}-{model_type}")
 
         # Валідація підготовлених даних
@@ -530,7 +679,25 @@ class DataPreprocessor:
                                  validation_split: float = 0.2,
                                  target_column: str = 'target_close_1') -> Tuple[
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ModelConfig]:
-        """Підготовка попередньо оброблених даних з автоматичним створенням конфігурації"""
+        """
+           Завантажує попередньо оброблені дані, конвертує їх у DataFrame (за потреби),
+           і готує дані для моделі з автоматичним створенням або оновленням конфігурації.
+
+           Args:
+               symbol (str): Тікер активу (наприклад, 'BTCUSD').
+               timeframe (str): Таймфрейм (наприклад, '1h', '1d').
+               model_type (str): Тип моделі (наприклад, 'LSTM').
+               validation_split (float, optional): Частка валідаційних даних, за замовчуванням 0.2.
+               target_column (str, optional): Назва цільової колонки, за замовчуванням 'target_close_1'.
+
+           Returns:
+               Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, ModelConfig]:
+                   Тренувальні та валідаційні тензори ознак і цілей, а також конфігурація моделі.
+
+           Raises:
+               ValueError: Якщо дані не вдалося завантажити або вони мають некоректний формат.
+               Exception: Для інших помилок при завантаженні чи препроцесингу.
+           """
         self.logger.info(f"Підготовка даних з конфігурацією для {symbol}-{timeframe}-{model_type}")
 
         # Завантаження попередньо підготовлених даних
@@ -567,7 +734,23 @@ class DataPreprocessor:
 
     def get_optimal_config_for_timeframe(self, timeframe: str, input_dim: int,
                                          **custom_params) -> ModelConfig:
-        """Отримання оптимальної конфігурації для конкретного таймфрейму"""
+        """
+            Повертає оптимальну конфігурацію моделі (ModelConfig) залежно від таймфрейму
+            та розміру вхідних даних. Параметри конфігурації можуть бути додатково
+            налаштовані через аргументи.
+
+            Args:
+                timeframe (str): Таймфрейм даних (наприклад, '1m', '1h', '1d').
+                input_dim (int): Кількість ознак на вхід моделі.
+                **custom_params: Додаткові параметри конфігурації, які перекривають базові.
+
+            Returns:
+                ModelConfig: Об’єкт конфігурації моделі з параметрами, оптимальними для заданого таймфрейму.
+
+            Примітка:
+                Параметри базової конфігурації включають hidden_dim, num_layers, dropout, learning_rate,
+                а також batch_size, epochs і output_dim.
+            """
         self.logger.debug(f"Створення оптимальної конфігурації для {timeframe} з input_dim={input_dim}")
 
         # Базові параметри залежно від таймфрейму
@@ -608,7 +791,21 @@ class DataPreprocessor:
 
     def split_data(self, X: np.ndarray, y: np.ndarray,
                    validation_split: float = 0.2) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """Розділення даних на тренувальну та валідаційну вибірки з урахуванням часової послідовності"""
+        """
+            Розділяє дані на тренувальну та валідаційну вибірки, враховуючи часову послідовність.
+
+            Args:
+                X (np.ndarray): Вхідні ознаки, масив з формою (num_sequences, sequence_length, num_features).
+                y (np.ndarray): Цільові значення, масив з формою (num_sequences,).
+                validation_split (float, optional): Частка даних для валідації. За замовчуванням 0.2.
+
+            Returns:
+                Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                    X_train, X_val, y_train, y_val — відповідно тренувальні та валідаційні вибірки.
+
+            Примітка:
+                Розділення відбувається послідовно (без перемішування), щоб зберегти часовий порядок.
+            """
         self.logger.debug(f"Розділення даних: X {X.shape}, y {y.shape}, split={validation_split}")
 
         # Для часових рядів використовуємо послідовне розділення (не рандомне)
@@ -624,7 +821,21 @@ class DataPreprocessor:
 
     def inverse_transform_predictions(self, predictions: np.ndarray,
                                       symbol: str, timeframe: str) -> np.ndarray:
-        """Зворотнє перетворення прогнозів до оригінального масштабу"""
+        """
+           Застосовує зворотнє масштабування прогнозів до оригінального масштабу за допомогою
+           збереженого скейлера.
+
+           Args:
+               predictions (np.ndarray): Масив прогнозованих значень.
+               symbol (str): Тікер активу.
+               timeframe (str): Таймфрейм даних.
+
+           Returns:
+               np.ndarray: Прогнози у оригінальному масштабі.
+
+           Примітка:
+               Якщо для символу і таймфрейму скейлер не знайдений, повертає передані прогнози без змін.
+           """
         scaler_key = f"{symbol}_{timeframe}"
 
         if scaler_key not in self.scalers:
@@ -648,7 +859,23 @@ class DataPreprocessor:
 
     def validate_model_input(self, X: torch.Tensor, config: ModelConfig,
                              symbol: str, timeframe: str) -> bool:
-        """Валідація вхідних даних для моделі"""
+        """
+            Перевіряє відповідність вхідних даних моделі заданій конфігурації.
+
+            Args:
+                X (torch.Tensor): Вхідний тензор із розмірністю (batch_size, sequence_length, input_dim).
+                config (ModelConfig): Конфігурація моделі.
+                symbol (str): Тікер активу.
+                timeframe (str): Таймфрейм.
+
+            Returns:
+                bool: True, якщо вхідні дані валідні, і False інакше.
+
+            Перевірки включають:
+                - правильну розмірність тензора (3D),
+                - відповідність sequence_length та input_dim,
+                - відсутність NaN та Inf значень.
+            """
         self.logger.debug(f"Валідація вхідних даних моделі для {symbol}-{timeframe}")
 
         # Перевірка розмірності

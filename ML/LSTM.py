@@ -37,7 +37,45 @@ class ModelConfig:
 
 
 class LSTMModel(BaseDeepModel):
-    """LSTM модель для прогнозування часових рядів криптовалют"""
+    """
+    LSTM модель для прогнозування часових рядів криптовалют.
+
+    Параметри
+    ---------
+    config : ModelConfig | None
+        Конфігурація моделі. Якщо передано, використовуються її параметри.
+    input_dim : int | None
+        Розмірність вхідних даних.
+    hidden_dim : int | None
+        Розмір прихованого шару LSTM.
+    num_layers : int | None
+        Кількість LSTM шарів.
+    output_dim : int | None
+        Розмірність вихідного шару.
+    dropout : float | None
+        Вірогідність дроп-ауту.
+    bidirectional : bool
+        Використання двонапрямленої LSTM.
+
+    Методи
+    -------
+    from_config(config, bidirectional=False)
+        Створення моделі на основі конфігурації.
+    _init_weights()
+        Ініціалізація ваг моделі.
+    forward(x)
+        Прямий прохід через LSTM модель.
+    init_hidden(batch_size)
+        Ініціалізація прихованого та клітинного станів LSTM.
+    get_model_type()
+        Повертає тип моделі.
+    get_config()
+        Повертає конфігурацію моделі.
+    get_training_params()
+        Параметри навчання з конфігурації.
+    get_lstm_specific_info()
+        Специфічна інформація по LSTM моделі.
+    """
 
     def __init__(self, config: Union[ModelConfig, None] = None,
                  input_dim: int = None, hidden_dim: int = None, num_layers: int = None,

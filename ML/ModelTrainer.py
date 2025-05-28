@@ -75,8 +75,22 @@ class ModelTrainer:
 
     def _validate_model_type(self, model_type: Union[str, List[str]]) -> str:
         """
-        Валідація та нормалізація типу моделі
-        """
+           Валідація та нормалізація типу моделі.
+
+           Args:
+               model_type (Union[str, List[str]]): Тип моделі у вигляді рядка або списку рядків.
+
+           Returns:
+               str: Валідований тип моделі у нижньому регістрі.
+
+           Raises:
+               ValueError: Якщо переданий тип моделі некоректний або список порожній.
+
+           Логіка:
+               - Якщо переданий список, береться перший елемент із попередженням.
+               - Підтверджується, що тип моделі є рядком.
+               - Перевіряється належність до списку допустимих типів: 'lstm', 'gru', 'transformer'.
+           """
         if isinstance(model_type, list):
             if len(model_type) == 0:
                 raise ValueError("Список типів моделей не може бути порожнім")
@@ -97,8 +111,22 @@ class ModelTrainer:
 
     def _validate_and_clean_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Валідація та очищення даних перед навчанням
-        """
+    Валідація та очищення даних перед тренуванням моделі.
+
+    Args:
+        data (pd.DataFrame): Вхідний DataFrame з даними для моделі.
+
+    Returns:
+        pd.DataFrame: Очищений DataFrame з заповненими пропущеними значеннями
+                      та обробленими нескінченностями.
+
+    Опис:
+        - Логування початкової форми та типів колонок.
+        - Ігнорування нечислових колонок.
+        - Заповнення пропущених значень числових колонок медіаною.
+        - Замінювання безкінечних значень (Inf) на NaN та заповнення їх медіаною.
+        - Логування фінальної форми і типів колонок після очищення.
+    """
         self.logger.info(f"Початкова форма даних: {data.shape}")
         self.logger.info(f"Типи колонок:\n{data.dtypes}")
 
@@ -140,8 +168,22 @@ class ModelTrainer:
 
     def _safe_tensor_conversion(self, array: np.ndarray, name: str = "array") -> torch.Tensor:
         """
-        Безпечна конвертація numpy array в pytorch tensor
-        """
+    Безпечна конвертація numpy array у PyTorch tensor.
+
+    Args:
+        array (np.ndarray): Вхідний numpy масив.
+        name (str): Ім'я масиву для логування.
+
+    Returns:
+        torch.Tensor: Конвертований тензор типу float32.
+
+    Опис:
+        - Якщо dtype масиву — object, спробує конвертувати в float32,
+          інакше замінює масив нулями.
+        - Замінює NaN та Inf значення на 0.
+        - Логує інформацію про процес та можливі помилки.
+        - При критичній помилці викидає виключення з детальною інформацією.
+    """
         try:
             # Перевірка типу масиву
             if array.dtype == 'object':
@@ -179,8 +221,24 @@ class ModelTrainer:
     def _prepare_sequences_for_rnn(self, X: np.ndarray, y: np.ndarray,
                                    sequence_length: int, model_type: str) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Підготовка послідовностей для RNN моделей (LSTM/GRU) з правильними розмірами
-        """
+           Підготовка послідовностей для RNN моделей (LSTM/GRU) з правильними розмірами.
+
+           Args:
+               X (np.ndarray): Вхідні ознаки у вигляді масиву (samples, features).
+               y (np.ndarray): Цільові значення.
+               sequence_length (int): Довжина послідовності для RNN.
+               model_type (str): Тип моделі ('lstm', 'gru').
+
+           Returns:
+               Tuple[torch.Tensor, torch.Tensor]: Тензори послідовностей та цілей.
+
+           Опис:
+               - Створює послідовності довжиною sequence_length з X та відповідні цілі з y.
+               - Виконує безпечну конвертацію у PyTorch тензори.
+               - Переконується, що формат тензорів відповідає вимогам RNN.
+               - Логує розміри вхідних даних та результату.
+               - Викидає ValueError, якщо недостатньо даних для послідовностей.
+           """
         self.logger.info(f"Підготовка послідовностей для {model_type} моделі")
         self.logger.info(f"Вхідні розміри - X: {X.shape}, y: {y.shape}")
 
@@ -218,8 +276,21 @@ class ModelTrainer:
 
     def _calculate_actual_input_dim(self, data: pd.DataFrame, target_column: str = 'target') -> int:
         """
-        ВИПРАВЛЕНА ФУНКЦІЯ: Обчислює фактичну розмірність входу після обробки даних
-        """
+    Обчислює фактичну розмірність вхідних ознак після очищення та перевірки даних.
+
+    Аргументи:
+        data (pd.DataFrame): Вхідний датафрейм з ознаками і цільовою колонкою.
+        target_column (str): Бажане ім'я цільової колонки (за замовчуванням 'target').
+
+    Повертає:
+        int: Кількість числових колонок, що використовуються як ознаки (вхідна розмірність).
+
+    Логіка:
+        - Автоматично визначає цільову колонку з поширених варіантів.
+        - Перевіряє, що цільова колонка має числовий тип, або намагається конвертувати.
+        - Визначає список числових колонок, виключаючи цільову.
+        - Логує знайдені колонки та розмірність.
+    """
         # Check for target column (try common variations)
         target_col = None
         for col in ['target', 'target_close_1', 'target_close']:
@@ -267,8 +338,39 @@ class ModelTrainer:
                     target_column: str = 'target',
                     **kwargs) -> Dict[str, Any]:
         """
-        Train a model with improved data validation and preprocessing.
-        """
+    Навчання моделі з покращеною валідацією, очищенням і підготовкою даних.
+
+    Аргументи:
+        symbol (str): Тікер або назва активу.
+        timeframe (str): Таймфрейм даних.
+        model_type (str): Тип моделі ('lstm', 'gru', 'transformer', 'mlp' тощо).
+        data (pd.DataFrame): Вхідний датасет з ознаками та цільовою змінною.
+        input_dim (int, optional): Вхідна розмірність. Якщо None, обчислюється автоматично.
+        config (ModelConfig, optional): Конфігурація моделі.
+        validation_split (float): Частка даних для валідації.
+        patience (int): Кількість епох ранньої зупинки.
+        model_data (optional): Додаткові дані для тренування (якщо потрібно).
+        save_after_training (bool): Чи зберігати модель автоматично після тренування.
+        target_column (str): Назва цільової колонки.
+        **kwargs: Додаткові параметри для конфігурації.
+
+    Повертає:
+        dict: Результати тренування з інформацією про конфіг, метрики, історію, ключ моделі та колонки.
+
+    Основні кроки:
+        - Валідація вхідних даних та перевірка DataFrame.
+        - Пошук цільової колонки серед поширених варіантів.
+        - Перевірка і конвертація цільової колонки у числову.
+        - Відбір числових колонок для ознак.
+        - Автоматичне або ручне визначення input_dim з логуванням.
+        - Очищення NaN та Inf в даних з різними стратегіями для ознак і цілі.
+        - Перевірка варіації ознак і цілі.
+        - Підготовка даних залежно від типу моделі (RNN, Transformer, інші).
+        - Безпечна конвертація у тензори та перенесення на пристрій.
+        - Створення і тренування моделі з логуванням прогресу.
+        - Оцінка моделі та логування метрик.
+        - Збереження моделі (опціонально).
+    """
         # Validate and normalize model_type
         model_type = self._validate_model_type(model_type)
 
@@ -548,8 +650,23 @@ class ModelTrainer:
     def create_model_config(self, symbol: str, timeframe: str, model_type: str,
                             input_dim: int, **kwargs) -> ModelConfig:
         """
-        Оновлений метод з валідацією model_type
-        """
+            Створює конфігурацію моделі з параметрами, специфічними для типу моделі.
+
+            Args:
+                symbol (str): Символ фінансового інструменту (наприклад, 'BTCUSD').
+                timeframe (str): Таймфрейм даних (наприклад, '1h', '15m').
+                model_type (str): Тип моделі ('transformer', 'lstm', 'gru' тощо).
+                input_dim (int): Розмірність вхідних даних (кількість фіч).
+                **kwargs: Додаткові параметри конфігурації, наприклад:
+                    - hidden_dim (int): Розмірність прихованого шару.
+                    - num_heads (int): Кількість голів (для трансформера).
+                    - dim_feedforward (int): Розмірність feedforward шару (для трансформера).
+                    - num_layers (int): Кількість шарів.
+                    - learning_rate (float): Крок навчання.
+
+            Returns:
+                ModelConfig: Об'єкт конфігурації моделі з заданими параметрами.
+            """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -580,7 +697,20 @@ class ModelTrainer:
 
     def _prepare_sequence_data(self, data: pd.DataFrame, sequence_length: int,
                                batch_size: int = 10000) -> Tuple[np.ndarray, np.ndarray]:
+        """
+            Підготовлює послідовності ознак та цільових значень для тренування моделей послідовностей.
 
+            Args:
+                data (pd.DataFrame): Вхідний датафрейм із колонкою "target" та фічами.
+                sequence_length (int): Довжина послідовності, яку формуємо для моделі.
+                batch_size (int, optional): Розмір батчу для послідовної обробки (щоб уникнути перевантаження пам’яті). За замовчуванням 10000.
+
+            Returns:
+                Tuple[np.ndarray, np.ndarray]: Кортеж з двох numpy масивів:
+                    - X: Масив послідовностей розміром (num_sequences, sequence_length, num_features).
+                    - y: Масив цільових значень наступного кроку (num_sequences,).
+                    Якщо вхідних даних недостатньо для формування хоча б однієї послідовності, повертає порожні масиви.
+            """
         features = data.drop(columns=["target"]).values
         targets = data["target"].values
 
@@ -623,8 +753,19 @@ class ModelTrainer:
 
     def _build_model_from_config(self, model_type: str, config: ModelConfig) -> BaseDeepModel:
         """
-        Оновлений метод з валідацією model_type
-        """
+    Створює екземпляр моделі на основі конфігурації та типу моделі.
+
+    Args:
+        model_type (str): Тип моделі ('lstm', 'gru', 'transformer').
+        config (ModelConfig): Об'єкт конфігурації моделі з необхідними параметрами.
+
+    Raises:
+        ValueError: Якщо тип моделі невідомий.
+        ImportError: Якщо не вдалося імпортувати потрібний клас моделі.
+
+    Returns:
+        BaseDeepModel: Ініціалізована модель відповідного типу.
+    """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -667,8 +808,17 @@ class ModelTrainer:
     def _create_model_data_dict(self, symbol: str, timeframe: str, model_type: str,
                                 config: ModelConfig) -> Dict[str, Any]:
         """
-        Оновлений метод з валідацією model_type
-        """
+           Формує словник з метаданими та параметрами моделі для збереження або подальшої роботи.
+
+           Args:
+               symbol (str): Символ фінансового інструменту.
+               timeframe (str): Таймфрейм даних.
+               model_type (str): Тип моделі.
+               config (ModelConfig): Конфігурація моделі.
+
+           Returns:
+               Dict[str, Any]: Словник з інформацією про модель, шляхом до файлу, параметрами і станом.
+           """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -692,8 +842,17 @@ class ModelTrainer:
     def train_epoch(self, model: BaseDeepModel, train_loader: torch.utils.data.DataLoader,
                     optimizer, criterion) -> float:
         """
-        Навчання моделі на одній епосі з використанням DataLoader
-        """
+           Навчає модель на одному проході (епосі) по всіх батчах даталоадера.
+
+           Args:
+               model (BaseDeepModel): Модель для навчання.
+               train_loader (torch.utils.data.DataLoader): Даталоадер для тренувальних даних.
+               optimizer: Оптимізатор PyTorch.
+               criterion: Функція втрат (loss function).
+
+           Returns:
+               float: Середнє значення втрат (loss) за епоху.
+           """
         model.train()
         total_loss = 0
         batch_count = 0
@@ -722,8 +881,16 @@ class ModelTrainer:
     def validate_epoch(self, model: BaseDeepModel, val_loader: torch.utils.data.DataLoader,
                        criterion) -> float:
         """
-        Валідація моделі на одній епосі з використанням DataLoader
-        """
+    Виконує валідацію моделі на одному проході (епосі) по валідаційному даталоадеру.
+
+    Args:
+        model (BaseDeepModel): Модель для валідації.
+        val_loader (torch.utils.data.DataLoader): Даталоадер з валідаційними даними.
+        criterion: Функція втрат для обчислення помилки.
+
+    Returns:
+        float: Середнє значення втрат (loss) на валідації за епоху.
+    """
         model.eval()
         total_loss = 0
         batch_count = 0
@@ -747,8 +914,20 @@ class ModelTrainer:
                     val_data: Tuple[torch.Tensor, torch.Tensor], epochs: int,
                     batch_size: int, learning_rate: float, patience: int) -> Dict[str, List[float]]:
         """
-        Виправлений основний цикл навчання
-        """
+    Основний цикл навчання моделі з підтримкою ранньої зупинки (early stopping).
+
+    Args:
+        model (BaseDeepModel): Модель для навчання.
+        train_data (Tuple[torch.Tensor, torch.Tensor]): Тренувальні дані (X_train, y_train).
+        val_data (Tuple[torch.Tensor, torch.Tensor]): Валідаційні дані (X_val, y_val).
+        epochs (int): Максимальна кількість епох для тренування.
+        batch_size (int): Розмір батчу.
+        learning_rate (float): Швидкість навчання для оптимізатора.
+        patience (int): Кількість епох без покращення валідаційної втрати для ранньої зупинки.
+
+    Returns:
+        Dict[str, List[float]]: Історія навчання з ключами 'train_loss' та 'val_loss'.
+    """
         train_loader = torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(*train_data),
             batch_size=batch_size, shuffle=True
@@ -804,8 +983,15 @@ class ModelTrainer:
 
     def evaluate(self, model: BaseDeepModel, test_data: Tuple[torch.Tensor, torch.Tensor]) -> Dict[str, float]:
         """
-        Оцінка моделі
-        """
+           Оцінює модель на тестовому наборі даних.
+
+           Args:
+               model (BaseDeepModel): Навчена модель для оцінки.
+               test_data (Tuple[torch.Tensor, torch.Tensor]): Кортеж з тестовими даними (вхідні дані, цільові значення).
+
+           Returns:
+               Dict[str, float]: Словник з обчисленими метриками якості моделі.
+           """
         model.eval()
         X_test, y_true = test_data
 
@@ -818,8 +1004,16 @@ class ModelTrainer:
     def evaluate_batched(self, model: BaseDeepModel, test_data: Tuple[torch.Tensor, torch.Tensor],
                          batch_size: int = 1000) -> Dict[str, float]:
         """
-        Оцінка моделі по батчах для великих наборів даних
-        """
+           Оцінює модель на тестових даних з обробкою по батчах, що корисно при великих обсягах даних.
+
+           Args:
+               model (BaseDeepModel): Навчена модель для оцінки.
+               test_data (Tuple[torch.Tensor, torch.Tensor]): Кортеж з тестовими даними (вхідні дані, цільові значення).
+               batch_size (int, optional): Розмір батчу для оцінки. За замовчуванням 1000.
+
+           Returns:
+               Dict[str, float]: Словник з обчисленими метриками якості моделі.
+           """
         model.eval()
         X_test, y_true = test_data
 
@@ -862,7 +1056,21 @@ class ModelTrainer:
         return metrics
 
     def calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+        """
+            Обчислює основні метрики якості прогнозу.
 
+            Args:
+                y_true (np.ndarray): Масив істинних значень.
+                y_pred (np.ndarray): Масив передбачених значень.
+
+            Returns:
+                Dict[str, float]: Словник з метриками:
+                    - MSE (Mean Squared Error)
+                    - RMSE (Root Mean Squared Error)
+                    - MAE (Mean Absolute Error)
+                    - MAPE (Mean Absolute Percentage Error)
+                    - R2 (Coefficient of Determination)
+            """
         # Обробка випадків з нульовими значеннями для MAPE
         epsilon = 1e-8
         y_true_safe = np.where(np.abs(y_true) < epsilon, epsilon, y_true)
@@ -884,7 +1092,16 @@ class ModelTrainer:
         }
 
     def setup_optimizer_and_loss(self, model: BaseDeepModel, learning_rate: float):
+        """
+            Налаштовує оптимізатор та функцію втрат для моделі.
 
+            Args:
+                model (BaseDeepModel): Модель для навчання.
+                learning_rate (float): Швидкість навчання.
+
+            Returns:
+                Tuple[torch.optim.Optimizer, torch.nn.Module]: Оптимізатор і функція втрат (MSELoss).
+            """
         # Для Transformer моделей можна використовувати AdamW
         if hasattr(model, 'model_type') and model.model_type == 'transformer':
             optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
@@ -901,8 +1118,23 @@ class ModelTrainer:
                         save_after_update: bool = True,
                         **kwargs) -> Dict[str, Any]:
         """
-        Оновлений метод онлайн навчання з валідацією model_type
-        """
+    Онлайн навчання існуючої моделі на нових даних.
+
+    Args:
+        symbol (str): Тікер або символ активу.
+        timeframe (str): Таймфрейм даних (наприклад, '1h', '1d').
+        model_type (str): Тип моделі ('lstm', 'gru', 'transformer' тощо).
+        new_data (pd.DataFrame): Новий датасет для додаткового навчання, повинен містити колонку 'target'.
+        input_dim (int, optional): Розмір вхідного вектора (необов’язковий).
+        epochs (int, optional): Кількість епох для додаткового навчання. За замовчуванням 10.
+        learning_rate (float, optional): Швидкість навчання. За замовчуванням 0.0005.
+        model_data (optional): Додаткові параметри моделі (не використовується в коді).
+        save_after_update (bool, optional): Чи зберігати модель після навчання. За замовчуванням True.
+        **kwargs: Додаткові параметри.
+
+    Returns:
+        Dict[str, Any]: Словник з історією навчання і метриками якості моделі після оновлення.
+    """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -971,8 +1203,17 @@ class ModelTrainer:
     def _build_model(self, model_type: str, input_dim: int, hidden_dim: int,
                      num_layers: int) -> BaseDeepModel:
         """
-        Оновлений метод з валідацією model_type
-        """
+            Створює модель на основі переданих параметрів.
+
+            Args:
+                model_type (str): Тип моделі ('lstm', 'gru', 'transformer' тощо).
+                input_dim (int): Розмірність вхідних даних.
+                hidden_dim (int): Розмірність прихованого шару.
+                num_layers (int): Кількість шарів у моделі.
+
+            Returns:
+                BaseDeepModel: Ініціалізований об'єкт моделі відповідного типу.
+            """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -985,8 +1226,16 @@ class ModelTrainer:
 
     def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
         """
-        Оновлений метод з валідацією model_type
-        """
+            Генерує унікальний ключ моделі для ідентифікації.
+
+            Args:
+                symbol (str): Тікер або символ активу.
+                timeframe (str): Таймфрейм даних.
+                model_type (str): Тип моделі.
+
+            Returns:
+                str: Унікальний ключ у форматі "{symbol}_{timeframe}_{model_type}".
+            """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -994,8 +1243,19 @@ class ModelTrainer:
 
     def save_model(self, symbol: str, timeframe: str, model_type: str) -> str:
         """
-        Оновлений метод з валідацією model_type
-        """
+            Зберігає модель на диск та оновлює запис у базі даних.
+
+            Args:
+                symbol (str): Тікер або символ активу.
+                timeframe (str): Таймфрейм даних.
+                model_type (str): Тип моделі.
+
+            Raises:
+                ValueError: Якщо модель не знайдена в пам'яті.
+
+            Returns:
+                str: Шлях до збереженого файлу моделі.
+            """
         # Валідація та нормалізація model_type
         model_type = self._validate_model_type(model_type)
 
@@ -1034,7 +1294,17 @@ class ModelTrainer:
             raise
 
     def load_model(self, symbol: str, timeframe: str, model_type: str) -> bool:
+        """
+           Завантажує модель з диску за заданими параметрами.
 
+           Args:
+               symbol (str): Тікер або символ активу.
+               timeframe (str): Таймфрейм даних.
+               model_type (str): Тип моделі.
+
+           Returns:
+               bool: True, якщо модель успішно завантажена, інакше False.
+           """
         model_key = self._create_model_key(symbol, timeframe, model_type)
 
         # Шлях до файлу моделі
@@ -1080,6 +1350,20 @@ class ModelTrainer:
                          model_types: Optional[List[str]] = None,
                          save_models: bool = True,
                          **training_params) -> Dict[str, Dict[str, Any]]:
+        """
+            Запускає послідовне навчання множини моделей по заданих символах, таймфреймах та типах моделей.
+
+            Args:
+                symbols (Optional[List[str]]): Список символів (за замовчуванням беруться з конфігурації).
+                timeframes (Optional[List[str]]): Список таймфреймів (за замовчуванням беруться з конфігурації).
+                model_types (Optional[List[str]]): Список типів моделей (за замовчуванням беруться з конфігурації).
+                save_models (bool): Чи зберігати моделі після навчання. За замовчуванням True.
+                **training_params: Додаткові параметри, які передаються в метод навчання окремої моделі.
+
+            Returns:
+                Dict[str, Dict[str, Any]]: Результати навчання кожної моделі у вигляді словника, ключ — унікальний ключ моделі,
+                значення — словник з метриками, історією, шляхом збереження або помилками.
+            """
         config = CryptoConfig()
         symbols = symbols or config.symbols
         timeframes = timeframes or config.timeframes
@@ -1168,8 +1452,20 @@ class ModelTrainer:
                              k_folds: int = 5, batch_size: int = 1000,
                              **model_params) -> Dict[str, List[float]]:
         """
-        Крос-валідація з батчевою обробкою для великих наборів даних
-        """
+            Виконує батчеву крос-валідацію моделі з підтримкою великих обсягів даних.
+
+            Args:
+                symbol (str): Символ активу для моделювання.
+                timeframe (str): Таймфрейм даних.
+                model_type (str): Тип моделі.
+                k_folds (int, optional): Кількість фолдів у крос-валідації. За замовчуванням 5.
+                batch_size (int, optional): Розмір батчу для навчання і валідації. За замовчуванням 1000.
+                **model_params: Додаткові параметри моделі (наприклад, learning_rate, epochs, patience тощо).
+
+            Returns:
+                Dict[str, List[float]]: Результати крос-валідації з ключами у вигляді метрик
+                та значеннями - списками показників по фолдах, а також середні і стандартні відхилення.
+            """
         self.logger.info(f"Початок батчевої крос-валідації для {symbol}_{timeframe}_{model_type}")
 
         # Завантаження та підготовка даних
@@ -1269,7 +1565,13 @@ class ModelTrainer:
         return summary
 
     def get_training_summary(self) -> Dict[str, Any]:
+        """
+            Формує зведену статистику по навчених моделях.
 
+            Returns:
+                Dict[str, Any]: Словник зі статистикою, включно з кількістю моделей, розподілом по символах, таймфреймах,
+                типах моделей та описовою статистикою по основних метриках (RMSE, MAE, R2).
+            """
         total_models = len(self.models)
 
         if total_models == 0:

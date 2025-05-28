@@ -1420,3 +1420,29 @@
 2025-05-26 23:54:36 - Forecaster - INFO - [logger.py:103] - Split data: train=1382, test=346
 2025-05-26 23:54:36 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
 2025-05-26 23:54:36 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-28 17:55:42 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-28 17:55:42 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-28 17:55:48 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-28 17:55:48 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-28 17:55:49 - Forecaster - INFO - [logger.py:103] - Starting forecast for model ETH_arima_20250528175549 with 30 steps
+2025-05-28 17:55:49 - Forecaster - INFO - [logger.py:103] - Loading model ETH_arima_20250528175549 from database
+2025-05-28 17:55:49 - Forecaster - ERROR - [logger.py:111] - Error loading model ETH_arima_20250528175549: 'DatabaseManager' object has no attribute 'load_model_data'
+2025-05-28 17:55:49 - Forecaster - ERROR - [logger.py:111] - Error loading model ETH_arima_20250528175549: 'DatabaseManager' object has no attribute 'load_model_data'
+2025-05-28 17:55:49 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-28 17:55:49 - Forecaster - INFO - [logger.py:103] - Converting Decimal objects to float for numpy compatibility
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Starting forecast for model SOL_arima_20250528175550 with 30 steps
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Loading model SOL_arima_20250528175550 from database
+2025-05-28 17:55:50 - Forecaster - ERROR - [logger.py:111] - Error loading model SOL_arima_20250528175550: 'DatabaseManager' object has no attribute 'load_model_data'
+2025-05-28 17:55:50 - Forecaster - ERROR - [logger.py:111] - Error loading model SOL_arima_20250528175550: 'DatabaseManager' object has no attribute 'load_model_data'
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: BTC
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Split data: train=2272, test=568
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-28 17:55:50 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: ETH
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Split data: train=2272, test=568
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-28 17:55:50 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Starting auto forecasting process for symbol: SOL
+2025-05-28 17:55:50 - Forecaster - INFO - [logger.py:103] - Split data: train=1387, test=347
+2025-05-28 17:55:51 - Forecaster - INFO - [logger.py:103] - Time series is non-stationary. Applying differencing.
+2025-05-28 17:55:51 - Forecaster - ERROR - [logger.py:111] - Error in stationarity check: Invalid input, x is constant

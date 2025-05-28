@@ -108,3 +108,23 @@
 2025-05-26 23:54:36 - ModelEvaluator - INFO - [logger.py:103] - Model SOL_sarima_20250526235436 not found in memory, trying to load from database
 2025-05-26 23:54:36 - ModelEvaluator - INFO - [logger.py:103] - Model SOL_sarima_20250526235436 successfully loaded from database
 2025-05-26 23:54:36 - ModelEvaluator - ERROR - [logger.py:111] - Error during model evaluation: 'SOL_sarima_20250526235436'
+2025-05-28 17:55:48 - ModelEvaluator - INFO - [logger.py:103] - Starting evaluation of model BTC_arima_20250528175544
+2025-05-28 17:55:48 - ModelEvaluator - INFO - [logger.py:103] - Model BTC_arima_20250528175544 not found in memory, trying to load from database
+2025-05-28 17:55:48 - ModelEvaluator - INFO - [logger.py:103] - Model BTC_arima_20250528175544 successfully loaded from database
+2025-05-28 17:55:48 - ModelEvaluator - ERROR - [logger.py:111] - Error during model evaluation: 'BTC_arima_20250528175544'
+2025-05-28 17:55:48 - ModelEvaluator - INFO - [logger.py:103] - Starting evaluation of model BTC_sarima_20250528175548
+2025-05-28 17:55:48 - ModelEvaluator - INFO - [logger.py:103] - Model BTC_sarima_20250528175548 not found in memory, trying to load from database
+2025-05-28 17:55:48 - ModelEvaluator - INFO - [logger.py:103] - Model BTC_sarima_20250528175548 successfully loaded from database
+2025-05-28 17:55:48 - ModelEvaluator - ERROR - [logger.py:111] - Error during model evaluation: 'BTC_sarima_20250528175548'
+2025-05-28 17:55:49 - ModelEvaluator - INFO - [logger.py:103] - Starting evaluation of model ETH_arima_20250528175549
+2025-05-28 17:55:49 - ModelEvaluator - INFO - [logger.py:103] - Model ETH_arima_20250528175549 not found in memory, trying to load from database
+2025-05-28 17:55:49 - ModelEvaluator - INFO - [logger.py:103] - Model ETH_arima_20250528175549 successfully loaded from database
+2025-05-28 17:55:49 - ModelEvaluator - ERROR - [logger.py:111] - Error during model evaluation: 'ETH_arima_20250528175549'
+2025-05-28 17:55:49 - ModelEvaluator - INFO - [logger.py:103] - Starting residual analysis for model ETH_arima_20250528175549
+2025-05-28 17:55:49 - ModelEvaluator - ERROR - [logger.py:111] - Model ETH_arima_20250528175549 information not available
+2025-05-28 17:55:50 - ModelEvaluator - INFO - [logger.py:103] - Starting evaluation of model SOL_arima_20250528175550
+2025-05-28 17:55:50 - ModelEvaluator - INFO - [logger.py:103] - Model SOL_arima_20250528175550 not found in memory, trying to load from database
+2025-05-28 17:55:50 - ModelEvaluator - INFO - [logger.py:103] - Model SOL_arima_20250528175550 successfully loaded from database
+2025-05-28 17:55:50 - ModelEvaluator - ERROR - [logger.py:111] - Error during model evaluation: 'SOL_arima_20250528175550'
+2025-05-28 17:55:50 - ModelEvaluator - INFO - [logger.py:103] - Starting residual analysis for model SOL_arima_20250528175550
+2025-05-28 17:55:50 - ModelEvaluator - ERROR - [logger.py:111] - Model SOL_arima_20250528175550 information not available

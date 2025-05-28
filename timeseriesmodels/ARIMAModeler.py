@@ -30,7 +30,23 @@ class ARIMAModeler:
         self.logger.debug(f"Аналізатор часових рядів ініціалізовано: {self.ts_analyzer is not None}")
 
     def _validate_data(self, data: pd.Series, min_required: int) -> pd.Series:
+        """
+            Виконує валідацію вхідних даних для моделі.
 
+            Перевіряє тип даних, конвертує в pd.Series за потреби, приводить до числового типу,
+            видаляє NaN значення, перевіряє достатню кількість точок та унікальність значень.
+
+            Args:
+                data (pd.Series): Вхідні дані для валідації.
+                min_required (int): Мінімальна необхідна кількість валідних точок.
+
+            Raises:
+                ValueError: Якщо дані не можуть бути конвертовані, або містять недостатньо точок,
+                            або мають константні значення.
+
+            Returns:
+                pd.Series: Валідовані і очищені від NaN числові дані.
+            """
         self.logger.debug(
             f"Початок валідації даних. Тип: {type(data)}, розмір: {len(data) if hasattr(data, '__len__') else 'невідомо'}")
 
@@ -95,7 +111,16 @@ class ARIMAModeler:
         return data
 
     def _generate_model_key(self, model_type: str, symbol: str) -> str:
+        """
+            Генерує унікальний ключ моделі на основі символу, типу моделі та поточного часу.
 
+            Args:
+                model_type (str): Тип моделі.
+                symbol (str): Символ активу.
+
+            Returns:
+                str: Унікальний ключ моделі у форматі "<symbol>_<model_type>_<timestamp>".
+            """
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         model_key = f"{symbol}_{model_type}_{timestamp}"
         self.logger.debug(f"Згенеровано ключ моделі: {model_key}")
@@ -206,7 +231,16 @@ class ARIMAModeler:
         return datetime.now()
 
     def _serialize_model_parameters(self, parameters: Dict) -> Dict:
+        """
+            Конвертує рядок або datetime-об'єкт у datetime з обробкою помилок.
 
+            Args:
+                date_value (str or datetime): Дата у форматі рядка або вже datetime-об'єкт.
+
+            Returns:
+                datetime: Об'єкт datetime, конвертований з вхідних даних.
+                          Якщо конвертація не вдалась, повертає поточний час.
+            """
         serialized = {}
 
         try:
@@ -251,7 +285,17 @@ class ARIMAModeler:
             return {str(k): str(v) for k, v in parameters.items()}
 
     def _serialize_model_object(self, model_object) -> bytes:
+        """
+            Рекурсивно серіалізує параметри моделі у прості типи даних, придатні для збереження або логування.
 
+            Підтримує примітиви, списки, numpy масиви, словники, а також складні об'єкти (збираючи атрибути).
+
+            Args:
+                parameters (Dict): Словник параметрів для серіалізації.
+
+            Returns:
+                Dict: Словник із серіалізованими параметрами.
+            """
         try:
             # Try different serialization methods
             try:
@@ -279,7 +323,19 @@ class ARIMAModeler:
             raise
 
     def _serialize_transformations(self, transformations: Dict) -> Dict:
+        """
+            Серіалізує набір трансформацій у словник, де кожна трансформація зберігається у вигляді
+            типу та закодованого байтового рядка (hex) за допомогою pickle.
 
+            Якщо серіалізація трансформації не вдається, зберігається тип та опис помилки.
+
+            Args:
+                transformations (Dict): Словник з трансформаціями, де ключ — ім'я трансформації,
+                                        значення — об'єкт трансформації.
+
+            Returns:
+                Dict: Словник серіалізованих трансформацій з інформацією про тип і дані або помилку.
+            """
         serialized_transforms = {}
 
         try:
@@ -313,7 +369,20 @@ class ARIMAModeler:
 
     def _collect_model_metadata(self, data: pd.Series, model_key: str, model_type: str,
                                 symbol: str, timeframe: str = "1d") -> Dict:
+        """
+           Збирає метадані моделі, включно з інформацією про тип, символ, часовий інтервал,
+           часові позначки тренувальних даних та унікальний ключ моделі.
 
+           Args:
+               data (pd.Series): Серія даних, використаних для тренування моделі.
+               model_key (str): Унікальний ідентифікатор моделі.
+               model_type (str): Тип моделі.
+               symbol (str): Торговий символ або актив.
+               timeframe (str, optional): Таймфрейм даних. За замовчуванням "1d".
+
+           Returns:
+               Dict: Словник з метаданими моделі, готовий для збереження або логування.
+           """
         self.logger.debug(f"Збирання метаданих для моделі {model_key}")
 
         start_date = data.index[0] if len(data.index) > 0 else datetime.now()
@@ -350,7 +419,22 @@ class ARIMAModeler:
 
     def _create_model_info(self, fit_result: Any, data: pd.Series, model_key: str,
                            model_type: str, symbol: str, params: Dict, timeframe: str = "1d") -> Dict:
+        """
+            Створює інформаційний словник про модель, що містить метадані, параметри тренування,
+            статистику моделі і результат підгонки.
 
+            Args:
+                fit_result (Any): Результат підгонки моделі (наприклад, об’єкт fit з statsmodels).
+                data (pd.Series): Використані для тренування дані.
+                model_key (str): Унікальний ключ моделі.
+                model_type (str): Тип моделі.
+                symbol (str): Символ (актив), на якому тренувалась модель.
+                params (Dict): Параметри моделі та тренування.
+                timeframe (str, optional): Таймфрейм даних. За замовчуванням "1d".
+
+            Returns:
+                Dict: Інформація про модель, включаючи метадані, параметри, статистику та результат підгонки.
+            """
         self.logger.debug(f"Створення інформації про модель {model_key}")
 
         # Збираємо метадані
@@ -385,7 +469,18 @@ class ARIMAModeler:
         return model_info
 
     def _extract_convergence_info(self, fit_result: Any) -> Dict:
-        """Витягує інформацію про збіжність з результату підгонки."""
+        """
+            Витягує інформацію про збіжність (convergence) з результату підгонки моделі.
+
+            Args:
+                fit_result (Any): Результат підгонки моделі.
+
+            Returns:
+                Dict: Словник із ключами:
+                    - 'converged' (bool): Чи досягнуто збіжності.
+                    - 'iterations' (int or None): Кількість ітерацій.
+                    - 'final_llf' (float or None): Остаточне значення логарифмічної функції правдоподібності.
+            """
         convergence_info = {}
 
         try:
@@ -407,7 +502,16 @@ class ARIMAModeler:
         return convergence_info
 
     def _extract_model_stats(self, fit_result: Any) -> Dict:
-        """Витягує статистику моделі з результату підгонки."""
+        """
+           Витягує основні статистичні метрики моделі з результату підгонки.
+
+           Args:
+               fit_result (Any): Об’єкт результату підгонки моделі.
+
+           Returns:
+               Dict: Словник із ключами статистик ('aic', 'bic', 'aicc', 'llf', 'hqic') і їх значеннями.
+                     Якщо статистику отримати не вдалося — значення будуть None.
+           """
         stats = {}
 
         stat_attrs = ['aic', 'bic', 'aicc', 'llf', 'hqic']
@@ -425,6 +529,21 @@ class ARIMAModeler:
 
     def _extract_optimal_params(self, optimal_params: Dict, is_seasonal: bool = False) -> Tuple[
         Tuple[int, int, int], Tuple[int, int, int, int]]:
+        """
+            Витягує оптимальні параметри порядку (order) і сезонного порядку (seasonal_order)
+            для моделей (наприклад, ARIMA), з валідацією та обробкою дефолтних значень.
+
+            Args:
+                optimal_params (Dict): Словник із параметрами, отриманими в результаті оптимізації.
+                is_seasonal (bool, optional): Прапорець, чи модель сезонна. За замовчуванням False.
+
+            Returns:
+                Tuple[Tuple[int, int, int], Tuple[int, int, int, int] or None]:
+                    Пара (order, seasonal_order) де:
+                        - order — кортеж з трьох цілих параметрів (p, d, q),
+                        - seasonal_order — кортеж з чотирьох параметрів (P, D, Q, s) або None,
+                          якщо сезонність не застосовується або параметри не були знайдені.
+            """
 
         self.logger.debug(f"Витягування оптимальних параметрів. Сезонна модель: {is_seasonal}")
         self.logger.debug(f"Структура вхідних параметрів: {list(optimal_params.keys())}")
@@ -495,7 +614,19 @@ class ARIMAModeler:
 
     def _extract_from_parameters_section(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
         Optional[Tuple], Optional[Tuple]]:
-        """Витягує параметри з секції 'parameters'."""
+        """
+            Витягує параметри order і seasonal_order зі секції 'parameters' у словнику параметрів.
+
+            Args:
+                optimal_params (Dict): Словник з параметрами, де очікується секція 'parameters'.
+                is_seasonal (bool): Прапорець, чи витягати сезонні параметри.
+
+            Returns:
+                Tuple[Optional[Tuple], Optional[Tuple]]:
+                    Пара (order, seasonal_order) або (None, None), якщо параметри не знайдено.
+                    - order: кортеж з трьох цілих (p, d, q),
+                    - seasonal_order: кортеж з чотирьох цілих (P, D, Q, s) або None.
+            """
         if 'parameters' not in optimal_params:
             return None, None
 
@@ -537,7 +668,21 @@ class ARIMAModeler:
 
     def _extract_from_model_info_section(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
         Optional[Tuple], Optional[Tuple]]:
-        """Витягує параметри з секції 'model_info'."""
+        """
+            Витягує параметри order і seasonal_order зі секції 'model_info' у словнику параметрів.
+
+            Args:
+                optimal_params (Dict): Словник з параметрами, де очікується секція 'model_info'.
+                is_seasonal (bool): Прапорець, чи витягати сезонні параметри.
+
+            Returns:
+                Tuple[Optional[Tuple], Optional[Tuple]]:
+                    Пара (order, seasonal_order) або (None, None), якщо параметри не знайдено.
+                    - order: кортеж з трьох цілих (p, d, q),
+                    - seasonal_order: кортеж з чотирьох цілих (P, D, Q, s) або None.
+            """
+
+
         if 'model_info' not in optimal_params:
             return None, None
 
@@ -590,7 +735,19 @@ class ARIMAModeler:
 
     def _extract_from_top_level(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
         Optional[Tuple], Optional[Tuple]]:
-        """Витягує параметри з верхнього рівня словника."""
+        """
+            Витягує параметри order і seasonal_order безпосередньо з верхнього рівня словника параметрів.
+
+            Args:
+                optimal_params (Dict): Словник з параметрами на верхньому рівні.
+                is_seasonal (bool): Прапорець, чи витягати сезонні параметри.
+
+            Returns:
+                Tuple[Optional[Tuple], Optional[Tuple]]:
+                    Пара (order, seasonal_order) або (None, None), якщо параметри не знайдено.
+                    - order: кортеж з трьох цілих (p, d, q),
+                    - seasonal_order: кортеж з чотирьох цілих (P, D, Q, s) або None.
+            """
         if 'order' in optimal_params:
             order = self._ensure_tuple(optimal_params['order'])
             seasonal_order = None
@@ -606,7 +763,19 @@ class ARIMAModeler:
 
     def _extract_from_individual_params(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
         Optional[Tuple], Optional[Tuple]]:
-        """Витягує параметри з окремих ключів p, d, q."""
+        """
+            Витягує параметри order і seasonal_order з окремих ключів 'p', 'd', 'q' (і при сезонності — 'P', 'D', 'Q', 's').
+
+            Args:
+                optimal_params (Dict): Словник з окремими параметрами 'p', 'd', 'q' та, можливо, сезонними.
+                is_seasonal (bool): Прапорець, чи витягати сезонні параметри.
+
+            Returns:
+                Tuple[Optional[Tuple], Optional[Tuple]]:
+                    Пара (order, seasonal_order) або (None, None), якщо параметри не знайдено.
+                    - order: кортеж з трьох цілих (p, d, q),
+                    - seasonal_order: кортеж з чотирьох цілих (P, D, Q, s) або None.
+            """
         if all(key in optimal_params for key in ['p', 'd', 'q']):
             order = (optimal_params['p'], optimal_params['d'], optimal_params['q'])
             seasonal_order = None
@@ -625,7 +794,25 @@ class ARIMAModeler:
 
     def _extract_from_model_attributes(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
         Optional[Tuple], Optional[Tuple]]:
-        """Витягує параметри з атрибутів об'єкта моделі."""
+        """
+    Витягує параметри order і seasonal_order з атрибутів об'єкта моделі.
+
+    Пошук відбувається у:
+    - безпосередньо в optimal_params, якщо це об'єкт з атрибутом 'order',
+    - у вкладеному об'єкті під ключем 'model',
+    - у вкладеному об'єкті під ключем 'arima_model'.
+
+    Args:
+        optimal_params (Dict): Словник або об'єкт з атрибутами моделі.
+        is_seasonal (bool): Чи потрібно витягувати сезонні параметри.
+
+    Returns:
+        Tuple[Optional[Tuple], Optional[Tuple]]:
+            Пара (order, seasonal_order), де:
+            - order: кортеж (p, d, q) або None,
+            - seasonal_order: кортеж (P, D, Q, s) або None.
+            Якщо параметри не знайдені, повертає (None, None).
+    """
         # Якщо результат це сама модель з атрибутом order
         if hasattr(optimal_params, 'order'):
             order = optimal_params.order
@@ -661,7 +848,20 @@ class ARIMAModeler:
 
     def _extract_from_nested_dictionaries(self, optimal_params: Dict, is_seasonal: bool) -> Tuple[
         Optional[Tuple], Optional[Tuple]]:
-        """Рекурсивний пошук параметрів у вкладених словниках."""
+        """
+            Рекурсивно шукає параметри order і seasonal_order у вкладених словниках.
+
+            Args:
+                optimal_params (Dict): Словник з потенційно вкладеними словниками параметрів.
+                is_seasonal (bool): Чи потрібно витягувати сезонні параметри.
+
+            Returns:
+                Tuple[Optional[Tuple], Optional[Tuple]]:
+                    Пара (order, seasonal_order), де:
+                    - order: кортеж (p, d, q) або None,
+                    - seasonal_order: кортеж (P, D, Q, s) або None.
+                    Якщо параметри не знайдені, повертає (None, None).
+            """
         for key, value in optimal_params.items():
             if isinstance(value, dict):
                 # Перевіряємо наявність параметрів у вкладеному словнику
@@ -696,7 +896,16 @@ class ARIMAModeler:
         return None, None
 
     def _build_seasonal_order_from_params(self, params: Dict) -> Optional[Tuple]:
-        """Створює seasonal_order з окремих параметрів P, D, Q, s."""
+        """
+    Створює кортеж seasonal_order з окремих параметрів.
+
+    Args:
+        params (Dict): Словник, який може містити ключі 'P', 'D', 'Q', 's'.
+
+    Returns:
+        Optional[Tuple]: Кортеж (P, D, Q, s), якщо хоча б один ключ присутній,
+                         інакше None.
+    """
         if any(key in params for key in ['P', 'D', 'Q', 's']):
             return (
                 params.get('P', 0),
@@ -707,13 +916,34 @@ class ARIMAModeler:
         return None
 
     def _ensure_tuple(self, value) -> Tuple:
-        """Перетворює значення в кортеж, якщо це можливо."""
+        """
+    Перетворює вхідне значення у кортеж, якщо це список або кортеж.
+    Якщо це інший тип, повертає значення без змін.
+
+    Args:
+        value: Вхідне значення (може бути list, tuple або іншим).
+
+    Returns:
+        Tuple: Кортеж або вихідне значення.
+    """
         if isinstance(value, (list, tuple)):
             return tuple(value)
         return value
 
     def _validate_order_params(self, order: Tuple) -> bool:
-        """Валідує параметри order."""
+        """
+           Валідує параметри order.
+
+           Перевіряє, що order є кортежем/списком довжиною 3,
+           що всі елементи — цілі невід'ємні числа,
+           а також що вони не перевищують розумні межі (10).
+
+           Args:
+               order (Tuple): Кортеж параметрів (p, d, q).
+
+           Returns:
+               bool: True, якщо параметри валідні, інакше False.
+           """
         try:
             if not isinstance(order, (list, tuple)) or len(order) != 3:
                 return False
@@ -735,7 +965,18 @@ class ARIMAModeler:
             return False
 
     def _log_structure_for_diagnosis(self, optimal_params: Dict):
-        """Детальне логування структури для діагностики."""
+        """
+            Виконує детальне логування структури словника optimal_params для діагностики.
+
+            Проглядає верхній рівень ключів та значень, а також заглядає у вкладені словники,
+            щоб допомогти з аналізом структури даних при діагностиці проблем.
+
+            Args:
+                optimal_params (Dict): Словник параметрів або результатів, структуру якого треба проаналізувати.
+
+            Returns:
+                None
+            """
         self.logger.debug("Детальна структура optimal_params для діагностики:")
         try:
             for key, value in optimal_params.items():
@@ -753,7 +994,23 @@ class ARIMAModeler:
             self.logger.debug(f"Помилка логування структури: {str(log_error)}")
 
     def _robust_model_fit(self, model, methods_to_try=['lbfgs', 'bfgs', 'nm']):
+        """
+            Спробує підганяти модель за допомогою різних методів оптимізації, підбираючи параметри fit.
 
+            Працює по черзі з кожним методом з списку methods_to_try, намагаючись викликати
+            model.fit() з різними наборами параметрів, щоб знайти сумісний виклик.
+
+            Args:
+                model: Об'єкт моделі, що має метод fit().
+                methods_to_try (List[str], optional): Список методів оптимізації для спроб.
+                    За замовчуванням ['lbfgs', 'bfgs', 'nm'].
+
+            Returns:
+                fit_result: Результат fit() моделі.
+
+            Raises:
+                Exception: Якщо всі спроби fit завершуються помилкою, виняток передається далі.
+            """
         fit_result = None
 
         for method in methods_to_try:
@@ -801,7 +1058,34 @@ class ARIMAModeler:
                   symbol: str = 'default', auto_params: bool = True,
                   max_p: int = 5, max_d: int = 2, max_q: int = 5,
                   timeframe: str = "1d") -> Dict:
+        """
+            Навчає ARIMA-модель на заданому часовому ряді з автоматичним або фіксованим вибором параметрів.
 
+            Метод здійснює:
+            - Валідацію вхідних даних,
+            - Автоматичний пошук оптимальних параметрів (p, d, q), якщо auto_params=True,
+            - Побудову ARIMA-моделі,
+            - Адаптивне підгоняння моделі з декількома методами оптимізації,
+            - Логування ключових кроків і результатів,
+            - Збереження моделі у внутрішньому сховищі та БД.
+
+            Args:
+                data (pd.Series): Часовий ряд для навчання ARIMA-моделі.
+                order (Tuple[int, int, int], optional): Параметри ARIMA (p, d, q). Якщо None, параметри визначаються автоматично.
+                symbol (str, optional): Ідентифікатор символу/інструменту для логування та збереження моделі. За замовчуванням 'default'.
+                auto_params (bool, optional): Чи слід автоматично визначати параметри ARIMA. За замовчуванням True.
+                max_p (int, optional): Максимальне значення p для автоматичного пошуку. За замовчуванням 5.
+                max_d (int, optional): Максимальне значення d для автоматичного пошуку. За замовчуванням 2.
+                max_q (int, optional): Максимальне значення q для автоматичного пошуку. За замовчуванням 5.
+                timeframe (str, optional): Таймфрейм даних для збереження метаданих. За замовчуванням "1d".
+
+            Returns:
+                Dict: Результат навчання з ключами:
+                    - 'status': 'success' або 'error',
+                    - 'message': Повідомлення про результат,
+                    - 'model_key': Унікальний ключ моделі (або None при помилці),
+                    - 'model_info': Інформація про модель (або None при помилці).
+            """
         # Start with detailed logging of input parameters
         self.logger.info(
             f"Starting ARIMA model fitting for symbol: {symbol}\n"
@@ -958,7 +1242,36 @@ class ARIMAModeler:
                    symbol: str = 'default', auto_params: bool = True,
                    max_p: int = 5, max_d: int = 2, max_q: int = 5,
                    seasonal_period: int = 7, timeframe: str = "1d") -> Dict:
+        """
+            Навчає SARIMA-модель на часовому ряді з автоматичним або фіксованим вибором параметрів.
 
+            Метод виконує:
+            - Валідацію вхідних даних,
+            - Автоматичний пошук оптимальних параметрів (order, seasonal_order),
+            - Побудову SARIMA-моделі із врахуванням сезонності,
+            - Адаптивне підгоняння моделі різними алгоритмами оптимізації,
+            - Детальне логування процесу,
+            - Збереження результатів у внутрішньому сховищі та базі даних.
+
+            Args:
+                data (pd.Series): Часовий ряд для навчання SARIMA-моделі.
+                order (Tuple[int, int, int], optional): Параметри (p, d, q) для ARIMA частини. Якщо None — визначаються автоматично.
+                seasonal_order (Tuple[int, int, int, int], optional): Параметри сезонності (P, D, Q, s). Якщо None — визначаються автоматично.
+                symbol (str, optional): Ідентифікатор інструменту для логування та збереження. За замовчуванням 'default'.
+                auto_params (bool, optional): Чи виконувати автоматичний підбір параметрів. За замовчуванням True.
+                max_p (int, optional): Максимальне значення p для автоматичного пошуку. За замовчуванням 5.
+                max_d (int, optional): Максимальне значення d для автоматичного пошуку. За замовчуванням 2.
+                max_q (int, optional): Максимальне значення q для автоматичного пошуку. За замовчуванням 5.
+                seasonal_period (int, optional): Довжина сезонного циклу (s) для сезонної компоненти. За замовчуванням 7.
+                timeframe (str, optional): Таймфрейм даних для метаданих. За замовчуванням "1d".
+
+            Returns:
+                Dict: Результат навчання з ключами:
+                    - 'status': 'success' або 'error',
+                    - 'message': Повідомлення про результат,
+                    - 'model_key': Унікальний ключ моделі (або None при помилці),
+                    - 'model_info': Деталі моделі (або None при помилці).
+            """
         self.logger.info(
             f"Starting SARIMA model fitting for symbol: {symbol}\n"
             f"Parameters - auto_params: {auto_params}, seasonal_period: {seasonal_period}\n"
@@ -1169,7 +1482,27 @@ class ARIMAModeler:
 
     def get_model_forecast(self, model_key: str, steps: int,
                            return_conf_int: bool = True, alpha: float = 0.05) -> Dict:
+        """
+            Генерує прогноз для раніше навченої моделі за заданим ключем.
 
+            Якщо модель відсутня у пам’яті, намагається завантажити її з бази даних (якщо доступна).
+            Підтримує повернення довірчих інтервалів з вказаним рівнем значущості.
+
+            Args:
+                model_key (str): Унікальний ключ моделі, за яким вона була збережена.
+                steps (int): Кількість кроків вперед для прогнозування.
+                return_conf_int (bool, optional): Чи повертати довірчі інтервали прогнозу. За замовчуванням True.
+                alpha (float, optional): Рівень значущості для довірчих інтервалів (наприклад, 0.05 для 95% інтервалу). За замовчуванням 0.05.
+
+            Returns:
+                Dict: Словник із результатами, що містить:
+                    - 'status' (str): 'success' або 'error',
+                    - 'forecast' (list або ndarray): Масив прогнозних значень,
+                    - 'conf_int_lower' (list, optional): Нижні межі довірчого інтервалу (якщо return_conf_int=True),
+                    - 'conf_int_upper' (list, optional): Верхні межі довірчого інтервалу (якщо return_conf_int=True),
+                    - 'alpha' (float, optional): Рівень значущості (якщо return_conf_int=True),
+                    - 'message' (str, optional): Повідомлення про помилку (у випадку 'error').
+            """
         self.logger.info(
             f"Getting forecast for model {model_key}\n"
             f"Parameters - steps: {steps}, return_conf_int: {return_conf_int}, alpha: {alpha}"

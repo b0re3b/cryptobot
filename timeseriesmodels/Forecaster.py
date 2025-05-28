@@ -25,7 +25,18 @@ class Forecaster:
         self.modeler = ARIMAModeler()
 
     def _convert_decimal_series(self, series: pd.Series) -> pd.Series:
-        """Convert decimal.Decimal objects to float for numpy compatibility"""
+        """
+            Конвертує об'єкти decimal.Decimal у серії pandas у float для сумісності з numpy.
+
+            Аргументи:
+                series (pd.Series): Вхідна серія, яка може містити об'єкти типу Decimal.
+
+            Повертає:
+                pd.Series: Серія, де значення типу Decimal конвертовані у float,
+                           інші значення залишені без змін.
+                           Якщо конвертація неможлива, повертає серію з числовими значеннями
+                           (помилки при конвертації замінюються на NaN).
+            """
         try:
             if series.dtype == 'object' and len(series) > 0:
                 first_val = series.dropna().iloc[0] if len(series.dropna()) > 0 else None
@@ -41,7 +52,28 @@ class Forecaster:
             return pd.to_numeric(series, errors='coerce')
 
     def _validate_input_data(self, data: pd.Series, min_length: int = 30) -> Dict:
-        """Validate and preprocess input data"""
+        """
+            Перевіряє та попередньо обробляє вхідні дані для моделювання часових рядів.
+
+            Виконує:
+            - Перевірку на порожні або None дані,
+            - Конвертацію у pandas Series, якщо потрібно,
+            - Конвертацію об'єктів Decimal у float,
+            - Перевірку мінімальної довжини даних,
+            - Видалення NaN значень (з повторною перевіркою довжини),
+            - Перевірку індексу та конвертацію у DatetimeIndex, якщо можливо,
+            - Сортування даних за індексом, якщо індекс datetime і не впорядкований.
+
+            Аргументи:
+                data (pd.Series): Вхідні дані для перевірки (можуть бути у вигляді списку або іншої ітерації).
+                min_length (int, необов'язковий): Мінімальна кількість точок даних, необхідна для роботи (за замовчуванням 30).
+
+            Повертає:
+                dict: Результат у форматі словника:
+                    - 'status' (str): "success" або "error",
+                    - 'data' (pd.Series, якщо успішно): Оброблені дані,
+                    - 'message' (str, якщо помилка): Опис помилки.
+            """
         try:
             if data is None or len(data) == 0:
                 return {"status": "error", "message": "Input data is empty or None"}
@@ -87,7 +119,20 @@ class Forecaster:
             return {"status": "error", "message": f"Error validating input data: {str(e)}"}
 
     def _create_forecast_index(self, data: pd.Series, steps: int) -> pd.Index:
-        """Create appropriate index for forecast values"""
+        """
+           Створює відповідний індекс для прогнозованих значень.
+
+           Якщо вхідні дані мають datetime-індекс, намагається вивести частоту інтервалів.
+           Якщо частоту визначити не вдалося — використовує медіану інтервалів.
+           Якщо індекс числовий — створює RangeIndex із збереженням кроку індексації.
+
+           Аргументи:
+               data (pd.Series): Серія вхідних часових даних із індексом.
+               steps (int): Кількість кроків прогнозу.
+
+           Повертає:
+               pd.Index: Індекс для прогнозованих значень із відповідною частотою або кроком.
+           """
         if isinstance(data.index, pd.DatetimeIndex):
             last_date = data.index[-1]
 
@@ -128,7 +173,21 @@ class Forecaster:
         return forecast_index
 
     def _ensure_model_loaded(self, model_key: str) -> Dict:
-        """Ensure model is loaded in memory with improved error handling"""
+        """
+            Переконується, що модель із заданим ключем завантажена в пам'ять.
+
+            Якщо моделі немає в пам'яті, намагається завантажити її з бази даних.
+            Перевіряє наявність основних компонентів моделі (наприклад, fit_result).
+            Повертає статус успіху або помилки з повідомленням.
+
+            Аргументи:
+                model_key (str): Унікальний ключ моделі.
+
+            Повертає:
+                dict: Результат з полями:
+                    - 'status' (str): 'success' або 'error'
+                    - 'message' (str): Опис помилки, якщо є
+            """
         if model_key not in self.models:
             if self.db_manager is not None:
                 try:
@@ -170,7 +229,17 @@ class Forecaster:
             return {"status": "error", "message": f"Error validating model {model_key} in memory: {str(e)}"}
 
     def register_model(self, model_key: str, fit_result, metadata: Dict = None) -> None:
-        """Register a trained model in memory"""
+        """
+           Реєструє навчену модель у пам'яті.
+
+           Зберігає результат навчання, метадані, час створення та ключ моделі.
+           Виводить інформаційне повідомлення про успішну реєстрацію або повідомлення про помилку.
+
+           Аргументи:
+               model_key (str): Унікальний ідентифікатор моделі.
+               fit_result: Результат навчання моделі (наприклад, об'єкт SARIMAXResults).
+               metadata (dict, optional): Додаткова інформація про модель (тип, параметри, тощо).
+           """
         try:
             self.models[model_key] = {
                 "fit_result": fit_result,
@@ -183,7 +252,22 @@ class Forecaster:
             self.logger.error(f"Error registering model {model_key}: {str(e)}")
 
     def get_model_info(self, model_key: str) -> Dict:
-        """Get model information with proper error handling"""
+        """
+            Отримує інформацію про модель за її ключем із обробкою помилок.
+
+            Завантажує модель із бази даних, якщо вона ще не в пам'яті.
+            Повертає основні характеристики моделі (AIC, BIC, параметри, порядок тощо).
+            У разі помилки — повертає мінімальну доступну інформацію.
+
+            Аргументи:
+                model_key (str): Унікальний ідентифікатор моделі.
+
+            Повертає:
+                dict: Результат у форматі:
+                    - status (str): 'success' або 'error'
+                    - model_info (dict, якщо success): основна інформація про модель
+                    - message (str, якщо error): опис помилки
+            """
         try:
             # Ensure model is loaded
             load_result = self._ensure_model_loaded(model_key)
@@ -241,7 +325,26 @@ class Forecaster:
             return {"status": "error", "message": f"Error getting model info: {str(e)}"}
 
     def _generate_model_forecast(self, model_key: str, steps: int, alpha: Optional[float] = None) -> Dict:
-        """Core forecast generation method with improved error handling"""
+        """
+            Основний метод генерації прогнозу з покращеною обробкою помилок.
+
+            Повертає точковий прогноз або прогноз з довірчими інтервалами (за потреби).
+            Перевіряє наявність моделі у пам’яті та її готовність до прогнозування.
+
+            Аргументи:
+                model_key (str): Унікальний ідентифікатор моделі.
+                steps (int): Кількість кроків для прогнозування.
+                alpha (float, optional): Рівень значущості для довірчого інтервалу (наприклад, 0.05 для 95%).
+
+            Повертає:
+                dict: Результат у форматі:
+                    - status (str): 'success' або 'error'
+                    - forecast (Series): Прогнозовані значення
+                    - lower_bound (Series, optional): Нижній межа довірчого інтервалу
+                    - upper_bound (Series, optional): Верхня межа довірчого інтервалу
+                    - confidence_level (float, optional): Рівень довіри
+                    - message (str, якщо статус 'error'): Опис помилки
+            """
         try:
             if model_key not in self.models:
                 return {"status": "error", "message": f"Model {model_key} not found in memory"}
@@ -295,7 +398,24 @@ class Forecaster:
 
     def _apply_transformations(self, data: pd.Series, reverse: bool = False,
                                transformations: Optional[Dict] = None) -> pd.Series:
-        """Apply or reverse data transformations"""
+        """
+            Застосовує або інвертує перетворення даних.
+
+            Підтримує різні методи трансформації, наприклад диференціювання.
+            Якщо вказано `reverse=True`, застосовує зворотну трансформацію.
+
+            Аргументи:
+                data (pd.Series): Вхідні часові ряди.
+                reverse (bool): Чи застосовувати обернене перетворення.
+                transformations (dict, optional): Параметри перетворення, наприклад:
+                    {
+                        "method": "diff" або "diff_2",
+                        "lambda_param": float (для Box-Cox, якщо реалізовано)
+                    }
+
+            Повертає:
+                pd.Series: Перетворені або зворотно перетворені дані.
+            """
         if not transformations or not transformations.get("method"):
             return data
 
@@ -337,7 +457,23 @@ class Forecaster:
             return False
 
     def forecast(self, model_key: str, steps: int = 24) -> pd.Series:
-        """Generate point forecast for a specified number of steps"""
+        """
+            Генерує точковий прогноз для вказаної моделі на задану кількість кроків вперед.
+
+            Метод виконує:
+            - Перевірку завантаження моделі
+            - Генерацію прогнозу
+            - Створення індексу майбутніх значень
+            - Застосування зворотних трансформацій (якщо задано)
+            - Збереження прогнозу в базу даних
+
+            Аргументи:
+                model_key (str): Унікальний ідентифікатор моделі.
+                steps (int): Кількість майбутніх кроків прогнозу (по замовчуванню — 24).
+
+            Повертає:
+                pd.Series: Ряд прогнозованих значень з часовим індексом або порожній Series у разі помилки.
+            """
         self.logger.info(f"Starting forecast for model {model_key} with {steps} steps")
 
         # Ensure model is loaded
@@ -421,7 +557,30 @@ class Forecaster:
             return pd.Series([], dtype=float, name='forecast_error')
 
     def forecast_with_intervals(self, model_key: str, steps: int = 24, alpha: float = 0.05) -> Dict:
-        """Generate forecast with confidence intervals"""
+        """
+            Генерує прогноз з довірчими інтервалами для вказаної моделі.
+
+            Метод виконує:
+            - Перевірку параметра alpha
+            - Перевірку завантаження моделі
+            - Генерацію прогнозу з довірчими інтервалами
+            - Створення індексу майбутніх значень
+            - Застосування зворотних трансформацій (якщо задано)
+            - Збереження результатів у базу даних
+
+            Аргументи:
+                model_key (str): Унікальний ідентифікатор моделі.
+                steps (int): Кількість кроків прогнозу.
+                alpha (float): Рівень значущості для довірчого інтервалу (наприклад, 0.05 для 95%).
+
+            Повертає:
+                dict: Словник з результатами:
+                    - status (str): 'success' або 'error'
+                    - forecast_data (dict): Прогноз, межі довіри, індекси
+                    - forecast_timestamp (str): Час створення прогнозу
+                    - model_key (str), model_type (str), steps (int), alpha (float)
+                    - message (str, якщо статус 'error'): Опис помилки
+            """
         self.logger.info(f"Starting forecast with intervals for model {model_key}, steps={steps}, alpha={alpha}")
 
         # Validate alpha
@@ -545,7 +704,25 @@ class Forecaster:
 
     def auto_determine_order(self, data: pd.Series, max_p: int = 5, max_d: int = 2, max_q: int = 5) -> Tuple[
         int, int, int]:
-        """Automatically determine optimal ARIMA order"""
+        """
+            Автоматично визначає оптимальні параметри порядку (p, d, q) для моделі ARIMA.
+
+            Параметри:
+            ----------
+            data : pd.Series
+                Одновимірний часовий ряд, для якого визначається порядок моделі.
+            max_p : int, optional
+                Максимальне значення параметра p (кількість авторегресивних лагів).
+            max_d : int, optional
+                Максимальне значення параметра d (кількість диференціювань).
+            max_q : int, optional
+                Максимальне значення параметра q (кількість лагів скользячого середнього).
+
+            Повертає:
+            --------
+            Tuple[int, int, int]
+                Кортеж з трьох цілих чисел — (p, d, q). У випадку помилки повертається (1, 1, 1).
+            """
         try:
             optimal_params = self.analyzer.find_optimal_params(
                 data, max_p=max_p, max_d=max_d, max_q=max_q, seasonal=False
@@ -566,7 +743,27 @@ class Forecaster:
                     order: Optional[Tuple[int, int, int]] = None,
                     seasonal_order: Optional[Tuple[int, int, int, int]] = None,
                     symbol: str = 'auto') -> Dict:
-        """Train a model with unified interface"""
+        """
+            Уніфікований метод для тренування моделей ARIMA або SARIMA.
+
+            Параметри:
+            ----------
+            data : pd.Series
+                Одновимірний часовий ряд, який використовується для навчання моделі.
+            model_type : str, optional
+                Тип моделі для тренування ('arima' або 'sarima').
+            order : Tuple[int, int, int], optional
+                Параметри (p, d, q) для ARIMA/SARIMA. Якщо не задано — обирається автоматично.
+            seasonal_order : Tuple[int, int, int, int], optional
+                Сезонні параметри (P, D, Q, s) для SARIMA. Необов'язкові.
+            symbol : str, optional
+                Назва символьного ідентифікатора моделі (наприклад, тикер криптовалюти).
+
+            Повертає:
+            --------
+            Dict
+                Словник із результатом тренування, включаючи `status`, `model_key`, `model_info` і тип моделі.
+            """
         try:
             # Validate input data
             validation_result = self._validate_input_data(data)
@@ -614,7 +811,31 @@ class Forecaster:
 
     def run_auto_forecast(self, data: pd.Series, test_size: float = 0.2,
                           forecast_steps: int = 24, symbol: str = 'auto') -> Dict:
-        """Automatically analyze, train optimal model, and generate forecasts"""
+        """
+            Повністю автоматизований процес прогнозування:
+            - Аналіз станціонарності
+            - Трансформація ряду
+            - Визначення сезонності
+            - Вибір та тренування моделі (ARIMA/SARIMA)
+            - Прогноз та оцінка якості
+
+            Параметри:
+            ----------
+            data : pd.Series
+                Часовий ряд для моделювання і прогнозу.
+            test_size : float, optional
+                Частка даних для тестування (за замовчуванням 0.2).
+            forecast_steps : int, optional
+                Кількість кроків майбутнього прогнозу.
+            symbol : str, optional
+                Назва або ідентифікатор ряду/моделі.
+
+            Повертає:
+            --------
+            Dict
+                Словник із результатами прогнозування: статус, тип моделі, ключ моделі, перетворення,
+                майбутні прогнози та метрики точності.
+            """
         self.logger.info(f"Starting auto forecasting process for symbol: {symbol}")
 
         # Validate input data

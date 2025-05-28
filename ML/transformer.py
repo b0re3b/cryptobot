@@ -68,8 +68,51 @@ class TransformerEncoderLayerWithAttention(nn.Module):
 
 
 class TransformerModel(BaseDeepModel):
-    """Transformer модель для прогнозування часових рядів"""
+    """
+        Transformer модель для прогнозування часових рядів.
 
+        Параметри
+        ---------
+        config : ModelConfig | None
+            Конфігурація моделі.
+        input_dim : int | None
+            Розмірність вхідних даних.
+        hidden_dim : int | None
+            Розмірність прихованого шару (d_model).
+        num_layers : int | None
+            Кількість шарів трансформера.
+        output_dim : int | None
+            Розмірність вихідного шару.
+        dropout : float | None
+            Вірогідність дроп-ауту.
+        n_heads : int | None
+            Кількість голів у multi-head attention.
+        dim_feedforward : int | None
+            Розмірність feedforward шару.
+
+        Методи
+        -------
+        from_config(config)
+            Створення моделі на основі конфігурації.
+        forward(x, return_attention=False)
+            Прямий прохід через Transformer.
+        init_hidden(batch_size)
+            Повертає порожній тензор (Transformer не потребує прихованого стану).
+        get_model_type()
+            Повертає тип моделі.
+        get_config()
+            Повертає конфігурацію моделі.
+        get_training_params()
+            Параметри навчання з конфігурації.
+        get_transformer_specific_info()
+            Інформація, специфічна для Transformer.
+        get_attention_weights(x)
+            Отримання ваг уваги для всіх шарів.
+        visualize_attention(x, layer_idx=-1)
+            Візуалізація ваг уваги для конкретного шару.
+        get_averaged_attention(x)
+            Усереднені ваги уваги по всіх шарах та головах.
+        """
     def __init__(self, config: Union[ModelConfig, None] = None,
                  input_dim: int = None, hidden_dim: int = None, num_layers: int = None,
                  output_dim: int = None, dropout: float = None, n_heads: int = None,
