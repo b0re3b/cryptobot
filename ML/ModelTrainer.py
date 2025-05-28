@@ -176,6 +176,46 @@ class ModelTrainer:
             self.logger.error(f"Перші 5 значень: {array.flat[:5] if array.size > 0 else 'Порожній масив'}")
             raise
 
+    def _prepare_sequences_for_rnn(self, X: np.ndarray, y: np.ndarray,
+                                   sequence_length: int, model_type: str) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Підготовка послідовностей для RNN моделей (LSTM/GRU) з правильними розмірами
+        """
+        self.logger.info(f"Підготовка послідовностей для {model_type} моделі")
+        self.logger.info(f"Вхідні розміри - X: {X.shape}, y: {y.shape}")
+
+        if len(X) < sequence_length:
+            raise ValueError(f"Недостатньо даних для створення послідовностей довжиною {sequence_length}")
+
+        # Створення послідовностей
+        sequences = []
+        targets = []
+
+        for i in range(len(X) - sequence_length):
+            # Послідовність входів
+            seq = X[i:i + sequence_length]
+            # Цільове значення
+            target = y[i + sequence_length]
+
+            sequences.append(seq)
+            targets.append(target)
+
+        X_sequences = np.array(sequences)
+        y_targets = np.array(targets)
+
+        self.logger.info(f"Створено послідовності - X: {X_sequences.shape}, y: {y_targets.shape}")
+
+        # Конвертація в тензори
+        X_tensor = self._safe_tensor_conversion(X_sequences, f"X_sequences_{model_type}")
+        y_tensor = self._safe_tensor_conversion(y_targets, f"y_targets_{model_type}")
+
+        # Для RNN моделей потрібен формат (batch_size, sequence_length, input_size)
+        if model_type.lower() in ['lstm', 'gru']:
+            # X_tensor вже має правильний формат: (batch_size, sequence_length, input_size)
+            self.logger.info(f"Фінальні розміри для {model_type} - X: {X_tensor.shape}, y: {y_tensor.shape}")
+
+        return X_tensor, y_tensor
+
     def train_model(self, symbol: str, timeframe: str, model_type: str,
                     data: pd.DataFrame, input_dim: int,
                     config: Optional[ModelConfig] = None,
@@ -271,17 +311,31 @@ class ModelTrainer:
             self.logger.warning("Виявлено inf значення в y, замінюємо на 0")
             y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Split into training and validation sets
-        split_idx = int(len(X) * (1 - validation_split))
-        X_train, X_val = X[:split_idx], X[split_idx:]
-        y_train, y_val = y[:split_idx], y[split_idx:]
+        # === ПІДГОТОВКА ПОСЛІДОВНОСТЕЙ ДЛЯ RNN МОДЕЛЕЙ ===
+        if model_type.lower() in ['lstm', 'gru']:
+            # Для RNN моделей створюємо послідовності
+            X_tensor, y_tensor = self._prepare_sequences_for_rnn(X, y, config.sequence_length, model_type)
 
-        # === БЕЗПЕЧНА КОНВЕРТАЦІЯ В ТЕНЗОРИ ===
-        self.logger.info("Конвертація даних в тензори...")
-        X_train_tensor = self._safe_tensor_conversion(X_train, "X_train").to(self.device)
-        y_train_tensor = self._safe_tensor_conversion(y_train, "y_train").to(self.device)
-        X_val_tensor = self._safe_tensor_conversion(X_val, "X_val").to(self.device)
-        y_val_tensor = self._safe_tensor_conversion(y_val, "y_val").to(self.device)
+            # Split into training and validation sets
+            split_idx = int(len(X_tensor) * (1 - validation_split))
+            X_train_tensor = X_tensor[:split_idx].to(self.device)
+            y_train_tensor = y_tensor[:split_idx].to(self.device)
+            X_val_tensor = X_tensor[split_idx:].to(self.device)
+            y_val_tensor = y_tensor[split_idx:].to(self.device)
+
+        else:
+            # Для інших моделей (Transformer) використовуємо стандартний підхід
+            # Split into training and validation sets
+            split_idx = int(len(X) * (1 - validation_split))
+            X_train, X_val = X[:split_idx], X[split_idx:]
+            y_train, y_val = y[:split_idx], y[split_idx:]
+
+            # === БЕЗПЕЧНА КОНВЕРТАЦІЯ В ТЕНЗОРИ ===
+            self.logger.info("Конвертація даних в тензори...")
+            X_train_tensor = self._safe_tensor_conversion(X_train, "X_train").to(self.device)
+            y_train_tensor = self._safe_tensor_conversion(y_train, "y_train").to(self.device)
+            X_val_tensor = self._safe_tensor_conversion(X_val, "X_val").to(self.device)
+            y_val_tensor = self._safe_tensor_conversion(y_val, "y_val").to(self.device)
 
         # Create model
         model = self._build_model_from_config(model_type, config).to(self.device)
