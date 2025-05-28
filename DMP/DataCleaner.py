@@ -1,41 +1,42 @@
-import logging
 from datetime import datetime
 from typing import List, Tuple, Dict, Optional, Union, Any
 import numpy as np
 import pandas as pd
 import pytz
 from sklearn.preprocessing import StandardScaler
-
 from DMP.AnomalyDetector import AnomalyDetector
 from DMP.DataResampler import DataResampler
 from utils.config import BINANCE_API_KEY, BINANCE_API_SECRET
+from utils.logger import CryptoLogger
 
 
 class DataCleaner:
-    def __init__(self, logger=None):
-        self.logger = logger if logger else self._setup_default_logger()
+    def __init__(self):
+        self.logger = CryptoLogger('DataCleaner')
         self.anomaly_detector = AnomalyDetector()
         self.data_resampler = DataResampler(logger=self.logger)
 
-    @staticmethod
-    def _setup_default_logger() -> logging.Logger:
-        logger = logging.getLogger("data_cleaner")
-        logger.setLevel(logging.INFO)
 
-        if not logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            logger.addHandler(handler)
-
-        return logger
 
     def _fix_invalid_high_low(self, data: pd.DataFrame) -> pd.DataFrame:
         self.logger.info(f"Наявні колонки в _fix_invalid_high_low: {list(data.columns)}")
         """
-        Виправляє некоректні співвідношення між high і low значеннями.
-        Враховує особливість криптовалютних даних, де high та low можуть бути рівними.
-        """
+    Виправляє некоректні співвідношення між колонками 'high' та 'low' у датафреймі.
+
+    Особливості:
+    - В криптовалютних даних 'high' може бути рівним 'low'.
+    - Якщо 'high' менше за 'low', ці значення міняються місцями.
+    - Логування інформації про кількість проблемних рядків.
+    - Логування випадків, коли 'high' дорівнює 'low' за умови ненульового об'єму.
+    - Логування випадків, коли всі OHLC значення однакові (flat price), що може бути нормальною ситуацією для неліквідних періодів.
+
+    Args:
+        data (pd.DataFrame): Вхідний датафрейм з фінансовими даними, який має містити колонки
+                             'open', 'high', 'low', 'close' та 'volume'.
+
+    Returns:
+        pd.DataFrame: Виправлений датафрейм із коректними значеннями колонок 'high' і 'low'.
+    """
         result = data.copy()
 
         # Перевірка на наявність необхідних колонок
@@ -49,7 +50,7 @@ class DataCleaner:
             invalid_count = invalid_hl.sum()
             self.logger.warning(f"Знайдено {invalid_count} рядків, де high < low")
 
-            if self.logger.isEnabledFor(logging.DEBUG):
+            if self.logger.DEBUG.isEnabledFor:
                 invalid_indexes = result.index[invalid_hl].tolist()
                 self.logger.debug(
                     f"Індекси проблемних рядків: {invalid_indexes[:10]}{'...' if len(invalid_indexes) > 10 else ''}")
@@ -80,6 +81,27 @@ class DataCleaner:
 
     def _remove_outliers(self, data: pd.DataFrame, std_dev: float = 3.0,
                          price_pct_threshold: float = 0.5) -> pd.DataFrame:
+        """
+            Видаляє аномальні (викидні) значення в колонках з цінами за допомогою методу IQR та додаткових перевірок.
+
+            Особливості:
+            - Використовує інтерквартильний розмах (IQR) для визначення меж допустимих значень.
+            - Для криптовалют допускає більший діапазон через високу волатильність (налаштовується параметром std_dev).
+            - Коригує нижню межу для цін, щоб вона не була від’ємною.
+            - Виявляє значні цінові стрибки (price jumps) і виключає їх із аномалій, якщо вони не є надмірними.
+            - Аномальні значення замінює на NaN для подальшої обробки.
+
+            Args:
+                data (pd.DataFrame): Вхідний датафрейм з фінансовими даними, що містить колонки
+                                     'open', 'high', 'low', 'close'.
+                std_dev (float, optional): Кількість стандартних відхилень для розширення меж IQR.
+                                           За замовчуванням 3.0.
+                price_pct_threshold (float, optional): Поріг у відсотках для виявлення значних цінових стрибків.
+                                                       За замовчуванням 0.5 (50%).
+
+            Returns:
+                pd.DataFrame: Датафрейм з заміненими аномальними значеннями на NaN.
+            """
         self.logger.info(f"Наявні колонки в _remove_outliers: {list(data.columns)}")
         self.logger.info("Видалення аномальних значень...")
         result = data.copy()
@@ -129,7 +151,7 @@ class DataCleaner:
                 outlier_indexes = result.index[outliers].tolist()
                 self.logger.info(f"Знайдено {outlier_count} аномалій в колонці {col}")
 
-                if self.logger.isEnabledFor(logging.DEBUG):
+                if self.logger.DEBUG.isEnabledFor:
                     self.logger.debug(
                         f"Індекси перших 10 аномалій: {outlier_indexes[:10]}{'...' if len(outlier_indexes) > 10 else ''}")
 
@@ -143,7 +165,24 @@ class DataCleaner:
         return result
 
     def _fix_invalid_values(self, data: pd.DataFrame, essential_cols: List[str]) -> pd.DataFrame:
-        # Створюємо копію даних для безпечної модифікації
+        """
+            Виправляє некоректні або аномальні значення у фінансових даних.
+
+            Основні операції:
+            - Замінює від’ємні цінові значення у колонках 'open', 'high', 'low', 'close' на медіану або середнє.
+            - Виправляє нульові значення в колонках 'high' та 'low', замінюючи їх на максимально можливі коректні значення з інших колонок.
+            - Коригує від’ємні та нульові значення в колонці 'volume' з відповідною логікою.
+            - Визначає аномально великі об’єми, логуючи їх, але не змінюючи.
+            - Перевіряє логічну послідовність цін: 'high' має бути найбільшим, 'low' — найменшим серед OHLC.
+            - Відмічає всі зміни у колонці 'data_cleaning_flags' для подальшого аналізу.
+
+            Args:
+                data (pd.DataFrame): Вхідний датафрейм з фінансовими даними.
+                essential_cols (List[str]): Список обов’язкових колонок для перевірки.
+
+            Returns:
+                pd.DataFrame: Відкоригований датафрейм з оновленими значеннями та додатковою колонкою для позначення змін.
+            """
         result = data.copy()
         self.logger.info(f"Наявні колонки в _fix_invalid_values: {list(data.columns)}")
 
@@ -151,6 +190,7 @@ class DataCleaner:
         result['data_cleaning_flags'] = 'original'
 
         def safe_replace_values(df: pd.DataFrame, column: str, mask: pd.Series, replacement_value) -> pd.DataFrame:
+
             self.logger.info(f"Наявні колонки в safe_replace_values: {list(data.columns)}")
 
             # Зберігаємо оригінальні значення для логування
@@ -168,7 +208,7 @@ class DataCleaner:
                 )
 
                 # Додаткове логування оригінальних значень при DEBUG рівні
-                if self.logger.isEnabledFor(logging.DEBUG):
+                if self.logger.DEBUG.isEnabledFor:
                     self.logger.debug(
                         f"Original replaced values in '{column}': {original_values.tolist()[:10]}"
                         f"{'...' if len(original_values) > 10 else ''}"
@@ -301,6 +341,28 @@ class DataCleaner:
         return result
 
     def add_crypto_specific_features(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+            Додає криптовалютно-специфічні ознаки до фінансових даних для подальшого аналізу або моделювання.
+
+            Обчислювані ознаки включають:
+            - Волатильність (відношення розміру тіла свічки до мінімальної ціни).
+            - Співвідношення об’єму до волатильності (показник ліквідності).
+            - Індикатор нульового об’єму (активність ринку).
+            - Flat price (всі OHLC ціни однакові).
+            - Відсоткова зміна ціни за період.
+            - Відносний розмір тіла свічки.
+            - Відносні верхня і нижня тіні свічки.
+            - Індикатор Doji (дуже маленьке тіло свічки).
+            - Раптовий скачок об’єму (volume spike) на основі ковзного середнього.
+
+            Якщо відсутні необхідні колонки або датафрейм порожній — повертає дані без змін.
+
+            Args:
+                data (pd.DataFrame): Вхідний датафрейм з колонками 'open', 'high', 'low', 'close', 'volume'.
+
+            Returns:
+                pd.DataFrame: Датафрейм з доданими крипто-специфічними ознаками.
+            """
         self.logger.info(f"Наявні колонки в add_crypto_specific_features: {list(data.columns)}")
 
         if data is None or data.empty:
@@ -370,7 +432,60 @@ class DataCleaner:
                    cyclical: bool = True,
                    add_sessions: bool = False,
                    add_crypto_features: bool = False,  # Новий параметр для крипто-специфічних ознак
-                   crypto_volatility_tolerance: float = 0.5) -> pd.DataFrame:  # Параметр для врахування волатильності криптовалют
+                   crypto_volatility_tolerance: float = 0.5) -> pd.DataFrame:
+        """
+            Комплексне очищення та підготовка часових рядів фінансових даних (зокрема криптовалют).
+
+            Параметри:
+            ----------
+            data : pd.DataFrame
+                Вхідний DataFrame з часовими рядами. Має містити обов’язкові колонки:
+                'open', 'high', 'low', 'close', 'volume' з індексом типу DatetimeIndex.
+
+            remove_outliers : bool, optional (default=True)
+                Видаляти викиди з даних із врахуванням волатильності криптовалют.
+
+            fill_missing : bool, optional (default=True)
+                Заповнювати відсутні значення у даних.
+
+            normalize : bool, optional (default=True)
+                Застосовувати нормалізацію до цінових колонок.
+
+            norm_method : str, optional (default='z-score')
+                Метод нормалізації (наприклад, 'z-score', 'min-max').
+
+            resample : bool, optional (default=True)
+                Виконувати ресемплінг даних до заданого інтервалу.
+
+            target_interval : str or None, optional (default=None)
+                Цільовий часовий інтервал для ресемплінгу (наприклад, '1H', '1D').
+                Використовується тільки якщо `resample=True` та індекс типу DatetimeIndex.
+
+            add_time_features : bool, optional (default=True)
+                Додавати часові ознаки (години, дні тижня, циклічні ознаки тощо).
+
+            cyclical : bool, optional (default=True)
+                Використовувати циклічне кодування часових ознак.
+
+            add_sessions : bool, optional (default=False)
+                Додавати ознаки торгових сесій (якщо застосовно).
+
+            add_crypto_features : bool, optional (default=False)
+                Додавати крипто-специфічні ознаки (наприклад, індикатори волатильності).
+
+            crypto_volatility_tolerance : float, optional (default=0.5)
+                Поріг волатильності для обробки викидів у криптовалютних даних.
+
+            Повертає:
+            ---------
+            pd.DataFrame
+                Очищений та підготовлений DataFrame з усіма необхідними колонками.
+
+            Викиди, відсутні значення та неприпустимі значення коригуються або видаляються.
+            Проводиться нормалізація, ресемплінг, додавання часових та специфічних ознак.
+
+            В разі критичних помилок метод повертає максимально коректний результат або порожній DataFrame.
+            """
         self.logger.info(f"Наявні колонки в clean_data: {list(data.columns)}")
 
         self.logger.info(f"Початок комплексного очищення даних для криптовалютних таймсерій")
@@ -514,7 +629,24 @@ class DataCleaner:
 
 
     def _validate_normalized_data(self, data: pd.DataFrame, essential_cols: List[str]) -> bool:
-        """Перевіряє коректність нормалізованих даних"""
+        """
+           Перевіряє коректність нормалізованих даних.
+
+           Перевіряє, чи всі обов’язкові колонки присутні, чи немає NaN або нескінченних значень,
+           а також чи немає логічних помилок, як-от high < low.
+
+           Параметри:
+           -----------
+           data : pd.DataFrame
+               DataFrame з нормалізованими даними.
+           essential_cols : List[str]
+               Список обов’язкових колонок, які потрібно перевірити.
+
+           Повертає:
+           ---------
+           bool
+               True, якщо дані коректні, False — якщо знайдені проблеми.
+           """
         self.logger.info(f"Наявні колонки в _validate_normalized_data: {list(data.columns)}")
 
         # Перевірка на NaN
@@ -542,6 +674,23 @@ class DataCleaner:
 
     # Нова допоміжна функція для перевірки наявності необхідних колонок
     def _verify_essential_columns(self, data: pd.DataFrame, essential_cols: List[str]):
+        """
+            Перевіряє наявність обов’язкових колонок у DataFrame.
+
+            Якщо відсутні критичні колонки — логувує помилку та піднімає виключення.
+
+            Параметри:
+            -----------
+            data : pd.DataFrame
+                DataFrame для перевірки.
+            essential_cols : List[str]
+                Список обов’язкових колонок.
+
+            Викидає:
+            --------
+            ValueError
+                Якщо відсутні критичні колонки.
+            """
         missing_essential = [col for col in essential_cols if col not in data.columns]
         if missing_essential:
             self.logger.error(f"КРИТИЧНА ПОМИЛКА: Відсутні важливі колонки: {missing_essential}")
@@ -549,6 +698,26 @@ class DataCleaner:
         
     def validate_data_integrity(self, data: pd.DataFrame, price_jump_threshold: float = 0.2,
                                 volume_anomaly_threshold: float = 5) -> Dict[str, Any]:
+        """
+            Перевіряє цілісність та якість фінансових часових рядів.
+
+            Виконує перевірку на наявність колонок, коректність datetime індексу,
+            аномалії цін та обсягів, а також наявність NaN або нескінченних значень.
+
+            Параметри:
+            -----------
+            data : pd.DataFrame
+                DataFrame з часовими рядами для перевірки.
+            price_jump_threshold : float, optional (default=0.2)
+                Поріг для виявлення аномальних стрибків цін.
+            volume_anomaly_threshold : float, optional (default=5)
+                Поріг для виявлення аномалій об’єму торгів.
+
+            Повертає:
+            ---------
+            Dict[str, Any]
+                Словник з виявленими проблемами, якщо такі є. Порожній словник означає відсутність проблем.
+            """
         self.logger.info(f"Наявні колонки в validate_data_integrity: {list(data.columns)}")
 
         if data is None or data.empty:
@@ -608,6 +777,22 @@ class DataCleaner:
         return issues
 
     def _remove_duplicates(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+                    Видаляє дублікати за індексом у DataFrame.
+
+                    Якщо індекс не є DatetimeIndex, повертає оригінальний DataFrame без змін.
+                    Якщо знайдено дублікати в індексі, залишає перший та видаляє решту.
+
+                    Параметри:
+                    -----------
+                    data : pd.DataFrame
+                        Вхідний DataFrame для очищення від дублікатів за індексом.
+
+                    Повертає:
+                    ---------
+                    pd.DataFrame
+                        DataFrame без дублікатів індексу.
+                    """
         self.logger.info(f"Наявні колонки в _remove_duplicates: {list(data.columns)}")
 
         if not isinstance(data.index, pd.DatetimeIndex):
@@ -620,6 +805,26 @@ class DataCleaner:
 
         return data
     def _prepare_dataframe(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+           Підготовка DataFrame для подальшої обробки.
+
+           Включає:
+           - Конвертацію індексу у DatetimeIndex, якщо індекс не є датою,
+             шляхом пошуку стовпця з часовою інформацією.
+           - Сортування за індексом.
+           - Конвертацію типів колонок 'open', 'high', 'low', 'close', 'volume' у числові.
+
+           Параметри:
+           -----------
+           data : pd.DataFrame
+               Вхідний DataFrame для підготовки.
+
+           Повертає:
+           ---------
+           pd.DataFrame
+               Підготовлений DataFrame з коректним datetime індексом та числовими колонками.
+           """
+
         self.logger.info(f"Наявні колонки в _prepare_dataframe: {list(data.columns)}")
 
         self.logger.info(f"Підготовка DataFrame: {data.shape[0]} рядків, {data.shape[1]} стовпців")
@@ -655,6 +860,34 @@ class DataCleaner:
     def handle_missing_values(self, data: pd.DataFrame, method: str = 'interpolate',
                               symbol: str = None, timeframe: str = None,
                               fetch_missing: bool = True) -> pd.DataFrame:
+        """
+            Обробляє відсутні значення у DataFrame.
+
+            Методи обробки включають: 'interpolate' (лінійна інтерполяція),
+            'ffill' (forward/backward fill), 'mean' (заповнення середнім),
+            'median' (заповнення медіаною).
+
+            Якщо параметр fetch_missing увімкнено, і задані symbol та timeframe,
+            підтягує пропущені дані з Binance (або іншого джерела).
+
+            Параметри:
+            -----------
+            data : pd.DataFrame
+                DataFrame для обробки відсутніх значень.
+            method : str, optional (default='interpolate')
+                Метод заповнення пропущених значень.
+            symbol : str, optional
+                Символ фінансового інструменту для підтягу даних (для fetch_missing).
+            timeframe : str, optional
+                Таймфрейм для підтягу даних (для fetch_missing).
+            fetch_missing : bool, optional (default=True)
+                Чи завантажувати відсутні дані з зовнішнього джерела.
+
+            Повертає:
+            ---------
+            pd.DataFrame
+                DataFrame з обробленими відсутніми значеннями.
+            """
         self.logger.info(f"Наявні колонки в handle_missing_values: {list(data.columns)}")
 
         if data is None or data.empty:
@@ -775,6 +1008,25 @@ class DataCleaner:
 
     def _detect_missing_periods(self, data: pd.DataFrame, expected_diff: pd.Timedelta) -> List[
         Tuple[datetime, datetime]]:
+        """
+            Виявляє пропущені часові інтервали у часовому індексі DataFrame.
+
+            Порівнює різницю між послідовними мітками часу з очікуваним інтервалом
+            і повертає список періодів, де розрив перевищує 1.5 * expected_diff.
+
+            Параметри:
+            -----------
+            data : pd.DataFrame
+                DataFrame з часовим індексом (pd.DatetimeIndex).
+            expected_diff : pd.Timedelta
+                Очікуваний інтервал між суміжними записами.
+
+            Повертає:
+            ---------
+            List[Tuple[datetime, datetime]]
+                Список кортежів (початок_пропуску, кінець_пропуску), що описують пропущені періоди.
+                Якщо пропущених періодів немає або вхідні дані некоректні — порожній список.
+            """
         self.logger.info(f"Наявні колонки в _detect_missing_periods: {list(data.columns)}")
 
         if not isinstance(data.index, pd.DatetimeIndex) or data.empty:
@@ -809,6 +1061,29 @@ class DataCleaner:
     def _fetch_missing_data_from_binance(self, data: pd.DataFrame,
                                          missing_periods: List[Tuple[datetime, datetime]],
                                          symbol: str, interval: str) -> pd.DataFrame:
+        """
+           Завантажує відсутні дані з Binance за заданими пропущеними періодами.
+
+           Виконує запити до API Binance для кожного виявленого пропущеного інтервалу,
+           повертає конкатенований DataFrame з отриманими даними.
+
+           Параметри:
+           -----------
+           data : pd.DataFrame
+               Оригінальний DataFrame для порівняння колонок.
+           missing_periods : List[Tuple[datetime, datetime]]
+               Список часових періодів, для яких потрібно отримати пропущені дані.
+           symbol : str
+               Символ торгового інструменту на Binance (наприклад, 'BTCUSDT').
+           interval : str
+               Таймфрейм (інтервал) запитуваних даних (наприклад, '1m', '1h', '1d').
+
+           Повертає:
+           ---------
+           pd.DataFrame
+               DataFrame з даними, отриманими з Binance за пропущені періоди.
+               Якщо не вдалося отримати дані, повертається порожній DataFrame.
+           """
         self.logger.info(f"Наявні колонки в _fetch_missing_data_from_binance: {list(data.columns)}")
 
         if data is None or data.empty or not missing_periods:
@@ -899,6 +1174,30 @@ class DataCleaner:
     def normalize_data(self, data: pd.DataFrame, method: str = 'z-score',
                        columns: List[str] = None, exclude_columns: List[str] = None) -> Tuple[
         pd.DataFrame, Optional[Dict]]:
+        """
+            Нормалізує числові колонки DataFrame за обраним методом, з урахуванням збереження співвідношень між цінами.
+
+            Підтримує методи нормалізації: 'z-score', 'min-max', 'robust'.
+            Особливе ставлення до цінових колонок (OHLC) з метою збереження їх відносин.
+            Забезпечує невід'ємність нормалізованих значень.
+
+            Параметри:
+            -----------
+            data : pd.DataFrame
+                Вхідний DataFrame з фінансовими даними.
+            method : str, за замовчуванням 'z-score'
+                Метод нормалізації: 'z-score', 'min-max' або 'robust'.
+            columns : List[str], optional
+                Список колонок для нормалізації. Якщо None, беруться ['open', 'high', 'low', 'close', 'volume'].
+            exclude_columns : List[str], optional
+                Колонки, які слід виключити з нормалізації (не використовується у поточній реалізації).
+
+            Повертає:
+            ---------
+            Tuple[pd.DataFrame, Optional[Dict]]
+                Нормалізований DataFrame і словник метаданих зі скейлерами, імпутерами та параметрами зсувів.
+                У разі помилки повертає копію вхідного DataFrame та None.
+            """
         self.logger.info(f"Наявні колонки в normalize_data: {list(data.columns)}")
 
         if data is None or data.empty:
@@ -1102,7 +1401,28 @@ class DataCleaner:
     def _normalize_single_column_non_negative(self, df: pd.DataFrame, column: str, method: str,
                                               scaler_meta: Dict) -> pd.Series:
 
-        """Нормалізує окрему колонку з використанням вказаного методу, гарантуючи невід'ємні значення."""
+        """
+            Нормалізує окрему колонку DataFrame, забезпечуючи невід'ємність значень.
+
+            Виконує імпутацію пропущених значень, нормалізацію за обраним методом
+            і корекцію для усунення від'ємних значень, якщо такі виникли.
+
+            Параметри:
+            -----------
+            df : pd.DataFrame
+                DataFrame з даними.
+            column : str
+                Назва колонки для нормалізації.
+            method : str
+                Метод нормалізації: 'z-score', 'min-max' або 'robust'.
+            scaler_meta : Dict
+                Словник для збереження інформації про імпутери, скейлери та зсуви.
+
+            Повертає:
+            ---------
+            pd.Series
+                Нормалізовані дані колонки у вигляді Series з тим самим індексом, що і вхідний DataFrame.
+            """
         from sklearn.impute import SimpleImputer
 
         # Імпутація пропущених значень
@@ -1169,6 +1489,30 @@ class DataCleaner:
 
     def add_time_features_safely(self, data: pd.DataFrame, cyclical: bool = True,
                                  add_sessions: bool = False, tz: str = 'Europe/Kiev') -> pd.DataFrame:
+        """
+            Додає до DataFrame часові ознаки на основі індексу або часової колонки, без перезапису існуючих колонок.
+
+            Функція безпечно конвертує індекс у DatetimeIndex, локалізує час у вказаний часовий пояс,
+            додає базові часові ознаки (година, день, тиждень, місяць, квартал, рік та ін.),
+            а також циклічні ознаки (сінус і косінус) за бажанням.
+            За потреби додає індикатори торгових сесій.
+            У разі конфліктів імен колонок унікально перейменовує нові ознаки.
+
+            Args:
+                data (pd.DataFrame): Вхідний датафрейм з часовими даними. Індекс або колонка повинні містити часові мітки.
+                cyclical (bool, optional): Якщо True, додає циклічні ознаки (сінус/косінус) для кращого кодування періодичності.
+                    За замовчуванням True.
+                add_sessions (bool, optional): Якщо True, додає бінарні індикатори торгових сесій (азійська, європейська, американська)
+                    і часові перекриття сесій. За замовчуванням False.
+                tz (str, optional): Часовий пояс, у який слід локалізувати/конвертувати часові дані. За замовчуванням 'Europe/Kiev'.
+
+            Returns:
+                pd.DataFrame: Копія вхідного датафрейму з доданими часовими ознаками.
+
+            Логи:
+                - Інформує про початкові колонки, процес конвертації індексу, локалізацію часу, додавання ознак.
+                - Попереджає про NaT, дублікатні імена колонок, помилки конвертації.
+            """
         self.logger.info(f"Наявні колонки в add_time_features_safely: {list(data.columns)}")
 
         """Додає часові ознаки безпечно, без перезапису існуючих колонок"""
@@ -1411,6 +1755,23 @@ class DataCleaner:
 
 
     def remove_duplicate_timestamps(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+           Видаляє дублікати часових міток з DataFrame, залишаючи лише унікальні записи, сортує за індексом.
+
+           Якщо індекс не є DatetimeIndex, намагається знайти і конвертувати першу колонку з часом.
+           Видаляє рядки з NaT у часових мітках перед індексацією.
+
+           Args:
+               data (pd.DataFrame): Вхідний датафрейм, індекс або колонки якого мають часові дані.
+
+           Returns:
+               pd.DataFrame: DataFrame без дублікатів у часовому індексі, відсортований за індексом.
+
+           Логи:
+               - Інформує про початкові колонки, результати конвертації індексу.
+               - Попереджає про NaT у часових колонках.
+               - Повідомляє про кількість знайдених та видалених дублікатів.
+           """
         self.logger.info(f"Наявні колонки в remove_duplicate_timestamps: {list(data.columns)}")
 
         if data is None or data.empty:
@@ -1463,6 +1824,37 @@ class DataCleaner:
     def filter_by_time_range(self, data: pd.DataFrame,
                              start_time: Optional[Union[str, datetime]] = None,
                              end_time: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+        """
+            Фільтрує DataFrame за часовим діапазоном, використовуючи індекс або часову колонку.
+
+            Якщо індекс DataFrame не є DatetimeIndex, метод намагається знайти першу колонку,
+            пов’язану з часом (в назві містить 'time', 'date' або 'timestamp'), конвертувати її у datetime
+            та зробити індексом. Рядки з некоректними (NaT) часовими значеннями видаляються.
+
+            Підтримує фільтрацію за початковим (`start_time`) та кінцевим (`end_time`) часом,
+            які можуть бути рядками або datetime об’єктами. Часові пояси коригуються автоматично,
+            щоб відповідати часовому поясу індексу DataFrame.
+
+            Args:
+                data (pd.DataFrame): Вхідний датафрейм з часовими даними.
+                start_time (Optional[Union[str, datetime]], optional): Початковий час фільтрації.
+                    Якщо None, фільтрація за початком не застосовується. За замовчуванням None.
+                end_time (Optional[Union[str, datetime]], optional): Кінцевий час фільтрації.
+                    Якщо None, фільтрація за кінцем не застосовується. За замовчуванням None.
+
+            Returns:
+                pd.DataFrame: DataFrame, відфільтрований за часовим діапазоном. Якщо вхідні дані порожні або не
+                    містять часових колонок, повертає початковий DataFrame або його копію.
+
+            Логи:
+                - Інформує про наявні колонки на початку роботи.
+                - Попереджає, якщо отримано порожній DataFrame.
+                - Повідомляє про спробу конвертації індексу у DatetimeIndex та можливі помилки.
+                - Попереджає про NaT значення у часовій колонці.
+                - Логують операції локалізації та конвертації часових поясів.
+                - Інформує про кількість відфільтрованих записів.
+                - Попереджає, якщо початковий час пізніше кінцевого, що може призвести до порожнього результату.
+            """
         self.logger.info(f"Наявні колонки в filter_by_time_range: {list(data.columns)}")
 
         if data is None or data.empty:

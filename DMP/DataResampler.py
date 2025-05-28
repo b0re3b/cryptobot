@@ -21,7 +21,20 @@ class DataResampler:
         self.cache = {}
 
     def _find_column_original(self, df, column_name):
-        """Знаходить колонку незалежно від регістру з обробкою конфліктів"""
+        """
+           Знаходить колонку у DataFrame незалежно від регістру, обробляючи випадки з кількома збігами.
+
+           Спочатку перевіряє точну відповідність. Якщо її немає — шукає колонки, що відповідають
+           за нижнім регістром. У випадку кількох відповідників виводить попередження
+           і повертає перший збіг.
+
+           Args:
+               df (pd.DataFrame): DataFrame, у якому виконується пошук.
+               column_name (str): Назва колонки, яку потрібно знайти.
+
+           Returns:
+               str or None: Назва знайденої колонки у її оригінальному вигляді, або None, якщо не знайдено.
+           """
         exact_match = [col for col in df.columns if col == column_name]
         if exact_match:
             return exact_match[0]
@@ -36,7 +49,28 @@ class DataResampler:
         return None
 
     def detect_interval(self, data: pd.DataFrame) -> str:
+        """
+            Визначає найчастіший часовий інтервал між записами у DatetimeIndex DataFrame.
 
+            Метод аналізує різницю між часовими мітками та повертає інтервал у зручному форматі
+            (наприклад, '5m', '1h', '1d', '2w', '1M').
+
+            Args:
+                data (pd.DataFrame): DataFrame з індексом типу DatetimeIndex.
+
+            Returns:
+                str: Найпоширеніший інтервал між записами у вигляді рядка.
+                    Наприклад: '15m', '1h', '1d', '1w', '1M'.
+                    Якщо інтервал не вдається визначити, повертає None.
+
+            Raises:
+                Логує помилки, якщо:
+                - Індекс не є DatetimeIndex.
+                - Менше двох записів для аналізу.
+
+            Побічні ефекти:
+                Зберігає знайдений інтервал у self.original_data_map['detected_interval'].
+            """
         if not isinstance(data.index, pd.DatetimeIndex):
             self.logger.error("DataFrame повинен мати DatetimeIndex для визначення інтервалу")
             return None
@@ -83,7 +117,30 @@ class DataResampler:
 
     def auto_resample(self, data: pd.DataFrame, target_interval: str = None,
                       scaling_factor: int = None) -> pd.DataFrame:
+        """
+          Автоматично змінює частоту даних (ресемплінг) на більший інтервал.
 
+          Якщо не задано цільовий інтервал (`target_interval`), виконує масштабування
+          поточного інтервалу (визначеного через `detect_interval`) за допомогою
+          `scaling_factor`. Якщо не заданий `scaling_factor`, за замовчуванням використовується 4.
+
+          Args:
+              data (pd.DataFrame): Вхідний DataFrame з індексом DatetimeIndex.
+              target_interval (str, optional): Цільовий часовий інтервал у форматі '15m', '1h', '1d' тощо.
+              scaling_factor (int, optional): Множник для масштабування поточного інтервалу.
+
+          Returns:
+              pd.DataFrame: DataFrame після зміни частоти.
+
+          Raises:
+              Логує помилки, якщо:
+              - Індекс не є DatetimeIndex.
+              - Поточний інтервал не вдається визначити.
+              - Формат поточного інтервалу не відповідає очікуваному.
+
+          Побічні ефекти:
+              Зберігає інформацію про ресемплінг у self.original_data_map['auto_resample_info'].
+          """
         if not isinstance(data.index, pd.DatetimeIndex):
             self.logger.error("DataFrame повинен мати DatetimeIndex для ресемплінгу")
             return data
@@ -128,7 +185,19 @@ class DataResampler:
         return resampled_data
 
     def suggest_intervals(self, data: pd.DataFrame, max_suggestions: int = 5) -> list:
+        """
+          Пропонує розширені часові інтервали на основі поточного інтервалу даних.
 
+          Використовує тип інтервалу (секунди, хвилини, години, дні, тощо) та множники, щоб
+          сформувати список нових потенційних інтервалів для ресемплінгу або агрегації.
+
+          Args:
+              data (pd.DataFrame): DataFrame з індексом DatetimeIndex.
+              max_suggestions (int): Максимальна кількість рекомендацій, які буде повернуто.
+
+          Returns:
+              list: Список рекомендованих інтервалів у форматі рядків (наприклад, ['10m', '30m', '1h']).
+          """
         current_interval = self.detect_interval(data)
         if not current_interval:
             return []
@@ -175,8 +244,18 @@ class DataResampler:
 
     def _optimize_aggregation_dict(self, data: pd.DataFrame, store_column_map: bool = False) -> Dict:
         """
-        Формує словник агрегацій на основі типу колонок і їх назв (уніфікована логіка).
-        """
+           Формує словник агрегаційних функцій на основі назв та типів колонок у DataFrame.
+
+           Визначає стандартні методи агрегації для фінансових колонок (open, high, low, close, volume тощо),
+           а також генерує агрегації для інших числових та нечислових колонок на основі ключових слів.
+
+           Args:
+               data (pd.DataFrame): Вхідний DataFrame з фінансовими чи подібними даними.
+               store_column_map (bool): Якщо True, зберігає відповідність назв колонок до self.original_data_map.
+
+           Returns:
+               Dict: Словник формату {назва_колонки: метод_агрегації}, наприклад {'close': 'last'}.
+           """
         agg_dict = {}
         columns_lower_map = {col.lower(): col for col in data.columns}
         numeric_cols = data.select_dtypes(include=[np.number]).columns
@@ -229,7 +308,20 @@ class DataResampler:
         return agg_dict
 
     def convert_interval_to_pandas_format(self, timeframe: str) -> str:
+        """
+           Перетворює інтервал у форматі типу '15m', '2h', '1d' тощо у відповідний формат для pandas.
 
+           Використовується при ресемплінгу даних за допомогою pandas (наприклад, resample('15T')).
+
+           Args:
+               timeframe (str): Часовий інтервал у форматі рядка (наприклад, '15m', '1h').
+
+           Returns:
+               str: Інтервал у форматі, сумісному з pandas (наприклад, '15T', '1H').
+
+           Raises:
+               ValueError: Якщо формат інтервалу є некоректним або одиниця часу не підтримується.
+           """
         if not timeframe or not isinstance(timeframe, str):
             raise ValueError(f"Неправильний формат інтервалу: {timeframe}")
 
@@ -267,7 +359,49 @@ class DataResampler:
                       required_columns: List[str] = None,
                       auto_detect: bool = True,
                       check_interval_compatibility: bool = True) -> pd.DataFrame:
+        """
+           Ресемплює часові дані до вказаного інтервалу з автоматичною оптимізацією та валідацією.
 
+           Цей метод виконує інтелектуальний ресемплінг часових рядів з підтримкою:
+           - Автоматичного виявлення поточного інтервалу даних
+           - Валідації сумісності інтервалів
+           - Пакетної обробки великих наборів даних
+           - Детального логування та діагностики
+           - Збереження оригінальних даних для відновлення
+
+           Args:
+               data (pd.DataFrame): Вхідний DataFrame з часовим індексом (DatetimeIndex).
+                                  Повинен містити колонки OHLCV або інші числові дані.
+               target_interval (str): Цільовий інтервал для ресемплінгу.
+                                     Підтримувані формати: '1m', '5m', '15m', '1h', '1d' тощо.
+               required_columns (List[str], optional): Список необхідних колонок для перевірки.
+                                                     За замовчуванням: ['open', 'high', 'low', 'close', 'volume'].
+                                                     Якщо None, використовуються стандартні OHLCV колонки.
+               auto_detect (bool, optional): Чи автоматично визначати поточний інтервал даних.
+                                            За замовчуванням: True.
+               check_interval_compatibility (bool, optional): Чи перевіряти сумісність між поточним
+                                                             та цільовим інтервалами. За замовчуванням: True.
+
+           Returns:
+               pd.DataFrame: Ресемплений DataFrame з тим самим типом індексу та оптимізованою структурою.
+                            У разі помилки повертає оригінальний DataFrame без змін.
+
+           Raises:
+               ValueError: Якщо дані не мають DatetimeIndex або неможливо його створити.
+
+           Side Effects:
+               - Зберігає оригінальні та ресемплені дані в self.original_data_map
+               - Записує детальну інформацію про процес ресемплінгу в логи
+               - Модифікує внутрішній стан об'єкта для збереження метаданих трансформації
+
+           Notes:
+               - Метод автоматично сортує дані за часовим індексом
+               - Видаляє дублікати в індексі з попередженням
+               - Для великих наборів даних (> chunk_size) використовує пакетну обробку
+               - Перевіряє якість ресемплінгу з допуском 5% для інтервалів
+               - Попереджає про можливу втрату інформації при зменшенні інтервалу
+
+           """
         self.logger.info(f"Початок ресемплінгу даних. Наявні колонки: {list(data.columns)}")
 
         if data.empty:
@@ -592,51 +726,30 @@ class DataResampler:
             self.logger.error(f"Деталі помилки: {traceback.format_exc()}")
             return data
 
-    def verify_resampling(self, original_data: pd.DataFrame, resampled_data: pd.DataFrame,
-                          target_interval: str) -> bool:
-        """Перевіряє, чи був ресемплінг виконаний правильно"""
-
-        if len(resampled_data) <= 1:
-            self.logger.warning("Недостатньо даних для перевірки ресемплінгу")
-            return False
-
-        # 1. Перевірка зміни кількості рядків
-        orig_rows = len(original_data)
-        new_rows = len(resampled_data)
-
-        if orig_rows == new_rows:
-            self.logger.warning(f"Кількість рядків не змінилася: {orig_rows}. Ресемплінг може бути неправильним.")
-        else:
-            self.logger.info(f"Зміна кількості рядків: {orig_rows} -> {new_rows}")
-
-        # 2. Перевірка інтервалу
-        expected_td = self.parse_interval(target_interval)
-        expected_seconds = expected_td.total_seconds()
-
-        actual_intervals = []
-        for i in range(1, min(10, len(resampled_data))):
-            actual_seconds = (resampled_data.index[i] - resampled_data.index[i - 1]).total_seconds()
-            actual_intervals.append(actual_seconds)
-
-        avg_actual = sum(actual_intervals) / len(actual_intervals)
-
-        self.logger.info(f"Очікуваний інтервал: {expected_seconds} сек.")
-        self.logger.info(f"Фактичний середній інтервал: {avg_actual} сек.")
-        self.logger.info(f"Перші інтервали: {actual_intervals}")
-
-        # Перевірка з допуском 5%
-        is_correct = abs(avg_actual - expected_seconds) <= expected_seconds * 0.05
-
-        if not is_correct:
-            self.logger.error(f"Ресемплінг виконано неправильно! Різниця: {abs(avg_actual - expected_seconds)} сек.")
-        else:
-            self.logger.info("Ресемплінг виконано правильно!")
-
-        return is_correct
-
     def _fill_missing_values(self, df: pd.DataFrame, fill_method: str = 'auto',
                              max_gap: int = 5, interpolate_prices: bool = True) -> pd.DataFrame:
+        """
+            Заповнює пропущені значення у DataFrame відповідно до категорій колонок і обраної стратегії.
 
+            Метод підтримує адаптивне заповнення для цінових, об'ємних, торгових, інших числових і нечислових колонок,
+            використовуючи інтерполяцію, forward/backward fill або заповнення нулями. Також застосовує обмеження
+            на довжину допустимого проміжку (`max_gap`), щоб уникнути перекручування даних.
+
+            Args:
+                df (pd.DataFrame): Вхідний DataFrame з часовими рядами або фінансовими даними.
+                fill_method (str): Метод заповнення: 'auto', 'ffill', 'zero', 'interpolate'.
+                                   - 'auto': інтелектуальний підхід, залежно від типу даних;
+                                   - 'ffill': лише заповнення вперед (обмежено);
+                                   - 'zero': заповнення нулями;
+                                   - 'interpolate': інтерполяція з обмеженням.
+                max_gap (int): Максимальна кількість поспіль пропущених значень, які дозволено заповнити.
+                interpolate_prices (bool): Чи застосовувати інтерполяцію до цінових колонок (open, high, low, close, vwap).
+
+            Returns:
+                pd.DataFrame: DataFrame з заповненими пропущеними значеннями.
+
+
+            """
         if df.empty:
             return df
 
@@ -772,7 +885,22 @@ class DataResampler:
 
 
     def parse_interval(self, timeframe: str) -> pd.Timedelta:
+        """
+            Перетворює текстовий часовий інтервал у форматі (наприклад, '1h', '30m', '2d') у об'єкт pd.Timedelta.
 
+            Args:
+                timeframe (str): Строковий формат інтервалу з одиницею виміру: 's' (секунди), 'm' (хвилини),
+                                 'h' (години), 'd' (дні), 'w' (тижні), 'M' (місяці приблизно як 30.44 днів).
+
+            Returns:
+                pd.Timedelta: Відповідний часовий інтервал у форматі Timedelta.
+
+            Raises:
+                ValueError: Якщо формат інтервалу невірний або якщо задано не додатнє значення.
+
+            Notes:
+                - Місяці ('M') обробляються як середнє значення у днях: 30.44 днів.
+            """
         interval_map = {
             's': 'seconds',
             'm': 'minutes',
@@ -798,7 +926,29 @@ class DataResampler:
         return pd.Timedelta(**{interval_map[unit]: int(number)})
 
     def create_time_features(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+            Додає до DataFrame часові ознаки, засновані на індексі типу DatetimeIndex.
 
+            Для моделювання сезонності та патернів у часових рядах створюються числові, бінарні та циклічні ознаки,
+            такі як година доби, день тижня, місяць, квартал, рік, а також ознаки активних торгових сесій.
+
+            Args:
+                data (pd.DataFrame): Вхідний DataFrame з індексом типу DatetimeIndex.
+
+            Returns:
+                pd.DataFrame: DataFrame з доданими часовими ознаками.
+
+            Added features:
+                - `hour`, `day_of_week`, `day_of_month`, `month`, `quarter`, `year`
+                - `is_weekend`: прапор для вихідних
+                - `session`: приблизна торговельна сесія (Asia, Europe, US)
+                - `time_of_day`: частина доби (Night, Morning, Afternoon, Evening)
+                - `*_sin` / `*_cos`: циклічні ознаки для часу (наприклад, `hour_sin`, `day_of_week_cos`)
+
+            Notes:
+                - Якщо індекс не є DatetimeIndex, метод повертає вхідний DataFrame без змін.
+                - Оригінальні дані зберігаються у `self.original_data_map['data_before_time_features']` для зворотнього доступу.
+            """
         df = data.copy()
 
         # Зберігаємо оригінальні дані перед маніпуляціями
@@ -848,6 +998,44 @@ class DataResampler:
 
     def make_stationary(self, data: pd.DataFrame, columns=None, method='diff',
                         order=1, seasonal_order=None) -> pd.DataFrame:
+        """
+            Перетворює часоряд на стаціонарний шляхом диференціювання, логарифмування, обчислення
+            відсоткових змін та інших методів.
+
+            Параметри:
+            ----------
+            data : pd.DataFrame
+                Вхідний DataFrame з часовими рядами. Має містити щонайменше колонку 'close',
+                а для деяких обчислень також 'high', 'low' або 'volume'.
+
+            columns : list[str], optional
+                Список назв колонок для обробки. Якщо не вказано — обробляється лише 'close'.
+
+            method : str, optional (default='diff')
+                Метод стаціонаризації. Один з:
+                - 'diff': диференціювання
+                - 'log': логарифмування
+                - 'pct_change': відсоткова зміна
+                - 'all': усі методи
+
+            order : int, optional (default=1)
+                Порядок диференціювання або відсоткової зміни.
+
+            seasonal_order : int, optional
+                Порядок сезонного диференціювання, якщо задано.
+
+            Повертає:
+            ---------
+            pd.DataFrame
+                Новий DataFrame з додатковими колонками, які представляють стаціонаризовані
+                версії вихідних колонок. Початкові колонки не видаляються.
+
+            Додатково:
+            ----------
+            - Зберігає оригінальні дані до self.original_data_map для подальшого аналізу або відновлення.
+            - Обробляє NaN та нескінченні значення з відповідними попередженнями.
+            - Обробляє особливі випадки для 'volume' та 'close' з обчисленням логарифмів та діапазону high-low.
+            """
         self.logger.info(f"Наявні колонки в make_stationary: {list(data.columns)}")
         if data.empty:
             self.logger.warning("make_stationary: Отримано порожній DataFrame")
@@ -1122,7 +1310,49 @@ class DataResampler:
 
     def check_stationarity(self, data: pd.DataFrame, column='close_diff', sample_size=10000,
                            parallel=True, confidence_level=0.05) -> dict:
+        """
+        Перевіряє стаціонарність часового ряду за допомогою декількох статистичних тестів:
+        - ADF (Augmented Dickey-Fuller)
+        - KPSS (Kwiatkowski–Phillips–Schmidt–Shin)
+        - ACF/PACF аналіз (автокореляції та часткової автокореляції)
 
+        Параметри:
+        ----------
+        data : pd.DataFrame
+            Вхідний DataFrame з часовими рядами. Повинен містити вказану колонку з числовими значеннями.
+
+        column : str, optional (default='close_diff')
+            Назва колонки для перевірки. Можна вказати без урахування регістру (метод знайде найближчий збіг).
+
+        sample_size : int, optional (default=10000)
+            Максимальний розмір вибірки для аналізу. Якщо рядок довший, вибираються рівномірно розподілені точки.
+
+        parallel : bool, optional (default=True)
+            Якщо True, тести виконуються паралельно в потоках для прискорення обчислень.
+
+        confidence_level : float, optional (default=0.05)
+            Рівень значущості для тестів ADF і KPSS. Наприклад, 0.05 означає 95% довіру.
+
+        Повертає:
+        ---------
+        dict
+            Словник з результатами аналізу. Містить:
+            - 'is_stationary': bool – фінальне рішення про стаціонарність
+            - 'confidence': str – рівень впевненості у висновку ('висока', 'середня', 'низька')
+            - 'column': str – назва колонки, яка була перевірена
+            - 'tests': dict – результати кожного тесту окремо ('adf', 'kpss', 'acf_pacf')
+            - 'data_size': int – кількість точок у вхідному ряді
+            - 'sample_size': int – кількість точок, що були використані у вибірці
+            - 'stats': dict – статистика вибраного ряду (mean, std, min, max, unique_values)
+            - 'error': str – якщо сталася помилка, буде присутнє поле з описом
+
+        Особливості:
+        ------------
+        - Автоматично очищує NaN та нескінченні значення.
+        - Виявляє ігноровані випадки: константні ряди, малі варіації, короткі вибірки.
+        - Логіку об'єднання результатів тестів можна змінити, якщо потрібно суворіше/м'якше правило.
+        - У разі збоїв окремих тестів, обробляє винятки та формує часткові результати.
+        """
         self.logger.info(f"Наявні колонки в check_stationarity: {list(data.columns)}")
         from statsmodels.tsa.stattools import adfuller, kpss, acf, pacf
         import numpy as np
@@ -1414,7 +1644,138 @@ class DataResampler:
             sample_size: int = 10000,
             parallel: bool = True
     ) -> pd.DataFrame:
+        """
+           Підготовка даних для моделювання ARIMA з розширеним набором трансформацій та тестів стаціонарності.
 
+           Цей метод виконує комплексну підготовку часових рядів фінансових даних для моделювання ARIMA,
+           включаючи різноманітні трансформації для досягнення стаціонарності, статистичні тести та
+           автоматичне визначення оптимальних параметрів моделі.
+
+           Parameters
+           ----------
+           data : pd.DataFrame | dd.DataFrame
+               Вхідний DataFrame з фінансовими даними. Повинен містити колонки з цінами закриття
+               (close, price, last, last_price) та опціонально high, low, volume.
+               Якщо передано Dask DataFrame, буде конвертовано в pandas DataFrame.
+
+           symbol : str
+               Торговий символ/інструмент (наприклад, 'BTCUSDT', 'AAPL').
+               Використовується для логування та ідентифікації.
+
+           timeframe : str
+               Часовий інтервал даних (наприклад, '1h', '4h', '1d').
+               Впливає на визначення сезонного періоду для сезонного диференціювання.
+
+           sample_size : int, optional, default=10000
+               Максимальний розмір вибірки для статистичних тестів.
+               При великих обсягах даних використовується для оптимізації швидкості обчислень.
+
+           parallel : bool, optional, default=True
+               Чи використовувати паралельне виконання тестів стаціонарності.
+               При True - тести ADF та KPSS виконуються паралельно для всіх трансформацій.
+
+           Returns
+           -------
+           pd.DataFrame
+               DataFrame з підготовленими даними, що містить:
+
+               Базові дані:
+               - original_close : Оригінальні ціни закриття
+               - timeframe : Часовий інтервал
+
+               Трансформації цін:
+               - close_diff : Перша різниця цін закриття
+               - close_diff2 : Друга різниця цін закриття
+               - close_log : Логарифм цін закриття
+               - close_log_diff : Різниця логарифмів
+               - close_pct_change : Відсоткова зміна цін
+               - close_seasonal_diff : Сезонна різниця
+               - close_combo_diff : Комбінована різниця (сезонна + звичайна)
+
+               Трансформації об'єму (якщо є дані):
+               - original_volume : Оригінальний об'єм
+               - volume_log, volume_diff, volume_log_diff : Базові трансформації об'єму
+               - volume_pct_change : Відсоткова зміна об'єму
+               - volume_seasonal_diff : Сезонна різниця об'єму
+               - volume_relative : Відносний об'єм (відносно ковзного середнього)
+               - volume_relative_log : Логарифм відносного об'єму
+
+               Діапазон High-Low (якщо є дані):
+               - high_low_range : Абсолютний діапазон
+               - high_low_range_pct : Діапазон як відсоток від ціни закриття
+
+               Результати тестів стаціонарності (для кожної трансформації):
+               - {column}_adf_stationary : Результат ADF тесту (True/False)
+               - {column}_adf_pvalue : P-значення ADF тесту
+               - {column}_kpss_stationary : Результат KPSS тесту (True/False)
+               - {column}_kpss_pvalue : P-значення KPSS тесту
+               - {column}_confidence : Рівень впевненості ('висока', 'середня', 'низька')
+               - {column}_is_stationary : Підсумковий результат стаціонарності
+
+               Рекомендації для ARIMA:
+               - best_transformation : Найкраща трансформація для моделювання
+               - best_confidence : Рівень впевненості для найкращої трансформації
+               - best_adf_pvalue : P-значення ADF для найкращої трансформації
+               - suggested_p, suggested_d, suggested_q : Рекомендовані параметри ARIMA
+               - suggested_seasonal_p, suggested_seasonal_d, suggested_seasonal_q : Сезонні параметри
+               - suggested_seasonal_period : Сезонний період
+               - significant_lags : JSON з значущими лагами ACF/PACF
+               - significant_lags_acf, significant_lags_pacf : Окремі списки значущих лагів
+
+               Додаткові метрики:
+               - adf_pvalue, kpss_pvalue : P-значення для найкращої трансформації
+               - is_stationary : Чи є найкраща трансформація стаціонарною
+               - data_points : Кількість точок даних
+               - preparation_timestamp : Час підготовки даних
+               - residual_variance, aic_score, bic_score : Поля для майбутніх метрик моделі
+
+           Raises
+           ------
+           Exception
+               При помилках обробки даних, відсутності необхідних колонок або
+               проблемах з виконанням статистичних тестів.
+
+           Notes
+           -----
+           Метод виконує наступні кроки:
+
+           1. **Підготовка даних**:
+              - Конвертація Dask в pandas DataFrame при необхідності
+              - Встановлення DatetimeIndex
+              - Пошук та валідація колонки з цінами закриття
+              - Обробка нескінченних та відсутніх значень
+
+           2. **Трансформації для стаціонарності**:
+              - Диференціювання (першого та другого порядку)
+              - Логарифмічні перетворення
+              - Відсоткові зміни
+              - Сезонне диференціювання
+              - Комбіновані трансформації
+
+           3. **Статистичні тести стаціонарності**:
+              - Augmented Dickey-Fuller test (ADF)
+              - Kwiatkowski-Phillips-Schmidt-Shin test (KPSS)
+              - Паралельне або послідовне виконання
+              - Визначення рівня впевненості
+
+           4. **Аналіз автокореляції**:
+              - Обчислення ACF (AutoCorrelation Function)
+              - Обчислення PACF (Partial AutoCorrelation Function)
+              - Виявлення значущих лагів
+              - Автоматичне визначення параметрів ARIMA
+
+           5. **Оптимізація продуктивності**:
+              - Використання вибірки для великих наборів даних
+              - Паралельне виконання тестів
+              - Адаптивне визначення кількості лагів
+
+           Сезонний період визначається автоматично на основі timeframe:
+           - Хвилинні інтервали: 60 (година)
+           - Годинні інтервали: 24 (день)
+           - Денні інтервали: 7 (тиждень)
+
+
+           """
         try:
             self.logger.info(f"prepare_arima_data: Початок підготовки даних для {symbol} ({timeframe})")
 
@@ -2033,6 +2394,59 @@ class DataResampler:
             sequence_length: int = None,
             target_horizons: list = [1, 5, 10]
     ) -> pd.DataFrame:
+        """
+            Підготовка даних для навчання LSTM моделі з адаптивним створенням послідовностей.
+
+            Цей метод виконує повну підготовку фінансових даних для навчання LSTM моделі,
+            включаючи створення часових ознак, масштабування, генерацію цільових змінних
+            та формування послідовностей з урахуванням специфіки різних таймфреймів.
+
+            Args:
+                data (pd.DataFrame | dd.DataFrame): Вхідні дані з колонками OHLCV.
+                    Повинні мати DatetimeIndex та містити колонки: open, high, low, close, volume.
+                symbol (str): Символ торгового інструменту (наприклад, 'BTCUSDT').
+                timeframe (str): Таймфрейм даних ('1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w').
+                sequence_length (int, optional): Довжина послідовності для LSTM.
+                    Якщо не вказано, використовується адаптивне значення на основі таймфрейму.
+                target_horizons (list, optional): Список горизонтів прогнозування у кількості періодів.
+                    За замовчуванням [1, 5, 10].
+
+            Returns:
+                pd.DataFrame: DataFrame з підготовленими послідовностями, що містить:
+                    - Оригінальні OHLCV колонки
+                    - Часові ознаки (година, день тижня, місяць тощо)
+                    - Ознаки об'єму (зміна, ковзні середні, стрибки)
+                    - Масштабовані версії всіх ознак (*_scaled колонки)
+                    - Цільові змінні для кожного горизонту (target_close_*)
+                    - Метадані послідовностей (seq_id, position_in_sequence)
+
+                Повертає порожній DataFrame у випадку помилки або відсутності даних.
+
+            Attributes (збережені в DataFrame.attrs):
+                scaler (MinMaxScaler): Навчений скейлер для денормалізації прогнозів
+                features_to_scale (list): Список ознак, які були масштабовані
+                symbol (str): Символ торгового інструменту
+                timeframe (str): Таймфрейм даних
+                sequence_length (int): Використана довжина послідовності
+                target_horizons (list): Горизонти прогнозування
+
+            Методи генерації послідовностей (залежно від таймфрейму):
+                - '1m', '5m': random_sample - випадкова вибірка з мінімальними проміжками
+                - '15m', '30m', '1h': systematic_sample - систематична вибірка з фіксованим кроком
+                - '4h': no_overlap - послідовності без перекриття
+                - '1d': sliding_window - ковзне вікно з обмеженням кількості
+                - '1w': weekly_anchored - прив'язка до певних днів тижня
+
+            Raises:
+                ValueError: Якщо відсутні необхідні колонки в даних
+                TypeError: Якщо дані не мають DatetimeIndex
+            Note:
+                - Метод автоматично визначає оптимальну стратегію вибірки для кожного таймфрейму
+                - Всі послідовності мають однаковий розмір sequence_length
+                - Цільові змінні створюються тільки для точок, де доступні майбутні значення
+                - Скейлер навчається на стратифікованій вибірці для великих наборів даних
+                - Створені послідовності не перекриваються для запобігання витоку даних
+            """
         try:
             self.logger.info(f"Підготовка даних LSTM для збереження в базі даних: {symbol}, {timeframe}")
 

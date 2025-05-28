@@ -9,7 +9,7 @@
     "validation_split": 0.2,
     "target_column": "target_close_1"
   },
-  "timestamp": "2025-05-28T13:16:01.277723",
+  "timestamp": "2025-05-28T14:56:21.744926",
   "model_config": {
     "input_dim": 13,
     "hidden_dim": 64,

@@ -49,6 +49,15 @@ class BinanceClient:
 
     # Генерація цифрового підпису
     def _generate_signature(self, params):
+        """
+            Генерує цифровий підпис для захищеного запиту до API Binance.
+
+            Параметри:
+                params (dict): Словник параметрів, які будуть використані для створення підпису.
+
+            Повертає:
+                str: HMAC SHA256 підпис у шістнадцятковому форматі.
+            """
         query_string = urlencode(params)
         signature = hmac.new(
             self.api_secret.encode('utf-8'),
@@ -59,7 +68,16 @@ class BinanceClient:
 
     # Перевірка допустимості символу
     def _validate_symbol(self, symbol):
-        """Перевіряє, чи є символ допустимим для роботи"""
+        """
+           Перевіряє, чи входить вказаний торговий символ до списку підтримуваних.
+
+           Параметри:
+               symbol (str): Торговий символ (наприклад, 'BTCUSDT').
+
+           Повертає:
+               Tuple[bool, Optional[str]]: Кортеж, де перше значення — це результат перевірки (True/False),
+               а друге — базовий символ (наприклад, 'BTC') або None, якщо символ не підтримується.
+           """
         base_symbol = None
 
         # Витягуємо базовий символ (наприклад, BTC з BTCUSDT)
@@ -76,6 +94,24 @@ class BinanceClient:
 
     # Отримання даних про ціну у вигляді свічок
     def get_klines(self, symbol, timeframe, limit=100, start_time=None, end_time=None, use_cache=True):
+        """
+            Отримує історичні дані про ціни у вигляді японських свічок (Klines) з API Binance.
+
+            Параметри:
+                symbol (str): Торговий символ (наприклад, 'BTCUSDT').
+                timeframe (str): Інтервал свічок (наприклад, '1m', '1h', '1d').
+                limit (int, optional): Кількість свічок для отримання. За замовчуванням 100.
+                start_time (int, optional): Початковий час у мілісекундах з UNIX-епохи.
+                end_time (int, optional): Кінцевий час у мілісекундах з UNIX-епохи.
+                use_cache (bool, optional): Чи використовувати кешовані дані. За замовчуванням True.
+
+            Повертає:
+                pd.DataFrame: Таблиця з колонками:
+                    - 'open_time', 'open', 'high', 'low', 'close', 'volume',
+                    - 'close_time', 'quote_asset_volume', 'number_of_trades',
+                    - 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
+                У разі помилки — повертає порожній DataFrame.
+            """
         cache_key = f"{symbol}_{timeframe}_{start_time}_{end_time}_{limit}"
 
         if use_cache and cache_key in self.cache['klines']:
@@ -129,7 +165,17 @@ class BinanceClient:
 
     # Отримання поточної ціни
     def get_ticker_price(self, symbol=None, use_cache=True):
-        # Перевіряємо кеш, якщо дозволено і якщо запитується конкретний символ
+        """
+           Отримує поточну ринкову ціну (ticker price) для заданого торгового символу або для всіх символів.
+
+           Параметри:
+               symbol (str, optional): Торговий символ (наприклад, 'BTCUSDT'). Якщо None, повертає ціни для всіх символів.
+               use_cache (bool, optional): Чи використовувати кеш. За замовчуванням True.
+
+           Повертає:
+               Union[dict, list]: Дані з ціною для одного символу (dict) або список усіх символів з цінами (list).
+               У разі помилки — порожній словник.
+           """
         if use_cache and symbol and symbol in self.cache['ticker_price']:
             cache_time = self.last_cache_update['ticker_price'].get(symbol, 0)
             if time.time() - cache_time < self.cache_ttl['ticker_price']:
@@ -166,6 +212,18 @@ class BinanceClient:
 
     # Отримання останніх угод
     def get_recent_trades(self, symbol, limit=100):
+        """
+            Отримує останні угоди (trades) для заданого торгового символу.
+
+            Параметри:
+                symbol (str): Торговий символ (наприклад, 'BTCUSDT').
+                limit (int, optional): Кількість угод, які потрібно отримати. Максимум — 1000. За замовчуванням 100.
+
+            Повертає:
+                pd.DataFrame: Таблиця з інформацією про останні угоди, включаючи:
+                    - 'id', 'price', 'qty', 'quoteQty', 'time', 'isBuyerMaker', 'isBestMatch'
+                У разі помилки — повертає порожній DataFrame.
+            """
         endpoint = f"{self.base_url_v3}/trades"
         params = {
             'symbol': symbol,
@@ -193,6 +251,16 @@ class BinanceClient:
         return df
 
     def get_24hr_ticker_statistics(self, symbol=None):
+        """
+            Отримує статистику по символу за останні 24 години, або по всіх символах.
+
+            Параметри:
+                symbol (str, optional): Торговий символ (наприклад, 'ETHUSDT'). Якщо None, повертає статистику для всіх символів.
+
+            Повертає:
+                Union[dict, list]: Статистика у вигляді словника (для одного символу) або списку словників (для всіх символів).
+                У разі помилки — повертає порожній словник.
+            """
         endpoint = f"{self.base_url_v3}/ticker/24hr"
         params = {}
         if symbol:
@@ -206,85 +274,21 @@ class BinanceClient:
             self.db_manager.log_event('ERROR', f"Error getting 24hr ticker statistics: {e}", 'BinanceClient')
             return {}
 
-    # ===== Authenticated REST API requests =====
-
-    def get_account_info(self):
-        if not self.api_key or not self.api_secret:
-            raise ValueError("API key and secret required for authenticated requests")
-
-        endpoint = f"{self.base_url_v3}/account"
-        params = {
-            'timestamp': int(time.time() * 1000)
-        }
-
-        params['signature'] = self._generate_signature(params)
-
-        try:
-            response = self.session.get(endpoint, params=params)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            self.db_manager.log_event('ERROR', f"Error getting account info: {e}", 'BinanceClient')
-            return {}
-
-    # ===== Async methods for high performance =====
-
-    async def get_klines_async(self, symbols, timeframe, limit=999, start_time=None, end_time=None):
-        async def fetch_klines(session, symbol):
-            endpoint = f"{self.base_url_v3}/klines"
-            params = {
-                'symbol': symbol,
-                'interval': timeframe,  # FIXED: changed 'timeframe' to 'interval' for Binance API
-                'limit': limit
-            }
-
-            if start_time:
-                params['startTime'] = start_time
-            if end_time:
-                params['endTime'] = end_time
-
-            try:
-                async with session.get(endpoint, params=params) as response:
-                    if response.status != 200:
-                        text = await response.text()
-                        self.db_manager.log_event('ERROR', f"Error {response.status} for {symbol}: {text}",
-                                                  'BinanceClient')
-                        return symbol, pd.DataFrame()
-
-                    data = await response.json()
-
-                    df = pd.DataFrame(data, columns=[
-                        'open_time', 'open', 'high', 'low', 'close', 'volume',
-                        'close_time', 'quote_asset_volume', 'number_of_trades',
-                        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
-                    ])
-
-                    if df.empty:
-                        return symbol, df
-
-                    numeric_columns = ['open', 'high', 'low', 'close', 'volume',
-                                       'quote_asset_volume', 'taker_buy_base_asset_volume',
-                                       'taker_buy_quote_asset_volume']
-                    df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric)
-
-                    df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
-                    df['close_time'] = pd.to_datetime(df['close_time'], unit='ms')
-
-                    return symbol, df
-            except Exception as e:
-                self.db_manager.log_event('ERROR', f"Error fetching klines for {symbol}: {e}", 'BinanceClient')
-                return symbol, pd.DataFrame()
-
-        async with aiohttp.ClientSession() as session:
-            tasks = [fetch_klines(session, symbol) for symbol in symbols]
-            results = await asyncio.gather(*tasks)
-
-        return {symbol: df for symbol, df in results}
-
     # ===== WebSocket methods for real-time data =====
 
     def _save_kline_to_db(self, kline_data):
-        """Зберігає дані свічки в базу даних"""
+        """
+            Зберігає один запис японської свічки (kline) у базу даних.
+
+            Параметри:
+                kline_data (dict): Дані свічки у форматі, отриманому з WebSocket або API Binance.
+                    Очікувані ключі: 'symbol', 'timeframe', 'open_time', 'open', 'high', 'low',
+                    'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades',
+                    'taker_buy_base_volume', 'taker_buy_quote_volume', 'is_closed'.
+
+            Повертає:
+                bool: True, якщо збереження пройшло успішно, False у разі помилки або недопустимого символу.
+            """
         try:
             # Отримуємо базову валюту з символа (напр. BTC з BTCUSDT)
             symbol = kline_data['symbol']
@@ -319,7 +323,23 @@ class BinanceClient:
 
 
     def start_kline_socket(self, symbol, timeframe, callback, save_to_db=True):
-        """Запуск WebSocket для отримання даних свічок"""
+        """
+           Запускає WebSocket для підключення до стріму японських свічок (kline) з Binance API.
+
+           Параметри:
+               symbol (str): Торговий символ (наприклад, 'BTCUSDT').
+               timeframe (str): Інтервал свічок (наприклад, '1m', '5m', '1h').
+               callback (Callable): Користувацька функція, яка буде викликатись при кожному новому повідомленні.
+               save_to_db (bool, optional): Чи зберігати дані свічок до бази даних. За замовчуванням True.
+
+           Повертає:
+               websocket.WebSocketApp: Об'єкт активного WebSocket-з'єднання або None у разі помилки валідації символу.
+
+           Додатково:
+               - Дані свічок кешуються у self.active_websockets.
+               - У разі втрати з'єднання встановлюється прапорець перепідключення.
+               - Інформація про статус WebSocket фіксується у базі через db_manager.
+           """
         # Перевіряємо, чи є базовий символ допустимим
         is_valid, _ = self._validate_symbol(symbol)
         if not is_valid:
@@ -426,7 +446,12 @@ class BinanceClient:
 
     # Перевірка та автоматичне перепідключення сокетів
     def check_websocket_connections(self):
-        """Перевірка з'єднань WebSocket та перепідключення при необхідності"""
+        """
+            Перевіряє активні WebSocket-з'єднання та виконує автоматичне перепідключення, якщо з'єднання втрачено
+            або пінг не було отримано протягом 2 хвилин.
+
+            Визначає проблемні сокети та викликає reconnect_websocket для кожного з них.
+            """
         disconnected_sockets = []
 
         for key, ws_info in list(self.active_websockets.items()):
@@ -449,7 +474,15 @@ class BinanceClient:
             self.reconnect_websocket(key)
 
     def reconnect_websocket(self, ws_key):
-        """Перепідключення WebSocket за ключем"""
+        """
+           Виконує перепідключення до WebSocket за заданим ключем.
+
+           Параметри:
+               ws_key (str): Унікальний ключ з'єднання, наприклад 'kline_BTCUSDT_1m'.
+
+           Повертає:
+               bool: True, якщо перепідключення виконано успішно, False у разі помилки або невідомого ключа.
+           """
         if ws_key not in self.active_websockets:
             self.db_manager.log_event('ERROR', f"Cannot reconnect unknown WebSocket: {ws_key}", 'BinanceClient')
             return False
@@ -486,6 +519,16 @@ class BinanceClient:
 
     # Зупинка роботи веб сокета
     def close_websocket(self, ws_or_key):
+        """
+            Закриває одне WebSocket-з'єднання.
+
+            Параметри:
+                ws_or_key (str або WebSocketApp): Ключ WebSocket-з'єднання (наприклад, 'kline_BTCUSDT_1m')
+                або сам об'єкт WebSocketApp.
+
+            Повертає:
+                bool: True, якщо з'єднання було закрито, False — якщо ключ не знайдено або не вдалося завершити з'єднання.
+            """
         if isinstance(ws_or_key, str):
             if ws_or_key in self.active_websockets:
                 ws_info = self.active_websockets[ws_or_key]
@@ -528,6 +571,11 @@ class BinanceClient:
             return False
 
     def close_all_websockets(self):
+        """
+           Закриває всі активні WebSocket-з'єднання.
+
+           Оновлює статуси з'єднань у базі даних та очищає список активних WebSocket з'єднань.
+           """
         for key, ws_info in list(self.active_websockets.items()):
             try:
                 ws_info['ws'].close()
@@ -547,7 +595,12 @@ class BinanceClient:
         self.active_websockets.clear()
 
     def cleanup(self):
-        """Повне очищення всіх ресурсів"""
+        """
+           Повністю очищає всі ресурси, закриває всі WebSocket-з'єднання
+           та розриває з'єднання з базою даних.
+
+           Викликається зазвичай при завершенні роботи клієнта.
+           """
         self.close_all_websockets()
         self.db_manager.disconnect()
         print("Cleaned up all resources")
@@ -555,6 +608,12 @@ class BinanceClient:
     # ===== Сервісні функції для перепідключення та моніторингу =====
 
     def check_and_handle_reconnections(self):
+        """
+           Перевіряє, чи встановлено прапорець необхідності перепідключення,
+           і, якщо так, виконує перевірку WebSocket-з'єднань та їх перепідключення.
+
+           Після виконання скидає прапорець `self.reconnect_required`.
+           """
         if self.reconnect_required:
             print("Reconnection flag detected, checking WebSocket connections...")
             self.db_manager.log_event('INFO', "Reconnection flag detected, checking WebSocket connections...",
@@ -566,8 +625,22 @@ class BinanceClient:
 
     def _prepare_historical_params(self, symbol, start_date=None, end_date=None, timeframe=None):
         """
-        Підготовка параметрів для збору історичних даних
-        """
+            Підготовка параметрів для збору історичних даних про криптовалюту.
+
+            Параметри:
+                symbol (str): Символ торгової пари (наприклад, 'BTCUSDT').
+                start_date (str або tuple): Початкова дата у форматі 'YYYY-MM-DD' або кортеж (symbol, date).
+                end_date (str): Кінцева дата у форматі 'YYYY-MM-DD' (необов'язково).
+                timeframe (List[str]): Список таймфреймів для збору даних (наприклад, ['1m', '1h']).
+
+            Повертає:
+                dict: Словник з параметрами:
+                    - 'timeframe': Список таймфреймів
+                    - 'start_ts': Початковий timestamp у мс
+                    - 'end_ts': Кінцевий timestamp у мс
+                    - 'start_date': Початкова дата у вигляді рядка
+                    - 'end_date': Кінцева дата або "сьогодні"
+            """
         # Словник дат початку для символів
         symbol_start_dates = {
             'BTCUSDT': '2017-08-01',
@@ -641,8 +714,22 @@ class BinanceClient:
 
     def _process_and_save_klines_batch(self, symbol, timeframe, df):
         """
-        Обробка та збереження пакету свічок в базу даних
-        """
+           Обробляє пакет свічок (Kline) і зберігає їх у відповідну таблицю бази даних.
+
+           Параметри:
+               symbol (str): Назва торгової пари, наприклад 'BTCUSDT'.
+               timeframe (str): Інтервал часу свічок (наприклад '1m', '1h').
+               df (pd.DataFrame): DataFrame, який містить Kline-дані.
+
+           Повертає:
+               int: Кількість успішно збережених свічок.
+
+           Обробка включає:
+               - Конвертацію даних до відповідного формату.
+               - Валідацію символу.
+               - Вставку кожного запису в таблицю {symbol}_klines.
+               - Логування помилок при невдалому збереженні.
+           """
         saved_count = 0
 
         if df.empty:
@@ -690,8 +777,24 @@ class BinanceClient:
 
     def _fetch_and_save_historical_interval(self, symbol, timeframe, start_ts, end_ts):
         """
-        Отримання та збереження історичних даних для одного інтервалу
-        """
+    Збирає та зберігає історичні Kline-дані для заданого таймфрейму в межах зазначеного інтервалу часу.
+
+    Параметри:
+        symbol (str): Назва торгової пари (наприклад 'BTCUSDT').
+        timeframe (str): Таймфрейм (наприклад '1m', '1h', '1d').
+        start_ts (int): Початковий час у мілісекундах (timestamp).
+        end_ts (int): Кінцевий час у мілісекундах (timestamp).
+
+    Повертає:
+        int: Загальна кількість збережених свічок.
+
+    Логіка роботи:
+        - Інтервал часу розбивається на вікна розміру, що відповідає таймфрейму.
+        - Для кожного вікна виконується API-запит до Binance.
+        - Усі отримані свічки зберігаються в базу даних.
+        - Уникається дублювання за рахунок точного оновлення меж запитів.
+        - У разі помилок логуються повідомлення та виконується повторна спроба.
+    """
         saved_candles_count = 0
         current_start = start_ts
         window_size = self._calculate_window_size(timeframe)
@@ -773,8 +876,17 @@ class BinanceClient:
 
     def _summarize_historical_results(self, symbol, results):
         """
-        Підведення підсумків збору історичних даних
-        """
+    Підводить підсумки після збору історичних Kline-даних по різних таймфреймах.
+
+    Параметри:
+        symbol (str): Назва торгової пари (наприклад 'BTCUSDT').
+        results (dict): Словник, де ключ — таймфрейм, а значення — кількість збережених свічок.
+
+    Дії:
+        - Виводить у консоль кількість збережених свічок по кожному таймфрейму.
+        - Формує загальне зведення по всіх таймфреймах.
+        - Логує загальне зведення у систему логування.
+    """
         total_candles = sum(results.values())
 
         # Для кожного інтервалу виводимо кількість збережених свічок
@@ -787,7 +899,23 @@ class BinanceClient:
         print(summary_msg)
 
     def save_historical_data_to_db(self, symbol, start_date=None, end_date=None, timeframe=None):
+        """
+           Збирає історичні Kline-дані з Binance та зберігає їх у базу даних.
 
+           Параметри:
+               symbol (str): Назва торгової пари (наприклад 'ETHUSDT').
+               start_date (str або tuple, optional): Дата початку у форматі 'YYYY-MM-DD' або кортеж (symbol, date).
+               end_date (str, optional): Дата завершення у форматі 'YYYY-MM-DD'. Якщо не задано — використовується поточна дата.
+               timeframe (list або str, optional): Один або кілька таймфреймів (наприклад ['1h', '1d']).
+
+           Повертає:
+               dict: Словник з кількістю збережених свічок для кожного таймфрейму.
+
+           Особливості:
+               - Автоматично виконує підготовку параметрів.
+               - Під час помилок проводить логування і повертає порожній словник.
+               - В кінці викликає підсумкову функцію для виводу результатів.
+           """
         try:
             # Підготовка параметрів
             params = self._prepare_historical_params(symbol, start_date, end_date, timeframe)
@@ -812,6 +940,23 @@ class BinanceClient:
             return {}
 
 def handle_kline_message(ws, message):
+    """
+       Обробляє повідомлення WebSocket про нову свічку (Kline) від Binance.
+
+       Параметри:
+           ws: Об'єкт WebSocket (не використовується безпосередньо, але потрібен для сумісності з інтерфейсом).
+           message (str): Повідомлення у форматі JSON, що містить інформацію про нову свічку.
+
+       Дії:
+           - Розпарсює JSON-повідомлення.
+           - Виводить у консоль основні характеристики нової свічки:
+               - символ
+               - інтервал
+               - час відкриття
+               - ціни (open, high, low, close)
+               - обсяг
+               - статус закриття свічки
+       """
     data = json.loads(message)
     candle = data['k']
 

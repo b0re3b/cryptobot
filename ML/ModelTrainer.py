@@ -259,13 +259,16 @@ class ModelTrainer:
         return actual_input_dim
 
     def train_model(self, symbol: str, timeframe: str, model_type: str,
-                    data: pd.DataFrame, input_dim: int = None,  # ЗРОБИТИ ОПЦІОНАЛЬНИМ
+                    data: pd.DataFrame, input_dim: int = None,
                     config: Optional[ModelConfig] = None,
                     validation_split: float = 0.2,
                     patience: int = 10, model_data=None,
                     save_after_training: bool = True,
                     target_column: str = 'target',
                     **kwargs) -> Dict[str, Any]:
+        """
+        Train a model with improved data validation and preprocessing.
+        """
         # Validate and normalize model_type
         model_type = self._validate_model_type(model_type)
 
@@ -275,17 +278,63 @@ class ModelTrainer:
         if not isinstance(data, pd.DataFrame):
             raise ValueError("Expected DataFrame as input data")
 
+        if data.empty:
+            raise ValueError("Input DataFrame is empty")
+
         # === ВАЛІДАЦІЯ ТА ОЧИЩЕННЯ ДАНИХ ===
         self.logger.info("Валідація та очищення вхідних даних...")
         data = self._validate_and_clean_data(data)
 
+        # === ПОШУК ЦІЛЬОВОЇ КОЛОНКИ ===
+        target_col = None
+        possible_targets = ['target', 'target_close_1', 'target_close', target_column]
+
+        for col in possible_targets:
+            if col in data.columns:
+                target_col = col
+                break
+
+        if target_col is None:
+            raise ValueError(
+                f"DataFrame must contain a target column. Tried: {possible_targets}. "
+                f"Available columns: {list(data.columns)}"
+            )
+
+        self.logger.info(f"Using target column: '{target_col}'")
+
+        # === ПІДГОТОВКА ЧИСЛОВИХ ДАНИХ ===
+        self.logger.info("Відбір та валідація числових колонок...")
+
+        # Отримання числових колонок (крім цільової)
+        numeric_cols = data.select_dtypes(include=['number']).columns.tolist()
+
+        # Перевірка та конвертація цільової колонки
+        if target_col not in numeric_cols:
+            try:
+                data[target_col] = pd.to_numeric(data[target_col], errors='coerce')
+                if pd.api.types.is_numeric_dtype(data[target_col]):
+                    self.logger.info(f"Successfully converted target column '{target_col}' to numeric")
+                else:
+                    raise ValueError(f"Target column '{target_col}' cannot be converted to numeric type")
+            except Exception as e:
+                raise ValueError(f"Target column '{target_col}' is not numeric and cannot be converted: {str(e)}")
+
+        # Видалення цільової колонки зі списку ознак
+        feature_cols = [col for col in numeric_cols if col != target_col]
+
+        if not feature_cols:
+            raise ValueError("No numeric feature columns found after filtering")
+
+        self.logger.info(f"Using {len(feature_cols)} feature columns: {feature_cols}")
+        self.logger.info(f"Target column: {target_col}")
+
         # === АВТОМАТИЧНЕ ОБЧИСЛЕННЯ INPUT_DIM ===
+        actual_input_dim = len(feature_cols)
+
         if input_dim is None:
-            input_dim = self._calculate_actual_input_dim(data, target_column)
+            input_dim = actual_input_dim
             self.logger.info(f"Автоматично обчислено input_dim: {input_dim}")
         else:
-            # Перевірка відповідності переданого input_dim фактичним даним
-            actual_input_dim = self._calculate_actual_input_dim(data, target_column)
             if input_dim != actual_input_dim:
                 self.logger.warning(
                     f"Переданий input_dim ({input_dim}) не відповідає фактичному ({actual_input_dim}). "
@@ -293,98 +342,71 @@ class ModelTrainer:
                 )
                 input_dim = actual_input_dim
 
-        # Create or get model configuration
+        # === СТВОРЕННЯ КОНФІГУРАЦІЇ МОДЕЛІ ===
         if config is None:
             config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
         else:
-            # Update config with correct input_dim
+            # Оновлення конфігурації з правильним input_dim
             config.input_dim = input_dim
 
-        # Check for target column (try common variations)
-        target_col = None
-        for col in ['target', 'target_close_1', 'target_close']:
-            if col in data.columns:
-                target_col = col
-                break
-
-        if target_col is None:
-            if target_column in data.columns:
-                target_col = target_column
-            else:
-                raise ValueError(
-                    f"DataFrame must contain a target column (tried: 'target', 'target_close_1', 'target_close', '{target_column}')")
-
-        # === ПІДГОТОВКА ДАНИХ - ВИКЛЮЧЕННЯ НЕ-ЧИСЛОВИХ КОЛОНОК ===
-        self.logger.info("Відбір числових колонок для тренування...")
-
-        # Отримання списку числових колонок
-        numeric_cols = data.select_dtypes(include=['number']).columns.tolist()
-
-        # Переконуємося, що цільова колонка також числова
-        if target_col not in numeric_cols:
-            # Перевіряємо, чи можна конвертувати цільову колонку в числову
-            try:
-                data[target_col] = pd.to_numeric(data[target_col], errors='coerce')
-                if data[target_col].dtype in ['int64', 'float64', 'int32', 'float32']:
-                    numeric_cols.append(target_col)
-                else:
-                    raise ValueError(f"Target column '{target_col}' cannot be converted to numeric type")
-            except Exception as e:
-                raise ValueError(f"Target column '{target_col}' is not numeric and cannot be converted: {str(e)}")
-
-        self.logger.info(f"Використовуємо {len(numeric_cols)} числових колонок (включаючи target)")
-        self.logger.info(f"Числові колонки: {numeric_cols}")
-
-        # Підготовка даних - використовуємо лише числові колонки
-        numeric_data = data[numeric_cols].copy()
-
-        # Перевірка на наявність NaN значень після фільтрації
-        nan_counts = numeric_data.isnull().sum()
-        if nan_counts.any():
-            self.logger.warning(f"Виявлено NaN значення в числових колонках: {nan_counts[nan_counts > 0].to_dict()}")
-            # Заповнюємо NaN значення медіаною для кожної колонки
-            numeric_data = numeric_data.fillna(numeric_data.median())
-
-        # Prepare data
-        X = numeric_data.drop(columns=[target_col]).values
-        y = numeric_data[target_col].values
-
-        # === ФІНАЛЬНА ПЕРЕВІРКА РОЗМІРІВ ===
-        self.logger.info(f"Фінальні розміри даних - X: {X.shape}, y: {y.shape}")
-        self.logger.info(f"Очікувана input_dim: {input_dim}, фактична: {X.shape[1]}")
-
-        if X.shape[1] != input_dim:
+        # Валідація мінімальних вимог до даних
+        min_samples_required = max(config.sequence_length * 2, 100)  # Мінімум для навчання
+        if len(data) < min_samples_required:
             raise ValueError(
-                f"Невідповідність розмірів! Очікувана input_dim: {input_dim}, "
-                f"фактична кількість ознак: {X.shape[1]}")
+                f"Insufficient data for training. Required: {min_samples_required}, "
+                f"available: {len(data)}"
+            )
 
-        # === ДОДАНА ПЕРЕВІРКА ТИПІВ ДАНИХ ===
-        self.logger.info(f"Тип X: {X.dtype}, форма: {X.shape}")
-        self.logger.info(f"Тип y: {y.dtype}, форма: {y.shape}")
+        # === ПІДГОТОВКА ДАНИХ ===
+        # Створення DataFrame тільки з потрібними колонками
+        training_data = data[feature_cols + [target_col]].copy()
 
-        # Перевірка на наявність некоректних значень
-        if X.dtype == 'object':
-            self.logger.error("X містить object типи!")
-            self.logger.error(f"Унікальні типи в X: {[type(x).__name__ for x in X.flat[:10]]}")
-            raise ValueError("X contains object types that cannot be converted to tensor")
+        # Перевірка та обробка NaN значень
+        nan_counts = training_data.isnull().sum()
+        if nan_counts.any():
+            self.logger.warning(f"Виявлено NaN значення: {nan_counts[nan_counts > 0].to_dict()}")
 
-        if y.dtype == 'object':
-            self.logger.error("y містить object типи!")
-            self.logger.error(f"Унікальні типи в y: {[type(x).__name__ for x in y.flat[:10]]}")
-            raise ValueError("y contains object types that cannot be converted to tensor")
+            # Різні стратегії для різних типів колонок
+            for col in training_data.columns:
+                if training_data[col].isnull().any():
+                    if col == target_col:
+                        # Для цільової змінної використовуємо медіану
+                        training_data[col] = training_data[col].fillna(training_data[col].median())
+                    else:
+                        # Для ознак використовуємо медіану або forward fill
+                        training_data[col] = training_data[col].fillna(training_data[col].median())
 
-        # Додаткова перевірка на inf та -inf значення
-        if np.isinf(X).any():
-            self.logger.warning("Виявлено inf значення в X, замінюємо на 0")
-            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        # Фінальна перевірка на NaN
+        if training_data.isnull().any().any():
+            self.logger.warning("Залишились NaN значення після заповнення, замінюємо на 0")
+            training_data = training_data.fillna(0)
 
-        if np.isinf(y).any():
-            self.logger.warning("Виявлено inf значення в y, замінюємо на 0")
+        # Підготовка X та y
+        X = training_data[feature_cols].values.astype(np.float32)
+        y = training_data[target_col].values.astype(np.float32)
 
-            y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+        # === ДОДАТКОВА ВАЛІДАЦІЯ ДАНИХ ===
+        self.logger.info(f"Фінальні розміри даних - X: {X.shape}, y: {y.shape}")
+
+        # Перевірка на некоректні значення
+        if np.isnan(X).any() or np.isinf(X).any():
+            self.logger.warning("Виявлено NaN/Inf значення в X, очищаємо...")
+            X = np.nan_to_num(X, nan=0.0, posinf=1e6, neginf=-1e6)
+
+        if np.isnan(y).any() or np.isinf(y).any():
+            self.logger.warning("Виявлено NaN/Inf значення в y, очищаємо...")
+            y = np.nan_to_num(y, nan=0.0, posinf=1e6, neginf=-1e6)
+
+        # Перевірка варіації в даних
+        if np.std(X) == 0:
+            self.logger.warning("Відсутня варіація в ознаках X")
+        if np.std(y) == 0:
+            self.logger.warning("Відсутня варіація в цільовій змінній y")
+
+        # === ПІДГОТОВКА ДАНИХ ДЛЯ РІЗНИХ ТИПІВ МОДЕЛЕЙ ===
         if model_type.lower() == 'transformer':
             try:
-                # Get prepared data - ensure it returns 3 values
+                # Для Transformer використовуємо спеціальну підготовку даних
                 prepared_data = self.processor.prepare_data_with_config(
                     symbol=symbol,
                     timeframe=timeframe,
@@ -393,66 +415,119 @@ class ModelTrainer:
                     target_column=target_column
                 )
 
-                if len(prepared_data) == 5:  # X_train, y_train, X_val, y_val, config
-                    X_train_tensor, y_train_tensor, X_val_tensor, y_val_tensor, config = prepared_data
+                if len(prepared_data) == 5:
+                    X_train_tensor, y_train_tensor, X_val_tensor, y_val_tensor, transformer_config = prepared_data
+                    # Оновлюємо конфігурацію якщо потрібно
+                    if transformer_config and hasattr(transformer_config, 'input_dim'):
+                        config.input_dim = transformer_config.input_dim
                 else:
-                    raise ValueError("Data preparation returned unexpected number of values")
+                    raise ValueError(f"Transformer data preparation returned {len(prepared_data)} values, expected 5")
 
             except Exception as e:
                 self.logger.error(f"Transformer data preparation failed: {str(e)}")
                 raise
 
-        # === ПІДГОТОВКА ПОСЛІДОВНОСТЕЙ ДЛЯ RNN МОДЕЛЕЙ ===
-        if model_type.lower() in ['lstm', 'gru']:
-            # Для RNN моделей створюємо послідовності
-            X_tensor, y_tensor = self._prepare_sequences_for_rnn(X, y, config.sequence_length, model_type)
+        elif model_type.lower() in ['lstm', 'gru']:
+            # === ПІДГОТОВКА ПОСЛІДОВНОСТЕЙ ДЛЯ RNN МОДЕЛЕЙ ===
+            self.logger.info(f"Підготовка послідовностей для {model_type} моделі...")
 
-            # Split into training and validation sets
-            split_idx = int(len(X_tensor) * (1 - validation_split))
-            X_train_tensor = X_tensor[:split_idx].to(self.device)
-            y_train_tensor = y_tensor[:split_idx].to(self.device)
-            X_val_tensor = X_tensor[split_idx:].to(self.device)
-            y_val_tensor = y_tensor[split_idx:].to(self.device)
+            try:
+                X_tensor, y_tensor = self._prepare_sequences_for_rnn(
+                    X, y, config.sequence_length, model_type
+                )
+
+                if len(X_tensor) == 0:
+                    raise ValueError("No sequences generated for RNN model")
+
+                self.logger.info(f"Створено {len(X_tensor)} послідовностей")
+
+                # Розділення на тренувальну та валідаційну вибірки
+                split_idx = max(1, int(len(X_tensor) * (1 - validation_split)))
+
+                X_train_tensor = X_tensor[:split_idx].to(self.device)
+                y_train_tensor = y_tensor[:split_idx].to(self.device)
+                X_val_tensor = X_tensor[split_idx:].to(self.device)
+                y_val_tensor = y_tensor[split_idx:].to(self.device)
+
+            except Exception as e:
+                self.logger.error(f"RNN sequence preparation failed: {str(e)}")
+                raise
 
         else:
-            # Для інших моделей (Transformer) використовуємо стандартний підхід
-            # Split into training and validation sets
-            split_idx = int(len(X) * (1 - validation_split))
+            # === ДЛЯ ІНШИХ МОДЕЛЕЙ (MLP, CNN тощо) ===
+            self.logger.info(f"Підготовка даних для {model_type} моделі...")
+
+            # Розділення на тренувальну та валідаційну вибірки
+            split_idx = max(1, int(len(X) * (1 - validation_split)))
+
             X_train, X_val = X[:split_idx], X[split_idx:]
             y_train, y_val = y[:split_idx], y[split_idx:]
 
+            # Перевірка мінімальної кількості даних
+            if len(X_train) < 10 or len(X_val) < 5:
+                raise ValueError(f"Insufficient data after split. Train: {len(X_train)}, Val: {len(X_val)}")
+
             # === БЕЗПЕЧНА КОНВЕРТАЦІЯ В ТЕНЗОРИ ===
             self.logger.info("Конвертація даних в тензори...")
-            X_train_tensor = self._safe_tensor_conversion(X_train, "X_train").to(self.device)
-            y_train_tensor = self._safe_tensor_conversion(y_train, "y_train").to(self.device)
-            X_val_tensor = self._safe_tensor_conversion(X_val, "X_val").to(self.device)
-            y_val_tensor = self._safe_tensor_conversion(y_val, "y_val").to(self.device)
+            try:
+                X_train_tensor = self._safe_tensor_conversion(X_train, "X_train").to(self.device)
+                y_train_tensor = self._safe_tensor_conversion(y_train, "y_train").to(self.device)
+                X_val_tensor = self._safe_tensor_conversion(X_val, "X_val").to(self.device)
+                y_val_tensor = self._safe_tensor_conversion(y_val, "y_val").to(self.device)
+            except Exception as e:
+                self.logger.error(f"Tensor conversion failed: {str(e)}")
+                raise
 
-        # Create model
-        model = self._build_model_from_config(model_type, config).to(self.device)
+        # === СТВОРЕННЯ ТА ТРЕНУВАННЯ МОДЕЛІ ===
+        self.logger.info("Створення моделі...")
+        try:
+            model = self._build_model_from_config(model_type, config).to(self.device)
+            self.logger.info(f"Model created successfully. Parameters: {sum(p.numel() for p in model.parameters())}")
+        except Exception as e:
+            self.logger.error(f"Model creation failed: {str(e)}")
+            raise
 
-        # Train model
-        history = self._train_loop(
-            model=model,
-            train_data=(X_train_tensor, y_train_tensor),
-            val_data=(X_val_tensor, y_val_tensor),
-            epochs=config.epochs,
-            batch_size=config.batch_size,
-            learning_rate=config.learning_rate,
-            patience=patience
-        )
+        # Логування форм тензорів перед тренуванням
+        self.logger.info(f"Training data shapes:")
+        self.logger.info(f"  X_train: {X_train_tensor.shape}")
+        self.logger.info(f"  y_train: {y_train_tensor.shape}")
+        self.logger.info(f"  X_val: {X_val_tensor.shape}")
+        self.logger.info(f"  y_val: {y_val_tensor.shape}")
 
-        # Evaluate model
-        metrics = self.evaluate(model, (X_val_tensor, y_val_tensor))
+        # Тренування моделі
+        self.logger.info("Початок тренування...")
+        try:
+            history = self._train_loop(
+                model=model,
+                train_data=(X_train_tensor, y_train_tensor),
+                val_data=(X_val_tensor, y_val_tensor),
+                epochs=config.epochs,
+                batch_size=config.batch_size,
+                learning_rate=config.learning_rate,
+                patience=patience
+            )
+            self.logger.info("Тренування завершено успішно")
+        except Exception as e:
+            self.logger.error(f"Training failed: {str(e)}")
+            raise
 
-        # Save model
+        # Оцінка моделі
+        self.logger.info("Оцінка моделі...")
+        try:
+            metrics = self.evaluate(model, (X_val_tensor, y_val_tensor))
+            self.logger.info(f"Model evaluation completed. Metrics: {metrics}")
+        except Exception as e:
+            self.logger.warning(f"Model evaluation failed: {str(e)}")
+            metrics = {}
+
+        # Збереження моделі
         model_key = self._create_model_key(symbol, timeframe, model_type)
         self.models[model_key] = model
         self.model_configs[model_key] = config
         self.model_metrics[model_key] = metrics
         self.training_history[model_key] = history
 
-        # Auto-save model after training
+        # Автоматичне збереження моделі після тренування
         if save_after_training:
             try:
                 model_path = self.save_model(symbol, timeframe, model_type)
@@ -463,7 +538,11 @@ class ModelTrainer:
         return {
             'config': config.__dict__,
             'metrics': metrics,
-            'history': history
+            'history': history,
+            'model_key': model_key,
+            'input_dim': input_dim,
+            'feature_columns': feature_cols,
+            'target_column': target_col
         }
 
     def create_model_config(self, symbol: str, timeframe: str, model_type: str,

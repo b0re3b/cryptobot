@@ -17,7 +17,7 @@ from data.db import DatabaseManager
 
 
 class MarketDataProcessor:
-
+    "Фасадний клас для обробки даних"
     VALID_TIMEFRAMES = ['1m','1h', '4h', '1d', '1w']
     BASE_TIMEFRAMES = ['1m', '1h', '1d']
     DERIVED_TIMEFRAMES = ['4h', '1w']

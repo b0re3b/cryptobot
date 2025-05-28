@@ -100,98 +100,188 @@ class DeepLearning:
     # ==================== ПРОГНОЗУВАННЯ ====================
     def predict(self, symbol: str, timeframe: str, model_type: str,
                 input_data: Optional[pd.DataFrame] = None, steps_ahead: int = 1) -> Dict[str, Any]:
-
+        """
+        Generate predictions using a trained model with improved error handling and data validation.
+        """
         self._validate_inputs(symbol, timeframe, model_type)
+        model_key = f"{symbol}_{timeframe}_{model_type}"
 
-        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
-        if model_key not in self.models:
+        # Ensure model is loaded - improved validation
+        if model_key not in self.model_trainer.models:
             if not self.model_trainer.load_model(symbol, timeframe, model_type):
-                raise ValueError(f"Модель {model_key} не знайдена")
+                raise ValueError(f"Model {model_key} not found and could not be loaded")
 
+        # Get model and config from trainer - more reliable approach
+        model = self.model_trainer.models[model_key]
+        config = self.model_trainer.model_configs.get(model_key)
+
+        if config is None:
+            raise ValueError(f"Configuration for model {model_key} not found")
+
+        # Load input data if not provided
         if input_data is None:
-            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-            input_data = data_loader()
+            try:
+                data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+                input_data = data_loader()
+            except Exception as e:
+                raise ValueError(f"Failed to load input data: {str(e)}")
 
+        # Store original data for potential inverse transformations
         original_data = input_data.copy()
 
-        # Очікуємо, що input_data вже підготовлене
-        X = torch.tensor(input_data.values, dtype=torch.float32).to(self.device)
+        # Ensure we only keep numeric columns
+        numeric_data = input_data.select_dtypes(include=['number'])
+        if len(numeric_data.columns) < len(input_data.columns):
+            dropped_cols = set(input_data.columns) - set(numeric_data.columns)
+            self.logger.warning(f"Dropped non-numeric columns: {dropped_cols}")
 
-        model = self.models[model_key]
+        if numeric_data.empty:
+            raise ValueError("No numeric columns found in input data")
+
+        # Get the correct input dimension from model config
+        expected_dim = config.input_dim
+        if numeric_data.shape[1] > expected_dim:
+            # Select only the first 'expected_dim' features
+            numeric_data = numeric_data.iloc[:, :expected_dim]
+            self.logger.warning(f"Selected first {expected_dim} features from {input_data.shape[1]} available")
+        elif numeric_data.shape[1] < expected_dim:
+            raise ValueError(f"Input data has {numeric_data.shape[1]} features, but model expects {expected_dim}")
+
+        # Ensure we have enough data for the sequence length
+        sequence_length = config.sequence_length
+        if len(numeric_data) < sequence_length:
+            raise ValueError(f"Input data has {len(numeric_data)} rows, but model requires {sequence_length}")
+
+        # Convert to tensor with proper shape and validation
+        try:
+            # Take the last sequence_length rows for prediction
+            input_array = numeric_data.iloc[-sequence_length:].values.astype(np.float32)
+
+            # Check for NaN or infinite values
+            if np.isnan(input_array).any() or np.isinf(input_array).any():
+                self.logger.warning("Input data contains NaN or infinite values, filling with zeros")
+                input_array = np.nan_to_num(input_array, nan=0.0, posinf=0.0, neginf=0.0)
+
+            # Create tensor with proper dimensions: (batch_size, sequence_length, features)
+            X = torch.tensor(input_array, dtype=torch.float32).to(self.device)
+            X = X.unsqueeze(0)  # Add batch dimension
+
+            self.logger.info(f"Input tensor shape: {X.shape}, expected: (1, {sequence_length}, {expected_dim})")
+
+        except Exception as e:
+            raise ValueError(f"Failed to convert input data to tensor: {str(e)}")
+
+        # Final dimension validation
+        if X.shape != (1, sequence_length, expected_dim):
+            raise ValueError(
+                f"Input tensor shape {X.shape} doesn't match expected shape (1, {sequence_length}, {expected_dim})")
+
+        # Generate predictions
         model.eval()
-
-        with torch.no_grad():
-            raw_predictions = []
-            sequence_length = self.model_configs[model_key].sequence_length
-            current_input = X[-sequence_length:].unsqueeze(0)
-
-            for step in range(steps_ahead):
-                pred = model(current_input)
-                raw_predictions.append(pred.item())
-
-                if steps_ahead > 1 and step < steps_ahead - 1:
-                    new_input = torch.zeros_like(current_input[:, -1:, :])
-                    new_input[0, 0, 0] = pred.item()
-                    current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
+        raw_predictions = []
 
         try:
-            # Перетворюємо raw_predictions в numpy array
+            with torch.no_grad():
+                current_input = X.clone()
+
+                for step in range(steps_ahead):
+                    # Make prediction
+                    pred = model(current_input)
+
+                    # Handle different output shapes
+                    if pred.dim() > 1:
+                        pred_value = pred.squeeze().item()
+                    else:
+                        pred_value = pred.item()
+
+                    raw_predictions.append(pred_value)
+
+                    self.logger.debug(f"Step {step + 1}: Raw prediction = {pred_value}")
+
+                    # For multi-step predictions, update the input sequence
+                    if steps_ahead > 1 and step < steps_ahead - 1:
+                        # Create new input with the prediction
+                        new_input = torch.zeros_like(current_input[:, -1:, :])
+                        new_input[0, 0, 0] = pred_value  # Assume first feature is the target
+
+                        # Shift the sequence window
+                        current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
+
+        except Exception as e:
+            raise RuntimeError(f"Prediction failed: {str(e)}")
+
+        # Transform predictions back to original scale
+        try:
             raw_predictions_array = np.array(raw_predictions)
 
-            # Викликаємо inverse_transform_predictions з правильними параметрами
-            predictions = self.data_preprocessor.inverse_transform_predictions(
-                raw_predictions_array,
-                symbol,
-                timeframe
-            )
-            self.logger.info(f"Прогнози перетворені у оригінальний масштаб: {raw_predictions} -> {predictions}")
+            # Attempt inverse transformation
+            try:
+                predictions = self.data_preprocessor.inverse_transform_predictions(
+                    raw_predictions_array,
+                    symbol,
+                    timeframe
+                )
+                self.logger.info(
+                    f"Прогнози перетворені у оригінальний масштаб: {raw_predictions_array} -> {predictions}")
+            except Exception as e:
+                self.logger.warning(f"Не вдалося перетворити прогнози у оригінальний масштаб: {str(e)}")
+                predictions = raw_predictions_array
+
         except Exception as e:
-            self.logger.warning(f"Не вдалося перетворити прогнози у оригінальний масштаб: {str(e)}")
+            self.logger.error(f"Failed to process predictions: {str(e)}")
             predictions = raw_predictions
 
+        # Calculate confidence and save predictions
         prediction_timestamp = datetime.now()
-        model_id = self.db_manager._get_model_id(symbol, timeframe, model_type)
 
-        confidence = self._calculate_prediction_confidence(model_key, input_data)
+        try:
+            model_id = self.db_manager._get_model_id(symbol, timeframe, model_type)
+            confidence = self._calculate_prediction_confidence(model_key, numeric_data)
 
-        for i, pred in enumerate(predictions):
-            try:
-                target_timestamp = self._calculate_target_timestamp(prediction_timestamp, timeframe, i + 1)
-                confidence_low, confidence_high = self._calculate_confidence_intervals(pred, confidence)
-
+            # Save each prediction
+            for i, pred in enumerate(predictions):
                 try:
-                    if hasattr(self.data_preprocessor, 'inverse_transform_confidence_intervals'):
-                        confidence_low, confidence_high = self.data_preprocessor.inverse_transform_confidence_intervals(
-                            confidence_low, confidence_high, original_data, symbol
-                        )
+                    target_timestamp = self._calculate_target_timestamp(prediction_timestamp, timeframe, i + 1)
+                    confidence_low, confidence_high = self._calculate_confidence_intervals(pred, confidence)
+
+                    # Transform confidence intervals if possible
+                    try:
+                        if hasattr(self.data_preprocessor, 'inverse_transform_confidence_intervals'):
+                            confidence_low, confidence_high = self.data_preprocessor.inverse_transform_confidence_intervals(
+                                confidence_low, confidence_high, original_data, symbol
+                            )
+                    except Exception as e:
+                        self.logger.warning(f"Не вдалося перетворити інтервали довіри: {str(e)}")
+
+                    prediction_data = {
+                        'model_id': model_id,
+                        'symbol': symbol,
+                        'timeframe': timeframe,
+                        'prediction_timestamp': prediction_timestamp,
+                        'target_timestamp': target_timestamp,
+                        'predicted_value': float(pred),
+                        'confidence_interval_low': float(confidence_low),
+                        'confidence_interval_high': float(confidence_high)
+                    }
+
+                    prediction_id = self.db_manager.save_prediction(prediction_data, symbol)
+                    self.logger.info(f"Збережено прогноз з ID: {prediction_id}")
+
                 except Exception as e:
-                    self.logger.warning(f"Не вдалося перетворити інтервали довіри: {str(e)}")
+                    self.logger.warning(f"Не вдалося зберегти прогноз {i}: {str(e)}")
 
-                prediction_data = {
-                    'model_id': model_id,
-                    'symbol': symbol,
-                    'timeframe': timeframe,
-                    'prediction_timestamp': prediction_timestamp,
-                    'target_timestamp': target_timestamp,
-                    'predicted_value': float(pred),
-                    'confidence_interval_low': confidence_low,
-                    'confidence_interval_high': confidence_high
-                }
-
-                prediction_id = self.db_manager.save_prediction(prediction_data, symbol)
-                self.logger.info(f"Збережено прогноз з ID: {prediction_id}")
-
-            except Exception as e:
-                self.logger.warning(f"Не вдалося зберегти прогноз: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Failed to save predictions: {str(e)}")
+            # Continue execution even if saving fails
 
         return {
             'predictions': np.array(predictions),
             'raw_predictions': np.array(raw_predictions),
             'timestamp': prediction_timestamp,
             'model_key': model_key,
-            'confidence': confidence
+            'confidence': confidence if 'confidence' in locals() else 0.0,
+            'input_shape': X.shape if 'X' in locals() else None
         }
-
 
     def _calculate_target_timestamp(self, prediction_timestamp: datetime, timeframe: str, steps_ahead: int) -> datetime:
         """Розраховує цільовий час для прогнозу"""
