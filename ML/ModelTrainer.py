@@ -1,24 +1,16 @@
 import os
 from dataclasses import dataclass, field
-from datetime import time, datetime
-from typing import Dict, Any, List, Optional, Tuple, Generator
+from typing import Dict, Any, List, Optional, Tuple, Union
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
-import pandas as pd
 from sklearn.model_selection import KFold
 from ML.DataPreprocessor import DataPreprocessor
 from ML.base import BaseDeepModel
 from data.db import DatabaseManager
 from utils.logger import CryptoLogger
-
-
-@dataclass
-class ChunkConfig:
-    chunk_size: int = 10000
-    overlap_size: int = 100
-    max_chunks_in_memory: int = 5
 
 
 @dataclass
@@ -74,9 +66,6 @@ class ModelTrainer:
         # Ініціалізація компонентів
         self.processor = DataPreprocessor()
 
-        # Конфігурація для роботи з чанками
-        self.chunk_config = ChunkConfig()
-
         # Налаштування логування
         self.logger = CryptoLogger('trainer')
 
@@ -84,125 +73,41 @@ class ModelTrainer:
         if not os.path.exists(self.models_dir):
             os.makedirs(self.models_dir)
 
-    def _create_data_chunks(self, data: pd.DataFrame) -> Generator[pd.DataFrame, None, None]:
+    def _validate_model_type(self, model_type: Union[str, List[str]]) -> str:
         """
-        Створює чанки даних з перекриттям для безперервного навчання
+        Валідація та нормалізація типу моделі
         """
-        total_rows = len(data)
-        self.logger.info(f"Розділення {total_rows} рядків на чанки розміром {self.chunk_config.chunk_size}")
+        if isinstance(model_type, list):
+            if len(model_type) == 0:
+                raise ValueError("Список типів моделей не може бути порожнім")
+            # Якщо передано список, беремо перший елемент
+            model_type = model_type[0]
+            self.logger.warning(f"Передано список типів моделей, використовується перший: {model_type}")
 
-        chunk_count = 0
-        start_idx = 0
+        if not isinstance(model_type, str):
+            raise ValueError(f"model_type повинен бути рядком, отримано: {type(model_type)}")
 
-        while start_idx < total_rows:
-            end_idx = min(start_idx + self.chunk_config.chunk_size, total_rows)
+        model_type = model_type.lower().strip()
 
-            # Додаємо перекриття для збереження контексту послідовностей
-            if start_idx > 0:
-                actual_start = max(0, start_idx - self.chunk_config.overlap_size)
-            else:
-                actual_start = start_idx
+        valid_types = ['lstm', 'gru', 'transformer']
+        if model_type not in valid_types:
+            raise ValueError(f"Невідомий тип моделі: {model_type}. Доступні: {valid_types}")
 
-            chunk = data.iloc[actual_start:end_idx].copy()
-            chunk_count += 1
+        return model_type
 
-            self.logger.info(f"Створено чанк {chunk_count}: рядки {actual_start}-{end_idx - 1} ({len(chunk)} рядків)")
-
-            yield chunk
-
-            # Переходимо до наступного чанку
-            start_idx = end_idx
-
-            # Якщо залишилося менше overlap_size рядків, завершуємо
-            if total_rows - start_idx < self.chunk_config.overlap_size:
-                break
-
-    def _prepare_chunk_sequences(self, chunk: pd.DataFrame, sequence_length: int,
-                                 previous_chunk: Optional[pd.DataFrame] = None) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Підготовляє послідовності з чанку з урахуванням попереднього чанку для контексту
-        """
-        # Об'єднуємо з попереднім чанком для контексту, якщо він є
-        if previous_chunk is not None:
-            # Беремо останні sequence_length рядків з попереднього чанку
-            context_rows = min(sequence_length, len(previous_chunk))
-            context_data = previous_chunk.tail(context_rows)
-            combined_data = pd.concat([context_data, chunk], ignore_index=True)
-        else:
-            combined_data = chunk
-
-        features = combined_data.drop(columns=["close_scaled"]).values
-        targets = combined_data["close_scaled"].values
-
-        # Створюємо послідовності
-        X, y = [], []
-        start_idx = sequence_length if previous_chunk is not None else sequence_length
-
-        for i in range(start_idx, len(features)):
-            X.append(features[i - sequence_length:i])
-            y.append(targets[i])
-
-        self.logger.debug(f"З чанку розміром {len(chunk)} створено {len(X)} послідовностей")
-
-        return np.array(X), np.array(y)
-
-
-    def _train_chunk(self, model: BaseDeepModel, chunk_data: Tuple[torch.Tensor, torch.Tensor],
-                     optimizer, criterion, batch_size: int) -> float:
-        """
-        Навчання моделі на одному чанку даних
-        """
-        model.train()
-        X_chunk, y_chunk = chunk_data
-        X_chunk, y_chunk = X_chunk.to(self.device), y_chunk.to(self.device)
-
-        # Створюємо DataLoader для чанку
-        chunk_dataset = torch.utils.data.TensorDataset(X_chunk, y_chunk)
-        chunk_loader = torch.utils.data.DataLoader(
-            chunk_dataset, batch_size=batch_size, shuffle=True
-        )
-
-        total_loss = 0
-        batch_count = 0
-
-        for X_batch, y_batch in chunk_loader:
-            optimizer.zero_grad()
-            output = model(X_batch).squeeze()
-            loss = criterion(output, y_batch)
-            loss.backward()
-
-            # Gradient clipping для стабільності
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-            optimizer.step()
-            total_loss += loss.item()
-            batch_count += 1
-
-        return total_loss / batch_count if batch_count > 0 else 0
-
-    def _validate_chunk(self, model: BaseDeepModel, val_data: Tuple[torch.Tensor, torch.Tensor],
-                        criterion) -> float:
-        """
-        Валідація моделі на валідаційних даних
-        """
-        model.eval()
-        X_val, y_val = val_data
-        X_val, y_val = X_val.to(self.device), y_val.to(self.device)
-
-        with torch.no_grad():
-            output = model(X_val).squeeze()
-            loss = criterion(output, y_val)
-
-        return loss.item()
-
-    def train_model(self, symbol: str, timeframe: str, model_type: str,
+    def train_model(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
                     data: pd.DataFrame, input_dim: int,
                     config: Optional[ModelConfig] = None,
                     validation_split: float = 0.2,
-                    patience: int = 10, model_data=None, **kwargs) -> Dict[str, Any]:
+                    patience: int = 10, model_data=None,
+                    save_after_training: bool = True,
+                    **kwargs) -> Dict[str, Any]:
         """
-        Оновлений метод без використання prepare_features
+        Оновлений метод з валідацією model_type
         """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
+
         self.logger.info(f"Початок навчання моделі {symbol}_{timeframe}_{model_type}")
 
         # Створюємо або отримуємо конфігурацію моделі
@@ -255,13 +160,27 @@ class ModelTrainer:
         self.model_metrics[model_key] = metrics
         self.training_history[model_key] = history
 
+        # Автоматичне збереження моделі після навчання
+        if save_after_training:
+            try:
+                model_path = self.save_model(symbol, timeframe, model_type)
+                self.logger.info(f"Модель автоматично збережена: {model_path}")
+            except Exception as e:
+                self.logger.error(f"Помилка при автоматичному збереженні моделі: {str(e)}")
+
         return {
             'config': config.__dict__,
             'metrics': metrics,
             'history': history
         }
-    def create_model_config(self, symbol: str, timeframe: str, model_type: str,
+
+    def create_model_config(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
                             input_dim: int, **kwargs) -> ModelConfig:
+        """
+        Оновлений метод з валідацією model_type
+        """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
 
         # Базова конфігурація
         config = ModelConfig(
@@ -270,13 +189,13 @@ class ModelTrainer:
         )
 
         # Специфічні налаштування для різних типів моделей
-        if model_type.lower() == 'transformer':
-            config.hidden_dim = kwargs.get('hidden_dim', 128)  # Трансформер потребує більше параметрів
+        if model_type == 'transformer':
+            config.hidden_dim = kwargs.get('hidden_dim', 128)
             config.num_heads = kwargs.get('num_heads', 8)
             config.dim_feedforward = kwargs.get('dim_feedforward', 256)
             config.num_layers = kwargs.get('num_layers', 3)
-            config.learning_rate = kwargs.get('learning_rate', 0.0005)  # Менша швидкість для трансформера
-        elif model_type.lower() in ['lstm', 'gru']:
+            config.learning_rate = kwargs.get('learning_rate', 0.0005)
+        elif model_type in ['lstm', 'gru']:
             config.hidden_dim = kwargs.get('hidden_dim', 64)
             config.num_layers = kwargs.get('num_layers', 2)
             config.learning_rate = kwargs.get('learning_rate', 0.001)
@@ -289,7 +208,7 @@ class ModelTrainer:
         return config
 
     def _prepare_sequence_data(self, data: pd.DataFrame, sequence_length: int,
-                                       batch_size: int = 10000) -> Tuple[np.ndarray, np.ndarray]:
+                               batch_size: int = 10000) -> Tuple[np.ndarray, np.ndarray]:
 
         features = data.drop(columns=["target"]).values
         targets = data["target"].values
@@ -331,10 +250,15 @@ class ModelTrainer:
         self.logger.info(f"Створено {len(X)} послідовностей з {len(data)} рядків даних")
         return X, y
 
-    def _build_model_from_config(self, model_type: str, config: ModelConfig) -> BaseDeepModel:
+    def _build_model_from_config(self, model_type: Union[str, List[str]], config: ModelConfig) -> BaseDeepModel:
+        """
+        Оновлений метод з валідацією model_type
+        """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
 
         try:
-            if model_type.lower() == 'lstm':
+            if model_type == 'lstm':
                 from ML.LSTM import LSTMModel
                 return LSTMModel(
                     input_dim=config.input_dim,
@@ -343,7 +267,7 @@ class ModelTrainer:
                     output_dim=config.output_dim,
                     dropout=config.dropout
                 )
-            elif model_type.lower() == 'gru':
+            elif model_type == 'gru':
                 from ML.GRU import GRUModel
                 return GRUModel(
                     input_dim=config.input_dim,
@@ -352,7 +276,7 @@ class ModelTrainer:
                     output_dim=config.output_dim,
                     dropout=config.dropout
                 )
-            elif model_type.lower() == 'transformer':
+            elif model_type == 'transformer':
                 from ML.transformer import TransformerModel
                 return TransformerModel(
                     input_dim=config.input_dim,
@@ -369,10 +293,15 @@ class ModelTrainer:
             self.logger.error(f"Помилка імпорту моделі {model_type}: {str(e)}")
             raise
 
-    def _create_model_data_dict(self, symbol: str, timeframe: str, model_type: str,
+    def _create_model_data_dict(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
                                 config: ModelConfig) -> Dict[str, Any]:
+        """
+        Оновлений метод з валідацією model_type
+        """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
 
-        model_path = os.path.join(self.models_dir, symbol, timeframe, f"{model_type.lower()}_model.pth")
+        model_path = os.path.join(self.models_dir, symbol, timeframe, f"{model_type}_model.pth")
 
         return {
             'symbol': symbol,
@@ -380,7 +309,7 @@ class ModelTrainer:
             'model_type': model_type,
             'model_version': '1.0',
             'model_path': model_path,
-            'input_features': list(range(config.input_dim)),  # Список індексів фічів
+            'input_features': list(range(config.input_dim)),
             'hidden_dim': config.hidden_dim,
             'num_layers': config.num_layers,
             'sequence_length': config.sequence_length,
@@ -502,6 +431,18 @@ class ModelTrainer:
 
         return history
 
+    def evaluate(self, model: BaseDeepModel, test_data: Tuple[torch.Tensor, torch.Tensor]) -> Dict[str, float]:
+        """
+        Оцінка моделі
+        """
+        model.eval()
+        X_test, y_true = test_data
+
+        with torch.no_grad():
+            y_pred = model(X_test).squeeze().cpu().numpy()
+            y_true_np = y_true.cpu().numpy()
+
+        return self.calculate_metrics(y_true_np, y_pred)
 
     def evaluate_batched(self, model: BaseDeepModel, test_data: Tuple[torch.Tensor, torch.Tensor],
                          batch_size: int = 1000) -> Dict[str, float]:
@@ -582,13 +523,18 @@ class ModelTrainer:
         criterion = nn.MSELoss()
         return optimizer, criterion
 
-    def online_learning(self, symbol: str, timeframe: str, model_type: str,
+    def online_learning(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
                         new_data: pd.DataFrame, input_dim: int = None,
                         epochs: int = 10, learning_rate: float = 0.0005,
-                        model_data=None, **kwargs) -> Dict[str, Any]:
+                        model_data=None,
+                        save_after_update: bool = True,
+                        **kwargs) -> Dict[str, Any]:
         """
-        Оновлений метод онлайн навчання без використання prepare_features
+        Оновлений метод онлайн навчання з валідацією model_type
         """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
+
         model_key = self._create_model_key(symbol, timeframe, model_type)
 
         # Завантаження моделі, якщо вона не в пам'яті
@@ -638,12 +584,26 @@ class ModelTrainer:
         metrics = self.evaluate(model, (X_tensor, y_tensor))
         self.model_metrics[model_key] = metrics
 
+        # Автоматичне збереження оновленої моделі
+        if save_after_update:
+            try:
+                model_path = self.save_model(symbol, timeframe, model_type)
+                self.logger.info(f"Оновлена модель автоматично збережена: {model_path}")
+            except Exception as e:
+                self.logger.error(f"Помилка при автоматичному збереженні оновленої моделі: {str(e)}")
+
         return {
             'metrics': metrics,
             'history': history
         }
 
-    def _build_model(self, model_type: str, input_dim: int, hidden_dim: int, num_layers: int) -> BaseDeepModel:
+    def _build_model(self, model_type: Union[str, List[str]], input_dim: int, hidden_dim: int,
+                     num_layers: int) -> BaseDeepModel:
+        """
+        Оновлений метод з валідацією model_type
+        """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
 
         config = ModelConfig(
             input_dim=input_dim,
@@ -652,11 +612,21 @@ class ModelTrainer:
         )
         return self._build_model_from_config(model_type, config)
 
-    def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
+    def _create_model_key(self, symbol: str, timeframe: str, model_type: Union[str, List[str]]) -> str:
+        """
+        Оновлений метод з валідацією model_type
+        """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
 
         return f"{symbol}_{timeframe}_{model_type}"
 
-    def save_model(self, symbol: str, timeframe: str, model_type: str) -> str:
+    def save_model(self, symbol: str, timeframe: str, model_type: Union[str, List[str]]) -> str:
+        """
+        Оновлений метод з валідацією model_type
+        """
+        # Валідація та нормалізація model_type
+        model_type = self._validate_model_type(model_type)
 
         model_key = self._create_model_key(symbol, timeframe, model_type)
         if model_key not in self.models:
@@ -667,7 +637,7 @@ class ModelTrainer:
         os.makedirs(model_dir, exist_ok=True)
 
         # Шлях до файлу моделі
-        model_path = os.path.join(model_dir, f"{model_type.lower()}_model.pth")
+        model_path = os.path.join(model_dir, f"{model_type}_model.pth")
 
         try:
             # Зберігаємо модель
@@ -737,6 +707,7 @@ class ModelTrainer:
     def train_all_models(self, symbols: Optional[List[str]] = None,
                          timeframes: Optional[List[str]] = None,
                          model_types: Optional[List[str]] = None,
+                         save_models: bool = True,  # Новий параметр
                          **training_params) -> Dict[str, Dict[str, Any]]:
         """
         Оновлений метод без використання prepare_features
@@ -749,6 +720,8 @@ class ModelTrainer:
         results = {}
         total_models = len(symbols) * len(timeframes) * len(model_types)
         current_model = 0
+        saved_models = 0
+        failed_saves = 0
 
         self.logger.info(f"Початок навчання {total_models} моделей")
 
@@ -771,25 +744,43 @@ class ModelTrainer:
                         # Визначення розмірності вхідних даних
                         input_dim = data.shape[1] - 1  # Враховуємо, що остання колонка - target
 
-                        # Навчання моделі
+                        # Навчання моделі (без автоматичного збереження)
                         result = self.train_model(
                             symbol=symbol,
                             timeframe=timeframe,
                             model_type=model_type,
                             data=data,
                             input_dim=input_dim,
+                            save_after_training=False,  # Відключаємо автоматичне збереження
                             **training_params
                         )
 
                         results[model_key] = result
                         self.logger.info(f"Модель {model_key} навчена успішно. RMSE: {result['metrics']['RMSE']:.6f}")
 
+                        # Збереження моделі якщо потрібно
+                        if save_models:
+                            try:
+                                model_path = self.save_model(symbol, timeframe, model_type)
+                                saved_models += 1
+                                results[model_key]['model_path'] = model_path
+                                self.logger.info(f"Модель {model_key} збережена: {model_path}")
+                            except Exception as save_error:
+                                failed_saves += 1
+                                self.logger.error(f"Помилка збереження моделі {model_key}: {str(save_error)}")
+                                results[model_key]['save_error'] = str(save_error)
+
                     except Exception as e:
                         self.logger.error(f"Помилка навчання моделі {model_key}: {str(e)}")
                         results[model_key] = {'error': str(e)}
 
         successful_models = len([r for r in results.values() if 'error' not in r])
-        self.logger.info(f"Навчання завершено. Успішно: {successful_models}/{total_models}")
+
+        summary_msg = f"Навчання завершено. Успішно: {successful_models}/{total_models}"
+        if save_models:
+            summary_msg += f". Збережено: {saved_models}, Помилок збереження: {failed_saves}"
+
+        self.logger.info(summary_msg)
 
         return results
 
@@ -807,7 +798,7 @@ class ModelTrainer:
         if data is None:
             raise ValueError(f"Не вдалося завантажити дані для {symbol}_{timeframe}")
 
-        features = self.processor.prepare_features(data, symbol)
+        features = self.processor.prepare_data_with_config(data, symbol, model_type)
         if not isinstance(features, dict) or 'X' not in features or 'y' not in features:
             raise ValueError("Очікувався словник з ключами 'X' та 'y' від prepare_features")
 

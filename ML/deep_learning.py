@@ -54,7 +54,7 @@ class DeepLearning:
         self.logger = CryptoLogger('deep_learning')
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.crypto_config = CryptoConfig()
-
+        self.model_config = ModelConfig(input_dim=13)
         # Ініціалізація компонентів
         self.data_preprocessor = DataPreprocessor()
         self.model_trainer = ModelTrainer()
@@ -135,10 +135,14 @@ class DeepLearning:
                     current_input = torch.cat([current_input[:, 1:, :], new_input], dim=1)
 
         try:
+            # Перетворюємо raw_predictions в numpy array
+            raw_predictions_array = np.array(raw_predictions)
+
+            # Викликаємо inverse_transform_predictions з правильними параметрами
             predictions = self.data_preprocessor.inverse_transform_predictions(
-                raw_predictions,
-                original_data,
-                symbol
+                raw_predictions_array,
+                symbol,
+                timeframe
             )
             self.logger.info(f"Прогнози перетворені у оригінальний масштаб: {raw_predictions} -> {predictions}")
         except Exception as e:
@@ -203,7 +207,8 @@ class DeepLearning:
         delta = timeframe_deltas.get(timeframe, timedelta(hours=1))
         return prediction_timestamp + (delta * steps_ahead)
 
-    def _calculate_confidence_intervals(self, prediction: float, confidence: float) -> tuple:
+    @staticmethod
+    def _calculate_confidence_intervals(prediction: float, confidence: float) -> tuple:
         """Розраховує інтервали довіри для прогнозу"""
         # Простий розрахунок на основі довіри (можна покращити)
         margin = prediction * (1 - confidence) * 0.1  # 10% від різниці до повної довіри
@@ -682,56 +687,138 @@ class DeepLearning:
         # ==================== HYPERPARAMETER OPTIMIZATION ====================
 
     def hyperparameter_optimization(self, symbol: str, timeframe: str, model_type: str,
-                                        param_space: Dict[str, List], optimization_method: str = 'grid_search',
-                                        cv_folds: int = 3, max_iterations: int = 50) -> Dict[str, Any]:
+                                    param_space: Dict[str, List], optimization_method: str = 'grid_search',
+                                    cv_folds: int = 3, max_iterations: int = 50,
+                                    validation_split: float = 0.2,
+                                    target_column: str = 'target_close_1') -> Dict[str, Any]:
+        """
+        Оптимізація гіперпараметрів для моделі
 
-            self._validate_inputs(symbol, timeframe, model_type)
+        Args:
+            symbol: Символ активу
+            timeframe: Таймфрейм
+            model_type: Тип моделі
+            param_space: Простір параметрів для оптимізації
+            optimization_method: Метод оптимізації ('grid_search', 'random_search', 'bayesian')
+            cv_folds: Кількість фолдів для крос-валідації
+            max_iterations: Максимальна кількість ітерацій для випадкового/байєсівського пошуку
+            validation_split: Розмір валідаційної вибірки
+            target_column: Назва цільового стовпця
 
+        Returns:
+            Dict з результатами оптимізації
+        """
+        self._validate_inputs(symbol, timeframe, model_type)
+
+        try:
+            # Спочатку отримуємо сирі дані для оптимізації (як DataFrame)
+            self.logger.info(f"Завантаження сирих даних для оптимізації {symbol}-{timeframe}-{model_type}")
+
+            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+            raw_data = data_loader()
+
+            if raw_data is None or len(raw_data) == 0:
+                raise ValueError(f"Не вдалося завантажити дані для {symbol}-{timeframe}")
+
+            # Конвертація в DataFrame якщо потрібно
+            if isinstance(raw_data, list):
+                processed_data = pd.DataFrame(raw_data)
+            elif isinstance(raw_data, pd.DataFrame):
+                processed_data = raw_data.copy()
+            else:
+                raise ValueError(f"Невідомий тип даних: {type(raw_data)}")
+
+            self.logger.info(f"Дані для оптимізації підготовлено: {processed_data.shape}")
+
+            # Також підготовляємо конфігурацію моделі для збереження
             try:
-                # Отримання даних
-                data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-                data = data_loader()
-                processed_data = self.data_preprocessor.prepare_features(data, symbol)
+                X_train, X_val, y_train, y_val, model_config = self.data_preprocessor.prepare_data_with_config(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    model_type=model_type,
+                    validation_split=validation_split,
+                    target_column=target_column
+                )
+                self.logger.info(f"Конфігурація моделі створена: input_dim={model_config.input_dim}")
+            except Exception as config_error:
+                self.logger.warning(f"Не вдалося створити конфігурацію моделі: {config_error}")
+                model_config = None
 
-                best_params = {}
-                best_score = float('inf')
-                optimization_history = []
+            # Ініціалізація результатів
+            best_params = {}
+            best_score = float('inf')
+            optimization_history = []
 
-                if optimization_method == 'grid_search':
-                    best_params, best_score, optimization_history = self._grid_search_optimization(
-                        symbol, timeframe, model_type, processed_data, param_space, cv_folds
-                    )
-                elif optimization_method == 'random_search':
-                    best_params, best_score, optimization_history = self._random_search_optimization(
-                        symbol, timeframe, model_type, processed_data, param_space, max_iterations, cv_folds
-                    )
-                elif optimization_method == 'bayesian':
-                    best_params, best_score, optimization_history = self._bayesian_optimization(
-                        symbol, timeframe, model_type, processed_data, param_space, max_iterations, cv_folds
-                    )
-                else:
-                    raise ValueError(f"Непідтримуваний метод оптимізації: {optimization_method}")
+            # Вибір методу оптимізації
+            if optimization_method == 'grid_search':
+                best_params, best_score, optimization_history = self._grid_search_optimization(
+                    symbol, timeframe, model_type, processed_data, param_space, cv_folds
+                )
+            elif optimization_method == 'random_search':
+                best_params, best_score, optimization_history = self._random_search_optimization(
+                    symbol, timeframe, model_type, processed_data, param_space, max_iterations, cv_folds
+                )
+            elif optimization_method == 'bayesian':
+                best_params, best_score, optimization_history = self._bayesian_optimization(
+                    symbol, timeframe, model_type, processed_data, param_space, max_iterations, cv_folds
+                )
+            else:
+                raise ValueError(f"Непідтримуваний метод оптимізації: {optimization_method}")
 
-                # Збереження результатів
-                optimization_results = {
-                    'best_params': best_params,
-                    'best_score': best_score,
-                    'optimization_history': optimization_history,
-                    'method': optimization_method,
-                    'timestamp': datetime.now().isoformat()
+            # Створення результатів оптимізації
+            optimization_results = {
+                'best_params': best_params,
+                'best_score': best_score,
+                'optimization_history': optimization_history,
+                'method': optimization_method,
+                'data_info': {
+                    'total_samples': len(processed_data),
+                    'features': len(processed_data.columns),
+                    'validation_split': validation_split,
+                    'target_column': target_column
+                },
+                'timestamp': datetime.now().isoformat()
+            }
+
+            # Додаємо інформацію про конфігурацію моделі, якщо вона доступна
+            if model_config is not None:
+                optimization_results['model_config'] = {
+                    'input_dim': model_config.input_dim,
+                    'hidden_dim': model_config.hidden_dim,
+                    'num_layers': model_config.num_layers,
+                    'output_dim': model_config.output_dim,
+                    'dropout': model_config.dropout,
+                    'learning_rate': model_config.learning_rate,
+                    'batch_size': model_config.batch_size,
+                    'epochs': model_config.epochs,
+                    'sequence_length': model_config.sequence_length
                 }
 
-                # Збереження в файл
-                results_file = os.path.join(self.models_dir, f"{symbol}_{timeframe}_{model_type}_optimization.json")
-                with open(results_file, 'w') as f:
-                    json.dump(optimization_results, f, indent=2, default=str)
+            # Збереження результатів у файл
+            results_file = os.path.join(
+                self.models_dir,
+                f"{symbol}_{timeframe}_{model_type}_optimization.json"
+            )
 
-                self.logger.info(f"Оптимізація гіперпараметрів для {symbol}-{timeframe}-{model_type} завершена")
-                return optimization_results
+            try:
+                os.makedirs(self.models_dir, exist_ok=True)
+                with open(results_file, 'w', encoding='utf-8') as f:
+                    json.dump(optimization_results, f, indent=2, default=str, ensure_ascii=False)
 
-            except Exception as e:
-                self.logger.error(f"Помилка оптимізації гіперпараметрів: {str(e)}")
-                raise
+                self.logger.info(f"Результати оптимізації збережено в: {results_file}")
+            except Exception as save_error:
+                self.logger.warning(f"Не вдалося зберегти результати: {save_error}")
+
+            self.logger.info(
+                f"Оптимізація гіперпараметрів для {symbol}-{timeframe}-{model_type} завершена. "
+                f"Найкращий результат: {best_score:.6f}"
+            )
+
+            return optimization_results
+
+        except Exception as e:
+            self.logger.error(f"Помилка оптимізації гіперпараметрів для {symbol}-{timeframe}-{model_type}: {str(e)}")
+            raise
 
     def _grid_search_optimization(self, symbol: str, timeframe: str, model_type: str,
                                       data: pd.DataFrame, param_space: Dict, cv_folds: int) -> Tuple[Dict, float, List]:
@@ -892,27 +979,62 @@ class DeepLearning:
         # ==================== ADVANCED ANALYSIS ====================
 
     def feature_importance_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, float]:
+        """Аналіз важливості ознак для моделі"""
 
-            self._validate_inputs(symbol, timeframe, model_type)
+        self._validate_inputs(symbol, timeframe, model_type)
 
-            # Завантаження моделі
-            model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
-            if model_key not in self.model_trainer.models:
-                if not self.model_trainer.load_model(symbol, timeframe, model_type):
-                    raise ValueError(f"Модель {model_key} не знайдена")
+        # Завантаження моделі
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.model_trainer.models:
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+                raise ValueError(f"Модель {model_key} не знайдена")
 
-            model = self.model_trainer.models[model_key]
+        model = self.model_trainer.models[model_key]
 
-            # Отримання даних
+        # Отримання оброблених даних для аналізу
+        try:
+            # Завантажуємо сирі дані
             data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-            data = data_loader()
-            processed_data = self.data_preprocessor.prepare_features(data, symbol)
+            raw_data = data_loader()
 
-            # Аналіз важливості методом пермутації
+            if raw_data is None or len(raw_data) == 0:
+                raise ValueError(f"Не вдалося завантажити дані для {symbol}-{timeframe}")
+
+            # Конвертуємо в DataFrame якщо потрібно
+            if isinstance(raw_data, list):
+                processed_data = pd.DataFrame(raw_data)
+            elif isinstance(raw_data, pd.DataFrame):
+                processed_data = raw_data.copy()
+            else:
+                raise ValueError(f"Невідомий тип даних: {type(raw_data)}")
+
+            # Перевіряємо наявність цільової змінної
+            if "target" not in processed_data.columns:
+                # Якщо немає стандартного 'target', шукаємо target_close_1 або інші варіанти
+                target_candidates = [col for col in processed_data.columns if col.startswith('target')]
+                if target_candidates:
+                    # Перейменовуємо першу знайдену цільову змінну на 'target'
+                    processed_data = processed_data.rename(columns={target_candidates[0]: 'target'})
+                else:
+                    raise ValueError("Цільова змінна не знайдена в даних")
+
+            self.logger.info(f"Підготовлено дані для аналізу важливості: {processed_data.shape}")
+
+        except Exception as e:
+            self.logger.error(f"Помилка підготовки даних для аналізу важливості: {e}")
+            raise
+
+        # Аналіз важливості методом пермутації
+        try:
             feature_names = processed_data.drop(columns=["target"]).columns.tolist()
             importance_scores = self._permutation_importance(model, processed_data, feature_names)
 
+            self.logger.info(f"Завершено аналіз важливості для {len(feature_names)} ознак")
             return dict(zip(feature_names, importance_scores))
+
+        except Exception as e:
+            self.logger.error(f"Помилка аналізу важливості ознак: {e}")
+            raise
 
     def _permutation_importance(self, model, data: pd.DataFrame, feature_names: List[str]) -> List[float]:
             """Розрахунок важливості ознак методом пермутації"""
@@ -975,18 +1097,56 @@ class DeepLearning:
                 raise
 
     def _error_analysis(self, symbol: str, timeframe: str, model_type: str) -> Dict[str, Any]:
-            """Аналіз помилок моделі"""
-            # Отримання даних для аналізу
+        """Аналіз помилок моделі"""
+
+        # Завантаження моделі
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.model_trainer.models:
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+                raise ValueError(f"Модель {model_key} не знайдена")
+
+        model = self.model_trainer.models[model_key]
+
+        # Отримання даних для аналізу
+        try:
+            # Завантажуємо сирі дані
             data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-            data = data_loader()
-            processed_data = self.data_preprocessor.prepare_features(data, symbol)
+            raw_data = data_loader()
 
-            # Прогнози моделі
-            X = torch.tensor(processed_data.drop(columns=["target"]).values, dtype=torch.float32).to(self.device)
+            if raw_data is None or len(raw_data) == 0:
+                raise ValueError(f"Не вдалося завантажити дані для {symbol}-{timeframe}")
+
+            # Конвертуємо в DataFrame якщо потрібно
+            if isinstance(raw_data, list):
+                processed_data = pd.DataFrame(raw_data)
+            elif isinstance(raw_data, pd.DataFrame):
+                processed_data = raw_data.copy()
+            else:
+                raise ValueError(f"Невідомий тип даних: {type(raw_data)}")
+
+            # Перевіряємо наявність цільової змінної
+            if "target" not in processed_data.columns:
+                # Якщо немає стандартного 'target', шукаємо target_close_1 або інші варіанти
+                target_candidates = [col for col in processed_data.columns if col.startswith('target')]
+                if target_candidates:
+                    # Перейменовуємо першу знайдену цільову змінну на 'target'
+                    processed_data = processed_data.rename(columns={target_candidates[0]: 'target'})
+                else:
+                    raise ValueError("Цільова змінна не знайдена в даних")
+
+            self.logger.info(f"Підготовлено дані для аналізу помилок: {processed_data.shape}")
+
+        except Exception as e:
+            self.logger.error(f"Помилка підготовки даних для аналізу помилок: {e}")
+            raise
+
+        # Прогнози моделі
+        try:
+            X = torch.tensor(
+                processed_data.drop(columns=["target"]).values,
+                dtype=torch.float32
+            ).to(self.device)
             y_true = processed_data["target"].values
-
-            model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
-            model = self.model_trainer.models[model_key]
 
             model.eval()
             with torch.no_grad():
@@ -995,7 +1155,7 @@ class DeepLearning:
             # Розрахунок помилок
             errors = y_pred - y_true
 
-            return {
+            result = {
                 'mean_error': float(np.mean(errors)),
                 'std_error': float(np.std(errors)),
                 'max_error': float(np.max(np.abs(errors))),
@@ -1011,6 +1171,13 @@ class DeepLearning:
                     'kurtosis': float(self._calculate_kurtosis(errors))
                 }
             }
+
+            self.logger.info(f"Завершено аналіз помилок для {symbol}-{timeframe}-{model_type}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Помилка аналізу помилок моделі: {e}")
+            raise
 
     def _prediction_stability_analysis(self, symbol: str, timeframe: str, model_type: str,
                                            n_runs: int = 10) -> Dict[str, float]:
@@ -1156,68 +1323,92 @@ class DeepLearning:
             plt.show()
 
     def plot_prediction_vs_actual(self, symbol: str, timeframe: str, model_type: str,
-                                      test_data: Optional[pd.DataFrame] = None,
-                                      n_points: int = 100, save_path: Optional[str] = None) -> None:
+                                  test_data: Optional[pd.DataFrame] = None,
+                                  n_points: int = 100, save_path: Optional[str] = None) -> None:
 
-            # Отримання даних
-            if test_data is None:
-                data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-                test_data = data_loader()
+        # Отримання даних
+        if test_data is None:
+            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+            test_data = data_loader()
 
-            processed_data = self.data_preprocessor.prepare_features(test_data, symbol)
+        # Якщо у test_data є стовпець target, використовуємо його
+        if 'target' in test_data.columns or 'target_close_1' in test_data.columns:
+            # Визначаємо назву цільового стовпця
+            target_col = 'target' if 'target' in test_data.columns else 'target_close_1'
 
             # Вибір останніх n_points
-            if len(processed_data) > n_points:
-                processed_data = processed_data.tail(n_points)
+            if len(test_data) > n_points:
+                processed_data = test_data.tail(n_points)
+            else:
+                processed_data = test_data
 
-            # Прогнози
-            X = torch.tensor(processed_data.drop(columns=["target"]).values, dtype=torch.float32).to(self.device)
-            y_true = processed_data["target"].values
+            # Підготовка даних
+            X = torch.tensor(processed_data.drop(columns=[target_col]).values,
+                             dtype=torch.float32).to(self.device)
+            y_true = processed_data[target_col].values
+        else:
+            # Використовуємо prepare_data_with_config для підготовки даних
+            X_train, X_val, y_train, y_val, config = self.data_preprocessor.prepare_data_with_config(
+                symbol, timeframe, model_type
+            )
 
-            model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
-            if model_key not in self.model_trainer.models:
-                if not self.model_trainer.load_model(symbol, timeframe, model_type):
-                    raise ValueError(f"Модель {model_key} не знайдена")
+            # Об'єднуємо тренувальні та валідаційні дані
+            X_full = torch.cat([X_train, X_val], dim=0)
+            y_full = torch.cat([y_train, y_val], dim=0)
 
-            model = self.model_trainer.models[model_key]
-            model.eval()
+            # Вибір останніх n_points
+            if len(y_full) > n_points:
+                X = X_full[-n_points:].to(self.device)
+                y_true = y_full[-n_points:].cpu().numpy()
+            else:
+                X = X_full.to(self.device)
+                y_true = y_full.cpu().numpy()
 
-            with torch.no_grad():
-                y_pred = model(X).cpu().numpy().flatten()
+        # Прогнози
+        model_key = self.model_trainer._create_model_key(symbol, timeframe, model_type)
+        if model_key not in self.model_trainer.models:
+            if not self.model_trainer.load_model(symbol, timeframe, model_type):
+                raise ValueError(f"Модель {model_key} не знайдена")
 
-            # Візуалізація
-            plt.figure(figsize=(15, 8))
+        model = self.model_trainer.models[model_key]
+        model.eval()
 
-            x_axis = range(len(y_true))
+        with torch.no_grad():
+            y_pred = model(X).cpu().numpy().flatten()
 
-            plt.plot(x_axis, y_true, label='Actual', color='blue', alpha=0.7, linewidth=2)
-            plt.plot(x_axis, y_pred, label='Predicted', color='red', alpha=0.7, linewidth=2)
+        # Візуалізація
+        plt.figure(figsize=(15, 8))
 
-            plt.fill_between(x_axis, y_true, y_pred, alpha=0.2, color='gray', label='Prediction Error')
+        x_axis = range(len(y_true))
 
-            plt.xlabel('Time Steps')
-            plt.ylabel('Price')
-            plt.title(f'Prediction vs Actual - {symbol} {timeframe} {model_type.upper()}')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
+        plt.plot(x_axis, y_true, label='Actual', color='blue', alpha=0.7, linewidth=2)
+        plt.plot(x_axis, y_pred, label='Predicted', color='red', alpha=0.7, linewidth=2)
 
-            # Додавання метрик на графік
-            mse = np.mean((y_pred - y_true) ** 2)
-            mae = np.mean(np.abs(y_pred - y_true))
-            r2 = 1 - (np.sum((y_true - y_pred) ** 2) / np.sum((y_true - np.mean(y_true)) ** 2))
+        plt.fill_between(x_axis, y_true, y_pred, alpha=0.2, color='gray', label='Prediction Error')
 
-            textstr = f'MSE: {mse:.6f}\nMAE: {mae:.6f}\nR²: {r2:.4f}'
-            props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-            plt.text(0.02, 0.98, textstr, transform=plt.gca().transAxes, fontsize=10,
-                     verticalalignment='top', bbox=props)
+        plt.xlabel('Time Steps')
+        plt.ylabel('Price')
+        plt.title(f'Prediction vs Actual - {symbol} {timeframe} {model_type.upper()}')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
 
-            plt.tight_layout()
+        # Додавання метрик на графік
+        mse = np.mean((y_pred - y_true) ** 2)
+        mae = np.mean(np.abs(y_pred - y_true))
+        r2 = 1 - (np.sum((y_true - y_pred) ** 2) / np.sum((y_true - np.mean(y_true)) ** 2))
 
-            if save_path:
-                plt.savefig(save_path, dpi=300, bbox_inches='tight')
-                self.logger.info(f"Графік прогнозів збережено: {save_path}")
+        textstr = f'MSE: {mse:.6f}\nMAE: {mae:.6f}\nR²: {r2:.4f}'
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+        plt.text(0.02, 0.98, textstr, transform=plt.gca().transAxes, fontsize=10,
+                 verticalalignment='top', bbox=props)
 
-            plt.show()
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            self.logger.info(f"Графік прогнозів збережено: {save_path}")
+
+        plt.show()
 
         # ==================== UTILITY METHODS ====================
 
@@ -1300,7 +1491,7 @@ class DeepLearning:
                             raw_data = data_loader()
 
                             # 2. Feature Engineering
-                            features = self.data_preprocessor.prepare_features(raw_data, symbol)
+                            features = self.data_preprocessor.prepare_data_with_config(raw_data, symbol, model_type)
                             input_dim = features.shape[1] - 1  # Subtract target column
 
                             # 3. Model Training
@@ -1418,7 +1609,7 @@ class DeepLearning:
             """
             try:
                 # 1. Prepare features
-                processed_data = self.data_preprocessor.prepare_features(new_data, symbol)
+                processed_data = self.data_preprocessor.prepare_data_with_config(new_data, symbol, model_type)
 
                 # 2. Perform online learning
                 result = self.online_learning(
@@ -1645,7 +1836,7 @@ def main():
                 pred = pipeline.predict(
                     symbol=symbol,
                     timeframe=timeframe,
-                    model_type=['lstm', 'gru', 'transformer'],
+                    model_type='lstm',
                     steps_ahead=3
                 )
                 print(f"{symbol}-{timeframe} LSTM prediction:", pred['predictions'])
@@ -1705,7 +1896,7 @@ def main():
         online_result = pipeline.online_learning(
             symbol='BTC',
             timeframe='1h',
-            model_type=['lstm','gru','transformer'],
+            model_type='lstm',
             new_data=new_data,
             epochs=5
         )
@@ -1740,7 +1931,7 @@ def main():
     print("\n=== Generating Visualizations ===")
     try:
         # Model Comparison Plot
-        pipeline.plot_model_comparison('BTC', '4h' , 'lstm')
+        pipeline.plot_model_comparison('BTC', '4h' )
 
         # Feature Importance Plot
         pipeline.plot_feature_importance('BTC', '4h', 'lstm', top_n=10)
