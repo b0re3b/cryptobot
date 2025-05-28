@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from utils.config import *
 from utils.logger import CryptoLogger
-from decimal import Decimal
 
 
 class BitcoinCycleFeatureExtractor:

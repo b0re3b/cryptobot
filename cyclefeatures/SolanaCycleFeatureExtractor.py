@@ -14,6 +14,43 @@ class SolanaCycleFeatureExtractor:
 
     def calculate_sol_event_cycle_features(self, processed_data: pd.DataFrame,
                                            date_column: Optional[str] = None) -> pd.DataFrame:
+        """
+           Обчислює часові та подієві ознаки для блокчейну Solana на основі відомих значущих подій.
+
+           Метод додає до переданого DataFrame декілька ознак, пов'язаних із циклічністю подій у мережі Solana, зокрема:
+           - Кількість днів з моменту останньої значущої події
+           - Кількість днів з моменту останнього великого збою в мережі
+           - Оцінка стабільності мережі з експоненційним спадом впливу
+           - Фаза зростання екосистеми (ціле число від 0 до 4)
+           - Логарифмована кількість днів з моменту останньої події
+           - Оцінка зрілості екосистеми (неперервне значення від 0.0 до 1.0)
+           - Індикатор зростання мережі з урахуванням фази та стабільності
+
+           Метод автоматично визначає колонку з датою або використовує вказану, та встановлює `DatetimeIndex`.
+
+           Аргументи:
+               processed_data (pd.DataFrame): Вхідний DataFrame, що повинен містити колонку з датами або мати datetime-індекс.
+               date_column (Optional[str], опціонально): Назва колонки, що містить дати. Якщо не задано —
+                   метод спробує автоматично знайти відповідну колонку (наприклад, 'date', 'timestamp', тощо).
+
+           Повертає:
+               pd.DataFrame: Копія вхідного DataFrame з додатковими ознаками, що включають:
+                   - 'days_since_last_significant_event'
+                   - 'days_since_last_outage'
+                   - 'network_stability_score'
+                   - 'ecosystem_growth_phase'
+                   - 'log_days_since_event'
+                   - 'ecosystem_maturity_score'
+                   - 'network_growth_indicator'
+
+           Викликає:
+               ValueError: У випадку, якщо не вдалося визначити або перетворити часовий індекс.
+
+           Примітки:
+               - Метод використовує список `self.sol_significant_events`, який повинен містити словники з ключами "date" та "name".
+               - Вплив збоїв та фази розвитку екосистеми визначені жорстко в коді, але можуть бути розширені в майбутньому.
+               - Дата запуску мережі Solana вважається 16 березня 2020 року.
+           """
         self.logger.info("Starting calculation of Solana cycle features")
 
         try:
@@ -248,31 +285,3 @@ class SolanaCycleFeatureExtractor:
             self.logger.error(f"Error in calculate_sol_event_cycle_features: {str(e)}", exc_info=True)
             raise
 
-    def prepare_dataframe_for_processing(self, df: pd.DataFrame, date_column: str = None) -> pd.DataFrame:
-
-        self.logger.info("Preparing DataFrame for processing")
-
-        result_df = df.copy()
-
-        if not isinstance(result_df.index, pd.DatetimeIndex):
-            if date_column and date_column in result_df.columns:
-                result_df[date_column] = pd.to_datetime(result_df[date_column])
-                result_df = result_df.set_index(date_column)
-            else:
-                # Try to find a suitable date column
-                date_cols = [col for col in result_df.columns
-                             if any(keyword in col.lower() for keyword in ['date', 'time', 'timestamp'])]
-
-                if date_cols:
-                    date_column = date_cols[0]
-                    self.logger.info(f"Using column '{date_column}' as date index")
-                    result_df[date_column] = pd.to_datetime(result_df[date_column])
-                    result_df = result_df.set_index(date_column)
-                else:
-                    raise ValueError("No suitable date column found. Please specify date_column parameter.")
-
-        # Sort by index
-        if not result_df.index.is_monotonic_increasing:
-            result_df = result_df.sort_index()
-
-        return result_df

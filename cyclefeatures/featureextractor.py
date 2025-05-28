@@ -33,6 +33,17 @@ class FeatureExtractor:
         self.logger.info("FeatureExtractor initialized")
 
     def get_significant_events_for_symbol(self, symbol: str) -> List:
+        """
+           Отримує список значущих подій для заданого криптоактиву.
+
+           Аргументи:
+               symbol (str): Назва токена (наприклад, 'BTC', 'ETH', 'SOL').
+                             Додається обробка для видалення суфіксів 'USDT' або 'USD'.
+
+           Повертає:
+               List: Список словників із датами та назвами подій, пов’язаних з активом.
+                     Якщо подій немає, повертається порожній список.
+           """
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
         events = self.symbol_events_map.get(symbol, [])
         self.logger.debug(f"Retrieved {len(events)} significant events for {symbol}")
@@ -41,6 +52,17 @@ class FeatureExtractor:
     def calculate_token_specific_cycle_features(self,
                                                 processed_data: pd.DataFrame,
                                                 symbol: str) -> pd.DataFrame:
+        """
+           Розраховує токен-специфічні циклічні ознаки для активів BTC, ETH або SOL.
+
+           Аргументи:
+               processed_data (pd.DataFrame): Підготовлений DataFrame з часовими рядами.
+               symbol (str): Назва токена (буде очищено від 'USDT'/'USD').
+
+           Повертає:
+               pd.DataFrame: DataFrame з доданими специфічними для токена ознаками.
+                             Якщо токен не підтримується, повертається незмінений DataFrame.
+           """
         symbol = symbol.upper().replace('USDT', '').replace('USD', '')
         self.logger.info(f"Calculating token-specific cycle features for {symbol}")
 
@@ -55,6 +77,21 @@ class FeatureExtractor:
             return processed_data
 
     def create_cyclical_features(self, processed_data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+           Створює повний набір циклічних ознак для криптоактиву, включаючи:
+           - Загальночасові цикли (день тижня, місяць, квартал, день місяця, тиждень року)
+           - Ринкові фази (та one-hot кодування)
+           - Бичачі/ведмежі ринкові цикли
+           - Токен-специфічні подієві цикли (BTC, ETH, SOL)
+           - Автоматично знайдені оптимальні цикли (якщо сила > 0.3)
+
+           Аргументи:
+               processed_data (pd.DataFrame): Дані з часовим індексом (DatetimeIndex).
+               symbol (str): Назва криптовалюти.
+
+           Повертає:
+               pd.DataFrame: DataFrame з доданими колонками циклічних ознак.
+           """
         self.logger.info(f"Creating cyclical features for {symbol}")
 
         # First, add general cyclical features (common to all cryptocurrencies)
@@ -166,6 +203,38 @@ class FeatureExtractor:
     def find_optimal_cycle_length(self, processed_data: pd.DataFrame,
                                   min_period: int = 7,
                                   max_period: int = 365) -> Tuple[int, float]:
+        """
+            Визначає оптимальну довжину циклу в часовому ряді цін за допомогою автокореляції.
+
+            Метод шукає періодичність у відсоткових змінах (returns) цінового ряду через
+            аналіз автокореляцій у заданому діапазоні періодів. Повертає лаг з найбільшим
+            локальним максимумом автокореляції або найвищу автокореляцію, якщо локальних максимумів не знайдено.
+
+            Args:
+                processed_data (pd.DataFrame): Таблиця з історичними даними, яка повинна містити
+                    колонку 'close' з цінами активу. Індекс повинен бути типу `pd.DatetimeIndex`.
+                min_period (int): Мінімальний період (лаг) для пошуку циклу. За замовчуванням 7.
+                max_period (int): Максимальний період (лаг) для пошуку циклу. За замовчуванням 365.
+
+            Returns:
+                Tuple[int, float]: Кортеж з:
+                    - оптимальною довжиною циклу (лаг, int),
+                    - значенням автокореляції на цій довжині циклу (float).
+
+            Raises:
+                ValueError: Якщо відсутня колонка 'close' або індекс DataFrame не є `pd.DatetimeIndex`.
+
+            Обробка винятків:
+                Якщо під час виконання виникає будь-яка інша помилка, метод логуватиме її
+                та поверне значення (max_period, 0.0) як дефолтне.
+
+            Notes:
+                - Якщо даних недостатньо для аналізу `max_period`, він буде зменшений автоматично.
+                - Ряд цін буде ресемпльовано до денного інтервалу, якщо необхідно.
+                - Для оцінки періодичності використовується автокореляція відсоткових змін (returns).
+                - Якщо виявлено локальні максимуми автокореляції, повертається найсильніший.
+                - Якщо ні, повертається період з максимальною автокореляцією.
+            """
         self.logger.info(f"Finding optimal cycle length between {min_period} and {max_period} days")
 
         try:
@@ -262,17 +331,49 @@ class FeatureExtractor:
                             cycle_type: str = 'auto',
                             normalized: bool = True) -> pd.DataFrame:
         """
-        Calculate ROI (Return on Investment) based on different market cycles.
+           Обчислює рентабельність інвестицій (ROI), нормалізовану дохідність та часову позицію
+           в межах різних типів циклів для вказаного криптоактиву.
 
-        Args:
-            processed_data: DataFrame with price data (must include 'close' column with datetime index)
-            symbol: Trading symbol (e.g. 'BTC', 'ETH', 'SOL')
-            cycle_type: Type of cycle analysis ('auto', 'halving', 'network_upgrade', 'ecosystem_event', 'bull_bear', 'custom')
-            normalized: Whether to normalize ROI values for comparison
+           Підтримувані типи циклів:
+               - "halving": цикли халвінгу (наприклад, для BTC)
+               - "network_upgrade": оновлення мережі (наприклад, для ETH)
+               - "ecosystem_event": ключові події екосистеми (наприклад, для SOL)
+               - "bull_bear": цикли бичачого та ведмежого ринку (на основі максимумів і мінімумів)
+               - "custom": користувацькі цикли на основі автокореляційного аналізу
+               - "auto": автоматичне визначення типу циклу на основі символу активу
 
-        Returns:
-            DataFrame with ROI calculations based on cycle type
-        """
+           Аргументи:
+           ----------
+           symbol : str
+               Символ криптовалюти (наприклад, "BTC", "ETH", "SOL").
+
+           cycle_type : str, optional
+               Тип циклу, який потрібно використати. За замовчуванням — "auto".
+
+           Повертає:
+           --------
+           pd.DataFrame
+               Фрейм даних із такими колонками:
+                   - "date": дата
+                   - "price": ціна активу на дату
+                   - "cycle_roi": ROI з початку відповідного циклу
+                   - "cycle_roi_norm": нормалізований ROI (z-score в межах циклу)
+                   - "time_in_cycle": частка пройденого часу в межах циклу [0, 1]
+
+           Обробка помилок:
+           ----------------
+           - Якщо тип циклу "bull_bear" не може бути визначено (наприклад, через відсутність максимумів/мінімумів),
+             буде використано просту логіку визначення пік/дно на основі ковзних вікон.
+           - Якщо не вдається розрахувати ROI — метод виводить попередження через лог і повертає порожній DataFrame.
+
+           Примітки:
+           ---------
+           - Для "custom" циклів ROI розраховується на основі сегментів, знайдених за автокореляцією лог-доходностей.
+           - Підтримка символів і типів циклів жорстко закодована, але може бути легко розширена.
+           - Дані про халвінги, оновлення мережі та події екосистеми мають бути заздалегідь визначені.
+
+
+           """
         self.logger.info(f"Calculating cycle ROI for {symbol} using cycle type: {cycle_type}")
 
         try:

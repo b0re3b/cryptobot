@@ -43,9 +43,17 @@ class CryptoCycles:
 
     def _ensure_float_df(self, df):
         """
-        Ensure all numeric columns in the dataframe are float type, not Decimal.
-        This helps prevent type mismatches in calculations.
-        """
+    Приводить всі числові стовпці DataFrame до типу float, якщо вони містять значення типу Decimal.
+
+    Це необхідно для запобігання помилкам, пов'язаним із типами даних у подальших обчисленнях.
+    Перевіряються лише перші 5 ненульових значень у кожному числовому стовпці для виявлення типу Decimal.
+
+    Parameters:
+        df (pandas.DataFrame): Вхідний DataFrame, у якому потрібно привести числові стовпці до float.
+
+    Returns:
+        pandas.DataFrame: DataFrame з приведеними типами даних (float замість Decimal).
+    """
         self.logger.debug("Converting dataframe to float type")
 
         numeric_cols = df.select_dtypes(include=['number']).columns
@@ -60,7 +68,24 @@ class CryptoCycles:
     def load_processed_data(self, symbol: str, timeframe: str,
                             start_date: Optional[str] = None,
                             end_date: Optional[str] = None) -> dict[Any, Any] | None | Any:
+        """
+            Завантажує попередньо оброблені дані для заданого символу й таймфрейму з кешу або бази даних.
 
+            Якщо дані вже є в кеші, вони повертаються звідти. В іншому випадку дані завантажуються
+            з бази даних через `db_connection`, обробляються, кешуються й повертаються.
+            Числові значення типу Decimal приводяться до типу float для забезпечення сумісності.
+
+            Parameters:
+                symbol (str): Символ інструменту (наприклад, 'BTCUSDT').
+                timeframe (str): Таймфрейм даних (наприклад, '1h', '1d').
+                start_date (Optional[str]): Початкова дата для фільтрації (може бути None).
+                end_date (Optional[str]): Кінцева дата для фільтрації (може бути None).
+
+            Returns:
+                dict[Any, Any] | None | Any: Завантажені та оброблені дані, або None, якщо дані не знайдено.
+
+
+            """
         cache_key = f"{symbol}_{timeframe}_{start_date}_{end_date}"
         self.logger.info(f"Loading data for {symbol} {timeframe} from {start_date} to {end_date}")
 
@@ -97,8 +122,40 @@ class CryptoCycles:
                                              symbol: str,
                                              cycle_type: str = 'auto',
                                              normalize: bool = True) -> Dict:
+
         """
-        Compare current market cycle to historical cycles.
+        Порівнює поточний ринковий цикл із історичними циклами для заданого фінансового інструменту.
+
+        Метод автоматично визначає тип циклу на основі символу інструменту, якщо встановлено `cycle_type='auto'`,
+        або використовує вказаний тип. Поточний цикл порівнюється з історичними на основі схожості цінового руху
+        (з використанням евклідової відстані). При бажанні дані нормалізуються.
+
+        Parameters:
+            processed_data (pd.DataFrame): Попередньо оброблені дані таймсерії з колонкою `close`
+                                           та індексом типу `pd.DatetimeIndex`.
+            symbol (str): Символ активу (наприклад, 'BTCUSDT', 'ETHUSD').
+            cycle_type (str, optional): Тип циклу для аналізу. Може бути:
+                - 'auto' (за замовчуванням) — вибирається автоматично залежно від символу
+                - 'bull_bear' — бичачі/ведмежі цикли
+                - 'halving' — халвінг (для BTC)
+                - 'network_upgrade' — оновлення мережі (для ETH)
+                - 'ecosystem_event' — екосистемні події (для SOL)
+            normalize (bool, optional): Якщо True, ціни нормалізуються перед порівнянням. За замовчуванням — True.
+
+        Returns:
+            Dict: Словник з результатами порівняння, який містить:
+                - 'similarity_scores': словник з ідентифікаторами історичних циклів і їхнім схожістю
+                - 'current_cycle_length': довжина поточного циклу в днях
+                - 'current_cycle_start': дата початку поточного циклу
+                - 'current_cycle_end': дата завершення поточного циклу
+                - 'most_similar_cycle': ідентифікатор найбільш схожого історичного циклу
+                - 'potential_continuation' (необов’язково): прогноз ціни на основі історичного циклу, якщо достатньо даних
+
+        Raises:
+            ValueError: Якщо індекс `processed_data` не є `pd.DatetimeIndex`.
+            Exception: У разі помилок під час визначення циклів.
+
+        
         """
         self.logger.info(f"Comparing current to historical cycles for {symbol} with cycle_type={cycle_type}")
 
@@ -226,10 +283,6 @@ class CryptoCycles:
             if normalize:
                 historical_prices = historical_prices / historical_prices[0]
 
-            # Calculate similarity using Dynamic Time Warping (DTW)
-            # We'll use Euclidean distance as a simple measure here
-            # DTW would be more accurate but requires additional libraries
-
             # For each possible starting point in the historical data
             min_distance = float('inf')
             best_start_idx = 0
@@ -318,12 +371,24 @@ class CryptoCycles:
         self.logger.info(f"Comparison complete. Found {len(sorted_scores)} similar cycles.")
         return comparison_results
 
-
-
     def _convert_to_float(self, value):
         """
-        Convert various numeric types (including Decimal) to float.
+        Перетворює значення на тип float, обробляючи різні числові типи та нестандартні випадки.
+
+        Метод дозволяє привести значення до стандартного типу `float`, підтримуючи:
+        - Decimal (з модуля decimal)
+        - int, float
+        - Рядки, які представляють числа
+
+        У випадку невдалої конверсії (наприклад, нечисловий рядок або непідтримуваний тип) повертається 0.0.
+
+        Параметри:
+            value (будь-який тип): Вхідне значення для перетворення.
+
+        Повертає:
+            float: Перетворене числове значення або 0.0, якщо перетворення не вдалося.
         """
+
         if isinstance(value, Decimal):
             return float(value)
         elif isinstance(value, (int, float)):
@@ -339,8 +404,31 @@ class CryptoCycles:
     def update_features_with_new_data(self, processed_data: pd.DataFrame,
                                       symbol: str, timeframe: str = '1d') -> pd.DataFrame:
         """
-        Fixed version of update_features_with_new_data with proper error handling
+        Оновлює циклічні ознаки на основі нового обробленого ринкового датафрейму.
+
+        Цей метод виконує повний процес оновлення:
+        1. Перевіряє вхідні дані на коректність.
+        2. Завантажує з бази даних існуючі ознаки для симоволу.
+        3. Оновлює фазу ринку та визначає бичачі/ведмежі цикли.
+        4. Розраховує токен-специфічні циклічні ознаки (наприклад, халвінг для BTC).
+        5. Прогнозує потенційні точки розвороту циклу та зберігає їх.
+        6. Виявляє аномалії в циклах і додає цю інформацію до ознак.
+        7. Порівнює поточний цикл з історичними та зберігає показники схожості.
+        8. Зберігає оновлені ознаки та метрики в базу даних.
+
+        Параметри:
+            processed_data (pd.DataFrame): Оброблені ринкові дані з індексом типу DatetimeIndex.
+            symbol (str): Символ активу (наприклад, "BTCUSDT").
+            timeframe (str): Таймфрейм даних (наприклад, "1d", "4h"). За замовчуванням — "1d".
+
+        Повертає:
+            pd.DataFrame: Оновлений датафрейм з новими циклічними ознаками.
+
+        Виключення:
+            ValueError: Якщо датафрейм порожній або індекс не є DatetimeIndex.
+            Exception: У разі критичних помилок під час будь-якого з етапів оновлення.
         """
+
         self.logger.info(f"Updating features for {symbol} with new data")
 
         if len(processed_data) == 0:
@@ -513,8 +601,43 @@ class CryptoCycles:
                                      cycle_type: str = 'auto',
                                      confidence_interval: float = 0.9) -> pd.DataFrame:
         """
-        Fixed version with proper type handling
+        Прогнозує ключові точки розвороту ринку (верхні та нижні) на основі технічних індикаторів, історичних циклів та подій.
+
+        Метод:
+        1. Визначає тип циклу (автоматично або за параметром).
+        2. Розраховує технічні індикатори: SMA, RSI, MACD, волатильність.
+        3. Виявляє сигнали потенційних "днів дна" та "днів вершини" на основі комплексних умов.
+        4. Застосовує поправочні коефіцієнти залежно від специфіки циклу (наприклад, халвінг BTC).
+        5. Враховує історичні цикли для підсилення прогнозу.
+        6. Додає майбутні подієві розвороти (якщо є).
+        7. Фільтрує результати за вказаним рівнем довіри.
+
+        Параметри:
+            processed_data (pd.DataFrame): Попередньо оброблені ринкові дані з колонками `close`, `volume`, `high`, `low`, `open` та ін., з індексом типу DatetimeIndex.
+            symbol (str): Символ активу, наприклад "BTCUSDT".
+            cycle_type (str): Тип циклу (наприклад, "halving", "bull_bear", "network_upgrade", "ecosystem_event"). Якщо 'auto', вибирається на основі активу.
+            confidence_interval (float): Мінімальний рівень довіри для врахування точки розвороту (від 0 до 1).
+
+        Повертає:
+            pd.DataFrame: Таблиця з точками розвороту, що включає:
+                - `date`: Дата виявленої точки.
+                - `price`: Ціна в момент розвороту.
+                - `direction`: Напрямок розвороту ("top" або "bottom").
+                - `strength`: Числова сила сигналу (наскільки потужний був розворот).
+                - `confidence`: Розрахований рівень довіри.
+                - `indicators`: Перелік спрацьованих технічних сигналів.
+                - `days_since_last_tp`: Кількість днів від попереднього розвороту.
+                - `cycle_phase`: Поточна фаза ринкового циклу.
+
+        Виключення:
+            ValueError: Якщо індекс датафрейму не є типом DatetimeIndex.
+            Exception: У разі внутрішніх помилок під час обробки, логуються через self.logger.
+
+        Примітки:
+        - Підтримується спеціальна логіка для BTC (фази халвінгу).
+        - Працює лише з достатньо довгими часовими рядами (мінімум 200+ точок для коректної побудови SMA/RSI).
         """
+
         self.logger.info(f"Predicting cycle turning points for {symbol} with cycle_type={cycle_type}")
 
         # Clean symbol format
@@ -822,7 +945,15 @@ class CryptoCycles:
         return turning_points
 
     def _get_cycle_phase(self, row):
-        """Helper method to determine cycle phase"""
+        """
+            Визначає фазу ринку або фази халвінгового циклу на основі переданого рядка даних.
+
+            Параметри:
+                row (dict або pd.Series): Рядок з даними, який може містити поля 'market_phase' або 'halving_cycle_phase'.
+
+            Повертає:
+                str: Назва фази циклу, або 'Unknown', якщо дані відсутні.
+            """
         if 'market_phase' in row:
             return str(row['market_phase'])
         elif 'halving_cycle_phase' in row:
@@ -832,7 +963,17 @@ class CryptoCycles:
             return "Unknown"
 
     def _add_projected_turning_points(self, turning_points, cycle_comparison, df):
-        """Helper method to add projected turning points based on historical patterns"""
+        """
+            Додає проєктовані точки розвороту (turning points) до історичних даних на основі схожих історичних циклів.
+
+            Параметри:
+                turning_points (pd.DataFrame): Існуючі точки розвороту.
+                cycle_comparison (dict): Результати порівняння з історичними циклами, що містять потенційні ціни та рівень довіри.
+                df (pd.DataFrame): Початкові часові ряди з цінами.
+
+            Повертає:
+                pd.DataFrame: Оновлений DataFrame із доданими проєктованими точками розвороту.
+            """
         self.logger.debug("Using historical pattern to project future turning points")
         potential_prices = cycle_comparison['potential_continuation']['prices']
 
@@ -903,7 +1044,35 @@ class CryptoCycles:
         return turning_points
 
     def run_full_pipeline(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> dict:
+        """
+           Запускає повний аналітичний пайплайн для заданого активу в заданому таймфреймі та часовому проміжку.
 
+           Кроки:
+               1. Завантаження оброблених даних
+               2. Перетворення індексу у DatetimeIndex
+               3. Генерація циклічних ознак (features)
+               4. Розрахунок ROI за циклами
+               5. Виявлення аномалій циклів
+               6. Порівняння з історичними циклами
+               7. Прогнозування точок розвороту
+               8. Оновлення ознак на основі нових даних
+
+           Параметри:
+               symbol (str): Символ фінансового активу (наприклад, 'BTC').
+               timeframe (str): Таймфрейм для аналізу (наприклад, '1d', '4h').
+               start_date (str): Початкова дата в форматі 'YYYY-MM-DD'.
+               end_date (str): Кінцева дата в форматі 'YYYY-MM-DD'.
+
+           Повертає:
+               dict: Словник з результатами по кожному етапу пайплайну:
+                     - 'raw_data'
+                     - 'features'
+                     - 'roi_analysis'
+                     - 'anomalies'
+                     - 'historical_comparison'
+                     - 'turning_points'
+                     - 'updated_features'
+           """
         self.logger.info(f"Running full pipeline for {symbol} from {start_date} to {end_date} on {timeframe} timeframe")
         results = {}
 
@@ -1012,7 +1181,18 @@ class CryptoCycles:
             raise
 
     def analyze_multiple_symbols(self, symbols: list, timeframe: str, start_date: str, end_date: str) -> dict:
+        """
+           Виконує повний аналіз для кількох активів у вказаному таймфреймі та часовому проміжку.
 
+           Параметри:
+               symbols (list): Список символів фінансових активів.
+               timeframe (str): Таймфрейм для аналізу.
+               start_date (str): Початкова дата в форматі 'YYYY-MM-DD'.
+               end_date (str): Кінцева дата в форматі 'YYYY-MM-DD'.
+
+           Повертає:
+               dict: Словник із результатами аналізу для кожного символу. У разі помилки — ключ 'error'.
+           """
         self.logger.info(f"Analyzing multiple symbols: {symbols} from {start_date} to {end_date}")
         results = {}
 
@@ -1029,6 +1209,26 @@ class CryptoCycles:
         return results
 
     def save_cycle_metrics(self, processed_data: pd.DataFrame, symbol: str, timeframe: str) -> bool:
+        """
+            Зберігає метрики циклу для вказаного активу на заданому таймфреймі у базу даних.
+
+            Аргументи:
+                processed_data (pd.DataFrame): Оброблені дані з розрахованими метриками циклів.
+                symbol (str): Символ криптовалюти (наприклад, 'BTC', 'ETH', 'SOL').
+                timeframe (str): Таймфрейм, до якого належать дані (наприклад, '1d', '4h').
+
+            Повертає:
+                bool: True, якщо збереження пройшло успішно, False — у разі помилки або якщо дані відсутні.
+
+            Основні дії:
+                - Перевіряє наявність та коректність вхідних даних.
+                - Виділяє останній запис з метриками.
+                - Витягує загальні та специфічні для активу метрики (BTC, ETH, SOL).
+                - Зберігає метрики у базу даних через метод `save_cycle_feature`.
+                - Якщо доступна інформація про подібність циклів — зберігає її через метод `save_cycle_similarity`.
+                - Якщо доступні прогнози точок розвороту — зберігає їх через метод `save_predicted_turning_point`.
+                - Продовжує виконання, навіть якщо збереження подібності або розворотів завершилося з помилкою.
+            """
         self.logger.info(f"Saving cycle metrics for {symbol} on {timeframe} timeframe")
 
         try:
@@ -1234,7 +1434,28 @@ class CryptoCycles:
 
     @staticmethod
     def prepare_cycle_ml_features(processed_data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+            Готує ознаки (features) для машинного навчання на основі циклічних та технічних показників криптовалюти.
 
+            Аргументи:
+                processed_data (pd.DataFrame): Початкові часові ряди цінової інформації та об'ємів.
+                symbol (str): Символ криптовалюти (наприклад, 'BTC', 'ETH', 'SOL').
+
+            Повертає:
+                pd.DataFrame: Таблиця з новими колонками, що містять обчислені ознаки для моделі ML.
+
+            Основні ознаки:
+                - Специфічні циклічні метрики для BTC, ETH, SOL.
+                - Фаза ринку та визначення бичачих/ведмежих циклів.
+                - Сезонність (тижнева та місячна) у вигляді синусоїдальних ознак.
+                - Технічні індикатори: прибутковість, волатильність, RSI, MACD.
+                - Лагові ознаки (затримки) для цін, об’ємів та прибутковості.
+
+            Примітки:
+                - Видаляє всі рядки з пропущеними значеннями після обчислення.
+                - Використовує зовнішні класи-екстрактори для розрахунку специфічних ознак.
+                - Повертає повністю підготовлений DataFrame, готовий для тренування моделі.
+            """
         logger = CryptoLogger('FeaturePreparation')
 
         try:
