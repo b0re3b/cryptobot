@@ -29,7 +29,7 @@ class ModelConfig:
 @dataclass
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
-    timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
+    timeframes: List[str] = field(default_factory=lambda: ['4h'])
     model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru','transformer'])
 
 
@@ -93,14 +93,14 @@ class DataPreprocessor:
         self.logger.info(f"Збережено конфігурацію моделі для {key}")
 
     def get_data_loader(self, symbol: str, timeframe: str, model_type: str) -> Callable:
-        """Створення завантажувача даних"""
+        """Create data loader that returns a DataFrame with target column"""
         try:
-            self.logger.info(f"Підготовка завантажувача даних для {symbol} з таймфреймом {timeframe} "
-                             f"та моделлю {model_type}")
+            self.logger.info(f"Preparing data loader for {symbol} with timeframe {timeframe} "
+                             f"and model {model_type}")
 
             if not hasattr(self, 'db_manager') or self.db_manager is None:
-                self.logger.error("db_manager не ініціалізований у класі")
-                raise ValueError("db_manager не встановлений")
+                self.logger.error("db_manager not initialized in class")
+                raise ValueError("db_manager is not set")
 
             symbol_methods = {
                 'BTC': self.db_manager.get_btc_lstm_sequence,
@@ -109,45 +109,52 @@ class DataPreprocessor:
             }
 
             if symbol not in symbol_methods:
-                self.logger.error(f"Непідтримуваний символ: {symbol}")
-                raise ValueError(f"Непідтримуваний символ: {symbol}")
+                self.logger.error(f"Unsupported symbol: {symbol}")
+                raise ValueError(f"Unsupported symbol: {symbol}")
 
             def data_loader():
                 try:
-                    self.logger.debug(f"Завантаження даних для {symbol} з таймфреймом {timeframe}")
+                    self.logger.debug(f"Loading data for {symbol} with timeframe {timeframe}")
 
+                    # Get raw data
                     if symbol == 'BTC':
-                        data = self.db_manager.get_btc_lstm_sequence(timeframe)
+                        raw_data = self.db_manager.get_btc_lstm_sequence(timeframe)
                     elif symbol == 'ETH':
-                        data = self.db_manager.get_eth_lstm_sequence(timeframe)
+                        raw_data = self.db_manager.get_eth_lstm_sequence(timeframe)
                     elif symbol == 'SOL':
-                        data = self.db_manager.get_sol_lstm_sequence(timeframe)
+                        raw_data = self.db_manager.get_sol_lstm_sequence(timeframe)
                     else:
-                        raise ValueError(f"Непідтримуваний символ: {symbol}")
+                        raise ValueError(f"Unsupported symbol: {symbol}")
 
-                    if data is not None and len(data) > 0:
-                        self.logger.info(f"Успішно завантажено {len(data)} записів для {symbol}-{timeframe}")
-                        if isinstance(data, list) and len(data) > 0:
-                            self.logger.debug(f"Ключі у завантажених даних: {list(data[0].keys())}")
+                    if raw_data is None or len(raw_data) == 0:
+                        self.logger.warning(f"Loaded data for {symbol}-{timeframe} is empty")
+                        return pd.DataFrame()
 
-                            preview_data = [
-                                {k: row[k] for i, k in enumerate(row) if i < 5}
-                                for row in data[:5]
-                            ]
-                            self.logger.debug(f"Перші 5 рядків (до 5 колонок): {preview_data}")
+                    # Convert to DataFrame if needed
+                    if isinstance(raw_data, list):
+                        df = pd.DataFrame(raw_data)
+                    elif isinstance(raw_data, pd.DataFrame):
+                        df = raw_data.copy()
                     else:
-                        self.logger.warning(f"Завантажені дані для {symbol}-{timeframe} порожні")
+                        raise ValueError(f"Unknown data type: {type(raw_data)}")
 
-                    return data
+                    # Ensure we have a target column - create from next period's close price if not exists
+                    if 'target' not in df.columns and 'close' in df.columns:
+                        df['target'] = df['close'].shift(-1)
+                        df.dropna(subset=['target'], inplace=True)
+                        self.logger.info(f"Created target column from next period close prices")
+
+                    self.logger.info(f"Successfully loaded {len(df)} records for {symbol}-{timeframe}")
+                    return df
 
                 except Exception as e:
-                    self.logger.error(f"Помилка завантаження даних у data_loader для {symbol}: {str(e)}")
-                    return None
+                    self.logger.error(f"Error loading data in data_loader for {symbol}: {str(e)}")
+                    return pd.DataFrame()
 
             return data_loader
 
         except Exception as e:
-            self.logger.error(f"Помилка підготовки завантажувача даних для {symbol}: {str(e)}")
+            self.logger.error(f"Error preparing data loader for {symbol}: {str(e)}")
             raise
 
     def validate_prepared_data(self, df: pd.DataFrame, symbol: str) -> bool:

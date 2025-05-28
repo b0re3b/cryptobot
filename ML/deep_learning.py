@@ -38,7 +38,7 @@ class ModelConfig:
 @dataclass
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
-    timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
+    timeframes: List[str] = field(default_factory=lambda: ['4h'])
     model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru', 'transformer'])
 
 
@@ -1809,110 +1809,132 @@ class DeepLearning:
 
 def main():
     """
-    Main function to execute the deep learning pipeline with all major methods.
+    Головна функція для виконання повного циклу роботи з моделями:
+    - Ініціалізація
+    - Навчання всіх моделей
+    - Прогнозування
+    - Оцінка
+    - Візуалізація
+    - Управління моделями
     """
-    # Initialize pipeline
-    pipeline = DeepLearning()
+    # Ініціалізація
+    dl_pipeline = DeepLearning()
+    logger = dl_pipeline.logger
 
-    # 1. System Information
-    print("\n=== System Information ===")
-    system_info = pipeline.get_system_info()
-    print(json.dumps(system_info, indent=2))
+    # 1. Вивід інформації про систему
+    logger.info("=== Початок роботи Deep Learning Pipeline ===")
+    system_info = dl_pipeline.get_system_info()
+    logger.info(f"Інформація про систему:\n{json.dumps(system_info, indent=2)}")
 
-    # 2. Full Training Pipeline
-    print("\n=== Training Models ===")
-    training_results = pipeline.full_training_pipeline(
-        symbols=['BTC', 'ETH', 'SOL'],
-        timeframes=['4h'],
-        model_types='lstm',
+    # 2. Навчання всіх моделей для всіх символів і таймфреймів
+    logger.info("\n=== Навчання моделей ===")
+    training_results = dl_pipeline.train_all_models(
+        symbols=CryptoConfig().symbols,
+        timeframes=CryptoConfig().timeframes,
+        model_types=CryptoConfig().model_types,
         epochs=50,
-        batch_size=64
+        batch_size=64,
+        save_models=True
     )
-    print("Training completed for", len(training_results), "models")
 
-    # 3. List Trained Models
-    print("\n=== Trained Models ===")
-    trained_models = pipeline.list_trained_models()
-    print(pd.DataFrame(trained_models))
+    # 3. Вивід списку навчених моделей
+    trained_models = dl_pipeline.list_trained_models()
+    logger.info(f"Навчені моделі:\n{pd.DataFrame(trained_models).to_string()}")
 
-    # 4. Individual Predictions
-    print("\n=== Making Predictions ===")
-    for symbol in ['BTC', 'ETH', 'SOL']:
-        for timeframe in ['4h']:
+    # 4. Прогнозування для всіх моделей
+    logger.info("\n=== Прогнозування ===")
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    # Одноетапний прогноз
+                    prediction = dl_pipeline.predict(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        model_type=model_type,
+                        steps_ahead=3
+                    )
+                    logger.info(f"{symbol}-{timeframe}-{model_type} прогноз: {prediction['predictions']}")
+
+                    # Багатоетапний прогноз
+                    multi_step = dl_pipeline.predict_multiple_steps(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        model_type=model_type,
+                        steps=5
+                    )
+                    logger.info(f"{symbol}-{timeframe}-{model_type} багатоетапний прогноз:\n{multi_step}")
+
+                except Exception as e:
+                    logger.error(f"Помилка прогнозування для {symbol}-{timeframe}-{model_type}: {str(e)}")
+
+    # 5. Ансамблеві прогнози
+    logger.info("\n=== Ансамблеві прогнози ===")
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
             try:
-                pred = pipeline.predict(
+                ensemble_pred = dl_pipeline.ensemble_prediction_pipeline(
                     symbol=symbol,
                     timeframe=timeframe,
-                    model_type='lstm',
-                    steps_ahead=3
+                    steps_ahead=3,
+                    weights={'lstm': 0.4, 'gru': 0.3, 'transformer': 0.3}
                 )
-                print(f"{symbol}-{timeframe} LSTM prediction:", pred['predictions'])
+                logger.info(f"{symbol}-{timeframe} ансамблевий прогноз: {ensemble_pred}")
             except Exception as e:
-                print(f"Prediction failed for {symbol}-{timeframe}: {str(e)}")
+                logger.error(f"Помилка ансамблевого прогнозу для {symbol}-{timeframe}: {str(e)}")
 
-    # 5. Multiple Steps Prediction
-    print("\n=== Multi-step Prediction ===")
-    btc_multi = pipeline.predict_multiple_steps('BTC', '4h', 'lstm', steps=5)
-    print(btc_multi)
+    # 6. Оцінка моделей
+    logger.info("\n=== Оцінка моделей ===")
+    evaluation_results = {}
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    model_key = f"{symbol}_{timeframe}_{model_type}"
+                    metrics = dl_pipeline.evaluate_model(
+                        model_key=model_key,
+                        test_data=None
+                    )
+                    evaluation_results[model_key] = metrics
+                    logger.info(f"{model_key} метрики: {metrics}")
+                except Exception as e:
+                    logger.error(f"Помилка оцінки для {symbol}-{timeframe}-{model_type}: {str(e)}")
 
-    # 6. Ensemble Prediction
-    print("\n=== Ensemble Prediction ===")
-    ensemble_pred = pipeline.ensemble_prediction_pipeline(
-        symbol='BTC',
-        timeframe='4h',
-        steps_ahead=3,
-        weights={'lstm': 0.4, 'gru': 0.3, 'transformer': 0.3}
-    )
-    print("Ensemble prediction:", ensemble_pred)
-
-    # 7. Model Evaluation
-    print("\n=== Model Evaluation ===")
-    for symbol in ['BTC', 'ETH', 'SOL']:
-        for timeframe in ['4h']:
+    # 7. Порівняння моделей
+    logger.info("\n=== Порівняння моделей ===")
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
             try:
-                metrics = pipeline.evaluate_model(
-                    model_key=f"{symbol}_{timeframe}_lstm",
-                    test_data=None
-                )
-                print(f"{symbol}-{timeframe} metrics:", metrics)
+                comparison = dl_pipeline.compare_models(symbol, timeframe)
+                logger.info(f"{symbol}-{timeframe} порівняння моделей:\n{pd.DataFrame(comparison).T.to_string()}")
             except Exception as e:
-                print(f"Evaluation failed for {symbol}-{timeframe}: {str(e)}")
+                logger.error(f"Помилка порівняння для {symbol}-{timeframe}: {str(e)}")
 
-    # 8. Model Comparison
-    print("\n=== Model Comparison ===")
-    comparison = pipeline.compare_models('BTC', '4h')
-    print(pd.DataFrame(comparison).T)
+    # 8. Аналіз важливості ознак
+    logger.info("\n=== Аналіз важливості ознак ===")
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    feature_imp = dl_pipeline.feature_importance_analysis(symbol, timeframe, model_type)
+                    top_features = dict(sorted(feature_imp.items(), key=lambda x: x[1], reverse=True)[:5])
+                    logger.info(f"{symbol}-{timeframe}-{model_type} топ-5 ознак: {top_features}")
+                except Exception as e:
+                    logger.error(f"Помилка аналізу ознак для {symbol}-{timeframe}-{model_type}: {str(e)}")
 
-    # 9. Feature Importance
-    print("\n=== Feature Importance ===")
-    feature_imp = pipeline.feature_importance_analysis('BTC', '4h', 'lstm')
-    print("Top features:", dict(sorted(feature_imp.items(), key=lambda x: x[1], reverse=True)[:5]))
+    # 9. Інтерпретація моделей
+    logger.info("\n=== Інтерпретація моделей ===")
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    interpretation = dl_pipeline.model_interpretation(symbol, timeframe, model_type)
+                    logger.info(f"{symbol}-{timeframe}-{model_type} інтерпретація завершена")
+                except Exception as e:
+                    logger.error(f"Помилка інтерпретації для {symbol}-{timeframe}-{model_type}: {str(e)}")
 
-    # 10. Model Interpretation
-    print("\n=== Model Interpretation ===")
-    interpretation = pipeline.model_interpretation('BTC', '4h', 'lstm')
-    print("Interpretation keys:", interpretation.keys())
-
-    # 11. Online Learning
-    print("\n=== Online Learning ===")
-    try:
-        # Load some new data (in a real scenario, this would be fresh data)
-        data_loader = pipeline.data_preprocessor.get_data_loader('BTC', '4h', 'lstm')
-        new_data = data_loader().tail(100)  # Use last 100 points as new data
-
-        online_result = pipeline.online_learning(
-            symbol='BTC',
-            timeframe='1h',
-            model_type='lstm',
-            new_data=new_data,
-            epochs=5
-        )
-        print("Online learning result:", online_result)
-    except Exception as e:
-        print("Online learning failed:", str(e))
-
-    # 12. Hyperparameter Optimization
-    print("\n=== Hyperparameter Optimization ===")
+    # 10. Оптимізація гіперпараметрів
+    logger.info("\n=== Оптимізація гіперпараметрів ===")
     param_space = {
         'hidden_dim': [32, 64, 128],
         'num_layers': [1, 2],
@@ -1920,64 +1942,86 @@ def main():
         'dropout': [0.1, 0.2]
     }
 
-    try:
-        opt_result = pipeline.hyperparameter_optimization(
-            symbol='BTC',
-            timeframe='4h',
-            model_type='lstm',
-            param_space=param_space,
-            optimization_method='random_search',
-            max_iterations=10
-        )
-        print("Best params:", opt_result['best_params'])
-        print("Best score:", opt_result['best_score'])
-    except Exception as e:
-        print("Optimization failed:", str(e))
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    opt_result = dl_pipeline.hyperparameter_optimization(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        model_type=model_type,
+                        param_space=param_space,
+                        optimization_method='random_search',
+                        max_iterations=10
+                    )
+                    logger.info(f"{symbol}-{timeframe}-{model_type} оптимальні параметри: {opt_result['best_params']}")
+                except Exception as e:
+                    logger.error(f"Помилка оптимізації для {symbol}-{timeframe}-{model_type}: {str(e)}")
 
-    # 13. Visualization
-    print("\n=== Generating Visualizations ===")
-    try:
-        # Model Comparison Plot
-        pipeline.plot_model_comparison('BTC', '4h' )
+    # 11. Візуалізація
+    logger.info("\n=== Генерація візуалізацій ===")
+    os.makedirs("visualizations", exist_ok=True)
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    # Порівняння моделей
+                    comp_path = f"visualizations/{symbol}_{timeframe}_comparison.png"
+                    dl_pipeline.plot_model_comparison(symbol, timeframe, save_path=comp_path)
 
-        # Feature Importance Plot
-        pipeline.plot_feature_importance('BTC', '4h', 'lstm', top_n=10)
+                    # Важливість ознак
+                    feat_path = f"visualizations/{symbol}_{timeframe}_{model_type}_features.png"
+                    dl_pipeline.plot_feature_importance(
+                        symbol, timeframe, model_type,
+                        top_n=10, save_path=feat_path
+                    )
 
-        # Prediction vs Actual Plot
-        pipeline.plot_prediction_vs_actual('BTC', '4h', 'lstm', n_points=50)
+                    # Прогнози vs фактичні значення
+                    pred_path = f"visualizations/{symbol}_{timeframe}_{model_type}_predictions.png"
+                    dl_pipeline.plot_prediction_vs_actual(
+                        symbol, timeframe, model_type,
+                        n_points=50, save_path=pred_path
+                    )
 
-        # Training History Plot
-        pipeline.plot_training_history('BTC', '4h', 'lstm')
-    except Exception as e:
-        print("Visualization failed:", str(e))
+                    # Історія навчання
+                    hist_path = f"visualizations/{symbol}_{timeframe}_{model_type}_history.png"
+                    dl_pipeline.plot_training_history(symbol, timeframe, model_type)
 
-    # 14. Model Management
-    print("\n=== Model Management ===")
-    # Get model info
-    model_info = pipeline.get_model_info('BTC', '4h', 'lstm')
-    print("Model info:", model_info.keys())
+                    logger.info(f"Візуалізації для {symbol}-{timeframe}-{model_type} збережено")
+                except Exception as e:
+                    logger.error(f"Помилка візуалізації для {symbol}-{timeframe}-{model_type}: {str(e)}")
 
-    # Performance report
-    print("\n=== Performance Report ===")
-    perf_report = pipeline.model_performance_report()
-    print(perf_report.head())
+    # 12. Управління моделями
+    logger.info("\n=== Управління моделями ===")
+    for symbol in CryptoConfig().symbols:
+        for timeframe in CryptoConfig().timeframes:
+            for model_type in CryptoConfig().model_types:
+                try:
+                    # Інформація про модель
+                    model_info = dl_pipeline.get_model_info(symbol, timeframe, model_type)
+                    logger.info(f"{symbol}-{timeframe}-{model_type} інформація отримана")
 
-    # Cleanup old models
-    deleted_count = pipeline.cleanup_old_models(days_old=7)
-    print(f"Deleted {deleted_count} old model files")
+                    # Експорт моделі
+                    export_path = dl_pipeline.export_model_for_production(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        model_type=model_type,
+                        export_format='onnx'
+                    )
+                    logger.info(f"{symbol}-{timeframe}-{model_type} експортовано до {export_path}")
+                except Exception as e:
+                    logger.error(f"Помилка управління для {symbol}-{timeframe}-{model_type}: {str(e)}")
 
-    # 15. Export Model for Production
-    print("\n=== Model Export ===")
-    try:
-        export_path = pipeline.export_model_for_production(
-            symbol='BTC',
-            timeframe='4h',
-            model_type='lstm',
-            export_format='onnx'
-        )
-        print(f"Model exported to: {export_path}")
-    except Exception as e:
-        print("Export failed:", str(e))
+    # 13. Очищення старих моделей
+    deleted_count = dl_pipeline.cleanup_old_models(days_old=7)
+    logger.info(f"Видалено {deleted_count} старих моделей")
+
+    # 14. Звіт про продуктивність
+    logger.info("\n=== Звіт про продуктивність ===")
+    perf_report = dl_pipeline.model_performance_report()
+    logger.info(f"Звіт про продуктивність:\n{perf_report.to_string()}")
+
+    logger.info("=== Deep Learning Pipeline завершено успішно ===")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,24 @@
+{
+  "best_params": {},
+  "best_score": Infinity,
+  "optimization_history": [],
+  "method": "random_search",
+  "data_info": {
+    "total_samples": 10380,
+    "features": 25,
+    "validation_split": 0.2,
+    "target_column": "target_close_1"
+  },
+  "timestamp": "2025-05-28T12:16:49.450836",
+  "model_config": {
+    "input_dim": 13,
+    "hidden_dim": 64,
+    "num_layers": 2,
+    "output_dim": 1,
+    "dropout": 0.2,
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    "sequence_length": 60
+  }
+}

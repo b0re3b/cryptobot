@@ -47,7 +47,7 @@ class ModelConfig:
 @dataclass
 class CryptoConfig:
     symbols: List[str] = field(default_factory=lambda: ['BTC', 'ETH', 'SOL'])
-    timeframes: List[str] = field(default_factory=lambda: ['1m', '1h', '4h', '1d', '1w'])
+    timeframes: List[str] = field(default_factory=lambda: ['4h'])
     model_types: List[str] = field(default_factory=lambda: ['lstm', 'gru', 'transformer'])
 
 
@@ -101,45 +101,51 @@ class ModelTrainer:
                     validation_split: float = 0.2,
                     patience: int = 10, model_data=None,
                     save_after_training: bool = True,
+                    target_column: str = 'target',
                     **kwargs) -> Dict[str, Any]:
-        """
-        Оновлений метод з валідацією model_type
-        """
-        # Валідація та нормалізація model_type
+        # Validate and normalize model_type
         model_type = self._validate_model_type(model_type)
 
-        self.logger.info(f"Початок навчання моделі {symbol}_{timeframe}_{model_type}")
+        self.logger.info(f"Starting training for {symbol}_{timeframe}_{model_type}")
 
-        # Створюємо або отримуємо конфігурацію моделі
+        # Create or get model configuration
         if config is None:
             config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
 
-        # Валідація вхідних даних
+        # Validate input data
         if not isinstance(data, pd.DataFrame):
-            raise ValueError("Очікується DataFrame як вхідні дані")
+            raise ValueError("Expected DataFrame as input data")
 
-        if 'target' not in data.columns:
-            raise ValueError("DataFrame повинен містити колонку 'target'")
+        # Check for target column (try common variations)
+        target_col = None
+        for col in ['target', 'target_close_1', 'target_close']:
+            if col in data.columns:
+                target_col = col
+                break
 
-        # Підготовка даних
-        X = data.drop(columns=['close_scaled']).values
-        y = data['close_scaled'].values
+        if target_col is None:
+            raise ValueError(
+                f"DataFrame must contain a target column (tried: 'target', 'target_close_1', 'target_close')")
 
-        # Розділення на тренувальний та валідаційний набори
+        # Prepare data
+        X = data.drop(columns=[target_col]).values
+        y = data[target_col].values
+
+        # Split into training and validation sets
         split_idx = int(len(X) * (1 - validation_split))
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        # Конвертація в тензори
+        # Convert to tensors
         X_train_tensor = torch.tensor(X_train, dtype=torch.float32).to(self.device)
         y_train_tensor = torch.tensor(y_train, dtype=torch.float32).to(self.device)
         X_val_tensor = torch.tensor(X_val, dtype=torch.float32).to(self.device)
         y_val_tensor = torch.tensor(y_val, dtype=torch.float32).to(self.device)
 
-        # Створення моделі
+        # Create model
         model = self._build_model_from_config(model_type, config).to(self.device)
 
-        # Навчання моделі
+        # Train model
         history = self._train_loop(
             model=model,
             train_data=(X_train_tensor, y_train_tensor),
@@ -150,23 +156,23 @@ class ModelTrainer:
             patience=patience
         )
 
-        # Оцінка моделі
+        # Evaluate model
         metrics = self.evaluate(model, (X_val_tensor, y_val_tensor))
 
-        # Збереження моделі
+        # Save model
         model_key = self._create_model_key(symbol, timeframe, model_type)
         self.models[model_key] = model
         self.model_configs[model_key] = config
         self.model_metrics[model_key] = metrics
         self.training_history[model_key] = history
 
-        # Автоматичне збереження моделі після навчання
+        # Auto-save model after training
         if save_after_training:
             try:
                 model_path = self.save_model(symbol, timeframe, model_type)
-                self.logger.info(f"Модель автоматично збережена: {model_path}")
+                self.logger.info(f"Model automatically saved: {model_path}")
             except Exception as e:
-                self.logger.error(f"Помилка при автоматичному збереженні моделі: {str(e)}")
+                self.logger.error(f"Error during auto-saving model: {str(e)}")
 
         return {
             'config': config.__dict__,
@@ -707,11 +713,8 @@ class ModelTrainer:
     def train_all_models(self, symbols: Optional[List[str]] = None,
                          timeframes: Optional[List[str]] = None,
                          model_types: Optional[List[str]] = None,
-                         save_models: bool = True,  # Новий параметр
+                         save_models: bool = True,
                          **training_params) -> Dict[str, Dict[str, Any]]:
-        """
-        Оновлений метод без використання prepare_features
-        """
         config = CryptoConfig()
         symbols = symbols or config.symbols
         timeframes = timeframes or config.timeframes
@@ -723,7 +726,7 @@ class ModelTrainer:
         saved_models = 0
         failed_saves = 0
 
-        self.logger.info(f"Початок навчання {total_models} моделей")
+        self.logger.info(f"Starting training of {total_models} models")
 
         for symbol in symbols:
             for timeframe in timeframes:
@@ -732,53 +735,64 @@ class ModelTrainer:
                     model_key = self._create_model_key(symbol, timeframe, model_type)
 
                     try:
-                        self.logger.info(f"Навчання моделі {current_model}/{total_models}: {model_key}")
+                        self.logger.info(f"Training model {current_model}/{total_models}: {model_key}")
 
-                        # Отримання даних
+                        # Get data
                         data_loader = self.processor.get_data_loader(symbol, timeframe, model_type)
-                        data = data_loader()
+                        raw_data = data_loader()
+
+                        # Convert list to DataFrame if needed
+                        if isinstance(raw_data, list):
+                            if not raw_data:
+                                raise ValueError(f"Empty data list for {symbol}-{timeframe}")
+                            data = pd.DataFrame(raw_data)
+                        elif isinstance(raw_data, pd.DataFrame):
+                            data = raw_data.copy()
+                        else:
+                            raise ValueError(f"Unsupported data type: {type(raw_data)}")
 
                         if data.empty:
-                            raise ValueError("Порожній DataFrame")
+                            raise ValueError(f"Empty DataFrame for {symbol}-{timeframe}")
 
-                        # Визначення розмірності вхідних даних
-                        input_dim = data.shape[1] - 1  # Враховуємо, що остання колонка - target
+                        # Determine input dimension
+                        input_dim = data.shape[1] - 1  # Subtract target column
 
-                        # Навчання моделі (без автоматичного збереження)
+                        # Train model (without auto-saving)
                         result = self.train_model(
                             symbol=symbol,
                             timeframe=timeframe,
                             model_type=model_type,
                             data=data,
                             input_dim=input_dim,
-                            save_after_training=False,  # Відключаємо автоматичне збереження
+                            save_after_training=False,
                             **training_params
                         )
 
                         results[model_key] = result
-                        self.logger.info(f"Модель {model_key} навчена успішно. RMSE: {result['metrics']['RMSE']:.6f}")
+                        self.logger.info(
+                            f"Model {model_key} trained successfully. RMSE: {result['metrics']['RMSE']:.6f}")
 
-                        # Збереження моделі якщо потрібно
+                        # Save model if needed
                         if save_models:
                             try:
                                 model_path = self.save_model(symbol, timeframe, model_type)
                                 saved_models += 1
                                 results[model_key]['model_path'] = model_path
-                                self.logger.info(f"Модель {model_key} збережена: {model_path}")
+                                self.logger.info(f"Model {model_key} saved: {model_path}")
                             except Exception as save_error:
                                 failed_saves += 1
-                                self.logger.error(f"Помилка збереження моделі {model_key}: {str(save_error)}")
+                                self.logger.error(f"Error saving model {model_key}: {str(save_error)}")
                                 results[model_key]['save_error'] = str(save_error)
 
                     except Exception as e:
-                        self.logger.error(f"Помилка навчання моделі {model_key}: {str(e)}")
+                        self.logger.error(f"Error training model {model_key}: {str(e)}")
                         results[model_key] = {'error': str(e)}
 
         successful_models = len([r for r in results.values() if 'error' not in r])
 
-        summary_msg = f"Навчання завершено. Успішно: {successful_models}/{total_models}"
+        summary_msg = f"Training completed. Successful: {successful_models}/{total_models}"
         if save_models:
-            summary_msg += f". Збережено: {saved_models}, Помилок збереження: {failed_saves}"
+            summary_msg += f". Saved: {saved_models}, Save errors: {failed_saves}"
 
         self.logger.info(summary_msg)
 
