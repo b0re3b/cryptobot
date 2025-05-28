@@ -18,3 +18,4 @@ timeseriesmodels/logs/Forecaster.log
 timeseriesmodels/logs/TimeSeriesModels.log
 timeseriesmodels/logs/TimeseriesAnalyzer.log
 timeseriesmodels/logs/TimeseriesModelEvaluator.log
+ML/logs

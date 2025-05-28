@@ -95,7 +95,7 @@ class ModelTrainer:
 
         return model_type
 
-    def train_model(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
+    def train_model(self, symbol: str, timeframe: str, model_type: str,
                     data: pd.DataFrame, input_dim: int,
                     config: Optional[ModelConfig] = None,
                     validation_split: float = 0.2,
@@ -174,7 +174,7 @@ class ModelTrainer:
             'history': history
         }
 
-    def create_model_config(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
+    def create_model_config(self, symbol: str, timeframe: str, model_type: str,
                             input_dim: int, **kwargs) -> ModelConfig:
         """
         Оновлений метод з валідацією model_type
@@ -250,7 +250,7 @@ class ModelTrainer:
         self.logger.info(f"Створено {len(X)} послідовностей з {len(data)} рядків даних")
         return X, y
 
-    def _build_model_from_config(self, model_type: Union[str, List[str]], config: ModelConfig) -> BaseDeepModel:
+    def _build_model_from_config(self, model_type: str, config: ModelConfig) -> BaseDeepModel:
         """
         Оновлений метод з валідацією model_type
         """
@@ -293,7 +293,7 @@ class ModelTrainer:
             self.logger.error(f"Помилка імпорту моделі {model_type}: {str(e)}")
             raise
 
-    def _create_model_data_dict(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
+    def _create_model_data_dict(self, symbol: str, timeframe: str, model_type: str,
                                 config: ModelConfig) -> Dict[str, Any]:
         """
         Оновлений метод з валідацією model_type
@@ -523,7 +523,7 @@ class ModelTrainer:
         criterion = nn.MSELoss()
         return optimizer, criterion
 
-    def online_learning(self, symbol: str, timeframe: str, model_type: Union[str, List[str]],
+    def online_learning(self, symbol: str, timeframe: str, model_type: str,
                         new_data: pd.DataFrame, input_dim: int = None,
                         epochs: int = 10, learning_rate: float = 0.0005,
                         model_data=None,
@@ -597,7 +597,7 @@ class ModelTrainer:
             'history': history
         }
 
-    def _build_model(self, model_type: Union[str, List[str]], input_dim: int, hidden_dim: int,
+    def _build_model(self, model_type: str, input_dim: int, hidden_dim: int,
                      num_layers: int) -> BaseDeepModel:
         """
         Оновлений метод з валідацією model_type
@@ -612,7 +612,7 @@ class ModelTrainer:
         )
         return self._build_model_from_config(model_type, config)
 
-    def _create_model_key(self, symbol: str, timeframe: str, model_type: Union[str, List[str]]) -> str:
+    def _create_model_key(self, symbol: str, timeframe: str, model_type: str) -> str:
         """
         Оновлений метод з валідацією model_type
         """
@@ -621,7 +621,7 @@ class ModelTrainer:
 
         return f"{symbol}_{timeframe}_{model_type}"
 
-    def save_model(self, symbol: str, timeframe: str, model_type: Union[str, List[str]]) -> str:
+    def save_model(self, symbol: str, timeframe: str, model_type: str) -> str:
         """
         Оновлений метод з валідацією model_type
         """
