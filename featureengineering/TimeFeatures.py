@@ -126,8 +126,37 @@ class TimeFeatures:
                                columns: Optional[List[str]] = None,
                                lag_periods: List[int] = [1, 3, 5, 7, 14]) -> pd.DataFrame:
         """
-        Векторизоване створення лагових ознак для часових рядів.
-        """
+    Векторизовано створює лагові (відкладені у часі) ознаки для заданих стовпців у часовому ряді.
+
+    Лагові ознаки особливо корисні для моделей, що враховують часову залежність,
+    таких як моделі прогнозування часових рядів (time series forecasting) або класифікації станів ринку.
+    Метод дозволяє створювати кілька лагів одночасно та забезпечує логування та обробку помилок.
+
+    Args:
+        data (pd.DataFrame): Вхідний DataFrame з часовим рядом. Бажано, щоб індекс був типу pd.DatetimeIndex.
+        columns (Optional[List[str]]): Список стовпців, для яких потрібно створити лаги.
+            Якщо None — буде автоматично обрано всі числові стовпці.
+        lag_periods (List[int]): Список періодів лагу, які слід згенерувати. Наприклад, [1, 3, 5]
+            створить ознаки з відставанням на 1, 3 та 5 кроків відповідно.
+
+    Returns:
+        pd.DataFrame: Новий DataFrame з доданими лаговими ознаками.
+            Назви нових колонок мають формат `{column_name}_lag_{n}`, де `n` — це значення лагу.
+
+    Raises:
+        - Всі помилки логуються, метод не піднімає виключення назовні.
+        - У разі помилки повертає копію вхідного DataFrame без змін.
+
+    Примітки:
+        - Якщо індекс не є `pd.DatetimeIndex`, буде виведено попередження у логах.
+        - Метод автоматично викликає `_ensure_datetime_index()` для перетворення індексу, якщо можливо.
+        - Якщо не передано `columns`, будуть використані всі числові колонки (`np.number`).
+        - Лаги створюються векторизовано для кращої продуктивності.
+
+    Приклад:
+        df = pd.DataFrame(ohlcv_data)
+        df_with_lags = feature_generator.create_lagged_features(df, columns=["close", "volume"], lag_periods=[1, 7, 14])
+    """
         try:
             self.logger.info("Створення лагових ознак...")
 
@@ -185,8 +214,44 @@ class TimeFeatures:
                                 window_sizes: List[int] = [5, 10, 20, 50],
                                 functions: List[str] = ['mean', 'std', 'min', 'max']) -> pd.DataFrame:
         """
-        Векторизоване створення ознак на основі ковзного вікна.
-        """
+            Векторизовано створює ознаки на основі ковзного вікна для заданих числових стовпців часових рядів.
+
+            Ці ознаки дозволяють моделі враховувати локальні статистичні характеристики
+            за певний період часу, що може суттєво покращити якість прогнозів для
+            фінансових чи інших часових даних.
+
+            Args:
+                data (pd.DataFrame): Вхідний DataFrame з часовими даними.
+                    Індекс бажано повинен бути типу pd.DatetimeIndex.
+                columns (Optional[List[str]]): Список стовпців, для яких створюються ознаки.
+                    Якщо None — будуть автоматично обрані всі числові колонки.
+                window_sizes (List[int]): Список розмірів ковзного вікна. Наприклад, [5, 10, 20].
+                functions (List[str]): Список статистичних функцій для обчислення в рамках вікна.
+                    Підтримуються: ['mean', 'std', 'min', 'max', 'median', 'sum', 'var',
+                    'kurt', 'skew', 'quantile_25', 'quantile_75'].
+
+            Returns:
+                pd.DataFrame: Новий DataFrame з доданими ознаками ковзного вікна.
+                    Формат назв нових стовпців: `{column}_rolling_{window}_{function}`.
+
+            Raises:
+                - Метод не піднімає виключення, всі помилки логуються.
+                - У разі фатальної помилки повертається копія вхідного DataFrame без змін.
+
+            Примітки:
+                - Якщо індекс не є pd.DatetimeIndex, метод попереджає в логах.
+                - Використовується метод `.rolling()` з `min_periods=1`, тому значення обчислюються навіть
+                  на початку серії, але можуть бути менш точними.
+                - Якщо передані непідтримувані функції — вони автоматично ігноруються.
+
+            Приклад:
+                df = pd.DataFrame(ohlcv_data)
+                df_with_rolling = feature_generator.create_rolling_features(
+                    df, columns=["close", "volume"],
+                    window_sizes=[5, 20],
+                    functions=["mean", "std", "quantile_25"]
+                )
+            """
         try:
             self.logger.info("Створення ознак на основі ковзного вікна...")
 
@@ -294,8 +359,43 @@ class TimeFeatures:
                             spans: List[int] = [5, 10, 20, 50],
                             functions: List[str] = ['mean', 'std']) -> pd.DataFrame:
         """
-        Векторизоване створення ознак на основі експоненційно зваженого вікна.
-        """
+            Векторизовано створює ознаки на основі експоненційно зваженого вікна (EWM)
+            для заданих числових стовпців часових рядів.
+
+            Експоненційне згладжування надає більшу вагу останнім спостереженням,
+            що дозволяє краще реагувати на останні зміни в ринку або часі.
+
+            Args:
+                data (pd.DataFrame): Вхідний DataFrame з часовими рядами.
+                    Бажано, щоб індекс був типу pd.DatetimeIndex.
+                columns (Optional[List[str]]): Список стовпців для створення ознак.
+                    Якщо None — будуть обрані всі числові стовпці.
+                spans (List[int]): Список значень параметра `span` для EWM.
+                    Наприклад, [5, 10, 20].
+                functions (List[str]): Список статистичних функцій для обчислення в рамках EWM.
+                    Підтримуються: ['mean', 'std', 'var'].
+
+            Returns:
+                pd.DataFrame: DataFrame з доданими EWM-ознаками.
+                    Формат назв нових стовпців: `{column}_ewm_{span}_{function}`.
+
+            Raises:
+                - Метод не піднімає виключень, усі помилки логуються.
+                - У випадку критичної помилки повертає копію вхідного DataFrame без змін.
+
+            Примітки:
+                - Якщо передані непідтримувані функції, вони будуть автоматично виключені.
+                - Всі обчислення проводяться векторизовано, що забезпечує високу продуктивність.
+                - Значення `span <= 0` ігноруються.
+
+            Приклад:
+                df = pd.DataFrame(ohlcv_data)
+                df_with_ewm = feature_generator.create_ewm_features(
+                    df, columns=["close", "volume"],
+                    spans=[10, 20],
+                    functions=["mean", "std"]
+                )
+            """
         try:
             self.logger.info("Створення ознак на основі експоненційно зваженого вікна...")
 
@@ -379,8 +479,43 @@ class TimeFeatures:
 
     def create_datetime_features(self, data: pd.DataFrame, cyclical: bool = True) -> pd.DataFrame:
         """
-        Векторизоване створення ознак на основі дати й часу.
-        """
+           Векторизовано створює ознаки на основі дати та часу з індексу DatetimeIndex.
+
+           Метод генерує як базові календарні ознаки, так і бінарні, часові сегменти доби, циклічні перетворення,
+           та сегментацію торгових годин (наприклад, Asia/Europe/America), що корисно для часових рядів у фінансовому контексті.
+
+           Args:
+               data (pd.DataFrame): Вхідний DataFrame із часовим індексом (DatetimeIndex).
+               cyclical (bool): Якщо True — створюються циклічні ознаки (sin/cos перетворення для годин, днів, місяців тощо).
+
+           Returns:
+               pd.DataFrame: DataFrame з доданими часовими ознаками.
+
+           Raises:
+               - Метод не піднімає виключень — усі помилки логуються.
+               - У випадку критичної помилки повертається копія початкових даних без змін.
+
+           Додає наступні ознаки:
+               - **Базові календарні**:
+                   - `hour`, `day_of_week`, `day_of_month`, `month`, `quarter`, `year`, `day_of_year`
+               - **Бінарні**:
+                   - `is_weekend`, `is_month_end`, `is_quarter_end`, `is_year_end`
+               - **Сегменти доби**:
+                   - `time_of_day` (night, morning, day, evening)
+                   - `utc_segment` (asia_late, asia_main, europe_main, america_main, asia_early)
+               - **Циклічні (за потреби)**:
+                   - `hour_sin`, `hour_cos`
+                   - `day_of_week_sin`, `day_of_week_cos`
+                   - `day_of_month_sin`, `day_of_month_cos`
+                   - `month_sin`, `month_cos`
+                   - `day_of_year_sin`, `day_of_year_cos`
+               - **Інші**:
+                   - `timestamp` — Unix timestamp (в секундах)
+
+           Приклад:
+               df = pd.DataFrame(data, index=pd.to_datetime(data["datetime"]))
+               df_with_time = feature_generator.create_datetime_features(df, cyclical=True)
+           """
         try:
             self.logger.info("Створення ознак на основі дати і часу...")
 
