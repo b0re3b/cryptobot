@@ -242,7 +242,7 @@ class DeepLearning:
 
     def predict_all_symbols(self, timeframe: str, model_type: str,
                             steps_ahead: int = 1) -> Dict[str, np.ndarray]:
-        """Прогнозування для всіх символів"""
+        """Прогнозування для всіх символів з використанням одного типу моделі"""
         predictions = {}
 
         for symbol in self.SYMBOLS:
@@ -257,16 +257,22 @@ class DeepLearning:
         return predictions
 
     def ensemble_predict(self, symbol: str, timeframe: str, steps_ahead: int = 1,
+                         model_types: Optional[List[str]] = None,
                          weights: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
-        """Ансамблевий прогноз (комбінація LSTM, GRU та Transformer)"""
+        """Ансамблевий прогноз (комбінація різних типів моделей)"""
+        if model_types is None:
+            model_types = self.MODEL_TYPES
+
         if weights is None:
-            weights = {'lstm': 0.33, 'gru': 0.33, 'transformer': 0.34}
+            # Рівномірний розподіл ваг між доступними моделями
+            weight_per_model = 1.0 / len(model_types)
+            weights = {model_type: weight_per_model for model_type in model_types}
 
         predictions = {}
         ensemble_pred = np.zeros(steps_ahead)
         total_weight = 0
 
-        for model_type in self.MODEL_TYPES:
+        for model_type in model_types:
             try:
                 result = self.predict(symbol, timeframe, model_type, steps_ahead=steps_ahead)
                 predictions[model_type] = result['predictions']
@@ -296,27 +302,29 @@ class DeepLearning:
         return self.model_evaluator.evaluate_model(model_key, test_data, use_rolling_validation, window_size, step)
 
     def model_performance_report(self, symbol: Optional[str] = None,
-                                 timeframe: Optional[str] = None) -> pd.DataFrame:
+                                 timeframe: Optional[str] = None,
+                                 model_type: Optional[str] = None) -> pd.DataFrame:
         """Звіт про ефективність моделей"""
         performance_data = []
 
         symbols = [symbol] if symbol else self.SYMBOLS
         timeframes = [timeframe] if timeframe else self.TIMEFRAMES
+        model_types = [model_type] if model_type else self.MODEL_TYPES
 
         for sym in symbols:
             for tf in timeframes:
-                for model_type in self.MODEL_TYPES:
+                for mt in model_types:
                     try:
-                        metrics = self.get_model_metrics(sym, tf, model_type)
+                        metrics = self.get_model_metrics(sym, tf, mt)
                         if metrics:
                             performance_data.append({
                                 'symbol': sym,
                                 'timeframe': tf,
-                                'model_type': model_type,
+                                'model_type': mt,
                                 **metrics
                             })
                     except Exception as e:
-                        self.logger.warning(f"Не вдалося отримати метрики для {sym}-{tf}-{model_type}: {str(e)}")
+                        self.logger.warning(f"Не вдалося отримати метрики для {sym}-{tf}-{mt}: {str(e)}")
                         continue
 
         return pd.DataFrame(performance_data)
@@ -1452,77 +1460,76 @@ class DeepLearning:
             }
 
     def full_training_pipeline(self,
-                                   symbols: Optional[List[str]] = None,
-                                   timeframes: Optional[List[str]] = None,
-                                   model_types: Optional[List[str]] = None,
-                                   validation_split: float = 0.2,
-                                   epochs: int = 100,
-                                   batch_size: int = 32) -> Dict[str, Dict[str, Any]]:
-            """
-            Complete training pipeline from data loading to model evaluation.
+                               symbols: Optional[List[str]] = None,
+                               timeframes: Optional[List[str]] = None,
+                               model_type: Optional[str] = None,
+                               validation_split: float = 0.2,
+                               epochs: int = 100,
+                               batch_size: int = 32) -> Dict[str, Dict[str, Any]]:
+        """
+        Complete training pipeline from data loading to model evaluation.
 
-            Args:
-                symbols: List of cryptocurrency symbols to train on
-                timeframes: List of timeframes to train on
-                model_types: List of model types to train
-                validation_split: Ratio of data to use for validation
-                epochs: Number of training epochs
-                batch_size: Batch size for training
+        Args:
+            symbols: List of cryptocurrency symbols to train on
+            timeframes: List of timeframes to train on
+            model_type: Model type to train
+            validation_split: Ratio of data to use for validation
+            epochs: Number of training epochs
+            batch_size: Batch size for training
 
-            Returns:
-                Dictionary containing training results for each model
-            """
-            results = {}
+        Returns:
+            Dictionary containing training results for each model
+        """
+        results = {}
 
-            # Use default values if not specified
-            symbols = symbols or self.SYMBOLS
-            timeframes = timeframes or self.TIMEFRAMES
-            model_types = model_types or self.MODEL_TYPES
+        # Use default values if not specified
+        symbols = symbols or self.SYMBOLS
+        timeframes = timeframes or self.TIMEFRAMES
+        model_type = model_type or self.MODEL_TYPES[0]  # Use first model type as default
 
-            for symbol in symbols:
-                for timeframe in timeframes:
-                    for model_type in model_types:
-                        try:
-                            model_key = f"{symbol}_{timeframe}_{model_type}"
-                            self.logger.info(f"Starting training for {model_key}")
+        for symbol in symbols:
+            for timeframe in timeframes:
+                try:
+                    model_key = f"{symbol}_{timeframe}_{model_type}"
+                    self.logger.info(f"Starting training for {model_key}")
 
-                            # 1. Data Loading
-                            data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
-                            raw_data = data_loader()
+                    # 1. Data Loading
+                    data_loader = self.data_preprocessor.get_data_loader(symbol, timeframe, model_type)
+                    raw_data = data_loader()
 
-                            # 2. Feature Engineering
-                            features = self.data_preprocessor.prepare_data_with_config(raw_data, symbol, model_type)
-                            input_dim = features.shape[1] - 1  # Subtract target column
+                    # 2. Feature Engineering
+                    features = self.data_preprocessor.prepare_data_with_config(raw_data, symbol, model_type)
+                    input_dim = features.shape[1] - 1  # Subtract target column
 
-                            # 3. Model Training
-                            train_result = self.train_model(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                model_type=model_type,
-                                data=features,
-                                input_dim=input_dim,
-                                validation_split=validation_split,
-                                epochs=epochs,
-                                batch_size=batch_size
-                            )
+                    # 3. Model Training
+                    train_result = self.train_model(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        model_type=model_type,
+                        data=features,
+                        input_dim=input_dim,
+                        validation_split=validation_split,
+                        epochs=epochs,
+                        batch_size=batch_size
+                    )
 
-                            # 4. Model Evaluation
-                            metrics = self.evaluate_model(symbol, timeframe, model_type, features)
+                    # 4. Model Evaluation
+                    metrics = self.evaluate_model(symbol, timeframe, model_type, features)
 
-                            # 5. Save Results
-                            results[model_key] = {
-                                'training_result': train_result,
-                                'metrics': metrics
-                            }
+                    # 5. Save Results
+                    results[model_key] = {
+                        'training_result': train_result,
+                        'metrics': metrics
+                    }
 
-                            self.logger.info(f"Completed training for {model_key} with RMSE: {metrics.get('RMSE')}")
+                    self.logger.info(f"Completed training for {model_key} with RMSE: {metrics.get('RMSE')}")
 
-                        except Exception as e:
-                            self.logger.error(f"Error training {symbol}-{timeframe}-{model_type}: {str(e)}")
-                            results[f"{symbol}_{timeframe}_{model_type}"] = {'error': str(e)}
-                            continue
+                except Exception as e:
+                    self.logger.error(f"Error training {symbol}-{timeframe}-{model_type}: {str(e)}")
+                    results[f"{symbol}_{timeframe}_{model_type}"] = {'error': str(e)}
+                    continue
 
-            return results
+        return results
 
     def prediction_pipeline(self,
                                 symbol: str,
@@ -1817,7 +1824,7 @@ def main():
     training_results = pipeline.full_training_pipeline(
         symbols=['BTC', 'ETH', 'SOL'],
         timeframes=['4h'],
-        model_types=['lstm', 'gru', 'transformer'],
+        model_types='lstm',
         epochs=50,
         batch_size=64
     )
