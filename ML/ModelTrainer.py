@@ -102,13 +102,21 @@ class ModelTrainer:
         self.logger.info(f"Початкова форма даних: {data.shape}")
         self.logger.info(f"Типи колонок:\n{data.dtypes}")
 
+        # Identify non-numeric columns to exclude
+        non_numeric_cols = data.select_dtypes(exclude=['number']).columns.tolist()
+        if non_numeric_cols:
+            self.logger.info(f"Ignoring non-numeric columns: {non_numeric_cols}")
+
+        # Process only numeric columns
+        numeric_cols = [col for col in data.columns if col not in non_numeric_cols]
+
         # Перевірка на відсутні значення
-        missing_counts = data.isnull().sum()
+        missing_counts = data[numeric_cols].isnull().sum()
         if missing_counts.any():
             self.logger.warning(f"Знайдено відсутні значення:\n{missing_counts[missing_counts > 0]}")
 
             # Заповнення відсутніх значень
-            for col in data.columns:
+            for col in numeric_cols:
                 if data[col].isnull().any():
                     if data[col].dtype in ['float64', 'float32', 'int64', 'int32']:
                         # Для числових колонок - заповнюємо медіаною
@@ -117,28 +125,12 @@ class ModelTrainer:
                         # Для інших типів - заповнюємо 0
                         data[col] = data[col].fillna(0)
 
-        # Конвертація всіх колонок в числовий тип
-        for col in data.columns:
-            try:
-                # Спроба конвертації в float
-                data[col] = pd.to_numeric(data[col], errors='coerce')
-
-                # Якщо після конвертації з'явилися NaN, заповнюємо їх
-                if data[col].isnull().any():
-                    self.logger.warning(f"Колонка {col} містить не-числові значення, заповнюємо медіаною")
-                    data[col] = data[col].fillna(data[col].median())
-
-            except Exception as e:
-                self.logger.error(f"Помилка конвертації колонки {col}: {str(e)}")
-                # В крайньому випадку заповнюємо нулями
-                data[col] = 0
-
         # Перевірка на inf значення
-        inf_mask = np.isinf(data.select_dtypes(include=[np.number]))
+        inf_mask = np.isinf(data[numeric_cols].select_dtypes(include=[np.number]))
         if inf_mask.any().any():
             self.logger.warning("Знайдено безкінечні значення, замінюємо на NaN та заповнюємо")
-            data = data.replace([np.inf, -np.inf], np.nan)
-            data = data.fillna(data.median())
+            data[numeric_cols] = data[numeric_cols].replace([np.inf, -np.inf], np.nan)
+            data[numeric_cols] = data[numeric_cols].fillna(data[numeric_cols].median())
 
         # Перевірка фінальних типів
         self.logger.info(f"Типи після очищення:\n{data.dtypes}")
@@ -220,9 +212,40 @@ class ModelTrainer:
             raise ValueError(
                 f"DataFrame must contain a target column (tried: 'target', 'target_close_1', 'target_close')")
 
+        # === ПІДГОТОВКА ДАНИХ - ВИКЛЮЧЕННЯ НЕ-ЧИСЛОВИХ КОЛОНОК ===
+        self.logger.info("Відбір числових колонок для тренування...")
+
+        # Отримання списку числових колонок
+        numeric_cols = data.select_dtypes(include=['number']).columns.tolist()
+
+        # Переконуємося, що цільова колонка також числова
+        if target_col not in numeric_cols:
+            # Перевіряємо, чи можна конвертувати цільову колонку в числову
+            try:
+                data[target_col] = pd.to_numeric(data[target_col], errors='coerce')
+                if data[target_col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    numeric_cols.append(target_col)
+                else:
+                    raise ValueError(f"Target column '{target_col}' cannot be converted to numeric type")
+            except Exception as e:
+                raise ValueError(f"Target column '{target_col}' is not numeric and cannot be converted: {str(e)}")
+
+        self.logger.info(f"Використовуємо {len(numeric_cols)} числових колонок (включаючи target)")
+        self.logger.info(f"Числові колонки: {numeric_cols}")
+
+        # Підготовка даних - використовуємо лише числові колонки
+        numeric_data = data[numeric_cols].copy()
+
+        # Перевірка на наявність NaN значень після фільтрації
+        nan_counts = numeric_data.isnull().sum()
+        if nan_counts.any():
+            self.logger.warning(f"Виявлено NaN значення в числових колонках: {nan_counts[nan_counts > 0].to_dict()}")
+            # Заповнюємо NaN значення медіаною для кожної колонки
+            numeric_data = numeric_data.fillna(numeric_data.median())
+
         # Prepare data
-        X = data.drop(columns=[target_col]).values
-        y = data[target_col].values
+        X = numeric_data.drop(columns=[target_col]).values
+        y = numeric_data[target_col].values
 
         # === ДОДАНА ПЕРЕВІРКА ТИПІВ ДАНИХ ===
         self.logger.info(f"Тип X: {X.dtype}, форма: {X.shape}")
@@ -238,6 +261,15 @@ class ModelTrainer:
             self.logger.error("y містить object типи!")
             self.logger.error(f"Унікальні типи в y: {[type(x).__name__ for x in y.flat[:10]]}")
             raise ValueError("y contains object types that cannot be converted to tensor")
+
+        # Додаткова перевірка на inf та -inf значення
+        if np.isinf(X).any():
+            self.logger.warning("Виявлено inf значення в X, замінюємо на 0")
+            X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if np.isinf(y).any():
+            self.logger.warning("Виявлено inf значення в y, замінюємо на 0")
+            y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Split into training and validation sets
         split_idx = int(len(X) * (1 - validation_split))
