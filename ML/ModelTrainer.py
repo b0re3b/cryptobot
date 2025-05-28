@@ -216,8 +216,50 @@ class ModelTrainer:
 
         return X_tensor, y_tensor
 
+    def _calculate_actual_input_dim(self, data: pd.DataFrame, target_column: str = 'target') -> int:
+        """
+        ВИПРАВЛЕНА ФУНКЦІЯ: Обчислює фактичну розмірність входу після обробки даних
+        """
+        # Check for target column (try common variations)
+        target_col = None
+        for col in ['target', 'target_close_1', 'target_close']:
+            if col in data.columns:
+                target_col = col
+                break
+
+        if target_col is None:
+            # If no target column found, assume it's the last column or use the provided name
+            if target_column in data.columns:
+                target_col = target_column
+            else:
+                # Use the last column as target
+                target_col = data.columns[-1]
+                self.logger.warning(f"Target column not found, using last column: {target_col}")
+
+        # Get numeric columns only
+        numeric_cols = data.select_dtypes(include=['number']).columns.tolist()
+
+        # Ensure target column is numeric
+        if target_col not in numeric_cols:
+            try:
+                data[target_col] = pd.to_numeric(data[target_col], errors='coerce')
+                if data[target_col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    numeric_cols.append(target_col)
+            except:
+                pass
+
+        # Calculate input dimension (all numeric columns except target)
+        feature_cols = [col for col in numeric_cols if col != target_col]
+        actual_input_dim = len(feature_cols)
+
+        self.logger.info(f"Calculated input dimension: {actual_input_dim}")
+        self.logger.info(f"Feature columns: {feature_cols}")
+        self.logger.info(f"Target column: {target_col}")
+
+        return actual_input_dim
+
     def train_model(self, symbol: str, timeframe: str, model_type: str,
-                    data: pd.DataFrame, input_dim: int,
+                    data: pd.DataFrame, input_dim: int = None,  # ЗРОБИТИ ОПЦІОНАЛЬНИМ
                     config: Optional[ModelConfig] = None,
                     validation_split: float = 0.2,
                     patience: int = 10, model_data=None,
@@ -229,17 +271,34 @@ class ModelTrainer:
 
         self.logger.info(f"Starting training for {symbol}_{timeframe}_{model_type}")
 
-        # Create or get model configuration
-        if config is None:
-            config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
-
         # Validate input data
         if not isinstance(data, pd.DataFrame):
             raise ValueError("Expected DataFrame as input data")
 
-        # === ДОДАНА ВАЛІДАЦІЯ ТА ОЧИЩЕННЯ ДАНИХ ===
+        # === ВАЛІДАЦІЯ ТА ОЧИЩЕННЯ ДАНИХ ===
         self.logger.info("Валідація та очищення вхідних даних...")
         data = self._validate_and_clean_data(data)
+
+        # === АВТОМАТИЧНЕ ОБЧИСЛЕННЯ INPUT_DIM ===
+        if input_dim is None:
+            input_dim = self._calculate_actual_input_dim(data, target_column)
+            self.logger.info(f"Автоматично обчислено input_dim: {input_dim}")
+        else:
+            # Перевірка відповідності переданого input_dim фактичним даним
+            actual_input_dim = self._calculate_actual_input_dim(data, target_column)
+            if input_dim != actual_input_dim:
+                self.logger.warning(
+                    f"Переданий input_dim ({input_dim}) не відповідає фактичному ({actual_input_dim}). "
+                    f"Використовується фактичний: {actual_input_dim}"
+                )
+                input_dim = actual_input_dim
+
+        # Create or get model configuration
+        if config is None:
+            config = self.create_model_config(symbol, timeframe, model_type, input_dim, **kwargs)
+        else:
+            # Update config with correct input_dim
+            config.input_dim = input_dim
 
         # Check for target column (try common variations)
         target_col = None
@@ -249,8 +308,11 @@ class ModelTrainer:
                 break
 
         if target_col is None:
-            raise ValueError(
-                f"DataFrame must contain a target column (tried: 'target', 'target_close_1', 'target_close')")
+            if target_column in data.columns:
+                target_col = target_column
+            else:
+                raise ValueError(
+                    f"DataFrame must contain a target column (tried: 'target', 'target_close_1', 'target_close', '{target_column}')")
 
         # === ПІДГОТОВКА ДАНИХ - ВИКЛЮЧЕННЯ НЕ-ЧИСЛОВИХ КОЛОНОК ===
         self.logger.info("Відбір числових колонок для тренування...")
@@ -286,6 +348,15 @@ class ModelTrainer:
         # Prepare data
         X = numeric_data.drop(columns=[target_col]).values
         y = numeric_data[target_col].values
+
+        # === ФІНАЛЬНА ПЕРЕВІРКА РОЗМІРІВ ===
+        self.logger.info(f"Фінальні розміри даних - X: {X.shape}, y: {y.shape}")
+        self.logger.info(f"Очікувана input_dim: {input_dim}, фактична: {X.shape[1]}")
+
+        if X.shape[1] != input_dim:
+            raise ValueError(
+                f"Невідповідність розмірів! Очікувана input_dim: {input_dim}, "
+                f"фактична кількість ознак: {X.shape[1]}")
 
         # === ДОДАНА ПЕРЕВІРКА ТИПІВ ДАНИХ ===
         self.logger.info(f"Тип X: {X.dtype}, форма: {X.shape}")
