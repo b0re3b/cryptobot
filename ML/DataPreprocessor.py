@@ -138,13 +138,73 @@ class DataPreprocessor:
                     else:
                         raise ValueError(f"Unknown data type: {type(raw_data)}")
 
+                    # *** КРИТИЧНЕ ВИПРАВЛЕННЯ: Очистка та конвертація типів даних ***
+
+                    # Список числових колонок які повинні бути float
+                    numeric_columns = [
+                        'open_scaled', 'high_scaled', 'low_scaled', 'close_scaled', 'volume_scaled',
+                        'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
+                        'month_sin', 'month_cos', 'day_of_month_sin', 'day_of_month_cos',
+                        'target_close_1', 'target_close_5', 'target_close_10'
+                    ]
+
+                    # Додаємо всі колонки які закінчуються на _scaled
+                    additional_numeric = [col for col in df.columns if col.endswith('_scaled')]
+                    numeric_columns.extend(additional_numeric)
+
+                    # Видаляємо дублікати
+                    numeric_columns = list(set(numeric_columns))
+
+                    # Конвертація числових колонок
+                    for col in numeric_columns:
+                        if col in df.columns:
+                            try:
+                                # Замінюємо None на NaN
+                                df[col] = df[col].replace([None, 'None', 'null'], np.nan)
+
+                                # Конвертуємо в числовий тип
+                                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+                                # Логування якщо є проблеми
+                                if df[col].dtype == 'object':
+                                    unique_values = df[col].unique()[:10]  # Перші 10 унікальних значень
+                                    self.logger.warning(
+                                        f"Колонка {col} все ще має object dtype. Унікальні значення: {unique_values}")
+
+                            except Exception as e:
+                                self.logger.error(f"Помилка конвертації колонки {col}: {e}")
+
                     # Ensure we have a target column - create from next period's close price if not exists
                     if 'target' not in df.columns and 'close' in df.columns:
                         df['target'] = df['close'].shift(-1)
                         df.dropna(subset=['target'], inplace=True)
                         self.logger.info(f"Created target column from next period close prices")
 
+                    # *** ДОДАТКОВА ПЕРЕВІРКА ТИПІВ ДАНИХ ***
+
+                    # Перевірка що всі числові колонки дійсно числові
+                    problematic_columns = []
+                    for col in numeric_columns:
+                        if col in df.columns and df[col].dtype == 'object':
+                            problematic_columns.append(col)
+
+                    if problematic_columns:
+                        self.logger.error(
+                            f"КРИТИЧНА ПОМИЛКА: Наступні колонки все ще мають object dtype: {problematic_columns}")
+
+                        # Детальна діагностика
+                        for col in problematic_columns:
+                            sample_values = df[col].dropna().head(10).tolist()
+                            self.logger.error(f"Приклади значень з {col}: {sample_values}")
+
+                        raise ValueError(f"Не вдалося конвертувати колонки в числовий тип: {problematic_columns}")
+
                     self.logger.info(f"Successfully loaded {len(df)} records for {symbol}-{timeframe}")
+
+                    # Логування типів даних для діагностики
+                    numeric_dtypes = {col: str(df[col].dtype) for col in numeric_columns if col in df.columns}
+                    self.logger.debug(f"Типи даних числових колонок: {numeric_dtypes}")
+
                     return df
 
                 except Exception as e:
@@ -156,6 +216,7 @@ class DataPreprocessor:
         except Exception as e:
             self.logger.error(f"Error preparing data loader for {symbol}: {str(e)}")
             raise
+
 
     def validate_prepared_data(self, df: pd.DataFrame, symbol: str) -> bool:
         """Валідація підготовлених даних"""
@@ -278,8 +339,7 @@ class DataPreprocessor:
         exclude_columns.extend(lag_columns)
 
         feature_columns = [col for col in df.columns if col not in exclude_columns]
-        self.logger.info(
-            f"Використовуємо {len(feature_columns)} ознак (виключено {len(lag_columns)} lag-колонок): {feature_columns[:10]}...")
+        self.logger.info(f"Використовуємо {len(feature_columns)} ознак: {feature_columns[:10]}...")
 
         # Сортування даних по sequence_id та sequence_position
         df_sorted = df.sort_values(['sequence_id', 'sequence_position'])
@@ -298,15 +358,54 @@ class DataPreprocessor:
             # Витягування ознак та цільового значення
             sequence_features = group[feature_columns].values
 
+            # *** КРИТИЧНЕ ВИПРАВЛЕННЯ: Перевірка та конвертація типів ***
+
+            # Перевірка типу даних
+            if sequence_features.dtype == 'object':
+                self.logger.warning(f"Знайдено object dtype в sequence_id {sequence_id}, спроба конвертації")
+                try:
+                    # Спроба конвертації в float64
+                    sequence_features = sequence_features.astype(np.float64)
+                    self.logger.debug(f"Успішно конвертовано sequence_id {sequence_id} в float64")
+                except (ValueError, TypeError) as e:
+                    self.logger.error(f"Не вдалося конвертувати sequence_id {sequence_id}: {e}")
+                    # Детальна діагностика
+                    for i, col in enumerate(feature_columns):
+                        col_data = group[col].values
+                        if col_data.dtype == 'object':
+                            self.logger.error(f"Колонка {col} має object dtype: {col_data[:5]}")
+                    continue
+
+            # Перевірка на правильність форми
+            if len(sequence_features.shape) != 2:
+                self.logger.error(
+                    f"Неправильна форма sequence_features для sequence_id {sequence_id}: {sequence_features.shape}")
+                continue
+
             # Перевірка на NaN в ознаках (після виключення lag-колонок)
             if np.isnan(sequence_features).any():
-                self.logger.warning(f"NaN значення в ознаках для sequence_id {sequence_id}, пропускаємо")
+                nan_count = np.isnan(sequence_features).sum()
+                self.logger.warning(f"NaN значення ({nan_count}) в ознаках для sequence_id {sequence_id}, пропускаємо")
+                continue
+
+            # Перевірка на Inf значення
+            if np.isinf(sequence_features).any():
+                inf_count = np.isinf(sequence_features).sum()
+                self.logger.warning(f"Inf значення ({inf_count}) в ознаках для sequence_id {sequence_id}, пропускаємо")
                 continue
 
             # Берем цільове значення з останньої позиції послідовності
             target_value = group[target_column].iloc[-1]
 
-            if not np.isnan(target_value):
+            # Конвертація цільового значення
+            try:
+                target_value = float(target_value)
+            except (ValueError, TypeError):
+                self.logger.warning(
+                    f"Неможливо конвертувати target_value в float для sequence_id {sequence_id}: {target_value}")
+                continue
+
+            if not np.isnan(target_value) and not np.isinf(target_value):
                 sequences.append(sequence_features)
                 targets.append(target_value)
 
@@ -314,11 +413,55 @@ class DataPreprocessor:
             self.logger.error("Не вдалося витягти жодної валідної послідовності")
             raise ValueError("Не вдалося витягати жодної валідної послідовності")
 
-        # Перетворення в numpy arrays
-        X = np.array(sequences)
-        y = np.array(targets)
+        # *** КРИТИЧНЕ ВИПРАВЛЕННЯ: Гарантія правильного dtype ***
 
-        self.logger.info(f"Витягнуто {len(sequences)} послідовностей: X {X.shape}, y {y.shape}")
+        # Перетворення в numpy arrays з явним dtype
+        try:
+            X = np.array(sequences, dtype=np.float64)
+            y = np.array(targets, dtype=np.float64)
+
+            # Додаткова перевірка
+            if X.dtype == 'object':
+                self.logger.error("КРИТИЧНА ПОМИЛКА: X все ще має object dtype після конвертації")
+                # Спроба форсованої конвертації
+                X = np.stack(sequences).astype(np.float64)
+
+            if y.dtype == 'object':
+                self.logger.error("КРИТИЧНА ПОМИЛКА: y все ще має object dtype після конвертації")
+                y = np.array(targets, dtype=np.float64)
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка створення numpy arrays: {e}")
+
+            # Діагностика проблеми
+            self.logger.error(f"Кількість послідовностей: {len(sequences)}")
+            if sequences:
+                self.logger.error(f"Форма першої послідовності: {sequences[0].shape}")
+                self.logger.error(f"Dtype першої послідовності: {sequences[0].dtype}")
+
+                # Перевірка всіх послідовностей на однакову форму
+                shapes = [seq.shape for seq in sequences]
+                dtypes = [seq.dtype for seq in sequences]
+
+                unique_shapes = set(shapes)
+                unique_dtypes = set(dtypes)
+
+                self.logger.error(f"Унікальні форми: {unique_shapes}")
+                self.logger.error(f"Унікальні dtypes: {unique_dtypes}")
+
+                if len(unique_shapes) > 1:
+                    self.logger.error("ПРОБЛЕМА: Послідовності мають різні форми!")
+                if len(unique_dtypes) > 1:
+                    self.logger.error("ПРОБЛЕМА: Послідовності мають різні типи даних!")
+
+            raise
+
+        # Фінальна валідація
+        if X.dtype == 'object' or y.dtype == 'object':
+            self.logger.error(f"КРИТИЧНА ПОМИЛКА: Залишився object dtype - X: {X.dtype}, y: {y.dtype}")
+            raise ValueError("Не вдалося конвертувати дані в числовий тип")
+
+        self.logger.info(f"Витягнуто {len(sequences)} послідовностей: X {X.shape} ({X.dtype}), y {y.shape} ({y.dtype})")
         return X, y
 
     def preprocess_prepared_data_for_model(self, data: pd.DataFrame, symbol: str, timeframe: str,
