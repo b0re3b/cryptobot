@@ -95,6 +95,95 @@ class ModelTrainer:
 
         return model_type
 
+    def _validate_and_clean_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Валідація та очищення даних перед навчанням
+        """
+        self.logger.info(f"Початкова форма даних: {data.shape}")
+        self.logger.info(f"Типи колонок:\n{data.dtypes}")
+
+        # Перевірка на відсутні значення
+        missing_counts = data.isnull().sum()
+        if missing_counts.any():
+            self.logger.warning(f"Знайдено відсутні значення:\n{missing_counts[missing_counts > 0]}")
+
+            # Заповнення відсутніх значень
+            for col in data.columns:
+                if data[col].isnull().any():
+                    if data[col].dtype in ['float64', 'float32', 'int64', 'int32']:
+                        # Для числових колонок - заповнюємо медіаною
+                        data[col] = data[col].fillna(data[col].median())
+                    else:
+                        # Для інших типів - заповнюємо 0
+                        data[col] = data[col].fillna(0)
+
+        # Конвертація всіх колонок в числовий тип
+        for col in data.columns:
+            try:
+                # Спроба конвертації в float
+                data[col] = pd.to_numeric(data[col], errors='coerce')
+
+                # Якщо після конвертації з'явилися NaN, заповнюємо їх
+                if data[col].isnull().any():
+                    self.logger.warning(f"Колонка {col} містить не-числові значення, заповнюємо медіаною")
+                    data[col] = data[col].fillna(data[col].median())
+
+            except Exception as e:
+                self.logger.error(f"Помилка конвертації колонки {col}: {str(e)}")
+                # В крайньому випадку заповнюємо нулями
+                data[col] = 0
+
+        # Перевірка на inf значення
+        inf_mask = np.isinf(data.select_dtypes(include=[np.number]))
+        if inf_mask.any().any():
+            self.logger.warning("Знайдено безкінечні значення, замінюємо на NaN та заповнюємо")
+            data = data.replace([np.inf, -np.inf], np.nan)
+            data = data.fillna(data.median())
+
+        # Перевірка фінальних типів
+        self.logger.info(f"Типи після очищення:\n{data.dtypes}")
+        self.logger.info(f"Фінальна форма даних: {data.shape}")
+
+        return data
+
+    def _safe_tensor_conversion(self, array: np.ndarray, name: str = "array") -> torch.Tensor:
+        """
+        Безпечна конвертація numpy array в pytorch tensor
+        """
+        try:
+            # Перевірка типу масиву
+            if array.dtype == 'object':
+                self.logger.error(f"{name} має тип 'object'. Спроба конвертації...")
+
+                # Спроба конвертації кожного елементу
+                try:
+                    array = array.astype(np.float32)
+                except (ValueError, TypeError) as e:
+                    self.logger.error(f"Не вдалося конвертувати {name} в float32: {str(e)}")
+                    # Створюємо масив нулів з правильними розмірами
+                    array = np.zeros(array.shape, dtype=np.float32)
+
+            # Перевірка на NaN та inf
+            if np.isnan(array).any():
+                self.logger.warning(f"{name} містить NaN значення, замінюємо на 0")
+                array = np.nan_to_num(array, nan=0.0)
+
+            if np.isinf(array).any():
+                self.logger.warning(f"{name} містить безкінечні значення, замінюємо на 0")
+                array = np.nan_to_num(array, posinf=0.0, neginf=0.0)
+
+            # Конвертація в tensor
+            tensor = torch.tensor(array, dtype=torch.float32)
+
+            self.logger.debug(f"{name} успішно сконвертовано в tensor. Shape: {tensor.shape}, dtype: {tensor.dtype}")
+            return tensor
+
+        except Exception as e:
+            self.logger.error(f"Критична помилка при конвертації {name} в tensor: {str(e)}")
+            self.logger.error(f"Тип масиву: {array.dtype}, форма: {array.shape}")
+            self.logger.error(f"Перші 5 значень: {array.flat[:5] if array.size > 0 else 'Порожній масив'}")
+            raise
+
     def train_model(self, symbol: str, timeframe: str, model_type: str,
                     data: pd.DataFrame, input_dim: int,
                     config: Optional[ModelConfig] = None,
@@ -116,6 +205,10 @@ class ModelTrainer:
         if not isinstance(data, pd.DataFrame):
             raise ValueError("Expected DataFrame as input data")
 
+        # === ДОДАНА ВАЛІДАЦІЯ ТА ОЧИЩЕННЯ ДАНИХ ===
+        self.logger.info("Валідація та очищення вхідних даних...")
+        data = self._validate_and_clean_data(data)
+
         # Check for target column (try common variations)
         target_col = None
         for col in ['target', 'target_close_1', 'target_close']:
@@ -131,16 +224,32 @@ class ModelTrainer:
         X = data.drop(columns=[target_col]).values
         y = data[target_col].values
 
+        # === ДОДАНА ПЕРЕВІРКА ТИПІВ ДАНИХ ===
+        self.logger.info(f"Тип X: {X.dtype}, форма: {X.shape}")
+        self.logger.info(f"Тип y: {y.dtype}, форма: {y.shape}")
+
+        # Перевірка на наявність некоректних значень
+        if X.dtype == 'object':
+            self.logger.error("X містить object типи!")
+            self.logger.error(f"Унікальні типи в X: {[type(x).__name__ for x in X.flat[:10]]}")
+            raise ValueError("X contains object types that cannot be converted to tensor")
+
+        if y.dtype == 'object':
+            self.logger.error("y містить object типи!")
+            self.logger.error(f"Унікальні типи в y: {[type(x).__name__ for x in y.flat[:10]]}")
+            raise ValueError("y contains object types that cannot be converted to tensor")
+
         # Split into training and validation sets
         split_idx = int(len(X) * (1 - validation_split))
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
-        # Convert to tensors
-        X_train_tensor = torch.tensor(X_train, dtype=torch.float32).to(self.device)
-        y_train_tensor = torch.tensor(y_train, dtype=torch.float32).to(self.device)
-        X_val_tensor = torch.tensor(X_val, dtype=torch.float32).to(self.device)
-        y_val_tensor = torch.tensor(y_val, dtype=torch.float32).to(self.device)
+        # === БЕЗПЕЧНА КОНВЕРТАЦІЯ В ТЕНЗОРИ ===
+        self.logger.info("Конвертація даних в тензори...")
+        X_train_tensor = self._safe_tensor_conversion(X_train, "X_train").to(self.device)
+        y_train_tensor = self._safe_tensor_conversion(y_train, "y_train").to(self.device)
+        X_val_tensor = self._safe_tensor_conversion(X_val, "X_val").to(self.device)
+        y_val_tensor = self._safe_tensor_conversion(y_val, "y_val").to(self.device)
 
         # Create model
         model = self._build_model_from_config(model_type, config).to(self.device)
