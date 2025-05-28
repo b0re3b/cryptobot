@@ -5117,83 +5117,49 @@ class DatabaseManager:
 
             return self.execute_query(query, params)
 
-        # ----- Методи для ML послідовностей даних -----
+            # ----- Методи для ML послідовностей даних -----
 
     def save_ml_sequence_data(self, data: Dict[str, Any]) -> int:
+        required_fields = [
+            'symbol', 'timeframe', 'sequence_start_time', 'sequence_end_time',
+            'data_json', 'target_json', 'sequence_length'
+        ]
 
-            required_fields = [
-                'symbol', 'timeframe', 'sequence_start_time', 'sequence_end_time',
-                'data_json', 'target_json', 'sequence_length'
-            ]
+        # Перетворення JSON полів на строки, якщо потрібно
+        if isinstance(data.get('data_json'), (dict, list)):
+            data['data_json'] = json.dumps(data['data_json'])
 
-            # Перетворення JSON полів на строки, якщо потрібно
-            if isinstance(data.get('data_json'), (dict, list)):
-                data['data_json'] = json.dumps(data['data_json'])
+        if isinstance(data.get('target_json'), (dict, list)):
+            data['target_json'] = json.dumps(data['target_json'])
 
-            if isinstance(data.get('target_json'), (dict, list)):
-                data['target_json'] = json.dumps(data['target_json'])
-
-            query = """
-                    INSERT INTO ml_sequence_data
-                    (symbol, timeframe, sequence_start_time, sequence_end_time, data_json, target_json, sequence_length)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol, timeframe, sequence_start_time) 
+        query = """
+                INSERT INTO ml_sequence_data
+                (symbol, timeframe, sequence_start_time, sequence_end_time, data_json, target_json, sequence_length)
+                VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (symbol, timeframe, sequence_start_time) 
                 DO \
-                    UPDATE SET
-                        sequence_end_time = EXCLUDED.sequence_end_time, \
-                        data_json = EXCLUDED.data_json, \
-                        target_json = EXCLUDED.target_json, \
-                        sequence_length = EXCLUDED.sequence_length \
-                        RETURNING id \
-                    """
+                UPDATE SET
+                    sequence_end_time = EXCLUDED.sequence_end_time, \
+                    data_json = EXCLUDED.data_json, \
+                    target_json = EXCLUDED.target_json, \
+                    sequence_length = EXCLUDED.sequence_length \
+                    RETURNING id \
+                """
 
-            params = [data.get(field) for field in required_fields]
+        params = [data.get(field) for field in required_fields]
 
-            connection = self.conn()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(query, params)
-                    result = cursor.fetchone()
-                    connection.commit()
-                    return result[0]
-            except Exception as e:
-                connection.rollback()
-                raise e
-
-    def get_ml_sequence_data(self, symbol: str, timeframe: str,
-                                 start_time: Optional[datetime] = None,
-                                 limit: int = 100) -> List[Dict[str, Any]]:
-
-            conditions = ["symbol = %s", "timeframe = %s"]
-            params = [symbol, timeframe]
-
-            if start_time:
-                conditions.append("sequence_start_time >= %s")
-                params.append(start_time)
-
-            query = f"""
-                SELECT * FROM ml_sequence_data
-                WHERE {' AND '.join(conditions)}
-                ORDER BY sequence_start_time DESC
-                LIMIT %s
-            """
-
-            params.append(limit)
-
-            result = self.execute_query(query, params)
-
-            # Перетворення JSON строк на Python об'єкти
-            for row in result:
-                if 'data_json' in row and row['data_json']:
-                    row['data_json'] = json.loads(row['data_json'])
-                if 'target_json' in row and row['target_json']:
-                    row['target_json'] = json.loads(row['target_json'])
-
-            return result
-
-        # ----- Методи для ML моделей -----
+        # Fixed: Use self.conn directly, not self.conn()
+        connection = self.conn
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                result = cursor.fetchone()
+                connection.commit()
+                return result[0]
+        except Exception as e:
+            connection.rollback()
+            raise e
 
     def save_ml_model(self, data: Dict[str, Any]) -> int:
-
         required_fields = [
             'symbol', 'timeframe', 'model_type', 'model_version', 'model_path',
             'input_features', 'hidden_dim', 'num_layers', 'active'
@@ -5213,7 +5179,7 @@ class DatabaseManager:
                 (symbol, timeframe, model_type, model_version, model_path, input_features, hidden_dim, num_layers,
                  active, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP) ON CONFLICT (symbol, timeframe, model_type, model_version) 
-            DO \
+                DO \
                 UPDATE SET
                     model_path = EXCLUDED.model_path, \
                     input_features = EXCLUDED.input_features, \
@@ -5226,7 +5192,8 @@ class DatabaseManager:
 
         params = [data.get(field) for field in required_fields]
 
-        connection = self.conn()
+        # Fixed: Use self.conn directly, not self.conn()
+        connection = self.conn
         try:
             with connection.cursor() as cursor:
                 cursor.execute(query, params)
@@ -5238,98 +5205,51 @@ class DatabaseManager:
             self.logger.error(f"Помилка при збереженні ML моделі в БД: {str(e)}")
             raise e
 
-    def get_ml_models(self, symbol: Optional[str] = None, timeframe: Optional[str] = None,
-                          model_type: Optional[str] = None, active_only: bool = True) -> List[Dict[str, Any]]:
-
-            conditions = []
-            params = []
-
-            if symbol:
-                conditions.append("symbol = %s")
-                params.append(symbol)
-
-            if timeframe:
-                conditions.append("timeframe = %s")
-                params.append(timeframe)
-
-            if model_type:
-                conditions.append("model_type = %s")
-                params.append(model_type)
-
-            if active_only:
-                conditions.append("active = TRUE")
-
-            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-            query = f"""
-                SELECT * FROM ml_models
-                {where_clause}
-                ORDER BY updated_at DESC
-            """
-
-            return self.execute_query(query, params)
-
-        # ----- Методи для метрик моделей -----
-
     def save_ml_model_metrics(self, data: Dict[str, Any]) -> int:
+        required_fields = [
+            'model_id', 'mse', 'rmse', 'mae', 'r2_score', 'test_date',
+            'training_duration_seconds', 'epochs_completed'
+        ]
 
-            required_fields = [
-                'model_id', 'mse', 'rmse', 'mae', 'r2_score', 'test_date',
-                'training_duration_seconds', 'epochs_completed'
-            ]
+        query = """
+                INSERT INTO ml_model_metrics
+                (model_id, mse, rmse, mae, r2_score, test_date, training_duration_seconds, epochs_completed)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id \
+                """
 
-            query = """
-                    INSERT INTO ml_model_metrics
-                    (model_id, mse, rmse, mae, r2_score, test_date, training_duration_seconds, epochs_completed)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id \
-                    """
+        params = [data.get(field) for field in required_fields]
 
-            params = [data.get(field) for field in required_fields]
+        # Fixed: Use self.conn directly, not self.conn()
+        connection = self.conn
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                result = cursor.fetchone()
+                connection.commit()
+                return result[0]
+        except Exception as e:
+            connection.rollback()
+            raise e
 
-            connection = self.conn()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(query, params)
-                    result = cursor.fetchone()
-                    connection.commit()
-                    return result[0]
-            except Exception as e:
-                connection.rollback()
-                raise e
+    def save_prediction(self, data: Dict[str, Any], symbol: str) -> int:
+        required_fields = [
+            'model_id', 'symbol', 'timeframe', 'prediction_timestamp', 'target_timestamp',
+            'predicted_value', 'confidence_interval_low', 'confidence_interval_high'
+        ]
 
-    def get_ml_model_metrics(self, model_id: int) -> List[Dict[str, Any]]:
+        # Підготовка полів і значень для вставки
+        present_fields = [f for f in required_fields if f in data and data[f] is not None]
 
-            query = """
-                    SELECT * \
-                    FROM ml_model_metrics
-                    WHERE model_id = %s
-                    ORDER BY test_date DESC \
-                    """
+        # Додаємо опціональні поля, якщо вони є
+        optional_fields = ['actual_value', 'prediction_error']
+        for field in optional_fields:
+            if field in data and data[field] is not None:
+                present_fields.append(field)
 
-            return self.execute_query(query, [model_id])
+        placeholders = ', '.join(['%s'] * len(present_fields))
+        fields_str = ', '.join(present_fields)
 
-        # ----- Методи для прогнозів -----
-
-    def save_prediction(self, data: Dict[str, Any], symbol:str ) -> int:
-
-            required_fields = [
-                'model_id', 'symbol', 'timeframe', 'prediction_timestamp', 'target_timestamp',
-                'predicted_value', 'confidence_interval_low', 'confidence_interval_high'
-            ]
-
-            # Підготовка полів і значень для вставки
-            present_fields = [f for f in required_fields if f in data and data[f] is not None]
-
-            # Додаємо опціональні поля, якщо вони є
-            optional_fields = ['actual_value', 'prediction_error']
-            for field in optional_fields:
-                if field in data and data[field] is not None:
-                    present_fields.append(field)
-
-            placeholders = ', '.join(['%s'] * len(present_fields))
-            fields_str = ', '.join(present_fields)
-
-            query = f"""
+        query = f"""
                 INSERT INTO predictions ({fields_str})
                 VALUES ({placeholders})
                 ON CONFLICT (model_id, symbol, timeframe, target_timestamp) 
@@ -5338,29 +5258,30 @@ class DatabaseManager:
                     predicted_value = EXCLUDED.predicted_value
             """
 
-            # Додаємо опціональні поля до UPDATE, якщо вони є
-            update_fields = []
-            for field in optional_fields:
-                if field in present_fields:
-                    update_fields.append(f"{field} = EXCLUDED.{field}")
+        # Додаємо опціональні поля до UPDATE, якщо вони є
+        update_fields = []
+        for field in optional_fields:
+            if field in present_fields:
+                update_fields.append(f"{field} = EXCLUDED.{field}")
 
-            if update_fields:
-                query += ", " + ", ".join(update_fields)
+        if update_fields:
+            query += ", " + ", ".join(update_fields)
 
-            query += " RETURNING id"
+        query += " RETURNING id"
 
-            params = [data.get(field) for field in present_fields]
+        params = [data.get(field) for field in present_fields]
 
-            connection = self.conn()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(query, params)
-                    result = cursor.fetchone()
-                    connection.commit()
-                    return result[0]
-            except Exception as e:
-                connection.rollback()
-                raise e
+        # Fixed: Use self.conn directly, not self.conn()
+        connection = self.conn
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params)
+                result = cursor.fetchone()
+                connection.commit()
+                return result[0]
+        except Exception as e:
+            connection.rollback()
+            raise e
 
     def _get_model_id(self, symbol: str, timeframe: str, model_type: str) -> int:
         """
@@ -5385,73 +5306,34 @@ class DatabaseManager:
                   AND model_type = %s \
                 """
         try:
-            with self.conn() as connection:
-                with connection.cursor() as cursor:
-                    cursor.execute(query, (symbol, timeframe, model_type))
-                    result = cursor.fetchone()
-                    if result:
-                        return result[0]
-                    else:
-                        raise ValueError(f"Модель не знайдена в БД: {symbol}-{timeframe}-{model_type}")
+            # Fixed: Use self.conn directly, not self.conn()
+            connection = self.conn
+            with connection.cursor() as cursor:
+                cursor.execute(query, (symbol, timeframe, model_type))
+                result = cursor.fetchone()
+                if result:
+                    return result[0]
+                else:
+                    raise ValueError(f"Модель не знайдена в БД: {symbol}-{timeframe}-{model_type}")
         except Exception as e:
             self.logger.error(f"Помилка при отриманні ID моделі: {e}")
             raise
 
-    def get_predictions(self, model_id: Optional[int] = None, symbol: Optional[str] = None,
-                            timeframe: Optional[str] = None, start_time: Optional[datetime] = None,
-                            end_time: Optional[datetime] = None, limit: int = 100) -> List[Dict[str, Any]]:
-
-            conditions = []
-            params = []
-
-            if model_id:
-                conditions.append("model_id = %s")
-                params.append(model_id)
-
-            if symbol:
-                conditions.append("symbol = %s")
-                params.append(symbol)
-
-            if timeframe:
-                conditions.append("timeframe = %s")
-                params.append(timeframe)
-
-            if start_time:
-                conditions.append("target_timestamp >= %s")
-                params.append(start_time)
-
-            if end_time:
-                conditions.append("target_timestamp <= %s")
-                params.append(end_time)
-
-            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-            query = f"""
-                SELECT * FROM predictions
-                {where_clause}
-                ORDER BY target_timestamp DESC
-                LIMIT %s
-            """
-
-            params.append(limit)
-
-            return self.execute_query(query, params)
-
     def update_prediction_actual_value(self, prediction_id: int, actual_value: float) -> None:
+        query = """
+                UPDATE predictions
+                SET actual_value     = %s,
+                    prediction_error = ABS(predicted_value - %s)
+                WHERE id = %s \
+                """
 
-            query = """
-                    UPDATE predictions
-                    SET actual_value     = %s,
-                        prediction_error = ABS(predicted_value - %s)
-                    WHERE id = %s \
-                    """
-
-            connection = self.conn()
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(query, [actual_value, actual_value, prediction_id])
-                    connection.commit()
-            except Exception as e:
-                connection.rollback()
-                raise e
+        # Fixed: Use self.conn directly, not self.conn()
+        connection = self.conn
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query, [actual_value, actual_value, prediction_id])
+                connection.commit()
+        except Exception as e:
+            connection.rollback()
+            raise e
 
