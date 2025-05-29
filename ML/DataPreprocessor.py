@@ -1,10 +1,8 @@
 from dataclasses import field, dataclass
 from typing import Tuple, Callable, List, Optional
-
 import numpy as np
 import pandas as pd
 import torch
-
 from analysis import VolatilityAnalysis
 from cyclefeatures import CryptoCycles
 from data.db import DatabaseManager

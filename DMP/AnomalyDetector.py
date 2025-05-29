@@ -2,7 +2,6 @@ from typing import Tuple, List, Dict, Any
 import numpy as np
 import pandas as pd
 import decimal
-import warnings
 from utils.logger import CryptoLogger
 try:
     from sklearn.ensemble import IsolationForest

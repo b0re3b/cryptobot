@@ -1,12 +1,10 @@
 import concurrent.futures
-
 import numpy as np
 import pandas as pd
 from arch import arch_model
 from scipy.stats import percentileofscore
 from sklearn.cluster import KMeans
 from statsmodels.tsa.stattools import acf
-
 from data.db import DatabaseManager
 from featureengineering.feature_engineering import FeatureEngineering
 from utils.logger import CryptoLogger

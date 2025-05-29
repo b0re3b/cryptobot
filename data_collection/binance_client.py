@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import hmac
 import json
@@ -6,7 +5,6 @@ import time
 import os
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
-import aiohttp
 import pandas as pd
 import requests
 import websocket
